@@ -1,0 +1,39 @@
+{% load static django_htmx %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Local Business Suite{% endblock %}</title>
+    {% htmx_script %}
+    <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
+  </head>
+  <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+    <header class="site-header">
+      <div>
+        <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
+        <p class="subtitle">Канбан заявок ТО и ремонтов</p>
+      </div>
+      <nav class="main-nav">
+        <a href="{% url 'workorders:board' %}">Доска</a>
+        <a href="{% url 'inventory:list' %}">Медизделия</a>
+        {% if user.is_authenticated %}
+          <form action="{% url 'logout' %}" method="post">
+            {% csrf_token %}
+            <button type="submit">Выйти</button>
+          </form>
+        {% endif %}
+      </nav>
+    </header>
+    {% if messages %}
+      <section class="flash-stack">
+        {% for message in messages %}
+          <div class="flash {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+    <main class="page-shell">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

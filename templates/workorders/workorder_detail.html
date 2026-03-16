@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">{{ workorder.number }}</p>
+      <h1>{{ workorder.title }}</h1>
+    </div>
+    <span class="badge">{{ workorder.get_status_display }}</span>
+  </div>
+  <p>{{ workorder.description }}</p>
+  <div class="detail-grid">
+    <div><strong>Подразделение:</strong> {{ workorder.department }}</div>
+    <div><strong>Приоритет:</strong> {{ workorder.get_priority_display }}</div>
+    <div><strong>Изделие:</strong> {{ workorder.device }}</div>
+    <div><strong>Автор:</strong> {{ workorder.author.get_full_name|default:workorder.author.username }}</div>
+    <div><strong>Исполнитель:</strong> {{ workorder.assignee.get_full_name|default:workorder.assignee.username|default:"Не назначен" }}</div>
+    <div><strong>Обновлено:</strong> {{ workorder.updated_at }}</div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Смена статуса</h2>
+  {% if transition_choices %}
+    <form action="{% url 'workorders:transition' workorder.pk %}" method="post" class="inline-form">
+      {% csrf_token %}
+      <select name="status">
+        {% for value, label in transition_choices %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Обновить</button>
+    </form>
+  {% else %}
+    <p>Для вашей роли допустимых переходов нет.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Комментарии</h2>
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ comment_form.as_p }}
+    <button type="submit">Добавить комментарий</button>
+  </form>
+  <div class="stack">
+    {% for comment in workorder.comments.all %}
+      <article class="comment">
+        <strong>{{ comment.author.get_full_name|default:comment.author.username }}</strong>
+        <small>{{ comment.created_at }}</small>
+        <p>{{ comment.body }}</p>
+      </article>
+    {% empty %}
+      <p>Комментариев пока нет.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

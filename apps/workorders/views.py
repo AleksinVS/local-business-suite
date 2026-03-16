@@ -1,0 +1,142 @@
+from collections import OrderedDict
+
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
+from django.db.models import Q
+from django.http import HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.views import View
+from django.views.generic import CreateView, DetailView, TemplateView
+
+from apps.inventory.models import MedicalDevice
+
+from .forms import WorkOrderCommentForm, WorkOrderForm
+from .models import WorkOrder, WorkOrderComment, WorkOrderStatus
+from .policies import can_comment, can_transition
+from .services import transition_workorder
+
+
+class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
+    template_name = "workorders/board.html"
+
+    def get_queryset(self):
+        queryset = WorkOrder.objects.select_related("device", "author", "assignee").order_by(
+            "-updated_at"
+        )
+        q = self.request.GET.get("q", "").strip()
+        department = self.request.GET.get("department", "").strip()
+        status_value = self.request.GET.get("status", "").strip()
+        assignee = self.request.GET.get("assignee", "").strip()
+        device = self.request.GET.get("device", "").strip()
+
+        if q:
+            queryset = queryset.filter(
+                Q(number__icontains=q)
+                | Q(title__icontains=q)
+                | Q(description__icontains=q)
+                | Q(device__name__icontains=q)
+                | Q(device__model__icontains=q)
+                | Q(device__serial_number__icontains=q)
+            )
+        if department:
+            queryset = queryset.filter(department__iexact=department)
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        if assignee:
+            queryset = queryset.filter(assignee__id=assignee)
+        if device:
+            queryset = queryset.filter(device__id=device)
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        queryset = self.get_queryset()
+        columns = OrderedDict((status, []) for status, _label in WorkOrderStatus.choices)
+        for workorder in queryset:
+            columns[workorder.status].append(workorder)
+        context["board_columns"] = [
+            {"key": status, "label": label, "items": columns[status]}
+            for status, label in WorkOrderStatus.choices
+        ]
+        context["status_choices"] = WorkOrderStatus.choices
+        context["departments"] = (
+            WorkOrder.objects.exclude(department="")
+            .order_by("department")
+            .values_list("department", flat=True)
+            .distinct()
+        )
+        context["assignees"] = User.objects.order_by("first_name", "username")
+        context["devices"] = MedicalDevice.objects.order_by("name")
+        context["filters"] = {
+            "q": self.request.GET.get("q", ""),
+            "department": self.request.GET.get("department", ""),
+            "status": self.request.GET.get("status", ""),
+            "assignee": self.request.GET.get("assignee", ""),
+            "device": self.request.GET.get("device", ""),
+        }
+        return context
+
+
+class WorkOrderCreateView(LoginRequiredMixin, CreateView):
+    model = WorkOrder
+    form_class = WorkOrderForm
+    template_name = "workorders/workorder_form.html"
+
+    def get_success_url(self):
+        return reverse("workorders:detail", kwargs={"pk": self.object.pk})
+
+    def form_valid(self, form):
+        form.instance.author = self.request.user
+        return super().form_valid(form)
+
+
+class WorkOrderDetailView(LoginRequiredMixin, DetailView):
+    model = WorkOrder
+    template_name = "workorders/workorder_detail.html"
+    context_object_name = "workorder"
+
+    def get_queryset(self):
+        return (
+            WorkOrder.objects.select_related("device", "author", "assignee")
+            .prefetch_related("comments__author", "attachments", "transitions__actor")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["comment_form"] = WorkOrderCommentForm()
+        context["transition_choices"] = [
+            (status, label)
+            for status, label in WorkOrderStatus.choices
+            if can_transition(self.request.user, self.object, status)
+        ]
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not can_comment(request.user):
+            return HttpResponseForbidden("Комментарии недоступны")
+        form = WorkOrderCommentForm(request.POST)
+        if form.is_valid():
+            WorkOrderComment.objects.create(
+                workorder=self.object,
+                author=request.user,
+                body=form.cleaned_data["body"],
+            )
+            messages.success(request, "Комментарий добавлен.")
+            return redirect("workorders:detail", pk=self.object.pk)
+        context = self.get_context_data()
+        context["comment_form"] = form
+        return self.render_to_response(context)
+
+
+class WorkOrderTransitionView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(WorkOrder, pk=pk)
+        target_status = request.POST.get("status", "")
+        if not can_transition(request.user, workorder, target_status):
+            return HttpResponseForbidden("Переход запрещен")
+        transition_workorder(workorder=workorder, user=request.user, to_status=target_status)
+        messages.success(request, "Статус заявки обновлен.")
+        return redirect("workorders:detail", pk=workorder.pk)

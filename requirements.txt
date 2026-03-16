@@ -1,0 +1,5 @@
+Django>=5.2,<5.3
+django-htmx>=1.27,<2
+whitenoise>=6.12,<7
+gunicorn>=25,<26
+Pillow>=12,<13

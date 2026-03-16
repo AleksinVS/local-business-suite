@@ -3,6 +3,17 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
+ATTACHMENT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ATTACHMENT_ALLOWED_TYPES = ATTACHMENT_IMAGE_TYPES | {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+}
+
 
 class WorkOrderStatus(models.TextChoices):
     NEW = "new", "Новая"
@@ -79,8 +90,6 @@ class WorkOrder(models.Model):
             self.number = f"WO-{stamp}"
         if self.status == WorkOrderStatus.RESOLVED and not self.resolved_at:
             self.resolved_at = timezone.now()
-        if self.status != WorkOrderStatus.RESOLVED:
-            self.resolved_at = self.resolved_at
         if self.status == WorkOrderStatus.CLOSED and not self.closed_at:
             self.closed_at = timezone.now()
         if self.status != WorkOrderStatus.CLOSED:
@@ -122,6 +131,14 @@ class WorkOrderAttachment(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Вложение"
         verbose_name_plural = "Вложения"
+
+    @property
+    def is_image(self):
+        return self.content_type in ATTACHMENT_IMAGE_TYPES
+
+    @property
+    def filename(self):
+        return self.file.name.rsplit("/", 1)[-1]
 
 
 class WorkOrderTransitionLog(models.Model):

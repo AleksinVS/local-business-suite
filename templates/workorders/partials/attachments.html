@@ -17,8 +17,17 @@
   <div class="stack">
     {% for attachment in workorder.attachments.all %}
       <article class="comment">
-        <strong><a href="{{ attachment.file.url }}">{{ attachment.file.name|cut:"workorders/" }}</a></strong>
+        <strong><a href="{{ attachment.file.url }}">{{ attachment.filename }}</a></strong>
         <small>{{ attachment.created_at }} · {{ attachment.uploaded_by.get_full_name|default:attachment.uploaded_by.username }}</small>
+        {% if attachment.is_image %}
+          <div class="attachment-preview">
+            <a href="{{ attachment.file.url }}">
+              <img src="{{ attachment.file.url }}" alt="{{ attachment.filename }}">
+            </a>
+          </div>
+        {% else %}
+          <p class="subtitle">Тип: {{ attachment.content_type|default:"не определен" }}</p>
+        {% endif %}
       </article>
     {% empty %}
       <p>Файлы пока не загружены.</p>

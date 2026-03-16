@@ -110,6 +110,35 @@ class WorkOrderHtmxTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(WorkOrderAttachment.objects.count(), 1)
+        self.assertTrue(WorkOrderAttachment.objects.first().is_image)
+
+    def test_htmx_attachment_rejects_invalid_content_type(self):
+        self.client.force_login(self.user)
+        upload = SimpleUploadedFile("archive.zip", b"zipcontent", content_type="application/zip")
+        response = self.client.post(
+            reverse("workorders:attachment", args=[self.workorder.pk]),
+            {"file": upload},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Недопустимый тип файла.", status_code=400)
+        self.assertEqual(WorkOrderAttachment.objects.count(), 0)
+
+    def test_htmx_attachment_rejects_large_file(self):
+        self.client.force_login(self.user)
+        upload = SimpleUploadedFile(
+            "large.pdf",
+            b"x" * (10 * 1024 * 1024 + 1),
+            content_type="application/pdf",
+        )
+        response = self.client.post(
+            reverse("workorders:attachment", args=[self.workorder.pk]),
+            {"file": upload},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Файл превышает 10 МБ.", status_code=400)
+        self.assertEqual(WorkOrderAttachment.objects.count(), 0)
 
     def test_htmx_transition_returns_status_partial(self):
         self.client.force_login(self.user)

@@ -74,6 +74,18 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 }
 .comment { padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface-strong); }
 .auth-panel { max-width: 420px; margin: 6rem auto 0; }
+.attachment-preview {
+  margin-top: 0.8rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  max-width: 320px;
+}
+.attachment-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 
 @media (max-width: 960px) {
   .hero, .board-grid { grid-template-columns: 1fr; }

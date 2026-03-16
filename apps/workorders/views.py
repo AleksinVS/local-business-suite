@@ -105,6 +105,8 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         return context
 
     def get_template_names(self):
+        if self.request.htmx and self.request.htmx.target == "detail-panel":
+            return ["workorders/partials/detail_panel_empty.html"]
         if self.request.htmx:
             return ["workorders/partials/board_columns.html"]
         return [self.template_name]
@@ -170,6 +172,11 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         return visible_workorders_for(self.request.user).prefetch_related(
             "comments__author", "attachments", "transitions__actor"
         )
+
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["workorders/partials/detail_panel.html"]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

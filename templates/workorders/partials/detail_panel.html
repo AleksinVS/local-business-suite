@@ -1,0 +1,19 @@
+<aside class="detail-panel" id="detail-panel">
+  <div class="detail-panel-head">
+    <div>
+      <p class="eyebrow">Быстрый просмотр</p>
+      <h2>{{ workorder.number }}</h2>
+    </div>
+    <button
+      type="button"
+      class="ghost-button"
+      hx-get="{% url 'workorders:board' %}"
+      hx-target="#detail-panel"
+      hx-swap="outerHTML"
+    >
+      Закрыть
+    </button>
+  </div>
+  {% include "workorders/partials/detail_sections.html" %}
+</aside>
+

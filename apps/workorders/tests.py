@@ -132,6 +132,26 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.workorder.title)
 
+    def test_board_detail_panel_renders_partial_for_htmx(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            reverse("workorders:detail", args=[self.workorder.pk]),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="detail-panel"')
+        self.assertContains(response, self.workorder.title)
+
+    def test_board_can_restore_empty_detail_panel(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            reverse("workorders:board"),
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Выбери карточку на доске")
+
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)
         response = self.client.post(

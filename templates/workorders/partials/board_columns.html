@@ -7,9 +7,23 @@
       </header>
       {% for workorder in column.items %}
         <article class="work-card">
-          <a href="{% url 'workorders:detail' workorder.pk %}" class="work-card-title">{{ workorder.number }} · {{ workorder.title }}</a>
+          <a
+            href="{% url 'workorders:detail' workorder.pk %}"
+            class="work-card-title"
+            hx-get="{% url 'workorders:detail' workorder.pk %}"
+            hx-target="#detail-panel"
+            hx-swap="outerHTML"
+          >
+            {{ workorder.number }} · {{ workorder.title }}
+          </a>
           <p>{{ workorder.device }}</p>
           <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
+          <div class="card-meta">
+            <span class="chip">{{ workorder.get_priority_display }}</span>
+            {% if workorder.assignee %}
+              <span class="chip chip-muted">{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}</span>
+            {% endif %}
+          </div>
         </article>
       {% empty %}
         <div class="work-card work-card-empty">Пусто</div>

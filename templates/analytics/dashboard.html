@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-card">
+    <p class="eyebrow">Analytics</p>
+    <h1>Сводка по заявкам</h1>
+    <p>Базовые агрегаты первой поставки: статусы, подразделения, нагрузка исполнителей и среднее время до выполнения.</p>
+  </div>
+  <div class="metrics">
+    <article class="metric"><span>{{ resolved_count }}</span><small>выполнено</small></article>
+    <article class="metric"><span>{{ closed_count }}</span><small>закрыто</small></article>
+    <article class="metric"><span>{% if avg_resolution_time %}{{ avg_resolution_time }}{% else %}n/a{% endif %}</span><small>среднее время решения</small></article>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>По статусам</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Статус</th><th>Количество</th></tr></thead>
+      <tbody>
+        {% for row in status_summary %}
+          <tr><td>{{ row.status }}</td><td>{{ row.total }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2">Нет данных.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>По подразделениям</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Подразделение</th><th>Количество</th></tr></thead>
+      <tbody>
+        {% for row in department_summary %}
+          <tr><td>{{ row.department }}</td><td>{{ row.total }}</td></tr>
+        {% empty %}
+          <tr><td colspan="2">Нет данных.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>По исполнителям</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Исполнитель</th><th>Количество</th></tr></thead>
+      <tbody>
+        {% for row in assignee_summary %}
+          <tr>
+            <td>
+              {% if row.assignee__username %}
+                {{ row.assignee__first_name }} {{ row.assignee__last_name }}{{ row.assignee__first_name|yesno:", " }}{{ row.assignee__username }}
+              {% else %}
+                Не назначен
+              {% endif %}
+            </td>
+            <td>{{ row.total }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="2">Нет данных.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

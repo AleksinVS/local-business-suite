@@ -17,6 +17,7 @@
       <nav class="main-nav">
         <a href="{% url 'workorders:board' %}">Доска</a>
         <a href="{% url 'inventory:list' %}">Медизделия</a>
+        <a href="{% url 'analytics:dashboard' %}">Аналитика</a>
         {% if user.is_authenticated %}
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}

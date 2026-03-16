@@ -1,21 +1,27 @@
 from collections import OrderedDict
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
-from django.views.generic import CreateView, DetailView, TemplateView
+from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
 from apps.inventory.models import MedicalDevice
 
-from .forms import WorkOrderAttachmentForm, WorkOrderCommentForm, WorkOrderForm
+from .forms import (
+    WorkOrderAttachmentForm,
+    WorkOrderCommentForm,
+    WorkOrderForm,
+    WorkOrderRatingForm,
+    WorkOrderUpdateForm,
+)
 from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
-from .policies import can_comment, can_transition
-from .services import transition_workorder
+from .policies import can_comment, can_confirm_closure, can_edit, can_rate, can_transition
+from .services import confirm_closure, transition_workorder
 
 
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
@@ -97,6 +103,23 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         return super().form_valid(form)
 
 
+class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = WorkOrder
+    form_class = WorkOrderUpdateForm
+    template_name = "workorders/workorder_form.html"
+
+    def test_func(self):
+        return can_edit(self.request.user, self.get_object())
+
+    def form_valid(self, form):
+        self.object = form.save()
+        messages.success(self.request, "Заявка обновлена.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("workorders:detail", kwargs={"pk": self.object.pk})
+
+
 class WorkOrderDetailView(LoginRequiredMixin, DetailView):
     model = WorkOrder
     template_name = "workorders/workorder_detail.html"
@@ -112,11 +135,15 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["comment_form"] = WorkOrderCommentForm()
         context["attachment_form"] = WorkOrderAttachmentForm()
+        context["rating_form"] = WorkOrderRatingForm(instance=self.object)
         context["transition_choices"] = [
             (status, label)
             for status, label in WorkOrderStatus.choices
             if can_transition(self.request.user, self.object, status)
         ]
+        context["can_edit"] = can_edit(self.request.user, self.object)
+        context["can_confirm_closure"] = can_confirm_closure(self.request.user, self.object)
+        context["can_rate"] = can_rate(self.request.user, self.object)
         return context
 
 
@@ -208,7 +235,64 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
                 {
                     "workorder": workorder,
                     "transition_choices": transition_choices,
+                    "can_confirm_closure": can_confirm_closure(request.user, workorder),
                 },
             )
         messages.success(request, "Статус заявки обновлен.")
+        return redirect("workorders:detail", pk=workorder.pk)
+
+
+class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(WorkOrder, pk=pk)
+        if not can_confirm_closure(request.user, workorder):
+            return HttpResponseForbidden("Подтверждение закрытия запрещено")
+        confirm_closure(workorder=workorder, user=request.user)
+        workorder.refresh_from_db()
+        transition_choices = [
+            (status, label)
+            for status, label in WorkOrderStatus.choices
+            if can_transition(request.user, workorder, status)
+        ]
+        context = {
+            "workorder": workorder,
+            "transition_choices": transition_choices,
+            "can_confirm_closure": can_confirm_closure(request.user, workorder),
+        }
+        if request.htmx:
+            return render(request, "workorders/partials/status_section.html", context)
+        messages.success(request, "Закрытие заявки подтверждено.")
+        return redirect("workorders:detail", pk=workorder.pk)
+
+
+class WorkOrderRateView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(WorkOrder, pk=pk)
+        if not can_rate(request.user, workorder):
+            return HttpResponseForbidden("Оценка запрещена")
+        form = WorkOrderRatingForm(request.POST, instance=workorder)
+        if form.is_valid():
+            form.save()
+            workorder.refresh_from_db()
+            context = {
+                "workorder": workorder,
+                "rating_form": WorkOrderRatingForm(instance=workorder),
+                "can_rate": can_rate(request.user, workorder),
+            }
+            if request.htmx:
+                return render(request, "workorders/partials/rating_section.html", context)
+            messages.success(request, "Оценка сохранена.")
+            return redirect("workorders:detail", pk=workorder.pk)
+        if request.htmx:
+            return render(
+                request,
+                "workorders/partials/rating_section.html",
+                {
+                    "workorder": workorder,
+                    "rating_form": form,
+                    "can_rate": can_rate(request.user, workorder),
+                },
+                status=400,
+            )
+        messages.error(request, "Не удалось сохранить оценку.")
         return redirect("workorders:detail", pk=workorder.pk)

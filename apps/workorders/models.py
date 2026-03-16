@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -37,8 +38,14 @@ class WorkOrder(models.Model):
         choices=WorkOrderStatus.choices,
         default=WorkOrderStatus.NEW,
     )
-    rating = models.PositiveSmallIntegerField("Оценка", blank=True, null=True)
+    rating = models.PositiveSmallIntegerField(
+        "Оценка",
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
     closure_confirmed = models.BooleanField("Закрытие подтверждено", default=False)
+    closure_confirmed_at = models.DateTimeField(blank=True, null=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -72,9 +79,12 @@ class WorkOrder(models.Model):
             self.number = f"WO-{stamp}"
         if self.status == WorkOrderStatus.RESOLVED and not self.resolved_at:
             self.resolved_at = timezone.now()
+        if self.status != WorkOrderStatus.RESOLVED:
+            self.resolved_at = self.resolved_at
         if self.status == WorkOrderStatus.CLOSED and not self.closed_at:
             self.closed_at = timezone.now()
-            self.closure_confirmed = True
+        if self.status != WorkOrderStatus.CLOSED:
+            self.closed_at = None
         super().save(*args, **kwargs)
 
     def __str__(self):

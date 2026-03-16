@@ -2,6 +2,9 @@
   <h2>Смена статуса</h2>
   <div class="status-inline">
     <span class="badge">{{ workorder.get_status_display }}</span>
+    {% if workorder.closure_confirmed %}
+      <small>Подтверждено {{ workorder.closure_confirmed_at }}</small>
+    {% endif %}
   </div>
   {% if transition_choices %}
     <form
@@ -22,5 +25,18 @@
     </form>
   {% else %}
     <p>Для вашей роли допустимых переходов нет.</p>
+  {% endif %}
+  {% if can_confirm_closure %}
+    <form
+      action="{% url 'workorders:confirm_closure' workorder.pk %}"
+      method="post"
+      class="inline-form"
+      hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
+      hx-target="#status-panel"
+      hx-swap="outerHTML"
+    >
+      {% csrf_token %}
+      <button type="submit">Подтвердить закрытие</button>
+    </form>
   {% endif %}
 </section>

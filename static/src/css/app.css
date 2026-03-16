@@ -53,6 +53,7 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 .metric, .status-card { padding: 1rem; }
 .metric span, .status-card span { display: block; font-size: 2rem; font-weight: 700; }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.detail-actions { display: flex; align-items: center; gap: 0.8rem; }
 .filters, .inline-form { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem; }
 .stack { display: grid; gap: 1rem; }
 .status-inline { margin: 0.6rem 0 1rem; }

@@ -19,6 +19,22 @@ class WorkOrderForm(forms.ModelForm):
         }
 
 
+class WorkOrderUpdateForm(forms.ModelForm):
+    class Meta:
+        model = WorkOrder
+        fields = [
+            "title",
+            "description",
+            "department",
+            "priority",
+            "device",
+            "assignee",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 5}),
+        }
+
+
 class WorkOrderCommentForm(forms.ModelForm):
     class Meta:
         model = WorkOrderComment
@@ -32,3 +48,12 @@ class WorkOrderAttachmentForm(forms.ModelForm):
     class Meta:
         model = WorkOrderAttachment
         fields = ["file"]
+
+
+class WorkOrderRatingForm(forms.ModelForm):
+    class Meta:
+        model = WorkOrder
+        fields = ["rating"]
+        widgets = {
+            "rating": forms.NumberInput(attrs={"min": 1, "max": 5}),
+        }

@@ -1,0 +1,24 @@
+<section class="panel" id="rating-panel">
+  <h2>Оценка результата</h2>
+  {% if workorder.rating %}
+    <p><strong>Текущая оценка:</strong> {{ workorder.rating }}/5</p>
+  {% endif %}
+  {% if can_rate %}
+    <form
+      method="post"
+      action="{% url 'workorders:rate' workorder.pk %}"
+      class="inline-form"
+      hx-post="{% url 'workorders:rate' workorder.pk %}"
+      hx-target="#rating-panel"
+      hx-swap="outerHTML"
+    >
+      {% csrf_token %}
+      {{ rating_form.rating }}
+      <button type="submit">Сохранить оценку</button>
+    </form>
+  {% elif workorder.status != "closed" %}
+    <p>Оценка станет доступна после подтвержденного закрытия заявки.</p>
+  {% else %}
+    <p>Оценка недоступна для вашей роли.</p>
+  {% endif %}
+</section>

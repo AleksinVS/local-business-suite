@@ -47,10 +47,17 @@ def can_manage_inventory(user):
     return user.is_superuser or ROLE_MANAGER in user_roles(user)
 
 
+def can_edit(user, workorder: WorkOrder) -> bool:
+    roles = user_roles(user)
+    return user.is_superuser or ROLE_MANAGER in roles or workorder.author_id == user.id
+
+
 def can_transition(user, workorder: WorkOrder, target_status: str) -> bool:
     roles = user_roles(user)
     if user.is_superuser:
         return target_status in STATUS_TRANSITIONS.get(workorder.status, set())
+    if target_status == WorkOrderStatus.CLOSED:
+        return can_confirm_closure(user, workorder)
     return (
         target_status in STATUS_TRANSITIONS.get(workorder.status, set())
         and any(target_status in ROLE_TRANSITIONS.get(role, set()) for role in roles)
@@ -59,3 +66,16 @@ def can_transition(user, workorder: WorkOrder, target_status: str) -> bool:
 
 def can_comment(user) -> bool:
     return user.is_authenticated
+
+
+def can_confirm_closure(user, workorder: WorkOrder) -> bool:
+    roles = user_roles(user)
+    if workorder.status != WorkOrderStatus.RESOLVED:
+        return False
+    return user.is_superuser or ROLE_MANAGER in roles or workorder.author_id == user.id
+
+
+def can_rate(user, workorder: WorkOrder) -> bool:
+    if workorder.status != WorkOrderStatus.CLOSED:
+        return False
+    return user.is_superuser or workorder.author_id == user.id or ROLE_MANAGER in user_roles(user)

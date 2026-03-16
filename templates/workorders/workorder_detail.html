@@ -7,7 +7,12 @@
       <p class="eyebrow">{{ workorder.number }}</p>
       <h1>{{ workorder.title }}</h1>
     </div>
-    <span class="badge">{{ workorder.get_status_display }}</span>
+    <div class="detail-actions">
+      <span class="badge">{{ workorder.get_status_display }}</span>
+      {% if can_edit %}
+        <a href="{% url 'workorders:edit' workorder.pk %}">Редактировать</a>
+      {% endif %}
+    </div>
   </div>
   <p>{{ workorder.description }}</p>
   <div class="detail-grid">
@@ -21,6 +26,7 @@
 </section>
 
 {% include "workorders/partials/status_section.html" %}
+{% include "workorders/partials/rating_section.html" %}
 {% include "workorders/partials/comments.html" %}
 {% include "workorders/partials/attachments.html" %}
 {% endblock %}

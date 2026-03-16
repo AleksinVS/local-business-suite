@@ -27,6 +27,10 @@
 
 {% include "workorders/partials/status_section.html" %}
 {% include "workorders/partials/rating_section.html" %}
-{% include "workorders/partials/comments.html" %}
-{% include "workorders/partials/attachments.html" %}
+{% if can_comment %}
+  {% include "workorders/partials/comments.html" %}
+{% endif %}
+{% if can_upload_attachment %}
+  {% include "workorders/partials/attachments.html" %}
+{% endif %}
 {% endblock %}

@@ -20,17 +20,37 @@ from .forms import (
     WorkOrderUpdateForm,
 )
 from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
-from .policies import can_comment, can_confirm_closure, can_edit, can_rate, can_transition
+from .policies import (
+    can_comment,
+    can_confirm_closure,
+    can_create,
+    can_edit,
+    can_rate,
+    can_transition,
+    can_upload_attachment,
+    is_customer,
+    is_manager,
+    is_technician,
+)
 from .services import confirm_closure, transition_workorder
+
+
+def visible_workorders_for(user):
+    queryset = WorkOrder.objects.select_related("device", "author", "assignee")
+    if user.is_superuser or is_manager(user):
+        return queryset
+    if is_customer(user):
+        return queryset
+    if is_technician(user):
+        return queryset.filter(Q(assignee=user) | Q(assignee__isnull=True) | Q(author=user))
+    return queryset.none()
 
 
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
     def get_queryset(self):
-        queryset = WorkOrder.objects.select_related("device", "author", "assignee").order_by(
-            "-updated_at"
-        )
+        queryset = visible_workorders_for(self.request.user).order_by("-updated_at")
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("status", "").strip()
@@ -98,9 +118,23 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     def get_success_url(self):
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
+    def dispatch(self, request, *args, **kwargs):
+        if not can_create(request.user):
+            return HttpResponseForbidden("Создание заявок запрещено")
+        return super().dispatch(request, *args, **kwargs)
+
     def form_valid(self, form):
         form.instance.author = self.request.user
+        if not is_manager(self.request.user):
+            form.instance.assignee = None
         return super().form_valid(form)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        if not is_manager(self.request.user):
+            form.fields["assignee"].disabled = True
+            form.fields["assignee"].required = False
+        return form
 
 
 class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
@@ -116,6 +150,13 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         messages.success(self.request, "Заявка обновлена.")
         return super().form_valid(form)
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        if not is_manager(self.request.user):
+            form.fields["assignee"].disabled = True
+            form.fields["assignee"].required = False
+        return form
+
     def get_success_url(self):
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
@@ -126,9 +167,8 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "workorder"
 
     def get_queryset(self):
-        return (
-            WorkOrder.objects.select_related("device", "author", "assignee")
-            .prefetch_related("comments__author", "attachments", "transitions__actor")
+        return visible_workorders_for(self.request.user).prefetch_related(
+            "comments__author", "attachments", "transitions__actor"
         )
 
     def get_context_data(self, **kwargs):
@@ -144,13 +184,16 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         context["can_edit"] = can_edit(self.request.user, self.object)
         context["can_confirm_closure"] = can_confirm_closure(self.request.user, self.object)
         context["can_rate"] = can_rate(self.request.user, self.object)
+        context["can_upload_attachment"] = can_upload_attachment(self.request.user, self.object)
+        context["can_comment"] = can_comment(self.request.user, self.object)
         return context
 
 
 class WorkOrderCommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
         workorder = get_object_or_404(WorkOrder, pk=pk)
-        if not can_comment(request.user):
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        if not can_comment(request.user, workorder):
             return HttpResponseForbidden("Комментарии недоступны")
         form = WorkOrderCommentForm(request.POST)
         if form.is_valid():
@@ -183,7 +226,9 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(WorkOrder, pk=pk)
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        if not can_upload_attachment(request.user, workorder):
+            return HttpResponseForbidden("Загрузка файлов запрещена")
         form = WorkOrderAttachmentForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = form.cleaned_data["file"]
@@ -217,7 +262,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderTransitionView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(WorkOrder, pk=pk)
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
         target_status = request.POST.get("status", "")
         if not can_transition(request.user, workorder, target_status):
             return HttpResponseForbidden("Переход запрещен")
@@ -244,7 +289,7 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
 
 class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(WorkOrder, pk=pk)
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
         if not can_confirm_closure(request.user, workorder):
             return HttpResponseForbidden("Подтверждение закрытия запрещено")
         confirm_closure(workorder=workorder, user=request.user)
@@ -267,7 +312,7 @@ class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
 
 class WorkOrderRateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(WorkOrder, pk=pk)
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
         if not can_rate(request.user, workorder):
             return HttpResponseForbidden("Оценка запрещена")
         form = WorkOrderRatingForm(request.POST, instance=workorder)

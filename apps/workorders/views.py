@@ -35,6 +35,14 @@ from .policies import (
 from .services import confirm_closure, transition_workorder
 
 
+def quick_transition_choices_for(user, workorder):
+    return [
+        (status, label)
+        for status, label in WorkOrderStatus.choices
+        if can_transition(user, workorder, status)
+    ][:2]
+
+
 def visible_workorders_for(user):
     queryset = WorkOrder.objects.select_related("device", "author", "assignee")
     if user.is_superuser or is_manager(user):
@@ -81,7 +89,13 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         queryset = self.get_queryset()
         columns = OrderedDict((status, []) for status, _label in WorkOrderStatus.choices)
         for workorder in queryset:
-            columns[workorder.status].append(workorder)
+            columns[workorder.status].append(
+                {
+                    "workorder": workorder,
+                    "quick_transitions": quick_transition_choices_for(self.request.user, workorder),
+                    "can_confirm_closure": can_confirm_closure(self.request.user, workorder),
+                }
+            )
         context["board_columns"] = [
             {"key": status, "label": label, "items": columns[status]}
             for status, label in WorkOrderStatus.choices
@@ -281,6 +295,16 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
             if can_transition(request.user, workorder, status)
         ]
         if request.htmx:
+            if request.htmx.target == "board-columns":
+                board_view = WorkOrderBoardView()
+                board_view.request = request
+                board_view.args = ()
+                board_view.kwargs = {}
+                return render(
+                    request,
+                    "workorders/partials/board_columns.html",
+                    board_view.get_context_data(),
+                )
             return render(
                 request,
                 "workorders/partials/status_section.html",

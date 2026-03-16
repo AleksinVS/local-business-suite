@@ -5,7 +5,8 @@
         <h2>{{ column.label }}</h2>
         <span>{{ column.items|length }}</span>
       </header>
-      {% for workorder in column.items %}
+      {% for item in column.items %}
+        {% with workorder=item.workorder %}
         <article class="work-card">
           <a
             href="{% url 'workorders:detail' workorder.pk %}"
@@ -24,7 +25,37 @@
               <span class="chip chip-muted">{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}</span>
             {% endif %}
           </div>
+          {% if item.quick_transitions or item.can_confirm_closure %}
+            <div class="card-actions">
+              {% for value, label in item.quick_transitions %}
+                <form
+                  action="{% url 'workorders:transition' workorder.pk %}"
+                  method="post"
+                  hx-post="{% url 'workorders:transition' workorder.pk %}"
+                  hx-target="#board-columns"
+                  hx-swap="outerHTML"
+                >
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="{{ value }}">
+                  <button type="submit" class="mini-button">{{ label }}</button>
+                </form>
+              {% endfor %}
+              {% if item.can_confirm_closure %}
+                <form
+                  action="{% url 'workorders:confirm_closure' workorder.pk %}"
+                  method="post"
+                  hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
+                  hx-target="#board-columns"
+                  hx-swap="outerHTML"
+                >
+                  {% csrf_token %}
+                  <button type="submit" class="mini-button mini-button-strong">Подтвердить</button>
+                </form>
+              {% endif %}
+            </div>
+          {% endif %}
         </article>
+        {% endwith %}
       {% empty %}
         <div class="work-card work-card-empty">Пусто</div>
       {% endfor %}

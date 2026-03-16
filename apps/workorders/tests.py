@@ -240,6 +240,19 @@ class WorkOrderViewPermissionTests(TestCase):
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
 
+    def test_board_quick_transition_returns_board_partial(self):
+        self.client.force_login(self.technician)
+        response = self.client.post(
+            reverse("workorders:transition", args=[self.workorder.pk]),
+            {"status": WorkOrderStatus.ACCEPTED},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="board-columns",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="board-columns"')
+        self.workorder.refresh_from_db()
+        self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
+
     def test_customer_can_confirm_closure_and_rate(self):
         self.workorder.status = WorkOrderStatus.RESOLVED
         self.workorder.save()

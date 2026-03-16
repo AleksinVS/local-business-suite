@@ -68,6 +68,7 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 .work-card-empty { color: var(--ink-soft); text-align: center; }
 .work-card-title { font-weight: 600; display: block; margin-bottom: 0.4rem; }
 .card-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.card-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 0.8rem; }
 .chip {
   display: inline-flex;
   align-items: center;
@@ -78,6 +79,12 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   font-size: 0.82rem;
 }
 .chip-muted { color: var(--ink-soft); }
+.mini-button {
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+.mini-button-strong { background: #0d7a57; }
 .flash-stack { width: min(1180px, calc(100% - 2rem)); margin: 0 auto 1rem; display: grid; gap: 0.6rem; }
 .badge {
   display: inline-flex;

@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import WorkOrder, WorkOrderComment
+from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment
 
 
 class WorkOrderForm(forms.ModelForm):
@@ -26,3 +26,9 @@ class WorkOrderCommentForm(forms.ModelForm):
         widgets = {
             "body": forms.Textarea(attrs={"rows": 3, "placeholder": "Комментарий"}),
         }
+
+
+class WorkOrderAttachmentForm(forms.ModelForm):
+    class Meta:
+        model = WorkOrderAttachment
+        fields = ["file"]

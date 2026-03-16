@@ -1,0 +1,26 @@
+<section class="panel" id="comments-panel">
+  <h2>Комментарии</h2>
+  <form
+    method="post"
+    action="{% url 'workorders:comment' workorder.pk %}"
+    class="stack"
+    hx-post="{% url 'workorders:comment' workorder.pk %}"
+    hx-target="#comments-panel"
+    hx-swap="outerHTML"
+  >
+    {% csrf_token %}
+    {{ comment_form.as_p }}
+    <button type="submit">Добавить комментарий</button>
+  </form>
+  <div class="stack">
+    {% for comment in workorder.comments.all %}
+      <article class="comment">
+        <strong>{{ comment.author.get_full_name|default:comment.author.username }}</strong>
+        <small>{{ comment.created_at }}</small>
+        <p>{{ comment.body }}</p>
+      </article>
+    {% empty %}
+      <p>Комментариев пока нет.</p>
+    {% endfor %}
+  </div>
+</section>

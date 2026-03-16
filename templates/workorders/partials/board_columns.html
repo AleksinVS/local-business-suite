@@ -1,0 +1,19 @@
+<section class="board-grid" id="board-columns">
+  {% for column in board_columns %}
+    <div class="kanban-column">
+      <header>
+        <h2>{{ column.label }}</h2>
+        <span>{{ column.items|length }}</span>
+      </header>
+      {% for workorder in column.items %}
+        <article class="work-card">
+          <a href="{% url 'workorders:detail' workorder.pk %}" class="work-card-title">{{ workorder.number }} · {{ workorder.title }}</a>
+          <p>{{ workorder.device }}</p>
+          <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
+        </article>
+      {% empty %}
+        <div class="work-card work-card-empty">Пусто</div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</section>

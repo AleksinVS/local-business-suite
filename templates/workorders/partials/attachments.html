@@ -1,0 +1,27 @@
+<section class="panel" id="attachments-panel">
+  <h2>Вложения</h2>
+  <form
+    method="post"
+    enctype="multipart/form-data"
+    action="{% url 'workorders:attachment' workorder.pk %}"
+    class="stack"
+    hx-post="{% url 'workorders:attachment' workorder.pk %}"
+    hx-encoding="multipart/form-data"
+    hx-target="#attachments-panel"
+    hx-swap="outerHTML"
+  >
+    {% csrf_token %}
+    {{ attachment_form.as_p }}
+    <button type="submit">Загрузить файл</button>
+  </form>
+  <div class="stack">
+    {% for attachment in workorder.attachments.all %}
+      <article class="comment">
+        <strong><a href="{{ attachment.file.url }}">{{ attachment.file.name|cut:"workorders/" }}</a></strong>
+        <small>{{ attachment.created_at }} · {{ attachment.uploaded_by.get_full_name|default:attachment.uploaded_by.username }}</small>
+      </article>
+    {% empty %}
+      <p>Файлы пока не загружены.</p>
+    {% endfor %}
+  </div>
+</section>

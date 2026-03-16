@@ -5,15 +5,15 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.http import HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView
 
 from apps.inventory.models import MedicalDevice
 
-from .forms import WorkOrderCommentForm, WorkOrderForm
-from .models import WorkOrder, WorkOrderComment, WorkOrderStatus
+from .forms import WorkOrderAttachmentForm, WorkOrderCommentForm, WorkOrderForm
+from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import can_comment, can_transition
 from .services import transition_workorder
 
@@ -78,6 +78,11 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         }
         return context
 
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["workorders/partials/board_columns.html"]
+        return [self.template_name]
+
 
 class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     model = WorkOrder
@@ -106,6 +111,7 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["comment_form"] = WorkOrderCommentForm()
+        context["attachment_form"] = WorkOrderAttachmentForm()
         context["transition_choices"] = [
             (status, label)
             for status, label in WorkOrderStatus.choices
@@ -113,22 +119,73 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         ]
         return context
 
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
+
+class WorkOrderCommentCreateView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(WorkOrder, pk=pk)
         if not can_comment(request.user):
             return HttpResponseForbidden("Комментарии недоступны")
         form = WorkOrderCommentForm(request.POST)
         if form.is_valid():
             WorkOrderComment.objects.create(
-                workorder=self.object,
+                workorder=workorder,
                 author=request.user,
                 body=form.cleaned_data["body"],
             )
+            if request.htmx:
+                return render(
+                    request,
+                    "workorders/partials/comments.html",
+                    {
+                        "workorder": workorder,
+                        "comment_form": WorkOrderCommentForm(),
+                    },
+                )
             messages.success(request, "Комментарий добавлен.")
-            return redirect("workorders:detail", pk=self.object.pk)
-        context = self.get_context_data()
-        context["comment_form"] = form
-        return self.render_to_response(context)
+            return redirect("workorders:detail", pk=workorder.pk)
+        if request.htmx:
+            return render(
+                request,
+                "workorders/partials/comments.html",
+                {"workorder": workorder, "comment_form": form},
+                status=400,
+            )
+        messages.error(request, "Не удалось добавить комментарий.")
+        return redirect("workorders:detail", pk=workorder.pk)
+
+
+class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(WorkOrder, pk=pk)
+        form = WorkOrderAttachmentForm(request.POST, request.FILES)
+        if form.is_valid():
+            uploaded_file = form.cleaned_data["file"]
+            WorkOrderAttachment.objects.create(
+                workorder=workorder,
+                uploaded_by=request.user,
+                file=uploaded_file,
+                content_type=getattr(uploaded_file, "content_type", ""),
+            )
+            if request.htmx:
+                return render(
+                    request,
+                    "workorders/partials/attachments.html",
+                    {
+                        "workorder": workorder,
+                        "attachment_form": WorkOrderAttachmentForm(),
+                    },
+                )
+            messages.success(request, "Файл добавлен.")
+            return redirect("workorders:detail", pk=workorder.pk)
+        if request.htmx:
+            return render(
+                request,
+                "workorders/partials/attachments.html",
+                {"workorder": workorder, "attachment_form": form},
+                status=400,
+            )
+        messages.error(request, "Не удалось загрузить файл.")
+        return redirect("workorders:detail", pk=workorder.pk)
 
 
 class WorkOrderTransitionView(LoginRequiredMixin, View):
@@ -138,5 +195,20 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
         if not can_transition(request.user, workorder, target_status):
             return HttpResponseForbidden("Переход запрещен")
         transition_workorder(workorder=workorder, user=request.user, to_status=target_status)
+        workorder.refresh_from_db()
+        transition_choices = [
+            (status, label)
+            for status, label in WorkOrderStatus.choices
+            if can_transition(request.user, workorder, status)
+        ]
+        if request.htmx:
+            return render(
+                request,
+                "workorders/partials/status_section.html",
+                {
+                    "workorder": workorder,
+                    "transition_choices": transition_choices,
+                },
+            )
         messages.success(request, "Статус заявки обновлен.")
         return redirect("workorders:detail", pk=workorder.pk)

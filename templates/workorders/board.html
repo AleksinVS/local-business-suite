@@ -7,6 +7,7 @@
     <a href="{% url 'workorders:create' %}">Создать заявку</a>
   </div>
   <form method="get" class="filters">
+    <input type="hidden" name="view" value="board">
     <input type="search" name="q" value="{{ filters.q }}" placeholder="Номер, заголовок, изделие">
     <select name="department">
       <option value="">Все подразделения</option>
@@ -32,27 +33,16 @@
         <option value="{{ device.id }}" {% if filters.device == device.id|stringformat:"s" %}selected{% endif %}>{{ device.name }}</option>
       {% endfor %}
     </select>
-    <button type="submit">Применить</button>
+    <button
+      type="submit"
+      hx-get="{% url 'workorders:board' %}"
+      hx-target="#board-columns"
+      hx-swap="outerHTML"
+      hx-include="closest form"
+    >
+      Применить
+    </button>
   </form>
 </section>
-
-<section class="board-grid">
-  {% for column in board_columns %}
-    <div class="kanban-column">
-      <header>
-        <h2>{{ column.label }}</h2>
-        <span>{{ column.items|length }}</span>
-      </header>
-      {% for workorder in column.items %}
-        <article class="work-card">
-          <a href="{% url 'workorders:detail' workorder.pk %}" class="work-card-title">{{ workorder.number }} · {{ workorder.title }}</a>
-          <p>{{ workorder.device }}</p>
-          <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
-        </article>
-      {% empty %}
-        <div class="work-card work-card-empty">Пусто</div>
-      {% endfor %}
-    </div>
-  {% endfor %}
-</section>
+{% include "workorders/partials/board_columns.html" %}
 {% endblock %}

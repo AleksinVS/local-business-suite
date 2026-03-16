@@ -2,11 +2,11 @@
 
 {% block content %}
 <section class="panel">
-  <h1>Новое медицинское изделие</h1>
+  <h1>{% if object %}Редактирование медицинского изделия{% else %}Новое медицинское изделие{% endif %}</h1>
   <form method="post" class="stack">
     {% csrf_token %}
     {{ form.as_p }}
-    <button type="submit">Сохранить</button>
+    <button type="submit">{% if object %}Сохранить изменения{% else %}Сохранить{% endif %}</button>
   </form>
 </section>
 {% endblock %}

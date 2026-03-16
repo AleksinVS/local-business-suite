@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class OperationalStatus(models.TextChoices):
@@ -24,6 +25,8 @@ class MedicalDevice(models.Model):
     )
     commissioned_at = models.DateField("Дата ввода", blank=True, null=True)
     notes = models.TextField("Примечания", blank=True)
+    is_archived = models.BooleanField("Архивировано", default=False)
+    archived_at = models.DateTimeField("Дата архивации", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -34,3 +37,8 @@ class MedicalDevice(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
+
+    def archive(self):
+        self.is_archived = True
+        self.archived_at = timezone.now()
+        self.save(update_fields=["is_archived", "archived_at", "updated_at"])

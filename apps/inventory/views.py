@@ -1,7 +1,10 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib import messages
 from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, ListView
+from django.views import View
+from django.views.generic import CreateView, ListView, UpdateView
 
 from .forms import MedicalDeviceForm
 from .models import MedicalDevice, OperationalStatus
@@ -19,6 +22,10 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("operational_status", "").strip()
+        archived = self.request.GET.get("archived", "").strip()
+
+        if archived != "1":
+            queryset = queryset.filter(is_archived=False)
 
         if q:
             queryset = queryset.filter(
@@ -48,7 +55,9 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
             "q": self.request.GET.get("q", ""),
             "department": self.request.GET.get("department", ""),
             "operational_status": self.request.GET.get("operational_status", ""),
+            "archived": self.request.GET.get("archived", ""),
         }
+        context["can_manage_inventory"] = can_manage_inventory(self.request.user)
         return context
 
 
@@ -60,3 +69,28 @@ class MedicalDeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
 
     def test_func(self):
         return can_manage_inventory(self.request.user)
+
+
+class MedicalDeviceUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = MedicalDevice
+    form_class = MedicalDeviceForm
+    template_name = "inventory/device_form.html"
+    success_url = reverse_lazy("inventory:list")
+
+    def test_func(self):
+        return can_manage_inventory(self.request.user)
+
+    def form_valid(self, form):
+        messages.success(self.request, "Изделие обновлено.")
+        return super().form_valid(form)
+
+
+class MedicalDeviceArchiveView(LoginRequiredMixin, UserPassesTestMixin, View):
+    def test_func(self):
+        return can_manage_inventory(self.request.user)
+
+    def post(self, request, pk):
+        device = get_object_or_404(MedicalDevice, pk=pk)
+        device.archive()
+        messages.success(request, "Изделие перемещено в архив.")
+        return redirect("inventory:list")

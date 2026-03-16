@@ -55,9 +55,12 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .detail-actions { display: flex; align-items: center; gap: 0.8rem; }
 .filters, .inline-form { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem; }
+.checkline { display: inline-flex; align-items: center; gap: 0.45rem; }
 .stack { display: grid; gap: 1rem; }
 .status-inline { margin: 0.6rem 0 1rem; }
 .table-wrap { overflow-x: auto; }
+.table-actions { display: flex; gap: 0.6rem; align-items: center; }
+.table-actions form { margin: 0; }
 .board-grid { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 1rem; }
 .kanban-column header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .work-card { padding: 0.9rem; margin-bottom: 0.8rem; background: var(--surface-strong); }

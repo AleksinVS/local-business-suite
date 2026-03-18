@@ -10,7 +10,10 @@
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <header class="site-header">
-      <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
+      <div class="site-header-main">
+        <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
+        {% block header_context %}{% endblock %}
+      </div>
       <nav class="main-nav">
         <a href="{% url 'workorders:board' %}">Доска</a>
         <a href="{% url 'inventory:list' %}">Медизделия</a>

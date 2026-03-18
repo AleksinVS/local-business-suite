@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="board-page">
-<nav class="breadcrumbs">
-  <a href="{% url 'core:dashboard' %}">Local Business Suite</a>
+{% block header_context %}
+<nav class="breadcrumbs header-breadcrumbs">
   <span>/</span>
   <span>Канбан заявок ТО и ремонтов</span>
 </nav>
+{% endblock %}
+
+{% block content %}
+<div class="board-page">
 <section class="panel board-header-panel">
   <form method="get" class="filters filters-compact">
     <input type="hidden" name="view" value="board">

@@ -36,6 +36,12 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   align-items: center;
   padding: 0.5rem 0 0.35rem;
 }
+.site-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
 .brand { font-size: 1.08rem; font-weight: 700; }
 .subtitle, .eyebrow, small { color: var(--ink-soft); }
 .main-nav { display: flex; gap: 0.8rem; align-items: center; }
@@ -57,6 +63,11 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   padding: 0 0.2rem 0.3rem;
 }
 .breadcrumbs a:hover { color: var(--accent); }
+.header-breadcrumbs {
+  padding: 0;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
 .panel, .hero-card, .metric, .kanban-column, .work-card, .flash {
   background: var(--surface);
   border: 1px solid rgba(255,255,255,0.45);
@@ -276,6 +287,7 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; }
   .site-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .site-header-main { flex-wrap: wrap; }
   .board-page {
     width: calc(100vw - 0.6rem);
     margin-left: calc(50% - 50vw + 0.3rem);

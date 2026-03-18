@@ -1,6 +1,6 @@
 from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.core.models import Department
@@ -95,6 +95,33 @@ class WorkOrderRoleMatrixTests(TestCase):
 
     def test_workorder_number_is_human_readable(self):
         self.assertEqual(self.workorder.number, str(self.workorder.pk))
+
+    @override_settings(
+        LOCAL_BUSINESS_ROLE_RULES={
+            "dispatcher": {
+                "view_scope": "all",
+                "create_workorder": True,
+                "edit_scope": "none",
+                "comment_scope": "visible",
+                "upload_attachment_scope": "none",
+                "confirm_closure_scope": "none",
+                "rate_scope": "none",
+                "transition_scope": "all",
+                "transition_targets": ["accepted"],
+                "manage_inventory": False,
+                "manage_board_columns": False,
+                "manage_assignments": False,
+            }
+        }
+    )
+    def test_transition_rights_can_come_from_settings_defined_role(self):
+        dispatcher = User.objects.create_user(username="dispatcher", password="pass")
+        dispatcher_group, _ = Group.objects.get_or_create(name="dispatcher")
+        dispatcher.groups.add(dispatcher_group)
+
+        self.assertTrue(can_view(dispatcher, self.workorder))
+        self.assertTrue(can_transition(dispatcher, self.workorder, WorkOrderStatus.ACCEPTED))
+        self.assertFalse(can_transition(dispatcher, self.workorder, WorkOrderStatus.IN_PROGRESS))
 
 
 class WorkOrderViewPermissionTests(TestCase):

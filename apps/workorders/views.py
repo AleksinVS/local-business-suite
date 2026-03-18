@@ -23,16 +23,16 @@ from .forms import (
 )
 from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
+    allowed_view_scopes,
     can_comment,
     can_confirm_closure,
     can_create,
     can_edit,
+    can_manage_assignments,
+    can_manage_board_columns,
     can_rate,
     can_transition,
     can_upload_attachment,
-    is_customer,
-    is_manager,
-    is_technician,
 )
 from .services import confirm_closure, transition_workorder
 
@@ -67,13 +67,21 @@ def column_card_context(column):
 
 def visible_workorders_for(user):
     queryset = WorkOrder.objects.select_related("device", "author", "assignee", "department", "department__parent")
-    if user.is_superuser or is_manager(user):
+    scopes = allowed_view_scopes(user)
+    if "all" in scopes:
         return queryset
-    if is_customer(user):
-        return queryset
-    if is_technician(user):
-        return queryset.filter(Q(assignee=user) | Q(assignee__isnull=True) | Q(author=user))
-    return queryset.none()
+    visibility_filter = Q(pk__in=[])
+    if "authored" in scopes:
+        visibility_filter |= Q(author=user)
+    if "assigned" in scopes:
+        visibility_filter |= Q(assignee=user)
+    if "assigned_or_unassigned" in scopes:
+        visibility_filter |= Q(assignee=user) | Q(assignee__isnull=True)
+    if "assigned_or_unassigned_or_authored" in scopes:
+        visibility_filter |= Q(assignee=user) | Q(assignee__isnull=True) | Q(author=user)
+    if "visible" in scopes:
+        visibility_filter |= Q(author=user) | Q(assignee=user)
+    return queryset.filter(visibility_filter).distinct()
 
 
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
@@ -159,7 +167,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             "assignee": self.request.GET.get("assignee", ""),
             "device": self.request.GET.get("device", ""),
         }
-        context["can_manage_board_columns"] = is_manager(self.request.user)
+        context["can_manage_board_columns"] = can_manage_board_columns(self.request.user)
         return context
 
     def get_template_names(self):
@@ -185,13 +193,13 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.author = self.request.user
-        if not is_manager(self.request.user):
+        if not can_manage_assignments(self.request.user):
             form.instance.assignee = None
         return super().form_valid(form)
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
-        if not is_manager(self.request.user):
+        if not can_manage_assignments(self.request.user):
             form.fields["assignee"].disabled = True
             form.fields["assignee"].required = False
         return form
@@ -212,7 +220,7 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
-        if not is_manager(self.request.user):
+        if not can_manage_assignments(self.request.user):
             form.fields["assignee"].disabled = True
             form.fields["assignee"].required = False
         return form
@@ -442,7 +450,7 @@ class WorkOrderRateView(LoginRequiredMixin, View):
 
 class KanbanColumnRenameView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        if not is_manager(request.user):
+        if not can_manage_board_columns(request.user):
             return HttpResponseForbidden("Изменение колонок запрещено")
         column = get_object_or_404(KanbanColumnConfig, pk=pk)
         form = KanbanColumnTitleForm(request.POST, instance=column)
@@ -469,7 +477,7 @@ class KanbanColumnRenameView(LoginRequiredMixin, View):
 
 class KanbanColumnEditView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        if not is_manager(request.user):
+        if not can_manage_board_columns(request.user):
             return HttpResponseForbidden("Изменение колонок запрещено")
         column = get_object_or_404(KanbanColumnConfig, pk=pk)
         return render(
@@ -481,7 +489,7 @@ class KanbanColumnEditView(LoginRequiredMixin, View):
 
 class KanbanColumnDisplayView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        if not is_manager(request.user):
+        if not can_manage_board_columns(request.user):
             return HttpResponseForbidden("Изменение колонок запрещено")
         column = get_object_or_404(KanbanColumnConfig, pk=pk)
         return render(

@@ -115,3 +115,48 @@ WHITENOISE_AUTOREFRESH = DEBUG
 WHITENOISE_USE_FINDERS = DEBUG
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOCAL_BUSINESS_ROLE_RULES = {
+    "customer": {
+        "view_scope": "all",
+        "create_workorder": True,
+        "edit_scope": "authored",
+        "comment_scope": "visible",
+        "upload_attachment_scope": "authored",
+        "confirm_closure_scope": "authored",
+        "rate_scope": "authored",
+        "transition_scope": "authored",
+        "transition_targets": ["cancelled"],
+        "manage_inventory": False,
+        "manage_board_columns": False,
+        "manage_assignments": False,
+    },
+    "technician": {
+        "view_scope": "assigned_or_unassigned_or_authored",
+        "create_workorder": False,
+        "edit_scope": "none",
+        "comment_scope": "visible",
+        "upload_attachment_scope": "visible",
+        "confirm_closure_scope": "none",
+        "rate_scope": "none",
+        "transition_scope": "assigned_or_unassigned_or_authored",
+        "transition_targets": ["accepted", "in_progress", "on_hold", "resolved"],
+        "manage_inventory": False,
+        "manage_board_columns": False,
+        "manage_assignments": False,
+    },
+    "manager": {
+        "view_scope": "all",
+        "create_workorder": True,
+        "edit_scope": "all",
+        "comment_scope": "visible",
+        "upload_attachment_scope": "visible",
+        "confirm_closure_scope": "all",
+        "rate_scope": "all",
+        "transition_scope": "all",
+        "transition_targets": "*",
+        "manage_inventory": True,
+        "manage_board_columns": True,
+        "manage_assignments": True,
+    },
+}

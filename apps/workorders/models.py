@@ -106,17 +106,22 @@ class WorkOrder(models.Model):
         verbose_name = "Заявка"
         verbose_name_plural = "Заявки"
 
+    @staticmethod
+    def format_number(pk):
+        return f"{pk:06d}"
+
     def save(self, *args, **kwargs):
-        if not self.number:
-            stamp = timezone.now().strftime("%Y%m%d%H%M%S%f")
-            self.number = f"WO-{stamp}"
         if self.status == WorkOrderStatus.RESOLVED and not self.resolved_at:
             self.resolved_at = timezone.now()
         if self.status == WorkOrderStatus.CLOSED and not self.closed_at:
             self.closed_at = timezone.now()
         if self.status != WorkOrderStatus.CLOSED:
             self.closed_at = None
+        creating = self.pk is None
         super().save(*args, **kwargs)
+        if creating and not self.number:
+            self.number = self.format_number(self.pk)
+            super().save(update_fields=["number"])
 
     def __str__(self):
         return f"{self.number}: {self.title}"

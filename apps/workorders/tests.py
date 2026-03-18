@@ -93,6 +93,9 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
         self.assertEqual(self.workorder.transitions.count(), 1)
 
+    def test_workorder_number_is_human_readable(self):
+        self.assertEqual(self.workorder.number, f"{self.workorder.pk:06d}")
+
 
 class WorkOrderViewPermissionTests(TestCase):
     def setUp(self):

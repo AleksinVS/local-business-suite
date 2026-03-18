@@ -20,4 +20,5 @@ class MedicalDeviceAdmin(admin.ModelAdmin):
         "serial_number",
         "inventory_number",
         "location",
+        "department__name",
     )

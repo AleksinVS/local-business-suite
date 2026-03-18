@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils import timezone
 
+from apps.core.models import Department
+
 
 class OperationalStatus(models.TextChoices):
     ACTIVE = "active", "В эксплуатации"
@@ -15,7 +17,12 @@ class MedicalDevice(models.Model):
     model = models.CharField("Модель", max_length=255, blank=True)
     serial_number = models.CharField("Серийный номер", max_length=128, unique=True)
     inventory_number = models.CharField("Инвентарный номер", max_length=128, blank=True)
-    department = models.CharField("Подразделение", max_length=255)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="medical_devices",
+        verbose_name="Подразделение",
+    )
     location = models.CharField("Местоположение", max_length=255, blank=True)
     operational_status = models.CharField(
         "Статус эксплуатации",

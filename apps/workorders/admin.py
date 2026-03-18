@@ -23,7 +23,7 @@ class WorkOrderTransitionLogInline(admin.TabularInline):
 class WorkOrderAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "department", "status", "priority", "assignee")
     list_filter = ("status", "priority", "department")
-    search_fields = ("number", "title", "description", "device__name", "device__serial_number")
+    search_fields = ("number", "title", "description", "device__name", "device__serial_number", "department__name")
     inlines = [WorkOrderCommentInline, WorkOrderAttachmentInline, WorkOrderTransitionLogInline]
 
 

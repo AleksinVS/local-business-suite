@@ -2,6 +2,7 @@ from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.core.models import Department
 from apps.workorders.policies import ROLE_MANAGER
 
 from .models import MedicalDevice, OperationalStatus
@@ -13,10 +14,11 @@ class MedicalDeviceCrudTests(TestCase):
         self.regular_user = User.objects.create_user(username="viewer", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         self.manager.groups.add(manager_group)
+        self.department = Department.objects.create(name="Лучевая диагностика")
         self.device = MedicalDevice.objects.create(
             name="Рентген",
             serial_number="INV-001",
-            department="Лучевая диагностика",
+            department=self.department,
             operational_status=OperationalStatus.ACTIVE,
         )
 
@@ -35,7 +37,7 @@ class MedicalDeviceCrudTests(TestCase):
                 "model": "",
                 "serial_number": "INV-001",
                 "inventory_number": "",
-                "department": "Лучевая диагностика",
+                "department": self.department.pk,
                 "location": "",
                 "operational_status": OperationalStatus.MAINTENANCE,
                 "commissioned_at": "",
@@ -68,3 +70,17 @@ class MedicalDeviceCrudTests(TestCase):
         response = self.client.get(reverse("inventory:list"), {"archived": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Рентген")
+
+    def test_inventory_department_filter_uses_hierarchy(self):
+        parent = Department.objects.create(name="Диагностический блок")
+        child = Department.objects.create(name="Рентген-кабинет", parent=parent)
+        hierarchical_device = MedicalDevice.objects.create(
+            name="КТ",
+            serial_number="INV-002",
+            department=child,
+            operational_status=OperationalStatus.ACTIVE,
+        )
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("inventory:list"), {"department": parent.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, hierarchical_device.name)

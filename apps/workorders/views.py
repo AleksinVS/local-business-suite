@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
+from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
 from .forms import (
@@ -56,7 +57,7 @@ def column_card_context(column):
 
 
 def visible_workorders_for(user):
-    queryset = WorkOrder.objects.select_related("device", "author", "assignee")
+    queryset = WorkOrder.objects.select_related("device", "author", "assignee", "department", "department__parent")
     if user.is_superuser or is_manager(user):
         return queryset
     if is_customer(user):
@@ -87,7 +88,11 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 | Q(device__serial_number__icontains=q)
             )
         if department:
-            queryset = queryset.filter(department__iexact=department)
+            selected_department = Department.objects.filter(pk=department).first()
+            if selected_department:
+                queryset = queryset.filter(department_id__in=selected_department.descendant_ids())
+            else:
+                queryset = queryset.none()
         if status_value:
             queryset = queryset.filter(status=status_value)
         if assignee:
@@ -131,12 +136,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         ]
         context["board_visible_slots"] = min(max(board_column_count, 1), 5)
         context["status_choices"] = WorkOrderStatus.choices
-        context["departments"] = (
-            WorkOrder.objects.exclude(department="")
-            .order_by("department")
-            .values_list("department", flat=True)
-            .distinct()
-        )
+        context["departments"] = Department.objects.select_related("parent").order_by("parent_id", "name", "id")
         context["assignees"] = User.objects.order_by("first_name", "username")
         context["devices"] = MedicalDevice.objects.order_by("name")
         context["filters"] = {

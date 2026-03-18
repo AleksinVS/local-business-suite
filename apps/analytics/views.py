@@ -2,6 +2,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F
 from django.views.generic import TemplateView
 
+from apps.core.models import Department
 from apps.workorders.models import WorkOrder, WorkOrderStatus
 from apps.workorders.policies import can_manage_inventory
 
@@ -18,9 +19,21 @@ class AnalyticsDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
         context["status_summary"] = list(
             base_qs.values("status").annotate(total=Count("id")).order_by("status")
         )
-        context["department_summary"] = list(
-            base_qs.values("department").annotate(total=Count("id")).order_by("-total", "department")
+        department_rows = list(
+            base_qs.values("department")
+            .annotate(total=Count("id"))
+            .order_by("-total", "department")
         )
+        departments = Department.objects.select_related("parent")
+        department_map = {department.id: department for department in departments}
+        context["department_summary"] = [
+            {
+                "department_label": department_map[row["department"]].full_name,
+                "total": row["total"],
+            }
+            for row in department_rows
+            if row["department"] in department_map
+        ]
         context["assignee_summary"] = list(
             base_qs.values("assignee__username", "assignee__first_name", "assignee__last_name")
             .annotate(total=Count("id"))

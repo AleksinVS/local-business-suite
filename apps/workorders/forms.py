@@ -1,5 +1,7 @@
 from django import forms
 
+from apps.core.models import Department
+
 from .models import (
     ATTACHMENT_ALLOWED_TYPES,
     ATTACHMENT_MAX_SIZE,
@@ -10,7 +12,16 @@ from .models import (
 )
 
 
+class DepartmentChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return obj.indented_name
+
+
 class WorkOrderForm(forms.ModelForm):
+    department = DepartmentChoiceField(
+        queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+    )
+
     class Meta:
         model = WorkOrder
         fields = [
@@ -27,6 +38,10 @@ class WorkOrderForm(forms.ModelForm):
 
 
 class WorkOrderUpdateForm(forms.ModelForm):
+    department = DepartmentChoiceField(
+        queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+    )
+
     class Meta:
         model = WorkOrder
         fields = [

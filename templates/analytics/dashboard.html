@@ -37,7 +37,7 @@
       <thead><tr><th>Подразделение</th><th>Количество</th></tr></thead>
       <tbody>
         {% for row in department_summary %}
-          <tr><td>{{ row.department }}</td><td>{{ row.total }}</td></tr>
+          <tr><td>{{ row.department_label }}</td><td>{{ row.total }}</td></tr>
         {% empty %}
           <tr><td colspan="2">Нет данных.</td></tr>
         {% endfor %}

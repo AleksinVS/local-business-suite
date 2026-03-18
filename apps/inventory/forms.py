@@ -1,9 +1,20 @@
 from django import forms
 
+from apps.core.models import Department
+
 from .models import MedicalDevice
 
 
+class DepartmentChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return obj.indented_name
+
+
 class MedicalDeviceForm(forms.ModelForm):
+    department = DepartmentChoiceField(
+        queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+    )
+
     class Meta:
         model = MedicalDevice
         fields = [

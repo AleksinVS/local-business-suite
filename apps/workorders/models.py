@@ -3,6 +3,8 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from apps.core.models import Department
+
 ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
 ATTACHMENT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ATTACHMENT_ALLOWED_TYPES = ATTACHMENT_IMAGE_TYPES | {
@@ -51,7 +53,12 @@ class WorkOrder(models.Model):
     number = models.CharField("Номер", max_length=32, unique=True, editable=False)
     title = models.CharField("Заголовок", max_length=255)
     description = models.TextField("Описание")
-    department = models.CharField("Подразделение", max_length=255)
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="workorders",
+        verbose_name="Подразделение",
+    )
     priority = models.CharField(
         "Приоритет",
         max_length=16,

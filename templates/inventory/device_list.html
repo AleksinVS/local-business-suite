@@ -13,7 +13,7 @@
     <select name="department">
       <option value="">Все подразделения</option>
       {% for department in departments %}
-        <option value="{{ department }}" {% if filters.department == department %}selected{% endif %}>{{ department }}</option>
+        <option value="{{ department.id }}" {% if filters.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.indented_name }}</option>
       {% endfor %}
     </select>
     <select name="operational_status">

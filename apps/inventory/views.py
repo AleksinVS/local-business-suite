@@ -9,6 +9,7 @@ from django.views.generic import CreateView, ListView, UpdateView
 from .forms import MedicalDeviceForm
 from .models import MedicalDevice, OperationalStatus
 from apps.workorders.policies import can_manage_inventory
+from apps.core.models import Department
 
 
 class MedicalDeviceListView(LoginRequiredMixin, ListView):
@@ -37,7 +38,11 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
                 | Q(location__icontains=q)
             )
         if department:
-            queryset = queryset.filter(department__iexact=department)
+            selected_department = Department.objects.filter(pk=department).first()
+            if selected_department:
+                queryset = queryset.filter(department_id__in=selected_department.descendant_ids())
+            else:
+                queryset = queryset.none()
         if status_value:
             queryset = queryset.filter(operational_status=status_value)
         return queryset
@@ -45,12 +50,7 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["status_choices"] = OperationalStatus.choices
-        context["departments"] = (
-            MedicalDevice.objects.exclude(department="")
-            .order_by("department")
-            .values_list("department", flat=True)
-            .distinct()
-        )
+        context["departments"] = Department.objects.select_related("parent").order_by("parent_id", "name", "id")
         context["filters"] = {
             "q": self.request.GET.get("q", ""),
             "department": self.request.GET.get("department", ""),

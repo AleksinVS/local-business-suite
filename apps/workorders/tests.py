@@ -3,6 +3,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
 from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
@@ -20,10 +21,11 @@ from .services import confirm_closure, transition_workorder
 
 class WorkOrderRoleMatrixTests(TestCase):
     def setUp(self):
+        self.department = Department.objects.create(name="Диагностика")
         self.device = MedicalDevice.objects.create(
             name="УЗИ аппарат",
             serial_number="SN-001",
-            department="Диагностика",
+            department=self.department,
         )
         self.customer = User.objects.create_user(username="customer", password="pass")
         self.technician = User.objects.create_user(username="tech", password="pass")
@@ -41,7 +43,7 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.workorder = WorkOrder.objects.create(
             title="Проверить датчик",
             description="Нестабильные показания.",
-            department="Диагностика",
+            department=self.department,
             author=self.customer,
             assignee=self.technician,
             device=self.device,
@@ -94,10 +96,12 @@ class WorkOrderRoleMatrixTests(TestCase):
 
 class WorkOrderViewPermissionTests(TestCase):
     def setUp(self):
+        self.department = Department.objects.create(name="Стационар")
+        self.sub_department = Department.objects.create(name="ОРИТ", parent=self.department)
         self.device = MedicalDevice.objects.create(
             name="Монитор пациента",
             serial_number="SN-002",
-            department="ОРИТ",
+            department=self.sub_department,
         )
         self.customer = User.objects.create_user(username="customer2", password="pass")
         self.technician = User.objects.create_user(username="tech2", password="pass")
@@ -115,7 +119,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.workorder = WorkOrder.objects.create(
             title="Заменить кабель",
             description="Поврежден кабель питания.",
-            department="ОРИТ",
+            department=self.sub_department,
             author=self.customer,
             assignee=self.technician,
             device=self.device,
@@ -172,7 +176,7 @@ class WorkOrderViewPermissionTests(TestCase):
             {
                 "title": "Новая заявка",
                 "description": "Описание",
-                "department": "ОРИТ",
+                "department": self.sub_department.pk,
                 "priority": "medium",
                 "device": self.device.pk,
                 "assignee": self.technician.pk,
@@ -195,7 +199,7 @@ class WorkOrderViewPermissionTests(TestCase):
             {
                 "title": "Чужое изменение",
                 "description": self.workorder.description,
-                "department": self.workorder.department,
+                "department": self.workorder.department.pk,
                 "priority": self.workorder.priority,
                 "device": self.device.pk,
                 "assignee": self.technician.pk,
@@ -343,3 +347,9 @@ class WorkOrderViewPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, "Недопустимый тип файла.", status_code=400)
+
+    def test_board_department_filter_uses_hierarchy(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(reverse("workorders:board"), {"department": self.department.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)

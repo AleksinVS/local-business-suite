@@ -22,7 +22,7 @@
             hx-target="#detail-panel"
             hx-swap="outerHTML"
           >
-            {{ item.display_number }}. {{ workorder.title }}
+            {{ workorder.number }}. {{ workorder.title }}
           </a>
           <p>{{ workorder.device }}</p>
           <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>

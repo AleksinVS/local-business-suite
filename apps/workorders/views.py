@@ -110,7 +110,6 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         for column in column_configs:
             for status in column.statuses:
                 status_to_column[status] = column.code
-        display_number = 1
         for workorder in queryset:
             column_code = status_to_column.get(workorder.status)
             if not column_code:
@@ -118,12 +117,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             columns[column_code]["items"].append(
                 {
                     "workorder": workorder,
-                    "display_number": display_number,
                     "quick_transitions": quick_transition_choices_for(self.request.user, workorder),
                     "can_confirm_closure": can_confirm_closure(self.request.user, workorder),
                 }
             )
-            display_number += 1
         board_column_count = len(columns) if columns else 1
         context["board_columns"] = [
             {

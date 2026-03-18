@@ -94,7 +94,7 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertEqual(self.workorder.transitions.count(), 1)
 
     def test_workorder_number_is_human_readable(self):
-        self.assertEqual(self.workorder.number, f"{self.workorder.pk:06d}")
+        self.assertEqual(self.workorder.number, str(self.workorder.pk))
 
 
 class WorkOrderViewPermissionTests(TestCase):
@@ -166,11 +166,11 @@ class WorkOrderViewPermissionTests(TestCase):
             ["Новые", "В работе", "Выполнены", "Архив"],
         )
 
-    def test_board_uses_sequential_display_numbering(self):
+    def test_board_uses_request_number_in_card_title(self):
         self.client.force_login(self.customer)
         response = self.client.get(reverse("workorders:board"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "1. Заменить кабель")
+        self.assertContains(response, f"{self.workorder.number}. Заменить кабель")
         self.assertContains(response, 'name="status"')
         self.assertContains(response, 'hx-trigger="change"')
 

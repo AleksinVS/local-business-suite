@@ -108,7 +108,7 @@ class WorkOrder(models.Model):
 
     @staticmethod
     def format_number(pk):
-        return f"{pk:06d}"
+        return str(pk)
 
     def save(self, *args, **kwargs):
         if self.status == WorkOrderStatus.RESOLVED and not self.resolved_at:

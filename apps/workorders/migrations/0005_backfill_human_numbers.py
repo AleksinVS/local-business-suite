@@ -6,7 +6,7 @@ from django.db import migrations
 def backfill_human_numbers(apps, schema_editor):
     WorkOrder = apps.get_model("workorders", "WorkOrder")
     for workorder in WorkOrder.objects.order_by("pk"):
-        workorder.number = f"{workorder.pk:06d}"
+        workorder.number = str(workorder.pk)
         workorder.save(update_fields=["number"])
 
 

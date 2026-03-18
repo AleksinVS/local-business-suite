@@ -10,10 +10,7 @@
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <header class="site-header">
-      <div>
-        <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
-        <p class="subtitle">Канбан заявок ТО и ремонтов</p>
-      </div>
+      <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
       <nav class="main-nav">
         <a href="{% url 'workorders:board' %}">Доска</a>
         <a href="{% url 'inventory:list' %}">Медизделия</a>
@@ -36,5 +33,14 @@
     <main class="page-shell">
       {% block content %}{% endblock %}
     </main>
+    <script>
+      document.addEventListener("click", function (event) {
+        const panel = document.getElementById("detail-panel");
+        if (!panel || panel.classList.contains("is-hidden")) return;
+        if (panel.contains(event.target)) return;
+        if (event.target.closest("[hx-target='#detail-panel'], [hx-target=\"#detail-panel\"]")) return;
+        panel.outerHTML = '<section id="detail-panel" class="detail-panel is-hidden"><div class="detail-panel-placeholder detail-panel-empty">Выберите заявку, чтобы открыть быстрый просмотр.</div></section>';
+      });
+    </script>
   </body>
 </html>

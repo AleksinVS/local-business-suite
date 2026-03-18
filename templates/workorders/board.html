@@ -2,12 +2,13 @@
 
 {% block content %}
 <div class="board-page">
+<nav class="breadcrumbs">
+  <a href="{% url 'core:dashboard' %}">Local Business Suite</a>
+  <span>/</span>
+  <span>Канбан заявок ТО и ремонтов</span>
+</nav>
 <section class="panel board-header-panel">
-  <div class="section-head">
-    <h1>Канбан заявок</h1>
-    <a href="{% url 'workorders:create' %}">Создать заявку</a>
-  </div>
-  <form method="get" class="filters">
+  <form method="get" class="filters filters-compact">
     <input type="hidden" name="view" value="board">
     <input
       type="search"
@@ -81,6 +82,7 @@
     >
       Применить
     </button>
+    <a href="{% url 'workorders:create' %}" class="compact-link-button">Создать заявку</a>
   </form>
 </section>
 {% include "workorders/partials/board_columns.html" %}

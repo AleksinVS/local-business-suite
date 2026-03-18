@@ -1,8 +1,10 @@
 <div class="column-config-card" id="column-config-{{ column_config.pk }}">
   <div class="column-head">
-    <h2>{{ column_config.title }}</h2>
+    <div class="column-head-title">
+      <h2>{{ column_config.title }}</h2>
+      <span>{{ column_count }}</span>
+    </div>
     <div class="column-head-actions">
-      <span>{{ column_config.workorder_count|default:"" }}</span>
       <button
         type="button"
         class="icon-button"

@@ -1,11 +1,10 @@
 <section class="board-scroll" id="board-columns">
-  <div class="board-grid" style="grid-template-columns: repeat({{ board_columns|length }}, minmax(240px, calc((100vw - 2rem) / {{ board_visible_slots }})));">
+  <div class="board-grid" style="--board-columns: {{ board_columns|length }}; --board-visible-slots: {{ board_visible_slots }};">
   {% for column in board_columns %}
     <div class="kanban-column">
       <header>
         {% if can_manage_board_columns %}
-          {% include "workorders/partials/column_config_card.html" with column_config=column.config %}
-          <div class="column-count">{{ column.items|length }}</div>
+          {% include "workorders/partials/column_config_card.html" with column_config=column.config column_count=column.items|length %}
         {% else %}
           <div class="column-head">
             <h2>{{ column.label }}</h2>
@@ -16,7 +15,6 @@
       {% for item in column.items %}
         {% with workorder=item.workorder %}
         <article class="work-card">
-          <div class="work-card-index">#{{ item.display_number }}</div>
           <a
             href="{% url 'workorders:detail' workorder.pk %}"
             class="work-card-title"

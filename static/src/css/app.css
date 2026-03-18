@@ -187,7 +187,6 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 .card-status-form {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
   margin: 0;
 }
 .chip {

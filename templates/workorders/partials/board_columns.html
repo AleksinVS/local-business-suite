@@ -36,6 +36,7 @@
                 hx-post="{% url 'workorders:transition' workorder.pk %}"
                 hx-target="#board-columns"
                 hx-swap="outerHTML"
+                hx-trigger="change"
               >
                 {% csrf_token %}
                 <select name="status" class="mini-select">
@@ -43,7 +44,6 @@
                     <option value="{{ value }}">{{ label }}</option>
                   {% endfor %}
                 </select>
-                <button type="submit" class="mini-button">Сменить</button>
               </form>
             {% endif %}
           </div>

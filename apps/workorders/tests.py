@@ -169,7 +169,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "1. Заменить кабель")
         self.assertContains(response, 'name="status"')
-        self.assertContains(response, "Сменить")
+        self.assertContains(response, 'hx-trigger="change"')
 
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)

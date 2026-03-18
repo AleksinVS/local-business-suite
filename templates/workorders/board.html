@@ -91,3 +91,81 @@
 {% include "workorders/partials/detail_panel_empty.html" %}
 </div>
 {% endblock %}
+
+{% block extra_scripts %}
+  {{ block.super }}
+  <script>
+    (function () {
+      function csrfToken() {
+        const body = document.body.getAttribute("hx-headers");
+        if (!body) return "";
+        try {
+          return JSON.parse(body)["x-csrftoken"] || "";
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function clearDropState() {
+        document.querySelectorAll(".work-card.dragging").forEach((node) => node.classList.remove("dragging"));
+        document.querySelectorAll(".kanban-column.drag-over").forEach((node) => node.classList.remove("drag-over"));
+      }
+
+      document.addEventListener("dragstart", function (event) {
+        const card = event.target.closest(".work-card[draggable='true']");
+        if (!card) return;
+        if (event.target.closest("a, select, button, form")) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", card.dataset.workorderId);
+        card.classList.add("dragging");
+      });
+
+      document.addEventListener("dragend", clearDropState);
+
+      document.addEventListener("dragover", function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        event.preventDefault();
+        column.classList.add("drag-over");
+      });
+
+      document.addEventListener("dragleave", function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        if (column.contains(event.relatedTarget)) return;
+        column.classList.remove("drag-over");
+      });
+
+      document.addEventListener("drop", async function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        event.preventDefault();
+        const workorderId = event.dataTransfer.getData("text/plain");
+        clearDropState();
+        if (!workorderId) return;
+
+        const response = await fetch(`/workorders/${workorderId}/board-move/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "HX-Request": "true",
+            "HX-Target": "board-columns",
+            "X-CSRFToken": csrfToken(),
+          },
+          body: new URLSearchParams({column: column.dataset.columnCode}),
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) return;
+        const markup = await response.text();
+        const board = document.getElementById("board-columns");
+        if (board) {
+          board.outerHTML = markup;
+        }
+      });
+    })();
+  </script>
+{% endblock %}

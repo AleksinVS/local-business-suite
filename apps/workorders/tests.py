@@ -173,6 +173,29 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, f"{self.workorder.number}. Заменить кабель")
         self.assertContains(response, 'name="status"')
         self.assertContains(response, 'hx-trigger="change"')
+        self.assertContains(response, 'data-column-code="')
+
+    def test_technician_can_move_card_to_other_column(self):
+        self.client.force_login(self.technician)
+        response = self.client.post(
+            reverse("workorders:board_move", args=[self.workorder.pk]),
+            {"column": "in_progress"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="board-columns",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.workorder.refresh_from_db()
+        self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
+
+    def test_customer_cannot_drag_card_to_technical_column(self):
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:board_move", args=[self.workorder.pk]),
+            {"column": "in_progress"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="board-columns",
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)

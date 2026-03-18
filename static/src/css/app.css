@@ -112,6 +112,10 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   );
 }
 .kanban-column { padding: 0.8rem; }
+.kanban-column.drag-over {
+  border-color: rgba(19, 93, 102, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(19, 93, 102, 0.18);
+}
 .kanban-column header { display: block; margin-bottom: 0.55rem; }
 .column-head { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; }
 .column-head-title {
@@ -160,6 +164,8 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   box-shadow: none;
   border-radius: 1rem;
 }
+.work-card-draggable { cursor: grab; }
+.work-card.dragging { opacity: 0.45; }
 .work-card-empty { color: var(--ink-soft); text-align: center; }
 .work-card-title {
   font-weight: 600;

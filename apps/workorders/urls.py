@@ -13,6 +13,7 @@ from .views import (
     WorkOrderUpdateView,
     WorkOrderConfirmClosureView,
     WorkOrderTransitionView,
+    WorkOrderBoardMoveView,
 )
 
 app_name = "workorders"
@@ -30,4 +31,5 @@ urlpatterns = [
     path("<int:pk>/confirm-closure/", WorkOrderConfirmClosureView.as_view(), name="confirm_closure"),
     path("<int:pk>/rate/", WorkOrderRateView.as_view(), name="rate"),
     path("<int:pk>/transition/", WorkOrderTransitionView.as_view(), name="transition"),
+    path("<int:pk>/board-move/", WorkOrderBoardMoveView.as_view(), name="board_move"),
 ]

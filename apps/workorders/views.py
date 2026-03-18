@@ -49,6 +49,15 @@ def configured_columns():
     return list(KanbanColumnConfig.objects.order_by("position", "id"))
 
 
+def drop_status_for_column(user, workorder, column):
+    if workorder.status in column.statuses:
+        return None
+    for status in column.statuses:
+        if can_transition(user, workorder, status):
+            return status
+    return None
+
+
 def column_card_context(column):
     return {
         "column_config": column,
@@ -114,11 +123,18 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             column_code = status_to_column.get(workorder.status)
             if not column_code:
                 continue
+            drop_targets = {
+                column.code: status
+                for column in column_configs
+                for status in [drop_status_for_column(self.request.user, workorder, column)]
+                if status
+            }
             columns[column_code]["items"].append(
                 {
                     "workorder": workorder,
                     "quick_transitions": quick_transition_choices_for(self.request.user, workorder),
                     "can_confirm_closure": can_confirm_closure(self.request.user, workorder),
+                    "can_drag": bool(drop_targets),
                 }
             )
         board_column_count = len(columns) if columns else 1
@@ -343,6 +359,29 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
             )
         messages.success(request, "Статус заявки обновлен.")
         return redirect("workorders:detail", pk=workorder.pk)
+
+
+class WorkOrderBoardMoveView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        column_code = request.POST.get("column", "").strip()
+        column = get_object_or_404(KanbanColumnConfig, code=column_code)
+        target_status = drop_status_for_column(request.user, workorder, column)
+
+        if target_status:
+            transition_workorder(workorder=workorder, user=request.user, to_status=target_status)
+        elif workorder.status not in column.statuses:
+            return HttpResponseForbidden("Перемещение в колонку запрещено")
+
+        board_view = WorkOrderBoardView()
+        board_view.request = request
+        board_view.args = ()
+        board_view.kwargs = {}
+        return render(
+            request,
+            "workorders/partials/board_columns.html",
+            board_view.get_context_data(),
+        )
 
 
 class WorkOrderConfirmClosureView(LoginRequiredMixin, View):

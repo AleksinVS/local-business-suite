@@ -1,7 +1,7 @@
 <section class="board-scroll" id="board-columns">
   <div class="board-grid" style="--board-columns: {{ board_columns|length }}; --board-visible-slots: {{ board_visible_slots }};">
   {% for column in board_columns %}
-    <div class="kanban-column">
+    <div class="kanban-column" data-column-code="{{ column.key }}">
       <header>
         {% if can_manage_board_columns %}
           {% include "workorders/partials/column_config_card.html" with column_config=column.config column_count=column.items|length %}
@@ -14,7 +14,7 @@
       </header>
       {% for item in column.items %}
         {% with workorder=item.workorder %}
-        <article class="work-card">
+        <article class="work-card {% if item.can_drag %}work-card-draggable{% endif %}" data-workorder-id="{{ workorder.pk }}" {% if item.can_drag %}draggable="true"{% endif %}>
           <a
             href="{% url 'workorders:detail' workorder.pk %}"
             class="work-card-title"

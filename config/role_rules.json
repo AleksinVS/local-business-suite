@@ -1,0 +1,44 @@
+{
+  "customer": {
+    "view_scope": "all",
+    "create_workorder": true,
+    "edit_scope": "authored",
+    "comment_scope": "visible",
+    "upload_attachment_scope": "authored",
+    "confirm_closure_scope": "authored",
+    "rate_scope": "authored",
+    "transition_scope": "authored",
+    "transition_targets": ["cancelled"],
+    "manage_inventory": false,
+    "manage_board_columns": false,
+    "manage_assignments": false
+  },
+  "technician": {
+    "view_scope": "assigned_or_unassigned_or_authored",
+    "create_workorder": false,
+    "edit_scope": "none",
+    "comment_scope": "visible",
+    "upload_attachment_scope": "visible",
+    "confirm_closure_scope": "none",
+    "rate_scope": "none",
+    "transition_scope": "assigned_or_unassigned_or_authored",
+    "transition_targets": ["accepted", "in_progress", "on_hold", "resolved"],
+    "manage_inventory": false,
+    "manage_board_columns": false,
+    "manage_assignments": false
+  },
+  "manager": {
+    "view_scope": "all",
+    "create_workorder": true,
+    "edit_scope": "all",
+    "comment_scope": "visible",
+    "upload_attachment_scope": "visible",
+    "confirm_closure_scope": "all",
+    "rate_scope": "all",
+    "transition_scope": "all",
+    "transition_targets": "*",
+    "manage_inventory": true,
+    "manage_board_columns": true,
+    "manage_assignments": true
+  }
+}

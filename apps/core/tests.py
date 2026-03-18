@@ -1,5 +1,9 @@
+import json
+import tempfile
+from pathlib import Path
+
 from django.contrib.auth.models import Group, User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.workorders.policies import ROLE_MANAGER
@@ -48,3 +52,59 @@ class DepartmentViewTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, reverse("admin:index"))
+
+    @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
+    def test_manager_can_open_role_rules_editor(self):
+        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true}}', encoding="utf-8")
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("core:role_rules"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Права ролей")
+
+    def test_manager_can_save_role_rules_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "role_rules.json"
+            initial_payload = {
+                "manager": {
+                    "view_scope": "all",
+                    "create_workorder": True,
+                    "edit_scope": "all",
+                    "comment_scope": "visible",
+                    "upload_attachment_scope": "visible",
+                    "confirm_closure_scope": "all",
+                    "rate_scope": "all",
+                    "transition_scope": "all",
+                    "transition_targets": "*",
+                    "manage_inventory": True,
+                    "manage_board_columns": True,
+                    "manage_assignments": True,
+                }
+            }
+            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
+            with override_settings(
+                LOCAL_BUSINESS_ROLE_RULES_FILE=config_path,
+                LOCAL_BUSINESS_ROLE_RULES=initial_payload,
+            ):
+                self.client.force_login(self.manager)
+                updated_payload = {
+                    "dispatcher": {
+                        "view_scope": "all",
+                        "create_workorder": True,
+                        "edit_scope": "none",
+                        "comment_scope": "visible",
+                        "upload_attachment_scope": "none",
+                        "confirm_closure_scope": "none",
+                        "rate_scope": "none",
+                        "transition_scope": "all",
+                        "transition_targets": ["accepted"],
+                        "manage_inventory": False,
+                        "manage_board_columns": False,
+                        "manage_assignments": False,
+                    }
+                }
+                response = self.client.post(
+                    reverse("core:role_rules"),
+                    {"rules_json": json.dumps(updated_payload)},
+                )
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), updated_payload)

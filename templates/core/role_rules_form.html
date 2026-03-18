@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">JSON</p>
+      <h1>Права ролей</h1>
+    </div>
+    <a href="{% url 'core:department_list' %}">К подразделениям</a>
+  </div>
+  <p>Изменения сохраняются в `config/role_rules.json` и сразу применяются в текущем процессе Django.</p>
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="table-actions">
+      <button type="submit">Сохранить JSON</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

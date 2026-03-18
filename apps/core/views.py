@@ -1,11 +1,12 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
 from apps.workorders.policies import can_manage_inventory
-from .forms import DepartmentForm
+from .forms import DepartmentForm, RoleRulesForm
 from .models import Department
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import WorkOrder, WorkOrderStatus
@@ -69,4 +70,17 @@ class DepartmentUpdateView(DepartmentManagementMixin, UpdateView):
 
     def form_valid(self, form):
         messages.success(self.request, "Подразделение обновлено.")
+        return super().form_valid(form)
+
+
+class RoleRulesUpdateView(DepartmentManagementMixin, FormView):
+    template_name = "core/role_rules_form.html"
+    form_class = RoleRulesForm
+    success_url = reverse_lazy("core:role_rules")
+
+    def form_valid(self, form):
+        payload = form.cleaned_data["rules_payload"]
+        settings.LOCAL_BUSINESS_ROLE_RULES_FILE.write_text(form.cleaned_data["rules_json"] + "\n", encoding="utf-8")
+        settings.LOCAL_BUSINESS_ROLE_RULES = payload
+        messages.success(self.request, "Конфигурация ролей обновлена.")
         return super().form_valid(form)

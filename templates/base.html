@@ -19,6 +19,7 @@
         <a href="{% url 'inventory:list' %}">Медизделия</a>
         {% if show_department_nav %}
           <a href="{% url 'core:department_list' %}">Подразделения</a>
+          <a href="{% url 'core:role_rules' %}">Роли</a>
         {% endif %}
         {% if show_admin_nav %}
           <a href="{% url 'admin:index' %}">Django admin</a>

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderTransitionLog
+from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderTransitionLog
 
 
 class WorkOrderCommentInline(admin.TabularInline):
@@ -25,3 +25,9 @@ class WorkOrderAdmin(admin.ModelAdmin):
     list_filter = ("status", "priority", "department")
     search_fields = ("number", "title", "description", "device__name", "device__serial_number")
     inlines = [WorkOrderCommentInline, WorkOrderAttachmentInline, WorkOrderTransitionLogInline]
+
+
+@admin.register(KanbanColumnConfig)
+class KanbanColumnConfigAdmin(admin.ModelAdmin):
+    list_display = ("title", "code", "position")
+    ordering = ("position", "id")

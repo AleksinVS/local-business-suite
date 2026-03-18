@@ -32,6 +32,21 @@ class WorkOrderPriority(models.TextChoices):
     CRITICAL = "critical", "Критичный"
 
 
+class KanbanColumnConfig(models.Model):
+    code = models.SlugField("Код", max_length=50, unique=True)
+    title = models.CharField("Название", max_length=120)
+    position = models.PositiveIntegerField("Позиция", default=0)
+    statuses = models.JSONField("Статусы", default=list)
+
+    class Meta:
+        ordering = ["position", "id"]
+        verbose_name = "Колонка канбана"
+        verbose_name_plural = "Колонки канбана"
+
+    def __str__(self):
+        return self.title
+
+
 class WorkOrder(models.Model):
     number = models.CharField("Номер", max_length=32, unique=True, editable=False)
     title = models.CharField("Заголовок", max_length=255)

@@ -13,13 +13,14 @@ from django.views.generic import CreateView, DetailView, TemplateView, UpdateVie
 from apps.inventory.models import MedicalDevice
 
 from .forms import (
+    KanbanColumnTitleForm,
     WorkOrderAttachmentForm,
     WorkOrderCommentForm,
     WorkOrderForm,
     WorkOrderRatingForm,
     WorkOrderUpdateForm,
 )
-from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     can_comment,
     can_confirm_closure,
@@ -41,6 +42,10 @@ def quick_transition_choices_for(user, workorder):
         for status, label in WorkOrderStatus.choices
         if can_transition(user, workorder, status)
     ][:2]
+
+
+def configured_columns():
+    return list(KanbanColumnConfig.objects.order_by("position", "id"))
 
 
 def visible_workorders_for(user):
@@ -87,9 +92,17 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         queryset = self.get_queryset()
-        columns = OrderedDict((status, []) for status, _label in WorkOrderStatus.choices)
+        column_configs = configured_columns()
+        columns = OrderedDict((column.code, {"config": column, "items": []}) for column in column_configs)
+        status_to_column = {}
+        for column in column_configs:
+            for status in column.statuses:
+                status_to_column[status] = column.code
         for workorder in queryset:
-            columns[workorder.status].append(
+            column_code = status_to_column.get(workorder.status)
+            if not column_code:
+                continue
+            columns[column_code]["items"].append(
                 {
                     "workorder": workorder,
                     "quick_transitions": quick_transition_choices_for(self.request.user, workorder),
@@ -97,8 +110,14 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 }
             )
         context["board_columns"] = [
-            {"key": status, "label": label, "items": columns[status]}
-            for status, label in WorkOrderStatus.choices
+            {
+                "key": code,
+                "label": data["config"].title,
+                "config": data["config"],
+                "items": data["items"],
+                "rename_form": KanbanColumnTitleForm(instance=data["config"]),
+            }
+            for code, data in columns.items()
         ]
         context["status_choices"] = WorkOrderStatus.choices
         context["departments"] = (
@@ -116,6 +135,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             "assignee": self.request.GET.get("assignee", ""),
             "device": self.request.GET.get("device", ""),
         }
+        context["can_manage_board_columns"] = is_manager(self.request.user)
         return context
 
     def get_template_names(self):
@@ -212,7 +232,6 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
 
 class WorkOrderCommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(WorkOrder, pk=pk)
         workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
         if not can_comment(request.user, workorder):
             return HttpResponseForbidden("Комментарии недоступны")
@@ -372,3 +391,23 @@ class WorkOrderRateView(LoginRequiredMixin, View):
             )
         messages.error(request, "Не удалось сохранить оценку.")
         return redirect("workorders:detail", pk=workorder.pk)
+
+
+class KanbanColumnRenameView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        if not is_manager(request.user):
+            return HttpResponseForbidden("Изменение колонок запрещено")
+        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        form = KanbanColumnTitleForm(request.POST, instance=column)
+        if form.is_valid():
+            form.save()
+        board_view = WorkOrderBoardView()
+        board_view.request = request
+        board_view.args = ()
+        board_view.kwargs = {}
+        return render(
+            request,
+            "workorders/partials/board_columns.html",
+            board_view.get_context_data(),
+            status=200 if form.is_valid() else 400,
+        )

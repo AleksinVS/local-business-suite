@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from apps.inventory.models import MedicalDevice
 
-from .models import WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     ROLE_CUSTOMER,
     ROLE_MANAGER,
@@ -151,6 +151,13 @@ class WorkOrderViewPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Выбери карточку на доске")
+        self.assertContains(response, "is-hidden")
+
+    def test_default_board_columns_are_configured(self):
+        self.assertEqual(
+            list(KanbanColumnConfig.objects.values_list("title", flat=True)),
+            ["Новые", "В работе", "Выполнены", "Архив"],
+        )
 
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)
@@ -252,6 +259,19 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, 'id="board-columns"')
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
+
+    def test_manager_can_rename_column_title(self):
+        column = KanbanColumnConfig.objects.get(code="new")
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("workorders:column_rename", args=[column.pk]),
+            {"title": "Свежие заявки"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        column.refresh_from_db()
+        self.assertEqual(column.title, "Свежие заявки")
+        self.assertContains(response, "Свежие заявки")
 
     def test_customer_can_confirm_closure_and_rate(self):
         self.workorder.status = WorkOrderStatus.RESOLVED

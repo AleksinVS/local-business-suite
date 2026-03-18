@@ -82,8 +82,6 @@
     </button>
   </form>
 </section>
-<section class="board-layout">
-  {% include "workorders/partials/board_columns.html" %}
-  {% include "workorders/partials/detail_panel_empty.html" %}
-</section>
+{% include "workorders/partials/board_columns.html" %}
+{% include "workorders/partials/detail_panel_empty.html" %}
 {% endblock %}

@@ -3,6 +3,7 @@ from django import forms
 from .models import (
     ATTACHMENT_ALLOWED_TYPES,
     ATTACHMENT_MAX_SIZE,
+    KanbanColumnConfig,
     WorkOrder,
     WorkOrderAttachment,
     WorkOrderComment,
@@ -72,3 +73,9 @@ class WorkOrderRatingForm(forms.ModelForm):
         widgets = {
             "rating": forms.NumberInput(attrs={"min": 1, "max": 5}),
         }
+
+
+class KanbanColumnTitleForm(forms.ModelForm):
+    class Meta:
+        model = KanbanColumnConfig
+        fields = ["title"]

@@ -17,6 +17,12 @@
       <nav class="main-nav">
         <a href="{% url 'workorders:board' %}">Доска</a>
         <a href="{% url 'inventory:list' %}">Медизделия</a>
+        {% if show_department_nav %}
+          <a href="{% url 'core:department_list' %}">Подразделения</a>
+        {% endif %}
+        {% if show_admin_nav %}
+          <a href="{% url 'admin:index' %}">Django admin</a>
+        {% endif %}
         <a href="{% url 'analytics:dashboard' %}">Аналитика</a>
         {% if user.is_authenticated %}
           <form action="{% url 'logout' %}" method="post">

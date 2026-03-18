@@ -26,28 +26,34 @@
           </a>
           <p>{{ workorder.device }}</p>
           <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
-          <div class="card-meta">
+          <div class="card-meta card-meta-inline">
             <span class="chip">{{ workorder.get_priority_display }}</span>
-            {% if workorder.assignee %}
-              <span class="chip chip-muted">{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}</span>
+            {% if item.quick_transitions %}
+              <form
+                action="{% url 'workorders:transition' workorder.pk %}"
+                method="post"
+                class="card-status-form"
+                hx-post="{% url 'workorders:transition' workorder.pk %}"
+                hx-target="#board-columns"
+                hx-swap="outerHTML"
+              >
+                {% csrf_token %}
+                <select name="status" class="mini-select">
+                  {% for value, label in item.quick_transitions %}
+                    <option value="{{ value }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="mini-button">Сменить</button>
+              </form>
             {% endif %}
           </div>
-          {% if item.quick_transitions or item.can_confirm_closure %}
+          {% if workorder.assignee %}
             <div class="card-actions">
-              {% for value, label in item.quick_transitions %}
-                <form
-                  action="{% url 'workorders:transition' workorder.pk %}"
-                  method="post"
-                  hx-post="{% url 'workorders:transition' workorder.pk %}"
-                  hx-target="#board-columns"
-                  hx-swap="outerHTML"
-                >
-                  {% csrf_token %}
-                  <input type="hidden" name="status" value="{{ value }}">
-                  <button type="submit" class="mini-button">{{ label }}</button>
-                </form>
-              {% endfor %}
-              {% if item.can_confirm_closure %}
+              <span class="chip chip-muted">{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}</span>
+            </div>
+          {% endif %}
+          {% if item.can_confirm_closure %}
+            <div class="card-actions">
                 <form
                   action="{% url 'workorders:confirm_closure' workorder.pk %}"
                   method="post"
@@ -58,7 +64,7 @@
                   {% csrf_token %}
                   <button type="submit" class="mini-button mini-button-strong">Подтвердить</button>
                 </form>
-              {% endif %}
+              
             </div>
           {% endif %}
         </article>

@@ -42,7 +42,7 @@ def quick_transition_choices_for(user, workorder):
         (status, label)
         for status, label in WorkOrderStatus.choices
         if can_transition(user, workorder, status)
-    ][:2]
+    ]
 
 
 def configured_columns():

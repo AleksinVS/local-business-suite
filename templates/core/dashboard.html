@@ -16,7 +16,12 @@
 <section class="panel">
   <div class="section-head">
     <h2>Статусы заявок</h2>
-    <a href="{% url 'workorders:board' %}">Открыть доску</a>
+    <div class="table-actions">
+      {% if can_manage_inventory %}
+        <a href="{% url 'core:department_list' %}">Подразделения</a>
+      {% endif %}
+      <a href="{% url 'workorders:board' %}">Открыть доску</a>
+    </div>
   </div>
   <div class="status-grid">
     {% for item in status_counts %}

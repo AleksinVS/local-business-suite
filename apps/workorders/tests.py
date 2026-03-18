@@ -168,6 +168,8 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:board"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "1. Заменить кабель")
+        self.assertContains(response, 'name="status"')
+        self.assertContains(response, "Сменить")
 
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)
@@ -303,6 +305,12 @@ class WorkOrderViewPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Переименовать")
+
+    def test_workorder_detail_no_longer_shows_author_field(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(reverse("workorders:detail", args=[self.workorder.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<strong>Автор:</strong>", html=True)
 
     def test_customer_can_confirm_closure_and_rate(self):
         self.workorder.status = WorkOrderStatus.RESOLVED

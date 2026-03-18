@@ -178,7 +178,18 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   line-height: 1.2;
 }
 .card-meta { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.4rem; }
+.card-meta-inline {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
 .card-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.4rem; }
+.card-status-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin: 0;
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -193,8 +204,17 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   padding: 0.28rem 0.5rem;
   border-radius: 999px;
   font-size: 0.72rem;
+  white-space: nowrap;
 }
 .mini-button-strong { background: #0d7a57; }
+.mini-select {
+  min-width: 0;
+  width: 8.7rem;
+  padding: 0.26rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  background: #fff;
+}
 .compact-link-button {
   display: inline-flex;
   align-items: center;
@@ -237,6 +257,12 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
   background: var(--accent-soft);
+}
+.status-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 .comment { padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface-strong); }
 .auth-panel { max-width: 420px; margin: 6rem auto 0; }

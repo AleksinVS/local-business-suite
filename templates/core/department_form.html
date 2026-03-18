@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <h1>{% if object %}Редактирование подразделения{% else %}Новое подразделение{% endif %}</h1>
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="table-actions">
+      <button type="submit">{% if object %}Сохранить{% else %}Создать{% endif %}</button>
+      <a href="{% url 'core:department_list' %}">Назад к дереву</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

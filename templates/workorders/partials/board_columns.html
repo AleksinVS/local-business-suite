@@ -47,11 +47,6 @@
               </form>
             {% endif %}
           </div>
-          {% if workorder.assignee %}
-            <div class="card-actions">
-              <span class="chip chip-muted">{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}</span>
-            </div>
-          {% endif %}
           {% if item.can_confirm_closure %}
             <div class="card-actions">
                 <form

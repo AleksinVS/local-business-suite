@@ -273,6 +273,27 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(column.title, "Свежие заявки")
         self.assertContains(response, "Свежие заявки")
 
+    def test_manager_can_open_inline_column_edit_form(self):
+        column = KanbanColumnConfig.objects.get(code="new")
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:column_edit", args=[column.pk]),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="column-config-')
+        self.assertContains(response, "Сохранить")
+
+    def test_manager_can_restore_column_display_card(self):
+        column = KanbanColumnConfig.objects.get(code="new")
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:column_display", args=[column.pk]),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Переименовать")
+
     def test_customer_can_confirm_closure_and_rate(self):
         self.workorder.status = WorkOrderStatus.RESOLVED
         self.workorder.save()

@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     WorkOrderAttachmentCreateView,
     WorkOrderBoardView,
+    KanbanColumnEditView,
+    KanbanColumnDisplayView,
     KanbanColumnRenameView,
     WorkOrderCommentCreateView,
     WorkOrderCreateView,
@@ -17,6 +19,8 @@ app_name = "workorders"
 
 urlpatterns = [
     path("", WorkOrderBoardView.as_view(), name="board"),
+    path("columns/<int:pk>/", KanbanColumnDisplayView.as_view(), name="column_display"),
+    path("columns/<int:pk>/edit/", KanbanColumnEditView.as_view(), name="column_edit"),
     path("columns/<int:pk>/rename/", KanbanColumnRenameView.as_view(), name="column_rename"),
     path("new/", WorkOrderCreateView.as_view(), name="create"),
     path("<int:pk>/", WorkOrderDetailView.as_view(), name="detail"),

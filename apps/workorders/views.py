@@ -48,6 +48,13 @@ def configured_columns():
     return list(KanbanColumnConfig.objects.order_by("position", "id"))
 
 
+def column_card_context(column):
+    return {
+        "column_config": column,
+        "rename_form": KanbanColumnTitleForm(instance=column),
+    }
+
+
 def visible_workorders_for(user):
     queryset = WorkOrder.objects.select_related("device", "author", "assignee")
     if user.is_superuser or is_manager(user):
@@ -115,7 +122,6 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 "label": data["config"].title,
                 "config": data["config"],
                 "items": data["items"],
-                "rename_form": KanbanColumnTitleForm(instance=data["config"]),
             }
             for code, data in columns.items()
         ]
@@ -405,9 +411,40 @@ class KanbanColumnRenameView(LoginRequiredMixin, View):
         board_view.request = request
         board_view.args = ()
         board_view.kwargs = {}
+        if request.htmx and request.htmx.target == f"column-config-{column.pk}":
+            return render(
+                request,
+                "workorders/partials/column_config_card.html",
+                column_card_context(column),
+                status=200 if form.is_valid() else 400,
+            )
         return render(
             request,
             "workorders/partials/board_columns.html",
             board_view.get_context_data(),
             status=200 if form.is_valid() else 400,
+        )
+
+
+class KanbanColumnEditView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        if not is_manager(request.user):
+            return HttpResponseForbidden("Изменение колонок запрещено")
+        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        return render(
+            request,
+            "workorders/partials/column_config_form.html",
+            column_card_context(column),
+        )
+
+
+class KanbanColumnDisplayView(LoginRequiredMixin, View):
+    def get(self, request, pk):
+        if not is_manager(request.user):
+            return HttpResponseForbidden("Изменение колонок запрещено")
+        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        return render(
+            request,
+            "workorders/partials/column_config_card.html",
+            column_card_context(column),
         )

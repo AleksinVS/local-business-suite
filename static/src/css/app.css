@@ -75,11 +75,22 @@ th, td { padding: 0.8rem; border-bottom: 1px solid var(--line); text-align: left
 }
 .kanban-column header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .column-head { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; }
+.column-head-actions { display: flex; align-items: center; gap: 0.5rem; }
+.column-config-card { margin-bottom: 0.8rem; }
 .column-rename-form {
   display: flex;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 1rem;
+}
+.icon-button {
+  padding: 0.35rem 0.65rem;
+  background: transparent;
+  color: var(--ink);
+}
+.column-count {
+  margin-bottom: 1rem;
+  color: var(--ink-soft);
 }
 .column-rename-form input {
   min-width: 0;

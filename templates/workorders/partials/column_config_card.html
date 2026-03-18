@@ -1,0 +1,17 @@
+<div class="column-config-card" id="column-config-{{ column_config.pk }}">
+  <div class="column-head">
+    <h2>{{ column_config.title }}</h2>
+    <div class="column-head-actions">
+      <span>{{ column_config.workorder_count|default:"" }}</span>
+      <button
+        type="button"
+        class="icon-button"
+        hx-get="{% url 'workorders:column_edit' column_config.pk %}"
+        hx-target="#column-config-{{ column_config.pk }}"
+        hx-swap="outerHTML"
+      >
+        Переименовать
+      </button>
+    </div>
+  </div>
+</div>

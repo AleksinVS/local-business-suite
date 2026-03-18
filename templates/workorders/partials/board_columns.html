@@ -3,23 +3,14 @@
   {% for column in board_columns %}
     <div class="kanban-column">
       <header>
-        <div class="column-head">
-          <h2>{{ column.label }}</h2>
-          <span>{{ column.items|length }}</span>
-        </div>
         {% if can_manage_board_columns %}
-          <form
-            method="post"
-            action="{% url 'workorders:column_rename' column.config.pk %}"
-            class="column-rename-form"
-            hx-post="{% url 'workorders:column_rename' column.config.pk %}"
-            hx-target="#board-columns"
-            hx-swap="outerHTML"
-          >
-            {% csrf_token %}
-            {{ column.rename_form.title }}
-            <button type="submit" class="mini-button">Сохранить</button>
-          </form>
+          {% include "workorders/partials/column_config_card.html" with column_config=column.config %}
+          <div class="column-count">{{ column.items|length }}</div>
+        {% else %}
+          <div class="column-head">
+            <h2>{{ column.label }}</h2>
+            <span>{{ column.items|length }}</span>
+          </div>
         {% endif %}
       </header>
       {% for item in column.items %}

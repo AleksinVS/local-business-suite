@@ -1,0 +1,22 @@
+<form
+  method="post"
+  action="{% url 'workorders:column_rename' column_config.pk %}"
+  class="column-rename-form"
+  id="column-config-{{ column_config.pk }}"
+  hx-post="{% url 'workorders:column_rename' column_config.pk %}"
+  hx-target="#column-config-{{ column_config.pk }}"
+  hx-swap="outerHTML"
+>
+  {% csrf_token %}
+  {{ rename_form.title }}
+  <button type="submit" class="mini-button">Сохранить</button>
+  <button
+    type="button"
+    class="ghost-button"
+    hx-get="{% url 'workorders:column_display' column_config.pk %}"
+    hx-target="#column-config-{{ column_config.pk }}"
+    hx-swap="outerHTML"
+  >
+    Отмена
+  </button>
+</form>

@@ -159,6 +159,12 @@ class WorkOrderViewPermissionTests(TestCase):
             ["Новые", "В работе", "Выполнены", "Архив"],
         )
 
+    def test_board_uses_sequential_display_numbering(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(reverse("workorders:board"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "1. Заменить кабель")
+
     def test_customer_can_create_workorder(self):
         self.client.force_login(self.customer)
         response = self.client.post(

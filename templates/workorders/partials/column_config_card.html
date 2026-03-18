@@ -6,11 +6,13 @@
       <button
         type="button"
         class="icon-button"
+        title="Переименовать"
+        aria-label="Переименовать"
         hx-get="{% url 'workorders:column_edit' column_config.pk %}"
         hx-target="#column-config-{{ column_config.pk }}"
         hx-swap="outerHTML"
       >
-        Переименовать
+        &#9998;
       </button>
     </div>
   </div>

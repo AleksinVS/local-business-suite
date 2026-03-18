@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="panel">
+<div class="board-page">
+<section class="panel board-header-panel">
   <div class="section-head">
     <h1>Канбан заявок</h1>
     <a href="{% url 'workorders:create' %}">Создать заявку</a>
@@ -84,4 +85,5 @@
 </section>
 {% include "workorders/partials/board_columns.html" %}
 {% include "workorders/partials/detail_panel_empty.html" %}
+</div>
 {% endblock %}

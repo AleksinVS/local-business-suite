@@ -1,5 +1,5 @@
 <section class="board-scroll" id="board-columns">
-  <div class="board-grid">
+  <div class="board-grid" style="grid-template-columns: repeat({{ board_columns|length }}, minmax(240px, calc((100vw - 2rem) / {{ board_visible_slots }})));">
   {% for column in board_columns %}
     <div class="kanban-column">
       <header>
@@ -16,6 +16,7 @@
       {% for item in column.items %}
         {% with workorder=item.workorder %}
         <article class="work-card">
+          <div class="work-card-index">#{{ item.display_number }}</div>
           <a
             href="{% url 'workorders:detail' workorder.pk %}"
             class="work-card-title"
@@ -23,7 +24,7 @@
             hx-target="#detail-panel"
             hx-swap="outerHTML"
           >
-            {{ workorder.number }} · {{ workorder.title }}
+            {{ item.display_number }}. {{ workorder.title }}
           </a>
           <p>{{ workorder.device }}</p>
           <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>

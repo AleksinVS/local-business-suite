@@ -1,0 +1,37 @@
+{
+  "statuses": [
+    "new",
+    "accepted",
+    "in_progress",
+    "on_hold",
+    "resolved",
+    "closed",
+    "cancelled"
+  ],
+  "transitions": {
+    "accepted": [
+      "in_progress",
+      "on_hold",
+      "cancelled"
+    ],
+    "cancelled": [],
+    "closed": [],
+    "in_progress": [
+      "on_hold",
+      "resolved",
+      "cancelled"
+    ],
+    "new": [
+      "accepted",
+      "cancelled"
+    ],
+    "on_hold": [
+      "in_progress",
+      "cancelled"
+    ],
+    "resolved": [
+      "closed",
+      "in_progress"
+    ]
+  }
+}

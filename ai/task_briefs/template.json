@@ -1,0 +1,23 @@
+{
+  "id": "TASK-0001",
+  "title": "Describe the requested change",
+  "status": "draft",
+  "requested_by": "product-owner",
+  "target_modules": [
+    "apps/workorders"
+  ],
+  "objective": "State the business outcome in one paragraph.",
+  "constraints": [
+    "Do not break existing role policies.",
+    "Prefer config-driven changes over hardcoded branches."
+  ],
+  "deliverables": [
+    "Updated implementation",
+    "Updated tests",
+    "Updated documentation if architecture changes"
+  ],
+  "acceptance_checks": [
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test"
+  ]
+}

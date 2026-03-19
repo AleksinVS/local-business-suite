@@ -6,27 +6,6 @@ ROLE_CUSTOMER = "customer"
 ROLE_TECHNICIAN = "technician"
 ROLE_MANAGER = "manager"
 
-STATUS_TRANSITIONS = {
-    WorkOrderStatus.NEW: {WorkOrderStatus.ACCEPTED, WorkOrderStatus.CANCELLED},
-    WorkOrderStatus.ACCEPTED: {
-        WorkOrderStatus.IN_PROGRESS,
-        WorkOrderStatus.ON_HOLD,
-        WorkOrderStatus.CANCELLED,
-    },
-    WorkOrderStatus.IN_PROGRESS: {
-        WorkOrderStatus.ON_HOLD,
-        WorkOrderStatus.RESOLVED,
-        WorkOrderStatus.CANCELLED,
-    },
-    WorkOrderStatus.ON_HOLD: {
-        WorkOrderStatus.IN_PROGRESS,
-        WorkOrderStatus.CANCELLED,
-    },
-    WorkOrderStatus.RESOLVED: {WorkOrderStatus.CLOSED, WorkOrderStatus.IN_PROGRESS},
-    WorkOrderStatus.CLOSED: set(),
-    WorkOrderStatus.CANCELLED: set(),
-}
-
 def user_roles(user):
     if not user.is_authenticated:
         return set()
@@ -35,6 +14,17 @@ def user_roles(user):
 
 def role_rules():
     return settings.LOCAL_BUSINESS_ROLE_RULES
+
+
+def workflow_rules():
+    return settings.LOCAL_BUSINESS_WORKFLOW_RULES
+
+
+def status_transitions():
+    return {
+        status: set(targets)
+        for status, targets in workflow_rules().get("transitions", {}).items()
+    }
 
 
 def active_role_rules(user):
@@ -152,7 +142,7 @@ def can_rate(user, workorder: WorkOrder) -> bool:
 def can_transition(user, workorder: WorkOrder, target_status: str) -> bool:
     if not can_view(user, workorder):
         return False
-    allowed = STATUS_TRANSITIONS.get(workorder.status, set())
+    allowed = status_transitions().get(workorder.status, set())
     if target_status not in allowed:
         return False
     if target_status == WorkOrderStatus.CLOSED:

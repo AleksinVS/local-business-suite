@@ -2,6 +2,19 @@ import json
 import os
 from pathlib import Path
 
+from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured
+
+from apps.core.json_utils import (
+    load_json_file,
+    validate_change_plan_payload,
+    validate_dataset_registry_payload,
+    validate_integration_registry_payload,
+    validate_role_rules_payload,
+    validate_task_brief_payload,
+    validate_workflow_rules_payload,
+)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
@@ -120,4 +133,42 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOCAL_BUSINESS_ROLE_RULES_FILE = Path(
     os.environ.get("LOCAL_BUSINESS_ROLE_RULES_FILE", BASE_DIR / "config" / "role_rules.json")
 )
-LOCAL_BUSINESS_ROLE_RULES = json.loads(LOCAL_BUSINESS_ROLE_RULES_FILE.read_text(encoding="utf-8"))
+LOCAL_BUSINESS_WORKFLOW_RULES_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_WORKFLOW_RULES_FILE", BASE_DIR / "config" / "workflow_rules.json")
+)
+LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", BASE_DIR / "config" / "integrations" / "registry.json")
+)
+LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", BASE_DIR / "analytics_store" / "datasets.json")
+)
+LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE", BASE_DIR / "ai" / "task_briefs" / "template.json")
+)
+LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE", BASE_DIR / "ai" / "change_plans" / "template.json")
+)
+
+try:
+    LOCAL_BUSINESS_WORKFLOW_RULES = load_json_file(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
+    validate_workflow_rules_payload(LOCAL_BUSINESS_WORKFLOW_RULES)
+
+    LOCAL_BUSINESS_ROLE_RULES = load_json_file(LOCAL_BUSINESS_ROLE_RULES_FILE)
+    validate_role_rules_payload(
+        LOCAL_BUSINESS_ROLE_RULES,
+        workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
+    )
+
+    LOCAL_BUSINESS_INTEGRATION_REGISTRY = load_json_file(LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE)
+    validate_integration_registry_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY)
+
+    LOCAL_BUSINESS_ANALYTICS_DATASETS = load_json_file(LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE)
+    validate_dataset_registry_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS)
+
+    LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = load_json_file(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE)
+    validate_task_brief_payload(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE)
+
+    LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = load_json_file(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE)
+    validate_change_plan_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE)
+except (OSError, json.JSONDecodeError, ValidationError) as exc:
+    raise ImproperlyConfigured(f"Invalid Local Business Suite configuration: {exc}") from exc

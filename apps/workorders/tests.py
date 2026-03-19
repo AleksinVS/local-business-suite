@@ -123,6 +123,32 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertTrue(can_transition(dispatcher, self.workorder, WorkOrderStatus.ACCEPTED))
         self.assertFalse(can_transition(dispatcher, self.workorder, WorkOrderStatus.IN_PROGRESS))
 
+    @override_settings(
+        LOCAL_BUSINESS_WORKFLOW_RULES={
+            "statuses": [
+                "new",
+                "accepted",
+                "in_progress",
+                "on_hold",
+                "resolved",
+                "closed",
+                "cancelled",
+            ],
+            "transitions": {
+                "new": ["accepted"],
+                "accepted": ["in_progress"],
+                "in_progress": ["resolved"],
+                "on_hold": [],
+                "resolved": ["closed"],
+                "closed": [],
+                "cancelled": [],
+            },
+        }
+    )
+    def test_transition_matrix_can_come_from_workflow_config(self):
+        self.assertTrue(can_transition(self.technician, self.workorder, WorkOrderStatus.ACCEPTED))
+        self.assertFalse(can_transition(self.technician, self.workorder, WorkOrderStatus.CANCELLED))
+
 
 class WorkOrderViewPermissionTests(TestCase):
     def setUp(self):

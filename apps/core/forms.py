@@ -46,6 +46,6 @@ class RoleRulesForm(forms.Form):
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Некорректный JSON: {exc.msg}.") from exc
-        validate_role_rules_payload(payload)
+        validate_role_rules_payload(payload, workflow_payload=settings.LOCAL_BUSINESS_WORKFLOW_RULES)
         self.cleaned_data["rules_payload"] = payload
         return pretty_json(payload)

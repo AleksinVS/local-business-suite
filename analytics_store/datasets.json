@@ -1,0 +1,32 @@
+[
+  {
+    "code": "workorders_raw",
+    "layer": "raw",
+    "path": "analytics_store/raw/workorders.parquet",
+    "owner": "analytics",
+    "refresh_mode": "batch",
+    "grain": "one_row_per_workorder_export_record",
+    "schema_version": 1,
+    "description": "Raw export of work order records from the OLTP application."
+  },
+  {
+    "code": "workorder_transitions_raw",
+    "layer": "raw",
+    "path": "analytics_store/raw/workorder_transitions.parquet",
+    "owner": "analytics",
+    "refresh_mode": "batch",
+    "grain": "one_row_per_transition_log",
+    "schema_version": 1,
+    "description": "Raw export of workflow transition events."
+  },
+  {
+    "code": "workorders_sla_mart",
+    "layer": "mart",
+    "path": "analytics_store/marts/workorders_sla.parquet",
+    "owner": "analytics",
+    "refresh_mode": "batch",
+    "grain": "one_row_per_workorder",
+    "schema_version": 1,
+    "description": "Curated mart for lead time, throughput and SLA reporting."
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "title": "Role Rules",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "required": [
+      "view_scope",
+      "create_workorder",
+      "edit_scope",
+      "comment_scope",
+      "upload_attachment_scope",
+      "confirm_closure_scope",
+      "rate_scope",
+      "transition_scope",
+      "transition_targets",
+      "manage_inventory",
+      "manage_board_columns",
+      "manage_assignments"
+    ]
+  }
+}

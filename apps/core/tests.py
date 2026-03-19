@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 from django.contrib.auth.models import Group, User
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -108,3 +109,34 @@ class DepartmentViewTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), updated_payload)
+
+
+class ArchitectureContractTests(TestCase):
+    def test_validate_architecture_contracts_command_passes(self):
+        call_command("validate_architecture_contracts")
+
+    def test_generate_change_plan_command_uses_task_brief(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            brief_path = Path(tmpdir) / "brief.json"
+            output_path = Path(tmpdir) / "plan.json"
+            brief_path.write_text(
+                json.dumps(
+                    {
+                        "id": "TASK-42",
+                        "title": "Improve board filters",
+                        "status": "draft",
+                        "requested_by": "product-owner",
+                        "target_modules": ["apps/workorders"],
+                        "objective": "Compact board filters and preserve current permissions.",
+                        "constraints": ["Do not change workflow rules."],
+                        "deliverables": ["Updated UI", "Updated tests"],
+                        "acceptance_checks": ["./.venv/bin/python manage.py test apps.workorders.tests"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            call_command("generate_change_plan", str(brief_path), "--output", str(output_path))
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["brief_id"], "TASK-42")
+            self.assertEqual(payload["title"], "Improve board filters")
+            self.assertEqual(payload["status"], "draft")

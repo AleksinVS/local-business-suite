@@ -1,0 +1,15 @@
+{
+  "title": "Task Brief",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "status",
+    "requested_by",
+    "target_modules",
+    "objective",
+    "constraints",
+    "deliverables",
+    "acceptance_checks"
+  ]
+}

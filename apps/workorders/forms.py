@@ -36,6 +36,10 @@ class WorkOrderForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"rows": 5}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["device"].required = False
+
 
 class WorkOrderUpdateForm(forms.ModelForm):
     department = DepartmentChoiceField(
@@ -55,6 +59,10 @@ class WorkOrderUpdateForm(forms.ModelForm):
         widgets = {
             "description": forms.Textarea(attrs={"rows": 5}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["device"].required = False
 
 
 class WorkOrderCommentForm(forms.ModelForm):

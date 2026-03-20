@@ -95,6 +95,8 @@ class WorkOrder(models.Model):
         "inventory.MedicalDevice",
         on_delete=models.PROTECT,
         related_name="workorders",
+        blank=True,
+        null=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

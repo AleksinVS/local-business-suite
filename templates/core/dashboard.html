@@ -49,7 +49,7 @@
             <td><a href="{% url 'workorders:detail' workorder.pk %}">{{ workorder.number }}</a></td>
             <td>{{ workorder.title }}</td>
             <td>{{ workorder.get_status_display }}</td>
-            <td>{{ workorder.device }}</td>
+            <td>{{ workorder.device|default:"Без привязки" }}</td>
             <td>{{ workorder.author.get_full_name|default:workorder.author.username }}</td>
           </tr>
         {% empty %}

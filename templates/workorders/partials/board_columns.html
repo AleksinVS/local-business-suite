@@ -24,7 +24,7 @@
           >
             {{ workorder.number }}. {{ workorder.title }}
           </a>
-          <p>{{ workorder.device }}</p>
+          <p>{{ workorder.device|default:"Без привязки к медизделию" }}</p>
           <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
           <div class="card-meta card-meta-inline">
             <span class="chip">{{ workorder.get_priority_display }}</span>

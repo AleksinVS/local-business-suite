@@ -4,6 +4,10 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
+admin.site.site_header = settings.APP_DISPLAY_NAME
+admin.site.site_title = settings.APP_DISPLAY_NAME
+admin.site.index_title = settings.APP_DISPLAY_NAME
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/login/", auth_views.LoginView.as_view(), name="login"),

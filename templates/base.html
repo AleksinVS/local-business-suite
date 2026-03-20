@@ -4,14 +4,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Local Business Suite{% endblock %}</title>
+    <title>{% block title %}{{ app_display_name }}{% endblock %}</title>
     {% htmx_script %}
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <header class="site-header">
       <div class="site-header-main">
-        <a href="{% url 'core:dashboard' %}" class="brand">Local Business Suite</a>
+        <a href="{% url 'core:dashboard' %}" class="brand">{{ app_display_name }}</a>
         {% block header_context %}{% endblock %}
       </div>
       <nav class="main-nav">

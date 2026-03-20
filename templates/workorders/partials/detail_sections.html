@@ -15,7 +15,7 @@
   <div class="detail-grid">
     <div><strong>Подразделение:</strong> {{ workorder.department }}</div>
     <div><strong>Приоритет:</strong> {{ workorder.get_priority_display }}</div>
-    <div><strong>Изделие:</strong> {{ workorder.device }}</div>
+    <div><strong>Изделие:</strong> {{ workorder.device|default:"Без привязки к медизделию" }}</div>
     <div><strong>Исполнитель:</strong> {{ workorder.assignee.get_full_name|default:workorder.assignee.username|default:"Не назначен" }}</div>
     <div><strong>Обновлено:</strong> {{ workorder.updated_at }}</div>
   </div>

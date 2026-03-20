@@ -268,6 +268,23 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertIsNone(created.assignee)
         self.assertEqual(created.author, self.customer)
 
+    def test_customer_can_create_workorder_without_device(self):
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "title": "Починить раковину",
+                "description": "Не уходит вода.",
+                "department": self.sub_department.pk,
+                "priority": "medium",
+                "device": "",
+                "assignee": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        created = WorkOrder.objects.exclude(pk=self.workorder.pk).order_by("-pk").first()
+        self.assertIsNone(created.device)
+
     def test_outsider_cannot_create_workorder(self):
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("workorders:create"))

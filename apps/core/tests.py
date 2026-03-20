@@ -54,6 +54,12 @@ class DepartmentViewTests(TestCase):
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, reverse("admin:index"))
 
+    @override_settings(APP_DISPLAY_NAME="БУЗ ВО ВОБ №3")
+    def test_custom_app_display_name_is_rendered(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("core:dashboard"))
+        self.assertContains(response, "БУЗ ВО ВОБ №3")
+
     @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
     def test_manager_can_open_role_rules_editor(self):
         Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true}}', encoding="utf-8")
@@ -140,3 +146,10 @@ class ArchitectureContractTests(TestCase):
             self.assertEqual(payload["brief_id"], "TASK-42")
             self.assertEqual(payload["title"], "Improve board filters")
             self.assertEqual(payload["status"], "draft")
+
+
+class DemoSeedCommandTests(TestCase):
+    def test_seed_hospital_demo_creates_reference_data(self):
+        call_command("seed_hospital_demo")
+        self.assertTrue(Department.objects.filter(name="Стационар").exists())
+        self.assertTrue(User.objects.filter(username="chief_manager").exists())

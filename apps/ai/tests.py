@@ -10,6 +10,7 @@ from apps.workorders.models import WorkOrder, WorkOrderStatus
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
 
 from .models import AgentActionLog, ChatMessage, ChatSession
+from .services import normalize_session_external_id
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
@@ -102,6 +103,23 @@ class AIViewsTests(TestCase):
         detail_response = self.client.get(response["Location"])
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "AI чат")
+
+    def test_tool_gateway_accepts_non_uuid_session_id(self):
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "payload": {"status": WorkOrderStatus.NEW, "limit": 10},
+                    "session_id": "external-session-42",
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 200)
+        session = ChatSession.objects.get(user=self.customer)
+        self.assertEqual(session.external_id, normalize_session_external_id("external-session-42"))
 
     @patch("apps.ai.views.AgentRuntimeClient.chat")
     def test_chat_send_stores_user_and_assistant_messages(self, chat_mock):

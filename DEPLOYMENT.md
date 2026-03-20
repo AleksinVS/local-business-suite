@@ -37,6 +37,7 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `DJANGO_DEBUG=0`
 - `DJANGO_SECRET_KEY=<production-secret>`
 - `DJANGO_ALLOWED_HOSTS=<ip-or-domain>`
+- `DJANGO_INTERNAL_ALLOWED_HOSTS=web`
 - `LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090`
 - `OPENAI_API_KEY=<provider-key>`
 - `OPENAI_BASE_URL=<openai-compatible-base-url>`
@@ -49,6 +50,7 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=replace-me
 DJANGO_ALLOWED_HOSTS=188.120.246.243
+DJANGO_INTERNAL_ALLOWED_HOSTS=web
 LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
 OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1

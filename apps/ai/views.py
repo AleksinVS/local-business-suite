@@ -9,6 +9,8 @@ from django.urls import reverse
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 
 from apps.workorders.policies import can_manage_inventory
 
@@ -106,6 +108,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
         return redirect("ai:chat_detail", external_id=session.external_id)
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class AIToolExecuteView(View):
     http_method_names = ["post"]
 

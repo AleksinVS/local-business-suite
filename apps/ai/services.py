@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
@@ -12,6 +14,9 @@ from apps.workorders.services import create_workorder, transition_workorder
 from .models import AgentActionLog, ChatMessage, ChatSession
 
 
+AI_SESSION_NAMESPACE = uuid.UUID("4cf98619-f5ff-4f02-9d68-b9240c5778c8")
+
+
 def resolve_actor(*, user_id=None, username=None):
     if user_id:
         return User.objects.get(pk=user_id)
@@ -20,9 +25,26 @@ def resolve_actor(*, user_id=None, username=None):
     raise ValidationError("Actor identity is required.")
 
 
+def normalize_session_external_id(session_external_id):
+    if not session_external_id:
+        return None
+    if isinstance(session_external_id, uuid.UUID):
+        return session_external_id
+    try:
+        return uuid.UUID(str(session_external_id))
+    except (ValueError, TypeError):
+        return uuid.uuid5(AI_SESSION_NAMESPACE, str(session_external_id))
+
+
 def get_or_create_session(*, user, session_external_id=None, channel=ChatSession.Channel.INTERNAL, title=""):
-    if session_external_id:
-        return ChatSession.objects.get(external_id=session_external_id, user=user)
+    normalized_external_id = normalize_session_external_id(session_external_id)
+    if normalized_external_id:
+        session, _ = ChatSession.objects.get_or_create(
+            external_id=normalized_external_id,
+            user=user,
+            defaults={"channel": channel, "title": title},
+        )
+        return session
     return ChatSession.objects.create(user=user, channel=channel, title=title)
 
 

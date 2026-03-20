@@ -28,6 +28,11 @@ ALLOWED_HOSTS = [
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
     if host
 ]
+ALLOWED_HOSTS += [
+    host
+    for host in os.environ.get("DJANGO_INTERNAL_ALLOWED_HOSTS", "web").split(",")
+    if host and host not in ALLOWED_HOSTS
+]
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",

@@ -2,6 +2,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.core.json_utils import (
+    validate_ai_registry_payload,
+    validate_ai_task_types_payload,
+    validate_ai_tools_payload,
     load_json_file,
     validate_change_plan_payload,
     validate_dataset_registry_payload,
@@ -24,4 +27,7 @@ class Command(BaseCommand):
         validate_dataset_registry_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE))
         validate_task_brief_payload(load_json_file(settings.LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE))
         validate_change_plan_payload(load_json_file(settings.LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE))
+        validate_ai_registry_payload(load_json_file(settings.LOCAL_BUSINESS_AI_REGISTRY_FILE))
+        validate_ai_tools_payload(load_json_file(settings.LOCAL_BUSINESS_AI_TOOLS_FILE))
+        validate_ai_task_types_payload(load_json_file(settings.LOCAL_BUSINESS_AI_TASK_TYPES_FILE))
         self.stdout.write(self.style.SUCCESS("Architecture contracts are valid."))

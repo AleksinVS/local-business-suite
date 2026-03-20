@@ -1,0 +1,6 @@
+fastapi>=0.116,<0.117
+uvicorn[standard]>=0.35,<0.36
+httpx>=0.28,<0.29
+langchain>=0.3.27,<0.4
+langgraph>=0.6.0,<0.7
+langchain-openai>=0.3.28,<0.4

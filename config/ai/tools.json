@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "name": "chat_agent_tool_registry",
+  "description": "Declared tools available to the chat and agent block.",
+  "default_policies": {
+    "authentication_required": true,
+    "policy_enforced": true,
+    "writes_require_confirmation": true,
+    "direct_sql_writes_allowed": false
+  },
+  "tools": [
+    {
+      "id": "workorders.list",
+      "title": "List work orders",
+      "domain": "workorders",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return work orders filtered by status, department, assignee, author, text query, or priority.",
+      "inputs": [
+        "status",
+        "department_id",
+        "assignee_id",
+        "author_id",
+        "query",
+        "priority",
+        "limit"
+      ],
+      "outputs": [
+        "items",
+        "count"
+      ],
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "workorders.get",
+      "title": "Get work order",
+      "domain": "workorders",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return a single work order by id or human-readable number.",
+      "inputs": [
+        "workorder_id",
+        "number"
+      ],
+      "outputs": [
+        "workorder"
+      ],
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "workorders.create",
+      "title": "Create work order",
+      "domain": "workorders",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Create a work order with department, subject, description, optional device, priority, and requester context.",
+      "inputs": [
+        "department_id",
+        "subject",
+        "description",
+        "device_id",
+        "priority"
+      ],
+      "outputs": [
+        "workorder"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "create"
+    },
+    {
+      "id": "workorders.transition",
+      "title": "Transition work order",
+      "domain": "workorders",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Move a work order to an allowed next status.",
+      "inputs": [
+        "workorder_id",
+        "target_status"
+      ],
+      "outputs": [
+        "workorder"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "transition"
+    },
+    {
+      "id": "workorders.comment",
+      "title": "Add work order comment",
+      "domain": "workorders",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Append a comment to a work order timeline.",
+      "inputs": [
+        "workorder_id",
+        "text"
+      ],
+      "outputs": [
+        "comment"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "comment"
+    },
+    {
+      "id": "departments.list",
+      "title": "List departments",
+      "domain": "core",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return the hierarchical department tree or a filtered subset.",
+      "inputs": [
+        "query",
+        "parent_id"
+      ],
+      "outputs": [
+        "items"
+      ],
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "devices.list",
+      "title": "List devices",
+      "domain": "inventory",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return devices for selection and lookup.",
+      "inputs": [
+        "query",
+        "department_id",
+        "archived"
+      ],
+      "outputs": [
+        "items"
+      ],
+      "required_role_scope": "visible"
+    }
+  ]
+}
+

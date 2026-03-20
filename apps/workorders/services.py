@@ -3,6 +3,18 @@ from django.utils import timezone
 from .models import WorkOrder, WorkOrderStatus, WorkOrderTransitionLog
 
 
+def create_workorder(*, author, title: str, description: str, department, priority, device_id=None, assignee=None) -> WorkOrder:
+    return WorkOrder.objects.create(
+        author=author,
+        title=title,
+        description=description,
+        department=department,
+        priority=priority,
+        device_id=device_id,
+        assignee=assignee,
+    )
+
+
 def transition_workorder(*, workorder: WorkOrder, user, to_status: str) -> WorkOrder:
     previous_status = workorder.status
     workorder.status = to_status

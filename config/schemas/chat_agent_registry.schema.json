@@ -1,0 +1,17 @@
+{
+  "title": "Chat Agent Registry",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "primary_chat_ui",
+    "agent_orchestrator",
+    "tool_protocol",
+    "tool_catalog",
+    "task_type_catalog",
+    "identity_model",
+    "execution_policy"
+  ]
+}
+

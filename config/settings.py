@@ -6,6 +6,9 @@ from django.core.exceptions import ValidationError
 from django.core.exceptions import ImproperlyConfigured
 
 from apps.core.json_utils import (
+    validate_ai_registry_payload,
+    validate_ai_task_types_payload,
+    validate_ai_tools_payload,
     load_json_file,
     validate_change_plan_payload,
     validate_dataset_registry_payload,
@@ -40,6 +43,7 @@ INSTALLED_APPS = [
     "apps.inventory",
     "apps.workorders",
     "apps.analytics",
+    "apps.ai",
 ]
 
 MIDDLEWARE = [
@@ -149,6 +153,18 @@ LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = Path(
 LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = Path(
     os.environ.get("LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE", BASE_DIR / "ai" / "change_plans" / "template.json")
 )
+LOCAL_BUSINESS_AI_REGISTRY_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_AI_REGISTRY_FILE", BASE_DIR / "config" / "ai" / "registry.json")
+)
+LOCAL_BUSINESS_AI_TOOLS_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_AI_TOOLS_FILE", BASE_DIR / "config" / "ai" / "tools.json")
+)
+LOCAL_BUSINESS_AI_TASK_TYPES_FILE = Path(
+    os.environ.get("LOCAL_BUSINESS_AI_TASK_TYPES_FILE", BASE_DIR / "config" / "ai" / "task_types.json")
+)
+LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get("LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token")
+LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_URL", "http://127.0.0.1:8090")
+LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "30"))
 
 try:
     LOCAL_BUSINESS_WORKFLOW_RULES = load_json_file(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
@@ -171,5 +187,14 @@ try:
 
     LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = load_json_file(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE)
     validate_change_plan_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE)
+
+    LOCAL_BUSINESS_AI_REGISTRY = load_json_file(LOCAL_BUSINESS_AI_REGISTRY_FILE)
+    validate_ai_registry_payload(LOCAL_BUSINESS_AI_REGISTRY)
+
+    LOCAL_BUSINESS_AI_TOOLS = load_json_file(LOCAL_BUSINESS_AI_TOOLS_FILE)
+    validate_ai_tools_payload(LOCAL_BUSINESS_AI_TOOLS)
+
+    LOCAL_BUSINESS_AI_TASK_TYPES = load_json_file(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
+    validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
 except (OSError, json.JSONDecodeError, ValidationError) as exc:
     raise ImproperlyConfigured(f"Invalid Local Business Suite configuration: {exc}") from exc

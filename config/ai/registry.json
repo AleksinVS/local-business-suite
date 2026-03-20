@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "name": "chat_agent_registry",
+  "description": "Runtime profile for the local chat and agent block.",
+  "primary_chat_ui": {
+    "name": "LibreChat",
+    "mode": "self-hosted",
+    "purpose": "Multi-user chat interface"
+  },
+  "agent_orchestrator": {
+    "name": "LangGraph",
+    "mode": "self-hosted",
+    "purpose": "Stateful orchestration and human-in-the-loop execution"
+  },
+  "tool_protocol": {
+    "name": "MCP",
+    "mode": "self-hosted",
+    "purpose": "Standard protocol for tool invocation"
+  },
+  "tool_catalog": "config/ai/tools.json",
+  "task_type_catalog": "config/ai/task_types.json",
+  "identity_model": {
+    "propagate_user_identity": true,
+    "minimum_fields": [
+      "user_id",
+      "roles",
+      "session_id",
+      "conversation_id",
+      "request_id"
+    ]
+  },
+  "execution_policy": {
+    "read_actions": "allowed_through_declared_tools",
+    "write_actions": "service_layer_only",
+    "confirm_before_destructive_write": true,
+    "audit_all_tool_calls": true
+  }
+}
+

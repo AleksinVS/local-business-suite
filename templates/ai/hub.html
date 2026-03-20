@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}AI | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+  <section class="page-intro">
+    <h1>AI Hub</h1>
+    <p>Внутренний control plane для чата, агентных tools и аудита действий.</p>
+  </section>
+
+  <section class="panel-stack">
+    <article class="panel">
+      <h2>Tool Registry</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Код</th>
+              <th>Назначение</th>
+              <th>Тип</th>
+              <th>Подтверждение</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tool in tool_registry %}
+              <tr>
+                <td><code>{{ tool.code }}</code></td>
+                <td>{{ tool.description }}</td>
+                <td>{{ tool.mode }}</td>
+                <td>{{ tool.confirmation_policy }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2>Task Types</h2>
+      <ul class="compact-list">
+        {% for task in task_types %}
+          <li><strong>{{ task.code }}</strong> — {{ task.description }}</li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>Последние AI-сессии</h2>
+      <ul class="compact-list">
+        {% for session in recent_sessions %}
+          <li>{{ session.user.username }} · {{ session.channel }} · {{ session.status }} · {{ session.external_id }}</li>
+        {% empty %}
+          <li>Сессий пока нет.</li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>Последние действия агента</h2>
+      <ul class="compact-list">
+        {% for action in recent_actions %}
+          <li>{{ action.created_at|date:"d.m.Y H:i" }} · {{ action.actor.username }} · {{ action.tool_code }} · {{ action.status }}</li>
+        {% empty %}
+          <li>Действий пока нет.</li>
+        {% endfor %}
+      </ul>
+    </article>
+  </section>
+{% endblock %}

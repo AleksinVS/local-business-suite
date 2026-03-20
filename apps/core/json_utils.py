@@ -81,6 +81,57 @@ REQUIRED_CHANGE_PLAN_KEYS = {
     "risks",
 }
 
+REQUIRED_AI_REGISTRY_KEYS = {
+    "version",
+    "name",
+    "description",
+    "primary_chat_ui",
+    "agent_orchestrator",
+    "tool_protocol",
+    "tool_catalog",
+    "task_type_catalog",
+    "identity_model",
+    "execution_policy",
+}
+
+REQUIRED_AI_TOOLS_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "default_policies",
+    "tools",
+}
+
+REQUIRED_AI_TOOL_KEYS = {
+    "id",
+    "title",
+    "domain",
+    "mode",
+    "execution_mode",
+    "description",
+    "inputs",
+    "outputs",
+    "required_role_scope",
+}
+
+REQUIRED_AI_TASK_TYPES_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "task_types",
+}
+
+REQUIRED_AI_TASK_TYPE_KEYS = {
+    "id",
+    "title",
+    "mode",
+    "description",
+    "allowed_tools",
+    "requires_confirmation",
+    "output_mode",
+    "example_requests",
+}
+
 
 def pretty_json(payload):
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
@@ -233,3 +284,59 @@ def validate_change_plan_payload(payload):
         if not isinstance(payload.get(key), list):
             raise ValidationError(f"Поле '{key}' в change plan должно быть списком.")
 
+
+def validate_ai_registry_payload(payload):
+    _ensure_non_empty_mapping(payload, "AI registry")
+    missing = REQUIRED_AI_REGISTRY_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"AI registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+
+
+def validate_ai_tools_payload(payload):
+    _ensure_non_empty_mapping(payload, "AI tools")
+    missing = REQUIRED_AI_TOOLS_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"AI tools registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    tools = payload.get("tools")
+    if not isinstance(tools, list) or not tools:
+        raise ValidationError("AI tools registry должен содержать непустой список tools.")
+    for item in tools:
+        if not isinstance(item, dict):
+            raise ValidationError("Каждый AI tool должен быть JSON-объектом.")
+        missing_item_keys = REQUIRED_AI_TOOL_KEYS - set(item.keys())
+        if missing_item_keys:
+            raise ValidationError(
+                f"AI tool '{item.get('id', 'unknown')}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_item_keys))}."
+            )
+        for key in ("inputs", "outputs"):
+            if not isinstance(item.get(key), list):
+                raise ValidationError(f"Поле '{key}' у AI tool '{item['id']}' должно быть списком.")
+
+
+def validate_ai_task_types_payload(payload):
+    _ensure_non_empty_mapping(payload, "AI task types")
+    missing = REQUIRED_AI_TASK_TYPES_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"AI task type registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    task_types = payload.get("task_types")
+    if not isinstance(task_types, list) or not task_types:
+        raise ValidationError("AI task type registry должен содержать непустой список task_types.")
+    for item in task_types:
+        if not isinstance(item, dict):
+            raise ValidationError("Каждый AI task type должен быть JSON-объектом.")
+        missing_item_keys = REQUIRED_AI_TASK_TYPE_KEYS - set(item.keys())
+        if missing_item_keys:
+            raise ValidationError(
+                f"AI task type '{item.get('id', 'unknown')}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_item_keys))}."
+            )
+        for key in ("allowed_tools", "example_requests"):
+            if not isinstance(item.get(key), list):
+                raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")

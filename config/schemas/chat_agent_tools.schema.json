@@ -1,0 +1,12 @@
+{
+  "title": "Chat Agent Tools",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "default_policies",
+    "tools"
+  ]
+}
+

@@ -10,4 +10,6 @@ def navigation_flags(request):
         "app_display_name": settings.APP_DISPLAY_NAME,
         "show_department_nav": is_authenticated and can_manage_inventory(user),
         "show_admin_nav": is_authenticated and (user.is_staff or user.is_superuser),
+        "show_ai_nav": is_authenticated,
+        "show_ai_admin_nav": is_authenticated and can_manage_inventory(user),
     }

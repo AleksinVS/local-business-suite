@@ -13,6 +13,7 @@ Core rules:
 Main layers:
 
 - `apps/*` for domain modules;
+- `apps/ai` for internal AI control plane and tool gateway;
 - `config/*` for platform configuration and contracts;
 - `analytics_store/*` for analytical datasets;
 - `ai/*` for machine-readable delivery artifacts;

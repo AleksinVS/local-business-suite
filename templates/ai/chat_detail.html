@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}AI чат | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+  <section class="ai-chat-layout">
+    <aside class="ai-chat-sidebar panel">
+      <div class="panel-header-row">
+        <h1>AI чат</h1>
+        <a class="button-link" href="{% url 'ai:chat_index' %}">Новый чат</a>
+      </div>
+      <ul class="compact-list">
+        {% for session in chat_sessions %}
+          <li>
+            <a href="{% url 'ai:chat_detail' session.external_id %}">
+              {{ session.title|default:"Новый чат" }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </aside>
+
+    <section class="ai-chat-thread panel">
+      <div class="panel-header-row">
+        <h2>{{ chat_session.title|default:"Новый чат" }}</h2>
+        <a class="button-link button-link-muted" href="{% url 'ai:hub' %}">AI Hub</a>
+      </div>
+
+      <div class="ai-message-list">
+        {% for message in chat_session.messages.all %}
+          <article class="ai-message ai-message-{{ message.role }}">
+            <div class="ai-message-meta">
+              <strong>{{ message.get_role_display }}</strong>
+              <span>{{ message.created_at|date:"d.m.Y H:i" }}</span>
+              {% if message.tool_name %}
+                <code>{{ message.tool_name }}</code>
+              {% endif %}
+            </div>
+            <div class="ai-message-body">{{ message.content|linebreaksbr }}</div>
+          </article>
+        {% empty %}
+          <div class="detail-panel-empty">Диалог пока пуст. Начни с вопроса про заявки.</div>
+        {% endfor %}
+      </div>
+
+      <form method="post" action="{% url 'ai:chat_send' chat_session.external_id %}" class="ai-chat-form">
+        {% csrf_token %}
+        {{ form.prompt }}
+        <button type="submit">Отправить</button>
+      </form>
+    </section>
+  </section>
+{% endblock %}

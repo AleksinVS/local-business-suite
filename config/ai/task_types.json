@@ -1,0 +1,124 @@
+{
+  "version": "1.0",
+  "name": "chat_agent_task_types",
+  "description": "Intent catalog for the chat and agent block.",
+  "task_types": [
+    {
+      "id": "workorders.list",
+      "title": "List work orders",
+      "mode": "read",
+      "description": "Show work orders filtered by status or scope.",
+      "allowed_tools": [
+        "workorders.list"
+      ],
+      "required_slots": [
+        "status_or_scope"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "example_requests": [
+        "Покажи новые заявки",
+        "Какие заявки в работе у меня сейчас?"
+      ]
+    },
+    {
+      "id": "workorders.create",
+      "title": "Create work order",
+      "mode": "write",
+      "description": "Create a new work order from a conversational request.",
+      "allowed_tools": [
+        "workorders.create",
+        "departments.list",
+        "devices.list"
+      ],
+      "required_slots": [
+        "department",
+        "subject",
+        "description"
+      ],
+      "optional_slots": [
+        "device",
+        "priority"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Создай заявку на починку раковины в стационаре",
+        "Нужна заявка на светильник в поликлинике"
+      ]
+    },
+    {
+      "id": "workorders.transition",
+      "title": "Transition work order",
+      "mode": "write",
+      "description": "Move a request to the next allowed status.",
+      "allowed_tools": [
+        "workorders.get",
+        "workorders.transition"
+      ],
+      "required_slots": [
+        "workorder"
+      ],
+      "optional_slots": [
+        "target_status"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Переведи заявку 12 в работу",
+        "Закрой заявку 18"
+      ]
+    },
+    {
+      "id": "workorders.comment",
+      "title": "Comment on work order",
+      "mode": "write",
+      "description": "Add a comment to a work order timeline.",
+      "allowed_tools": [
+        "workorders.comment"
+      ],
+      "required_slots": [
+        "workorder",
+        "text"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Добавь комментарий к заявке 7: нужен доступ в подвал"
+      ]
+    },
+    {
+      "id": "lookup.departments",
+      "title": "Lookup departments",
+      "mode": "read",
+      "description": "Resolve a department name or tree branch.",
+      "allowed_tools": [
+        "departments.list"
+      ],
+      "required_slots": [],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "example_requests": [
+        "Покажи подразделения",
+        "Какие есть отделения в дереве?"
+      ]
+    },
+    {
+      "id": "lookup.devices",
+      "title": "Lookup devices",
+      "mode": "read",
+      "description": "Resolve a device name or device list.",
+      "allowed_tools": [
+        "devices.list"
+      ],
+      "required_slots": [],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "example_requests": [
+        "Покажи медизделия",
+        "Найди КТ аппарат"
+      ]
+    }
+  ]
+}
+

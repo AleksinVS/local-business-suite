@@ -21,6 +21,12 @@
           <a href="{% url 'core:department_list' %}">Подразделения</a>
           <a href="{% url 'core:role_rules' %}">Роли</a>
         {% endif %}
+        {% if show_ai_nav %}
+          <a href="{% url 'ai:chat_index' %}">AI чат</a>
+        {% endif %}
+        {% if show_ai_admin_nav %}
+          <a href="{% url 'ai:hub' %}">AI Hub</a>
+        {% endif %}
         {% if show_admin_nav %}
           <a href="{% url 'admin:index' %}">Django admin</a>
         {% endif %}

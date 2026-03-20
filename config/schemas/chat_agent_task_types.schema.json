@@ -1,0 +1,10 @@
+{
+  "title": "Chat Agent Task Types",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "task_types"
+  ]
+}

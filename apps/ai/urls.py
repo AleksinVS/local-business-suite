@@ -1,0 +1,13 @@
+from django.urls import path
+
+from .views import AIChatDetailView, AIChatIndexView, AIChatMessageCreateView, AIHubView, AIToolExecuteView
+
+app_name = "ai"
+
+urlpatterns = [
+    path("chat/", AIChatIndexView.as_view(), name="chat_index"),
+    path("chat/<uuid:external_id>/", AIChatDetailView.as_view(), name="chat_detail"),
+    path("chat/<uuid:external_id>/send/", AIChatMessageCreateView.as_view(), name="chat_send"),
+    path("", AIHubView.as_view(), name="hub"),
+    path("gateway/tools/<str:tool_code>/execute/", AIToolExecuteView.as_view(), name="tool_execute"),
+]

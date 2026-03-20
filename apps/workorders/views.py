@@ -23,7 +23,6 @@ from .forms import (
 )
 from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
-    allowed_view_scopes,
     can_comment,
     can_confirm_closure,
     can_create,
@@ -34,6 +33,7 @@ from .policies import (
     can_transition,
     can_upload_attachment,
 )
+from .selectors import visible_workorders_queryset
 from .services import confirm_closure, transition_workorder
 
 
@@ -64,31 +64,11 @@ def column_card_context(column):
         "rename_form": KanbanColumnTitleForm(instance=column),
     }
 
-
-def visible_workorders_for(user):
-    queryset = WorkOrder.objects.select_related("device", "author", "assignee", "department", "department__parent")
-    scopes = allowed_view_scopes(user)
-    if "all" in scopes:
-        return queryset
-    visibility_filter = Q(pk__in=[])
-    if "authored" in scopes:
-        visibility_filter |= Q(author=user)
-    if "assigned" in scopes:
-        visibility_filter |= Q(assignee=user)
-    if "assigned_or_unassigned" in scopes:
-        visibility_filter |= Q(assignee=user) | Q(assignee__isnull=True)
-    if "assigned_or_unassigned_or_authored" in scopes:
-        visibility_filter |= Q(assignee=user) | Q(assignee__isnull=True) | Q(author=user)
-    if "visible" in scopes:
-        visibility_filter |= Q(author=user) | Q(assignee=user)
-    return queryset.filter(visibility_filter).distinct()
-
-
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
     def get_queryset(self):
-        queryset = visible_workorders_for(self.request.user).order_by("-updated_at")
+        queryset = visible_workorders_queryset(self.request.user).order_by("-updated_at")
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("status", "").strip()
@@ -235,7 +215,7 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "workorder"
 
     def get_queryset(self):
-        return visible_workorders_for(self.request.user).prefetch_related(
+        return visible_workorders_queryset(self.request.user).prefetch_related(
             "comments__author", "attachments", "transitions__actor"
         )
 
@@ -264,7 +244,7 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
 
 class WorkOrderCommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         if not can_comment(request.user, workorder):
             return HttpResponseForbidden("Комментарии недоступны")
         form = WorkOrderCommentForm(request.POST)
@@ -298,7 +278,7 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         if not can_upload_attachment(request.user, workorder):
             return HttpResponseForbidden("Загрузка файлов запрещена")
         form = WorkOrderAttachmentForm(request.POST, request.FILES)
@@ -334,7 +314,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderTransitionView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         target_status = request.POST.get("status", "")
         if not can_transition(request.user, workorder, target_status):
             return HttpResponseForbidden("Переход запрещен")
@@ -371,7 +351,7 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
 
 class WorkOrderBoardMoveView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         column_code = request.POST.get("column", "").strip()
         column = get_object_or_404(KanbanColumnConfig, code=column_code)
         target_status = drop_status_for_column(request.user, workorder, column)
@@ -394,7 +374,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
 
 class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         if not can_confirm_closure(request.user, workorder):
             return HttpResponseForbidden("Подтверждение закрытия запрещено")
         confirm_closure(workorder=workorder, user=request.user)
@@ -417,7 +397,7 @@ class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
 
 class WorkOrderRateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_for(request.user), pk=pk)
+        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         if not can_rate(request.user, workorder):
             return HttpResponseForbidden("Оценка запрещена")
         form = WorkOrderRatingForm(request.POST, instance=workorder)

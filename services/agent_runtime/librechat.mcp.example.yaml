@@ -1,0 +1,4 @@
+mcpServers:
+  local-business-suite:
+    type: streamable-http
+    url: http://agent-runtime:8090/mcp

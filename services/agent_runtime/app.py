@@ -1,13 +1,25 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
 from .config import load_runtime_settings
 from .graph import run_agent
+from .mcp_server import build_mcp_server
 from .schemas import ChatRequest, ChatResponse
 
 
-app = FastAPI(title="Local Business Suite Agent Runtime")
+mcp_server = build_mcp_server()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with mcp_server.session_manager.run():
+        yield
+
+
+app = FastAPI(title="Local Business Suite Agent Runtime", lifespan=lifespan)
+app.mount("/mcp", mcp_server.streamable_http_app())
 
 
 @app.get("/health")

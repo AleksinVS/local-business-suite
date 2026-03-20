@@ -15,7 +15,7 @@ class DjangoGatewayClient:
                 "session_id": session_id,
             },
             headers={"X-AI-Gateway-Token": self.token},
-            timeout=30,
+            timeout=90,
         )
         response.raise_for_status()
         return response.json()

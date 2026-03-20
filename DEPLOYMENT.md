@@ -42,6 +42,7 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `DJANGO_INTERNAL_ALLOWED_HOSTS=web`
 - `LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal`
 - `LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090`
+- `LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90`
 - `OPENAI_API_KEY=<provider-key>`
 - `OPENAI_BASE_URL=<openai-compatible-base-url>`
 - `AI_AGENT_MODEL_NAME=<provider-model-name>`
@@ -63,6 +64,7 @@ DJANGO_ALLOWED_HOSTS=188.120.246.243
 DJANGO_INTERNAL_ALLOWED_HOSTS=web
 LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal
 LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
+LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90
 OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1
 AI_AGENT_MODEL_NAME=gpt-4.1-mini

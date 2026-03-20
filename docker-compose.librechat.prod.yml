@@ -1,0 +1,17 @@
+services:
+  librechat-mongodb:
+    networks:
+      - internal
+
+  librechat-meilisearch:
+    networks:
+      - internal
+
+  librechat:
+    networks:
+      - internal
+
+networks:
+  internal:
+    external: true
+    name: ${LOCAL_BUSINESS_SHARED_NETWORK:-local-business-suite_internal}

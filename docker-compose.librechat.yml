@@ -4,8 +4,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./services/librechat/.env
-    ports:
-      - "27018:27017"
     volumes:
       - librechat_mongodb_data:/data/db
 
@@ -16,18 +14,12 @@ services:
       - ./services/librechat/.env
     environment:
       MEILI_NO_ANALYTICS: "true"
-    ports:
-      - "7700:7700"
     volumes:
       - librechat_meili_data:/meili_data
 
   librechat:
     image: ${LIBRECHAT_IMAGE:-ghcr.io/danny-avila/librechat-dev-api:latest}
     restart: unless-stopped
-    depends_on:
-      - librechat-mongodb
-      - librechat-meilisearch
-      - agent-runtime
     env_file:
       - ./.env
       - ./services/librechat/.env
@@ -39,8 +31,6 @@ services:
       CONFIG_PATH: /app/librechat.yaml
       DOMAIN_CLIENT: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
       DOMAIN_SERVER: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
-    ports:
-      - "3080:3080"
     volumes:
       - ./services/librechat/librechat.yaml:/app/librechat.yaml:ro
       - librechat_images:/app/client/public/images

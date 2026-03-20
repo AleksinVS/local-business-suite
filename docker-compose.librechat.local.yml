@@ -1,0 +1,16 @@
+services:
+  librechat-mongodb:
+    ports:
+      - "27018:27017"
+
+  librechat-meilisearch:
+    ports:
+      - "7700:7700"
+
+  librechat:
+    depends_on:
+      - librechat-mongodb
+      - librechat-meilisearch
+      - agent-runtime
+    ports:
+      - "3080:3080"

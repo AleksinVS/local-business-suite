@@ -43,7 +43,7 @@ AI_AGENT_MODEL_NAME=...
 4. Start the full local AI stack:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.librechat.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.librechat.yml -f docker-compose.librechat.local.yml up --build
 ```
 
 5. Open LibreChat:
@@ -52,10 +52,17 @@ docker compose -f docker-compose.yml -f docker-compose.librechat.yml up --build
 http://localhost:3080
 ```
 
+For production behind Caddy, use `/librechat/` on the public host and set `LIBRECHAT_PUBLIC_URL` accordingly, for example:
+
+```bash
+LIBRECHAT_PUBLIC_URL=http://188.120.246.243/librechat
+```
+
 ## Notes
 
 - `docker-compose.yml` still owns `web` and `agent-runtime`.
 - `docker-compose.librechat.yml` only layers the external chat client and its dependencies.
+- `docker-compose.librechat.local.yml` adds the local-only port mappings for direct access.
 - If upstream LibreChat image tags change, override `LIBRECHAT_IMAGE` in your shell or `.env`.
 - LibreChat will see the Local Business Suite MCP server at `agent-runtime:8090/mcp`.
 

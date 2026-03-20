@@ -42,4 +42,3 @@ LibreChat MCP example:
 End-to-end local stack:
 
 - [services/librechat/README.md](/home/abc/.openclaw/workspace/projects/local-business-suite/services/librechat/README.md)
-- [services/librechat/README.md](/home/abc/.openclaw/workspace/projects/local-business-suite/services/librechat/README.md)

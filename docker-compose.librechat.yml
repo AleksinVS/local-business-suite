@@ -1,0 +1,53 @@
+services:
+  librechat-mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    env_file:
+      - ./services/librechat/.env
+    ports:
+      - "27018:27017"
+    volumes:
+      - librechat_mongodb_data:/data/db
+
+  librechat-meilisearch:
+    image: getmeili/meilisearch:v1.13
+    restart: unless-stopped
+    env_file:
+      - ./services/librechat/.env
+    environment:
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - librechat_meili_data:/meili_data
+
+  librechat:
+    image: ${LIBRECHAT_IMAGE:-ghcr.io/danny-avila/librechat-dev-api:latest}
+    restart: unless-stopped
+    depends_on:
+      - librechat-mongodb
+      - librechat-meilisearch
+      - agent-runtime
+    env_file:
+      - ./.env
+      - ./services/librechat/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3080
+      MONGO_URI: mongodb://librechat-mongodb:27017/LibreChat
+      MEILI_HOST: http://librechat-meilisearch:7700
+      CONFIG_PATH: /app/librechat.yaml
+      DOMAIN_CLIENT: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
+      DOMAIN_SERVER: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
+    ports:
+      - "3080:3080"
+    volumes:
+      - ./services/librechat/librechat.yaml:/app/librechat.yaml:ro
+      - librechat_images:/app/client/public/images
+      - librechat_uploads:/app/uploads
+
+volumes:
+  librechat_mongodb_data:
+  librechat_meili_data:
+  librechat_images:
+  librechat_uploads:

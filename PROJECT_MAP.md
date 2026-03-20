@@ -10,8 +10,10 @@ Top-level areas:
 - `apps/analytics`: operational dashboards inside Django;
 - `config`: runtime configuration and JSON contracts;
 - `config/ai`: declarative runtime profile, tool catalog and task-type catalog for chat-agent integration;
+- `services/librechat`: isolated LibreChat stack and MCP config;
 - `analytics_store`: exported analytical datasets and marts;
 - `ai`: machine-readable task briefs and change plans;
+- `docker-compose.librechat.yml`: local orchestration for the external LibreChat stack;
 - `templates` and `static`: server-rendered frontend.
 
 High-value files:
@@ -29,3 +31,5 @@ High-value files:
 - `apps/workorders/policies.py`
 - `apps/workorders/services.py`
 - `services/agent_runtime/app.py`
+- `services/librechat/librechat.yaml`
+- `docker-compose.librechat.yml`

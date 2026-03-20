@@ -31,9 +31,12 @@ def load_runtime_settings() -> RuntimeSettings:
         ai_task_types_path=Path(
             os.environ.get("LOCAL_BUSINESS_AI_TASK_TYPES_FILE", BASE_DIR / "config" / "ai" / "task_types.json")
         ),
-        system_prompt_path=Path(os.environ["AI_AGENT_SYSTEM_PROMPT_FILE"])
-        if os.environ.get("AI_AGENT_SYSTEM_PROMPT_FILE")
-        else None,
+        system_prompt_path=Path(
+            os.environ.get(
+                "AI_AGENT_SYSTEM_PROMPT_FILE",
+                BASE_DIR / "services" / "agent_runtime" / "prompts" / "hospital_system_prompt.txt",
+            )
+        ),
     )
 
 

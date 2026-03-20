@@ -32,10 +32,12 @@ Or generate secrets automatically:
 bash services/librechat/generate-env.sh
 ```
 
-3. Fill the required model provider variable in `.env`:
+3. Fill the required provider variables in `.env` and `services/librechat/.env`:
 
 ```bash
 OPENAI_API_KEY=...
+OPENAI_BASE_URL=...
+AI_AGENT_MODEL_NAME=...
 ```
 
 4. Start the full local AI stack:
@@ -56,3 +58,12 @@ http://localhost:3080
 - `docker-compose.librechat.yml` only layers the external chat client and its dependencies.
 - If upstream LibreChat image tags change, override `LIBRECHAT_IMAGE` in your shell or `.env`.
 - LibreChat will see the Local Business Suite MCP server at `agent-runtime:8090/mcp`.
+
+### Z.AI Example
+
+For `z.ai` coding endpoint, use:
+
+```bash
+OPENAI_BASE_URL=https://api.z.ai/api/coding/paas/v4/
+AI_AGENT_MODEL_NAME=glm-4.5-air
+```

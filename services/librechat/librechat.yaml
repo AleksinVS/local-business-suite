@@ -3,16 +3,16 @@ cache: true
 
 endpoints:
   custom:
-    - name: "OpenAI"
+    - name: "OpenAI Compatible"
       apiKey: "${OPENAI_API_KEY}"
-      baseURL: "https://api.openai.com/v1"
+      baseURL: "${OPENAI_BASE_URL}"
       models:
         default:
-          - "gpt-4.1-mini"
+          - "${AI_AGENT_MODEL_NAME}"
         fetch: true
       titleConvo: true
-      titleModel: "gpt-4.1-mini"
-      modelDisplayLabel: "OpenAI"
+      titleModel: "${AI_AGENT_MODEL_NAME}"
+      modelDisplayLabel: "OpenAI Compatible"
 
 mcpServers:
   local-business-suite:

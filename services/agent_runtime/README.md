@@ -19,6 +19,8 @@ Runtime assumptions:
 Required environment:
 
 - `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `AI_AGENT_MODEL_NAME` or `AI_AGENT_MODEL`
 - `AI_AGENT_MODEL` (default: `openai:gpt-4.1-mini`)
 - `DJANGO_AI_GATEWAY_URL`
 - `LOCAL_BUSINESS_AI_GATEWAY_TOKEN`
@@ -42,3 +44,10 @@ LibreChat MCP example:
 End-to-end local stack:
 
 - [services/librechat/README.md](/home/abc/.openclaw/workspace/projects/local-business-suite/services/librechat/README.md)
+
+For `z.ai` coding endpoint, set:
+
+```bash
+OPENAI_BASE_URL=https://api.z.ai/api/coding/paas/v4/
+AI_AGENT_MODEL_NAME=glm-4.5-air
+```

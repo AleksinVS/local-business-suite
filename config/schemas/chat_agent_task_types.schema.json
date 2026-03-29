@@ -6,5 +6,73 @@
     "name",
     "description",
     "task_types"
-  ]
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "task_types": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "mode",
+          "description",
+          "allowed_tools",
+          "requires_confirmation",
+          "output_mode",
+          "example_requests"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z]+\\.[a-z_]+$",
+            "description": "Task type identifier in domain.action format."
+          },
+          "title": { "type": "string" },
+          "mode": {
+            "type": "string",
+            "enum": ["read", "write"],
+            "description": "Whether this task type performs reads or writes."
+          },
+          "description": { "type": "string" },
+          "allowed_tools": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Tools that may be used to fulfill this task type."
+          },
+          "required_slots": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Slots that must be filled for this task type."
+          },
+          "optional_slots": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Slots that may be filled for this task type."
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "description": "Whether the runtime must ask for explicit confirmation before executing."
+          },
+          "output_mode": {
+            "type": "string",
+            "enum": ["structured_list", "confirmation_then_result", "result"],
+            "description": "How the result of this task type is presented to the user."
+          },
+          "example_requests": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Example user utterances that map to this task type."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
 }

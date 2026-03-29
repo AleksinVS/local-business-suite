@@ -12,6 +12,82 @@
     "task_type_catalog",
     "identity_model",
     "execution_policy"
-  ]
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Registry version identifier."
+    },
+    "name": {
+      "type": "string",
+      "description": "Registry name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this registry's scope."
+    },
+    "primary_chat_ui": {
+      "type": "object",
+      "required": ["name", "mode", "purpose"],
+      "properties": {
+        "name": { "type": "string" },
+        "mode": { "type": "string" },
+        "purpose": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "agent_orchestrator": {
+      "type": "object",
+      "required": ["name", "mode", "purpose"],
+      "properties": {
+        "name": { "type": "string" },
+        "mode": { "type": "string" },
+        "purpose": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "tool_protocol": {
+      "type": "object",
+      "required": ["name", "mode", "purpose"],
+      "properties": {
+        "name": { "type": "string" },
+        "mode": { "type": "string" },
+        "purpose": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "tool_catalog": {
+      "type": "string",
+      "description": "Path to the tool catalog JSON file."
+    },
+    "task_type_catalog": {
+      "type": "string",
+      "description": "Path to the task type catalog JSON file."
+    },
+    "identity_model": {
+      "type": "object",
+      "required": ["propagate_user_identity", "minimum_fields"],
+      "properties": {
+        "propagate_user_identity": { "type": "boolean" },
+        "minimum_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution_policy": {
+      "type": "object",
+      "required": ["read_actions", "write_actions", "confirm_before_destructive_write", "audit_all_tool_calls"],
+      "properties": {
+        "read_actions": { "type": "string" },
+        "write_actions": { "type": "string" },
+        "confirm_before_destructive_write": { "type": "boolean" },
+        "audit_all_tool_calls": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
 }
-

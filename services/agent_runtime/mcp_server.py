@@ -34,7 +34,7 @@ def build_mcp_server() -> FastMCP:
             payload={"status": status or None, "limit": limit},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def workorders_get(
@@ -58,7 +58,7 @@ def build_mcp_server() -> FastMCP:
             payload={"workorder_id": workorder_id, "number": number},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def workorders_create(
@@ -89,7 +89,7 @@ def build_mcp_server() -> FastMCP:
             },
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def workorders_transition(
@@ -113,7 +113,7 @@ def build_mcp_server() -> FastMCP:
             payload={"workorder_id": workorder_id, "target_status": target_status},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def workorders_comment(
@@ -137,7 +137,7 @@ def build_mcp_server() -> FastMCP:
             payload={"workorder_id": workorder_id, "text": text},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def departments_list(user_id: int, username: str, roles: list[str], session_id: str, query: str = ""):
@@ -154,7 +154,7 @@ def build_mcp_server() -> FastMCP:
             payload={"query": query},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     @mcp.tool()
     def devices_list(
@@ -178,6 +178,6 @@ def build_mcp_server() -> FastMCP:
             payload={"query": query, "department_id": department_id},
             session_id=session_id,
         )
-        return result["result"]
+        return result
 
     return mcp

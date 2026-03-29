@@ -7,6 +7,79 @@
     "description",
     "default_policies",
     "tools"
-  ]
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "default_policies": {
+      "type": "object",
+      "required": [
+        "authentication_required",
+        "policy_enforced",
+        "writes_require_confirmation",
+        "direct_sql_writes_allowed"
+      ],
+      "properties": {
+        "authentication_required": { "type": "boolean" },
+        "policy_enforced": { "type": "boolean" },
+        "writes_require_confirmation": { "type": "boolean" },
+        "direct_sql_writes_allowed": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "domain",
+          "mode",
+          "execution_mode",
+          "description",
+          "inputs",
+          "outputs",
+          "required_role_scope"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z]+\\.[a-z_]+$",
+            "description": "Tool identifier in domain.action format."
+          },
+          "title": { "type": "string" },
+          "domain": { "type": "string" },
+          "mode": {
+            "type": "string",
+            "enum": ["read", "write"],
+            "description": "Whether this tool performs reads or writes."
+          },
+          "execution_mode": {
+            "type": "string",
+            "description": "How this tool should be executed (service_layer, service_or_read_only_query)."
+          },
+          "description": { "type": "string" },
+          "inputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Input parameter names this tool accepts."
+          },
+          "outputs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Output keys this tool returns."
+          },
+          "requires_confirmation": {
+            "type": "boolean",
+            "description": "Whether this tool requires explicit user confirmation before execution."
+          },
+          "required_role_scope": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
 }
-

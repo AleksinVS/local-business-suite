@@ -15,19 +15,13 @@
       "domain": "workorders",
       "mode": "read",
       "execution_mode": "service_or_read_only_query",
-      "description": "Return work orders filtered by status, department, assignee, author, text query, or priority.",
+      "description": "Return work orders filtered by status and limit.",
       "inputs": [
         "status",
-        "department_id",
-        "assignee_id",
-        "author_id",
-        "query",
-        "priority",
         "limit"
       ],
       "outputs": [
-        "items",
-        "count"
+        "items"
       ],
       "required_role_scope": "visible"
     },
@@ -53,7 +47,7 @@
       "domain": "workorders",
       "mode": "write",
       "execution_mode": "service_layer",
-      "description": "Create a work order with department, subject, description, optional device, priority, and requester context.",
+      "description": "Create a work order with department, subject (title), description, optional device, and priority.",
       "inputs": [
         "department_id",
         "subject",
@@ -136,4 +130,3 @@
     }
   ]
 }
-

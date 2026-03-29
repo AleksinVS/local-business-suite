@@ -340,3 +340,129 @@ def validate_ai_task_types_payload(payload):
         for key in ("allowed_tools", "example_requests"):
             if not isinstance(item.get(key), list):
                 raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")
+
+
+def validate_ai_tools_drift(json_payload, canonical_tools):
+    canonical_by_id = {tool["id"]: tool for tool in canonical_tools}
+    json_by_id = {tool["id"]: tool for tool in json_payload.get("tools", [])}
+
+    for tool_id, canonical_tool in canonical_by_id.items():
+        if tool_id not in json_by_id:
+            raise ValidationError(f"Tool '{tool_id}' is missing in JSON registry.")
+        json_tool = json_by_id[tool_id]
+
+        for key in REQUIRED_AI_TOOL_KEYS:
+            if canonical_tool.get(key) != json_tool.get(key):
+                raise ValidationError(
+                    f"Tool '{tool_id}' field '{key}' differs: canonical={canonical_tool.get(key)!r}, json={json_tool.get(key)!r}."
+                )
+
+
+def validate_ai_task_types_tool_alignment(task_types_payload, tools_payload):
+    """
+    Validate that every tool referenced in task_types[].allowed_tools exists
+    in the tool catalog.
+
+    This catches drift where a task type declares a tool that was removed or
+    renamed in the tool catalog — before runtime.
+    """
+    tool_ids_in_catalog = {tool["id"] for tool in tools_payload.get("tools", [])}
+    task_types = task_types_payload.get("task_types", [])
+    for task_type in task_types:
+        tt_id = task_type.get("id", "unknown")
+        for tool_id in task_type.get("allowed_tools", []):
+            if tool_id not in tool_ids_in_catalog:
+                raise ValidationError(
+                    f"Task type '{tt_id}' declares allowed_tool '{tool_id}' "
+                    f"which does not exist in the tool catalog."
+                )
+
+
+def validate_ai_write_confirmation_alignment(task_types_payload, tools_payload):
+    """
+    Validate that write-mode task types and their write-mode tools have
+    aligned requires_confirmation semantics.
+
+    If a write tool declares requires_confirmation=True, all task types that
+    use it exclusively for write operations should also require confirmation.
+    This catches misalignment between tool-level and task-type-level policy.
+    """
+    tool_by_id = {tool["id"]: tool for tool in tools_payload.get("tools", [])}
+    task_types = task_types_payload.get("task_types", [])
+
+    for task_type in task_types:
+        tt_id = task_type.get("id", "unknown")
+        mode = task_type.get("mode", "")
+        tt_requires_confirmation = task_type.get("requires_confirmation", False)
+
+        if mode != "write":
+            continue
+
+        for tool_id in task_type.get("allowed_tools", []):
+            tool = tool_by_id.get(tool_id, {})
+            if tool.get("mode") != "write":
+                continue
+            tool_requires_confirmation = tool.get("requires_confirmation", False)
+            if tool_requires_confirmation != tt_requires_confirmation:
+                raise ValidationError(
+                    f"Task type '{tt_id}' (mode=write) has requires_confirmation={tt_requires_confirmation} "
+                    f"but its write tool '{tool_id}' has requires_confirmation={tool_requires_confirmation}. "
+                    f"These must be aligned for write-mode task types."
+                )
+
+
+def validate_ai_task_types_slot_coverage(task_types_payload):
+    """
+    Validate that within each task type, required_slots and optional_slots
+    are disjoint sets (a slot cannot be both required and optional).
+
+    Also validates that required_slots does not contain duplicates.
+    """
+    task_types = task_types_payload.get("task_types", [])
+    for task_type in task_types:
+        tt_id = task_type.get("id", "unknown")
+        required = set(task_type.get("required_slots", []))
+        optional = set(task_type.get("optional_slots", []))
+
+        overlap = required & optional
+        if overlap:
+            raise ValidationError(
+                f"Task type '{tt_id}' has slots that are both required and optional: "
+                f"{sorted(overlap)}. Required and optional slot sets must be disjoint."
+            )
+
+        if len(required) != len(task_type.get("required_slots", [])):
+            raise ValidationError(
+                f"Task type '{tt_id}' has duplicate entries in required_slots."
+            )
+
+
+# Minimum identity fields the runtime request identity model must carry, per
+# the identity_model contract in config/ai/registry.json.
+IDENTITY_MINIMUM_FIELDS = frozenset({
+    "user_id",
+    "roles",
+    "session_id",
+    "conversation_id",
+    "request_id",
+})
+
+
+def validate_ai_identity_model_alignment(registry_payload):
+    """
+    Validate that the identity_model.minimum_fields declared in the AI registry
+    include all fields required by the runtime request identity model.
+
+    The Django chat surface and gateway client must carry: user_id, roles,
+    session_id, conversation_id, request_id.  Any missing field is a
+    contract violation that breaks trace correlation.
+    """
+    identity_model = registry_payload.get("identity_model", {})
+    minimum_fields = set(identity_model.get("minimum_fields", []))
+    missing = IDENTITY_MINIMUM_FIELDS - minimum_fields
+    if missing:
+        raise ValidationError(
+            f"AI registry identity_model.minimum_fields is missing required fields: "
+            f"{', '.join(sorted(missing))}. "
+            f"The runtime request identity model must carry these to enable trace correlation."
+        )

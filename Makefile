@@ -1,6 +1,13 @@
 PYTHON := ./.venv/bin/python
+PYTHON_INSTALL := $(PYTHON) -m pip install
 
-.PHONY: check test contracts change-plan ai-runtime
+.PHONY: venv install check test contracts change-plan ai-runtime
+
+venv:
+	python3 -m venv .venv
+
+install: venv
+	$(PYTHON_INSTALL) -r requirements.txt
 
 check:
 	$(PYTHON) manage.py check

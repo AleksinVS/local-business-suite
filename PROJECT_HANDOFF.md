@@ -120,7 +120,38 @@ Backend:
 
 Главный принцип: не доверять шаблону. Важные ограничения реализованы на сервере.
 
-### 4.2 Data model
+### 4.2 AI layer
+
+В проекте теперь есть отдельный AI-контур поверх Django domain layer.
+
+Ключевые части:
+
+- `apps/ai`
+  Django-side gateway, chat surface, action audit, confirmation flow.
+- `services/agent_runtime`
+  Отдельный runtime/orchestration слой.
+- `config/ai/tools.json`
+  Генерируемый registry tools.
+- `config/ai/task_types.json`
+  Декларативный task type catalog.
+
+Что важно понимать:
+
+- source of truth для tool definitions теперь code-first:
+  `apps/ai/tool_definitions.py`
+- `config/ai/tools.json` синхронизируется из кода через:
+  `python manage.py sync_ai_tool_registry`
+- write-tools не должны исполняться напрямую без confirmation flow;
+- подтверждение write-path сейчас реализовано через `PendingAction`;
+- executable task-type contracts уже существуют для всех текущих task types из `config/ai/task_types.json`;
+- contract drift проверяется через:
+  `python manage.py validate_architecture_contracts`
+
+Для короткого agent protocol и обязательных execution rules теперь есть отдельный файл:
+
+- `AGENTS.md`
+
+### 4.3 Data model
 
 #### Inventory
 
@@ -440,8 +471,11 @@ python manage.py migrate
 ### Локально
 
 ```bash
-cd /home/abc/.openclaw/workspace/projects/local-business-suite
-. .venv/bin/activate
+make venv
+make install
+make check
+make test
+make contracts
 python manage.py migrate
 python manage.py seed_roles
 python manage.py runserver
@@ -489,5 +523,7 @@ docker compose up --build
 - `templates/workorders/board.html`
 - `templates/workorders/partials/board_columns.html`
 - `PROJECT_HANDOFF.md`
+
+Для agent-facing execution protocol (tool registry, bounded task types, confirmation flow, verification commands) — см. `AGENTS.md`.
 
 Этого достаточно, чтобы продолжать работу по канбану почти без дополнительной разведки.

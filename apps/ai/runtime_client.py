@@ -1,3 +1,5 @@
+import uuid
+
 import httpx
 from django.conf import settings
 
@@ -11,7 +13,33 @@ class AgentRuntimeClient:
         self.base_url = settings.LOCAL_BUSINESS_AGENT_RUNTIME_URL.rstrip("/")
         self.timeout = settings.LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT
 
-    def chat(self, *, user, session_id, prompt, history):
+    def chat(
+        self,
+        *,
+        user,
+        session_id,
+        prompt,
+        history,
+        conversation_id: str = "",
+        request_id: str = "",
+        origin_channel: str = "",
+        actor_version: str = "",
+    ):
+        """
+        Send a chat message to the LangGraph agent runtime.
+
+        Identity/correlation fields (conversation_id, request_id, origin_channel,
+        actor_version) are propagated through the runtime pipeline and persisted
+        in the audit trail. They are generated here if not supplied, so every
+        request has trace context from the Django chat surface onward.
+        """
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+        if not request_id:
+            request_id = str(uuid.uuid4())
+        if not origin_channel:
+            origin_channel = "django-chat"
+
         payload = {
             "session_id": str(session_id),
             "prompt": prompt,
@@ -23,6 +51,10 @@ class AgentRuntimeClient:
                 "is_superuser": user.is_superuser,
                 "channel": "internal",
                 "source": "django-chat",
+                "conversation_id": conversation_id,
+                "request_id": request_id,
+                "origin_channel": origin_channel,
+                "actor_version": actor_version,
             },
         }
         try:
@@ -37,4 +69,7 @@ class AgentRuntimeClient:
         data = response.json()
         if "assistant_message" not in data:
             raise AgentRuntimeError("Agent runtime returned invalid payload.")
+        # Always carry trace context back in the response for storage
+        data["conversation_id"] = conversation_id
+        data["request_id"] = request_id
         return data

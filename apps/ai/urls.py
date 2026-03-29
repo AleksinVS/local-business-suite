@@ -1,6 +1,13 @@
 from django.urls import path
 
-from .views import AIChatDetailView, AIChatIndexView, AIChatMessageCreateView, AIHubView, AIToolExecuteView
+from .views import (
+    AIChatDetailView,
+    AIChatIndexView,
+    AIChatMessageCreateView,
+    AIHubView,
+    AIToolConfirmView,
+    AIToolExecuteView,
+)
 
 app_name = "ai"
 
@@ -10,4 +17,5 @@ urlpatterns = [
     path("chat/<uuid:external_id>/send/", AIChatMessageCreateView.as_view(), name="chat_send"),
     path("", AIHubView.as_view(), name="hub"),
     path("gateway/tools/<str:tool_code>/execute/", AIToolExecuteView.as_view(), name="tool_execute"),
+    path("gateway/pending/<uuid:token>/confirm/", AIToolConfirmView.as_view(), name="tool_confirm"),
 ]

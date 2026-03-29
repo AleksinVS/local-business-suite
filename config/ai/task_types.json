@@ -57,11 +57,10 @@
         "workorders.transition"
       ],
       "required_slots": [
-        "workorder"
-      ],
-      "optional_slots": [
+        "workorder",
         "target_status"
       ],
+      "optional_slots": [],
       "requires_confirmation": true,
       "output_mode": "confirmation_then_result",
       "example_requests": [

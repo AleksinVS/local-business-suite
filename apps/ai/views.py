@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from django.conf import settings
 from django.contrib import messages
@@ -18,7 +19,7 @@ from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import append_chat_message, serialize_session_history
-from .tooling import UnknownToolError, execute_tool
+from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
 
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -79,29 +80,73 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             return redirect("ai:chat_detail", external_id=session.external_id)
 
         prompt = form.cleaned_data["prompt"]
-        append_chat_message(session=session, role=ChatMessage.Role.USER, content=prompt)
+
+        # Generate or recover trace context for this request.
+        # Persist conversation_id in session metadata so subsequent turns share it.
+        conversation_id = (
+            session.metadata.get("conversation_id") or str(uuid.uuid4())
+        )
+        request_id = str(uuid.uuid4())
+
+        user_msg = append_chat_message(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content=prompt,
+            metadata={
+                "conversation_id": conversation_id,
+                "request_id": request_id,
+                "origin_channel": session.channel,
+            },
+        )
         try:
             response = AgentRuntimeClient().chat(
                 user=request.user,
                 session_id=session.external_id,
                 prompt=prompt,
                 history=serialize_session_history(session),
+                conversation_id=conversation_id,
+                request_id=request_id,
+                origin_channel=session.channel,
             )
         except AgentRuntimeError as exc:
             append_chat_message(
                 session=session,
                 role=ChatMessage.Role.SYSTEM,
                 content=f"Ошибка agent runtime: {exc}",
+                metadata={"conversation_id": conversation_id, "request_id": request_id},
             )
             messages.error(request, "AI runtime недоступен или вернул ошибку.")
             return redirect("ai:chat_detail", external_id=session.external_id)
 
-        append_chat_message(
+        # Enrich tool trace entries with trace context for auditability.
+        # Use direct assignment to ensure the view-generated trace IDs take precedence
+        # for proper end-to-end correlation, overriding any values from the runtime.
+        tool_trace = response.get("tool_trace", [])
+        runtime_conversation_id = response.get("conversation_id") or conversation_id
+        runtime_request_id = response.get("request_id") or request_id
+        for entry in tool_trace:
+            entry["conversation_id"] = runtime_conversation_id
+            entry["request_id"] = runtime_request_id
+            entry["origin_channel"] = session.channel
+
+        assistant_msg = append_chat_message(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
             content=response["assistant_message"],
-            metadata={"tool_trace": response.get("tool_trace", [])},
+            metadata={
+                "tool_trace": tool_trace,
+                "conversation_id": runtime_conversation_id,
+                "request_id": runtime_request_id,
+            },
         )
+
+        # Persist trace context in session metadata using the runtime-returned ID
+        session.metadata["conversation_id"] = runtime_conversation_id
+        if "request_ids" not in session.metadata:
+            session.metadata["request_ids"] = []
+        session.metadata["request_ids"].append(runtime_request_id)
+        session.save(update_fields=["metadata", "updated_at"])
+
         if not session.title:
             session.title = prompt[:80]
             session.save(update_fields=["title", "updated_at"])
@@ -128,19 +173,66 @@ class AIToolExecuteView(View):
         actor_context = body.get("actor", {})
         payload = body.get("payload", {})
         session_id = body.get("session_id")
+        # Extract identity/correlation fields forwarded from the runtime
+        conversation_id = body.get("conversation_id", "")
+        request_id = body.get("request_id", str(uuid.uuid4()))
+        origin_channel = body.get("origin_channel", "")
+        actor_version = body.get("actor_version", "")
         try:
             result = execute_tool(
                 tool_code=tool_code,
                 actor_context=actor_context,
                 payload=payload,
                 session_external_id=session_id,
+                conversation_id=conversation_id,
+                request_id=request_id,
+                origin_channel=origin_channel,
+                actor_version=actor_version,
             )
-            return JsonResponse(result, status=200)
         except UnknownToolError:
             return JsonResponse({"error": "Unknown tool."}, status=404)
-        except PermissionDenied as exc:
-            return JsonResponse({"error": str(exc)}, status=403)
-        except ValidationError as exc:
-            return JsonResponse({"error": exc.message}, status=400)
-        except Exception as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+
+        if result.get("ok"):
+            return JsonResponse(result, status=200)
+        return JsonResponse(result, status=400)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AIToolConfirmView(View):
+    http_method_names = ["post"]
+
+    def dispatch(self, request, *args, **kwargs):
+        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
+        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
+        if not expected_token or gateway_token != expected_token:
+            return HttpResponseForbidden("AI gateway token is invalid.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request, token):
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+        confirmed = body.get("confirmed", False)
+        actor_context = body.get("actor", {})
+        session_id = body.get("session_id")
+        conversation_id = body.get("conversation_id", "")
+        request_id = body.get("request_id", str(uuid.uuid4()))
+        origin_channel = body.get("origin_channel", "")
+        actor_version = body.get("actor_version", "")
+
+        result = execute_pending_action(
+            token=token,
+            confirmed=confirmed,
+            actor_context=actor_context,
+            session_external_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+
+        if result.get("ok"):
+            return JsonResponse(result, status=200)
+        return JsonResponse(result, status=400)

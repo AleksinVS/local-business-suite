@@ -52,6 +52,37 @@ class ChatMessage(models.Model):
         verbose_name_plural = "AI chat messages"
 
 
+class PendingAction(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CONFIRMED = "confirmed", "Confirmed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    tool_code = models.CharField(max_length=120)
+    action_kind = models.CharField(max_length=16)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ai_pending_actions")
+    session = models.ForeignKey(
+        ChatSession,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pending_actions",
+    )
+    payload = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "AI pending action"
+        verbose_name_plural = "AI pending actions"
+
+    def __str__(self):
+        return f"Pending {self.tool_code} ({self.token})"
+
+
 class AgentActionLog(models.Model):
     class ActionKind(models.TextChoices):
         READ = "read", "Read"
@@ -62,6 +93,7 @@ class AgentActionLog(models.Model):
         SUCCEEDED = "succeeded", "Succeeded"
         DENIED = "denied", "Denied"
         FAILED = "failed", "Failed"
+        PENDING = "pending", "Pending"
 
     session = models.ForeignKey(
         ChatSession,

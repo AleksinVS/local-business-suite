@@ -1,28 +1,38 @@
 # Next Steps
 
 Этот документ нужен как рабочий план ближайших шагов без повторного анализа всей кодовой базы.  
-Он опирается на текущее состояние проекта после перехода к `AI-first / Code-first` архитектуре.
+Он опирается на текущее состояние проекта после AI-first remediation foundation и expansion block, уже зафиксированных в `main`.
 
 ## 1. Текущая базовая точка
 
 Сейчас в проекте уже есть:
 
 - архитектурные документы:
-  - [ARCHITECTURE.md](/home/abc/.openclaw/workspace/projects/local-business-suite/ARCHITECTURE.md)
-  - [DOMAIN_MODEL.md](/home/abc/.openclaw/workspace/projects/local-business-suite/DOMAIN_MODEL.md)
-  - [POLICY_MODEL.md](/home/abc/.openclaw/workspace/projects/local-business-suite/POLICY_MODEL.md)
-  - [INTEGRATIONS.md](/home/abc/.openclaw/workspace/projects/local-business-suite/INTEGRATIONS.md)
-  - [ANALYTICS_MODEL.md](/home/abc/.openclaw/workspace/projects/local-business-suite/ANALYTICS_MODEL.md)
-  - [PROJECT_MAP.md](/home/abc/.openclaw/workspace/projects/local-business-suite/PROJECT_MAP.md)
-  - [CHANGE_PATTERNS.md](/home/abc/.openclaw/workspace/projects/local-business-suite/CHANGE_PATTERNS.md)
+  - [ARCHITECTURE.md](/home/abc/projects/local-business-suite/ARCHITECTURE.md)
+  - [DOMAIN_MODEL.md](/home/abc/projects/local-business-suite/DOMAIN_MODEL.md)
+  - [POLICY_MODEL.md](/home/abc/projects/local-business-suite/POLICY_MODEL.md)
+  - [INTEGRATIONS.md](/home/abc/projects/local-business-suite/INTEGRATIONS.md)
+  - [ANALYTICS_MODEL.md](/home/abc/projects/local-business-suite/ANALYTICS_MODEL.md)
+  - [PROJECT_MAP.md](/home/abc/projects/local-business-suite/PROJECT_MAP.md)
+  - [CHANGE_PATTERNS.md](/home/abc/projects/local-business-suite/CHANGE_PATTERNS.md)
 - декларативные контракты:
-  - [config/role_rules.json](/home/abc/.openclaw/workspace/projects/local-business-suite/config/role_rules.json)
-  - [config/workflow_rules.json](/home/abc/.openclaw/workspace/projects/local-business-suite/config/workflow_rules.json)
-  - [config/integrations/registry.json](/home/abc/.openclaw/workspace/projects/local-business-suite/config/integrations/registry.json)
-  - [analytics_store/datasets.json](/home/abc/.openclaw/workspace/projects/local-business-suite/analytics_store/datasets.json)
+  - [config/role_rules.json](/home/abc/projects/local-business-suite/config/role_rules.json)
+  - [config/workflow_rules.json](/home/abc/projects/local-business-suite/config/workflow_rules.json)
+  - [config/integrations/registry.json](/home/abc/projects/local-business-suite/config/integrations/registry.json)
+  - [analytics_store/datasets.json](/home/abc/projects/local-business-suite/analytics_store/datasets.json)
 - машинно-читаемые артефакты работы:
-  - [ai/task_briefs/template.json](/home/abc/.openclaw/workspace/projects/local-business-suite/ai/task_briefs/template.json)
-  - [ai/change_plans/template.json](/home/abc/.openclaw/workspace/projects/local-business-suite/ai/change_plans/template.json)
+  - [ai/task_briefs/template.json](/home/abc/projects/local-business-suite/ai/task_briefs/template.json)
+  - [ai/change_plans/template.json](/home/abc/projects/local-business-suite/ai/change_plans/template.json)
+- AI runtime capabilities:
+  - code-first tool registry в [apps/ai/tool_definitions.py](/home/abc/projects/local-business-suite/apps/ai/tool_definitions.py)
+  - executable task-type layer в [services/agent_runtime/task_types.py](/home/abc/projects/local-business-suite/services/agent_runtime/task_types.py)
+  - agent protocol в [AGENTS.md](/home/abc/projects/local-business-suite/AGENTS.md)
+  - завершённый expansion plan в [AI_EXPANSION_BLOCK_PLAN.json](/home/abc/projects/local-business-suite/AI_EXPANSION_BLOCK_PLAN.json)
+  - покрытые bounded scenarios:
+    - `workorders` (`list`, `detail`, `create`, `transition`, `comment`, `confirm_closure`, `rate`)
+    - `lookup` (`departments`, `devices`)
+    - `inventory.devices` (`create`, `update`, `archive`)
+    - `analytics.summary` (`status`, `departments`, `assignees`)
 - команды проверки:
   - `./.venv/bin/python manage.py check`
   - `./.venv/bin/python manage.py validate_architecture_contracts`
@@ -34,7 +44,7 @@
 
 Цель:
 
-- перестать редактировать [config/workflow_rules.json](/home/abc/.openclaw/workspace/projects/local-business-suite/config/workflow_rules.json) только вручную;
+- перестать редактировать [config/workflow_rules.json](/home/abc/projects/local-business-suite/config/workflow_rules.json) только вручную;
 - дать управляемый интерфейс для изменения статусов и допустимых переходов;
 - сохранить серверную валидацию как обязательную.
 
@@ -47,18 +57,18 @@
 Что нужно изменить:
 
 - добавить форму и view в `apps/core` по аналогии с редактором ролей;
-- использовать валидацию из [apps/core/json_utils.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/json_utils.py);
-- добавить ссылку в верхнюю навигацию в [templates/base.html](/home/abc/.openclaw/workspace/projects/local-business-suite/templates/base.html);
+- использовать валидацию из [apps/core/json_utils.py](/home/abc/projects/local-business-suite/apps/core/json_utils.py);
+- добавить ссылку в верхнюю навигацию в [templates/base.html](/home/abc/projects/local-business-suite/templates/base.html);
 - после сохранения обновлять `settings.LOCAL_BUSINESS_WORKFLOW_RULES`.
 
 Файлы-кандидаты:
 
-- [apps/core/forms.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/forms.py)
-- [apps/core/views.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/views.py)
-- [apps/core/urls.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/urls.py)
-- [templates/core/role_rules_form.html](/home/abc/.openclaw/workspace/projects/local-business-suite/templates/core/role_rules_form.html)
-- [templates/base.html](/home/abc/.openclaw/workspace/projects/local-business-suite/templates/base.html)
-- [apps/core/tests.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/tests.py)
+- [apps/core/forms.py](/home/abc/projects/local-business-suite/apps/core/forms.py)
+- [apps/core/views.py](/home/abc/projects/local-business-suite/apps/core/views.py)
+- [apps/core/urls.py](/home/abc/projects/local-business-suite/apps/core/urls.py)
+- [templates/core/role_rules_form.html](/home/abc/projects/local-business-suite/templates/core/role_rules_form.html)
+- [templates/base.html](/home/abc/projects/local-business-suite/templates/base.html)
+- [apps/core/tests.py](/home/abc/projects/local-business-suite/apps/core/tests.py)
 
 Проверка:
 
@@ -69,7 +79,7 @@
 
 Цель:
 
-- позволить вести [config/integrations/registry.json](/home/abc/.openclaw/workspace/projects/local-business-suite/config/integrations/registry.json) без ручного редактирования файла;
+- позволить вести [config/integrations/registry.json](/home/abc/projects/local-business-suite/config/integrations/registry.json) без ручного редактирования файла;
 - превратить список внешних систем в рабочий каталог проекта.
 
 Почему это важно:
@@ -81,16 +91,16 @@
 
 - добавить страницу списка интеграций;
 - добавить форму редактирования JSON-реестра или CRUD поверх отдельных записей;
-- валидировать данные через [apps/core/json_utils.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/json_utils.py);
+- валидировать данные через [apps/core/json_utils.py](/home/abc/projects/local-business-suite/apps/core/json_utils.py);
 - в первой итерации достаточно JSON-редактора, как у ролей.
 
 Файлы-кандидаты:
 
-- [apps/core/forms.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/forms.py)
-- [apps/core/views.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/views.py)
-- [apps/core/urls.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/urls.py)
-- [templates/core/role_rules_form.html](/home/abc/.openclaw/workspace/projects/local-business-suite/templates/core/role_rules_form.html)
-- [apps/core/tests.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/tests.py)
+- [apps/core/forms.py](/home/abc/projects/local-business-suite/apps/core/forms.py)
+- [apps/core/views.py](/home/abc/projects/local-business-suite/apps/core/views.py)
+- [apps/core/urls.py](/home/abc/projects/local-business-suite/apps/core/urls.py)
+- [templates/core/role_rules_form.html](/home/abc/projects/local-business-suite/templates/core/role_rules_form.html)
+- [apps/core/tests.py](/home/abc/projects/local-business-suite/apps/core/tests.py)
 
 Проверка:
 
@@ -101,7 +111,7 @@
 
 Цель:
 
-- перевести [analytics_store/datasets.json](/home/abc/.openclaw/workspace/projects/local-business-suite/analytics_store/datasets.json) из “служебного файла” в управляемый каталог аналитического слоя;
+- перевести [analytics_store/datasets.json](/home/abc/projects/local-business-suite/analytics_store/datasets.json) из “служебного файла” в управляемый каталог аналитического слоя;
 - подготовить проект к реальному модулю `Evidence + Parquet + DuckDB`.
 
 Что нужно сделать:
@@ -113,11 +123,11 @@
 
 Файлы-кандидаты:
 
-- [apps/core/forms.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/forms.py)
-- [apps/core/views.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/views.py)
-- [apps/core/urls.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/urls.py)
-- [templates/analytics/dashboard.html](/home/abc/.openclaw/workspace/projects/local-business-suite/templates/analytics/dashboard.html)
-- [apps/core/tests.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/core/tests.py)
+- [apps/core/forms.py](/home/abc/projects/local-business-suite/apps/core/forms.py)
+- [apps/core/views.py](/home/abc/projects/local-business-suite/apps/core/views.py)
+- [apps/core/urls.py](/home/abc/projects/local-business-suite/apps/core/urls.py)
+- [templates/analytics/dashboard.html](/home/abc/projects/local-business-suite/templates/analytics/dashboard.html)
+- [apps/core/tests.py](/home/abc/projects/local-business-suite/apps/core/tests.py)
 
 Проверка:
 
@@ -134,7 +144,7 @@
 Что нужно реализовать в первой поставке:
 
 - management command для экспорта заявок и журналов переходов;
-- запись в пути из [analytics_store/datasets.json](/home/abc/.openclaw/workspace/projects/local-business-suite/analytics_store/datasets.json);
+- запись в пути из [analytics_store/datasets.json](/home/abc/projects/local-business-suite/analytics_store/datasets.json);
 - безопасное создание каталогов `analytics_store/raw/` и `analytics_store/marts/`;
 - базовую smoke-проверку на успешную генерацию файлов.
 
@@ -147,9 +157,9 @@
 Файлы-кандидаты:
 
 - новый management command в `apps/analytics/management/commands/`
-- [analytics_store/datasets.json](/home/abc/.openclaw/workspace/projects/local-business-suite/analytics_store/datasets.json)
-- [ANALYTICS_MODEL.md](/home/abc/.openclaw/workspace/projects/local-business-suite/ANALYTICS_MODEL.md)
-- [apps/analytics/tests.py](/home/abc/.openclaw/workspace/projects/local-business-suite/apps/analytics/tests.py)
+- [analytics_store/datasets.json](/home/abc/projects/local-business-suite/analytics_store/datasets.json)
+- [ANALYTICS_MODEL.md](/home/abc/projects/local-business-suite/ANALYTICS_MODEL.md)
+- [apps/analytics/tests.py](/home/abc/projects/local-business-suite/apps/analytics/tests.py)
 
 Проверка:
 
@@ -179,7 +189,7 @@
 
 Перед любой доработкой:
 
-1. взять [ai/task_briefs/template.json](/home/abc/.openclaw/workspace/projects/local-business-suite/ai/task_briefs/template.json) и создать новый task brief;
+1. взять [ai/task_briefs/template.json](/home/abc/projects/local-business-suite/ai/task_briefs/template.json) и создать новый task brief;
 2. сгенерировать change plan через:
    `./.venv/bin/python manage.py generate_change_plan path/to/brief.json --output path/to/plan.json`
 3. только после этого вносить изменения;
@@ -200,11 +210,11 @@
 
 Если нужен один конкретный следующий шаг без дополнительных обсуждений, брать нужно это:
 
-`Сделать UI-редактор workflow rules по образцу role rules editor, с серверной валидацией, тестами и ссылкой в navigation.`
+`Добавить end-to-end regression tests для новых AI-сценариев через gateway: inventory.devices.create/update/archive, analytics.summary, workorders.confirm_closure и workorders.rate.`
 
 Это лучший следующий шаг, потому что он:
 
-- завершает контур конфигурируемой policy/workflow-модели;
-- опирается на уже сделанный паттерн;
-- не требует тяжелой новой инфраструктуры;
-- уменьшает зависимость проекта от ручного редактирования файлов.
+- проверяет не только наличие JSON-контрактов, но и реальное исполнение нового AI surface;
+- снижает риск регрессий после уже выполненного expansion block;
+- опирается на уже существующий gateway и паттерны тестов в `apps/ai/tests.py`;
+- даст более надёжную базу перед следующими продуктовыми AI-сценариями.

@@ -7,9 +7,9 @@ from django.utils import timezone
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import WorkOrder, WorkOrderPriority
-from apps.workorders.policies import can_comment, can_create, can_transition
+from apps.workorders.policies import can_comment, can_create, can_transition, can_confirm_closure, can_rate
 from apps.workorders.selectors import visible_workorders_queryset
-from apps.workorders.services import create_workorder, transition_workorder
+from apps.workorders.services import create_workorder, transition_workorder, confirm_closure, rate_workorder
 
 from .models import AgentActionLog, ChatMessage, ChatSession
 
@@ -226,3 +226,115 @@ def record_action(
         message=message,
         error_message=error_message,
     )
+
+
+def confirm_closure_for_actor(*, actor, payload):
+    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
+    if not can_confirm_closure(actor, workorder):
+        raise PermissionDenied("Closure confirmation is not allowed for this user.")
+    workorder = confirm_closure(workorder=workorder, user=actor)
+    return {
+        "id": workorder.id,
+        "number": workorder.number,
+        "status": workorder.status,
+        "closure_confirmed": workorder.closure_confirmed,
+        "updated_at": workorder.updated_at.isoformat(),
+    }
+
+
+def rate_workorder_for_actor(*, actor, payload):
+    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
+    if not can_rate(actor, workorder):
+        raise PermissionDenied("Rating is not allowed for this user.")
+    workorder = rate_workorder(workorder=workorder, user=actor, rating=payload["rating"])
+    return {
+        "id": workorder.id,
+        "number": workorder.number,
+        "rating": workorder.rating,
+        "updated_at": workorder.updated_at.isoformat(),
+    }
+
+
+def create_device_for_actor(*, actor, payload):
+    from apps.workorders.policies import can_manage_inventory
+    if not can_manage_inventory(actor):
+        raise PermissionDenied("Inventory management is not allowed for this user.")
+    department = Department.objects.get(pk=payload["department_id"])
+    device = MedicalDevice.objects.create(
+        name=payload["name"],
+        department=department,
+        model=payload.get("model", ""),
+        serial_number=payload.get("serial_number", ""),
+    )
+    return {
+        "id": device.id,
+        "name": device.name,
+        "department_id": device.department_id,
+    }
+
+
+def update_device_for_actor(*, actor, payload):
+    from apps.workorders.policies import can_manage_inventory
+    if not can_manage_inventory(actor):
+        raise PermissionDenied("Inventory management is not allowed for this user.")
+    device = MedicalDevice.objects.get(pk=payload["device_id"])
+    if "name" in payload:
+        device.name = payload["name"]
+    if "department_id" in payload:
+        device.department_id = payload["department_id"]
+    if "model" in payload:
+        device.model = payload["model"]
+    if "serial_number" in payload:
+        device.serial_number = payload["serial_number"]
+    device.save()
+    return {
+        "id": device.id,
+        "name": device.name,
+        "department_id": device.department_id,
+    }
+
+
+def archive_device_for_actor(*, actor, payload):
+    from apps.workorders.policies import can_manage_inventory
+    if not can_manage_inventory(actor):
+        raise PermissionDenied("Inventory management is not allowed for this user.")
+    device = MedicalDevice.objects.get(pk=payload["device_id"])
+    device.archive()
+    return {
+        "id": device.id,
+        "is_archived": device.is_archived,
+    }
+
+
+def get_analytics_summary_for_actor(*, actor, payload):
+    from apps.workorders.policies import can_manage_inventory
+    from django.db.models import Count
+    if not can_manage_inventory(actor):
+        raise PermissionDenied("Analytics access is not allowed for this user.")
+    
+    summary_type = payload.get("summary_type")
+    base_qs = visible_workorders_queryset(actor).select_related("assignee", "department")
+    
+    if summary_type == "status":
+        return {
+            "summary": list(base_qs.values("status").annotate(total=Count("id")).order_by("status"))
+        }
+    elif summary_type == "departments":
+        department_rows = list(base_qs.values("department").annotate(total=Count("id")).order_by("-total", "department"))
+        departments = Department.objects.select_related("parent")
+        department_map = {d.id: d for d in departments}
+        return {
+            "summary": [
+                {
+                    "department_label": department_map[row["department"]].full_name,
+                    "total": row["total"]
+                }
+                for row in department_rows if row["department"] in department_map
+            ]
+        }
+    elif summary_type == "assignees":
+        return {
+            "summary": list(base_qs.values("assignee__username", "assignee__first_name", "assignee__last_name").annotate(total=Count("id")).order_by("-total"))
+        }
+    else:
+        raise ValidationError(f"Invalid summary_type: {summary_type}")

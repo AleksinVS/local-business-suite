@@ -1,0 +1,215 @@
+{
+  "block_id": "ai-expansion-scenarios-2026-03-30",
+  "title": "Expand The AI Layer With New Domain Scenarios",
+  "status": "completed",
+  "owner_model": "gemini-3.1-pro-preview",
+  "execution_mode": "ai-first",
+  "goal": "Extend the existing AI runtime/gateway contract beyond the current core work order flows so the AI layer can safely cover more real project scenarios using code-enforced tools, task types, confirmation rules, and verification gates.",
+  "principles": [
+    "Prefer bounded slices over one-shot broad refactors.",
+    "Do not add speculative scenarios that are not grounded in current domain code.",
+    "Keep code-first source of truth for tools and generated JSON registry sync.",
+    "Preserve structured envelopes, trace propagation, and contract validation.",
+    "Any new write scenario must be confirmation-safe when risk justifies it."
+  ],
+  "global_constraints": [
+    "Do not break the existing remediation foundation already committed on main.",
+    "Do not edit config/ai/tools.json manually without syncing from Python definitions.",
+    "Do not remove or weaken PendingAction-based confirmation for existing write tools.",
+    "Do not introduce new chat frontends or unrelated UI redesign.",
+    "Keep AGENTS.md and PROJECT_HANDOFF.md aligned if behavior or workflow expectations materially change."
+  ],
+  "global_verification": [
+    "./.venv/bin/python manage.py test apps.ai apps.core apps.workorders apps.inventory apps.analytics",
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python -m py_compile services/agent_runtime/*.py apps/ai/*.py apps/core/*.py apps/workorders/*.py apps/inventory/*.py apps/analytics/*.py"
+  ],
+  "slices": [
+    {
+      "id": "slice-01-workorder-detail-contracts",
+      "status": "completed",
+      "objective": "Add a first-class executable task type for reading one work order in detail so the AI layer can reason about detail retrieval explicitly instead of treating it as an undeclared tool call.",
+      "why_now": "The tool already exists as workorders.get, but there is no declared task type for this scenario, which keeps part of the runtime behavior partially implicit.",
+      "scope": {
+        "task_types": [
+          "workorders.get.detail"
+        ],
+        "tools": [
+          "workorders.get"
+        ]
+      },
+      "expected_changes": [
+        "Extend config/ai/task_types.json with a detail lookup task type.",
+        "Extend services/agent_runtime/task_types.py with an executable contract for the detail scenario.",
+        "Ensure task_type_report and slot_state cover work order id / number lookup variants.",
+        "Add tests for contract resolution, slot coverage, and task_type_report behavior."
+      ],
+      "likely_files": [
+        "config/ai/task_types.json",
+        "services/agent_runtime/task_types.py",
+        "apps/ai/tooling.py",
+        "apps/ai/tests.py",
+        "apps/core/json_utils.py"
+      ],
+      "verification": [
+        "./.venv/bin/python manage.py test apps.ai.tests.TaskTypeContractTests"
+      ]
+    },
+    {
+      "id": "slice-02-closure-and-rating-scenarios",
+      "status": "completed",
+      "objective": "Expose closure confirmation and post-closure rating as explicit AI scenarios grounded in existing work order domain services.",
+      "why_now": "The domain already has confirm_closure and rating behavior, but the AI layer currently cannot orchestrate these workflows safely or explicitly.",
+      "scope": {
+        "task_types": [
+          "workorders.confirm_closure",
+          "workorders.rate"
+        ],
+        "tools": [
+          "workorders.confirm_closure",
+          "workorders.rate"
+        ]
+      },
+      "expected_changes": [
+        "Add canonical Python tool definitions for closure confirmation and rating.",
+        "Implement Django gateway dispatch paths using existing policy/service logic.",
+        "Apply confirmation semantics only where appropriate based on actual domain risk.",
+        "Add executable task type contracts and tests.",
+        "Update generated config/ai/tools.json via sync command."
+      ],
+      "likely_files": [
+        "apps/ai/tool_definitions.py",
+        "apps/ai/tooling.py",
+        "apps/ai/services.py",
+        "apps/ai/tests.py",
+        "apps/workorders/services.py",
+        "apps/workorders/policies.py",
+        "services/agent_runtime/task_types.py",
+        "config/ai/task_types.json",
+        "config/ai/tools.json"
+      ],
+      "depends_on": [
+        "slice-01-workorder-detail-contracts"
+      ],
+      "verification": [
+        "./.venv/bin/python manage.py test apps.ai apps.workorders"
+      ]
+    },
+    {
+      "id": "slice-03-inventory-management-scenarios",
+      "status": "completed",
+      "objective": "Expand the AI layer from inventory lookup into real inventory management scenarios already supported by the project UI and policy layer.",
+      "why_now": "Inventory has create, update, archive flows in the app, but the AI layer currently only supports devices.list as a lookup tool.",
+      "scope": {
+        "task_types": [
+          "inventory.devices.create",
+          "inventory.devices.update",
+          "inventory.devices.archive"
+        ],
+        "tools": [
+          "inventory.devices.create",
+          "inventory.devices.update",
+          "inventory.devices.archive",
+          "devices.list",
+          "departments.list"
+        ]
+      },
+      "expected_changes": [
+        "Add canonical Python tool definitions for inventory device create/update/archive.",
+        "Implement Django-side service and gateway execution paths using existing model/form semantics and manage-inventory policy.",
+        "Use PendingAction for destructive or materially mutating inventory actions where risk warrants confirmation.",
+        "Add task type contracts and slot validation for inventory scenarios.",
+        "Add focused tests for permission, confirmation, and structured responses."
+      ],
+      "likely_files": [
+        "apps/ai/tool_definitions.py",
+        "apps/ai/tooling.py",
+        "apps/ai/services.py",
+        "apps/ai/tests.py",
+        "apps/inventory/models.py",
+        "apps/inventory/views.py",
+        "services/agent_runtime/task_types.py",
+        "services/agent_runtime/tools.py",
+        "config/ai/task_types.json",
+        "config/ai/tools.json"
+      ],
+      "depends_on": [
+        "slice-01-workorder-detail-contracts"
+      ],
+      "verification": [
+        "./.venv/bin/python manage.py test apps.ai apps.inventory"
+      ]
+    },
+    {
+      "id": "slice-04-analytics-read-scenarios",
+      "status": "completed",
+      "objective": "Add read-only AI scenarios for analytics summaries already computed by the analytics dashboard.",
+      "why_now": "Analytics is already present in the project and is a natural low-risk AI scenario because it is read-only.",
+      "scope": {
+        "task_types": [
+          "analytics.summary.status",
+          "analytics.summary.departments",
+          "analytics.summary.assignees"
+        ],
+        "tools": [
+          "analytics.summary"
+        ]
+      },
+      "expected_changes": [
+        "Add a read-only analytics tool that returns structured aggregates already present in the dashboard.",
+        "Represent analytics task types as executable contracts.",
+        "Keep output machine-readable and avoid formatting-only payloads.",
+        "Add tests for structure and contract validation."
+      ],
+      "likely_files": [
+        "apps/ai/tool_definitions.py",
+        "apps/ai/tooling.py",
+        "apps/ai/services.py",
+        "apps/ai/tests.py",
+        "apps/analytics/views.py",
+        "services/agent_runtime/task_types.py",
+        "config/ai/task_types.json",
+        "config/ai/tools.json"
+      ],
+      "verification": [
+        "./.venv/bin/python manage.py test apps.ai apps.analytics"
+      ]
+    },
+    {
+      "id": "slice-05-contract-hardening-and-doc-sync",
+      "status": "completed",
+      "objective": "Close the block by hardening validation/docs around the newly added scenarios so the expanded AI layer remains code-first and maintainable.",
+      "why_now": "New scenarios increase drift risk unless the registry, validation, and handoff docs are updated as part of the same block.",
+      "scope": {
+        "task_types": [
+          "all newly added in slices 01-04"
+        ],
+        "tools": [
+          "all newly added in slices 02-04"
+        ]
+      },
+      "expected_changes": [
+        "Extend semantic validators if the new scenarios require additional alignment checks.",
+        "Regenerate tool registry and ensure contracts stay green.",
+        "Update AGENTS.md and PROJECT_HANDOFF.md only where the new scenarios materially affect agent workflow or AI capabilities.",
+        "Leave a clear final state in this JSON plan by marking slice statuses completed or blocked with brief notes."
+      ],
+      "likely_files": [
+        "apps/core/json_utils.py",
+        "apps/core/management/commands/validate_architecture_contracts.py",
+        "AGENTS.md",
+        "PROJECT_HANDOFF.md",
+        "AI_EXPANSION_BLOCK_PLAN.json"
+      ],
+      "depends_on": [
+        "slice-02-closure-and-rating-scenarios",
+        "slice-03-inventory-management-scenarios",
+        "slice-04-analytics-read-scenarios"
+      ],
+      "verification": [
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ]
+    }
+  ],
+  "completion_rule": "The block is complete only when every slice status is completed, global verification passes, and the expanded AI surface remains aligned with AGENTS.md and PROJECT_HANDOFF.md."
+}

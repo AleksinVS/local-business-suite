@@ -22,6 +22,26 @@
       ]
     },
     {
+      "id": "workorders.get.detail",
+      "title": "Get work order details",
+      "mode": "read",
+      "description": "Read one work order in detail by ID or number.",
+      "allowed_tools": [
+        "workorders.get"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "workorder_id",
+        "number"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи подробности заявки 123",
+        "Что с заявкой номер REQ-456?"
+      ]
+    },
+    {
       "id": "workorders.create",
       "title": "Create work order",
       "mode": "write",
@@ -87,6 +107,43 @@
       ]
     },
     {
+      "id": "workorders.confirm_closure",
+      "title": "Confirm work order closure",
+      "mode": "write",
+      "description": "Confirm the closure of a resolved work order.",
+      "allowed_tools": [
+        "workorders.confirm_closure"
+      ],
+      "required_slots": [
+        "workorder_id"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Подтверди закрытие заявки 123",
+        "Заявка 456 выполнена, закрывай"
+      ]
+    },
+    {
+      "id": "workorders.rate",
+      "title": "Rate work order",
+      "mode": "write",
+      "description": "Rate a closed work order.",
+      "allowed_tools": [
+        "workorders.rate"
+      ],
+      "required_slots": [
+        "workorder_id",
+        "rating"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Оцени заявку 123 на 5",
+        "Поставь 4 звезды за заявку 456"
+      ]
+    },
+    {
       "id": "lookup.departments",
       "title": "Lookup departments",
       "mode": "read",
@@ -116,6 +173,127 @@
       "example_requests": [
         "Покажи медизделия",
         "Найди КТ аппарат"
+      ]
+    },
+    {
+      "id": "inventory.devices.create",
+      "title": "Create device",
+      "mode": "write",
+      "description": "Create a new medical device.",
+      "allowed_tools": [
+        "inventory.devices.create",
+        "departments.list"
+      ],
+      "required_slots": [
+        "name",
+        "department_id"
+      ],
+      "optional_slots": [
+        "model",
+        "serial_number"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Добавь новый тонометр в кардиологию"
+      ]
+    },
+    {
+      "id": "inventory.devices.update",
+      "title": "Update device",
+      "mode": "write",
+      "description": "Update an existing medical device.",
+      "allowed_tools": [
+        "inventory.devices.update",
+        "departments.list",
+        "devices.list"
+      ],
+      "required_slots": [
+        "device_id"
+      ],
+      "optional_slots": [
+        "name",
+        "department_id",
+        "model",
+        "serial_number"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Измени серийный номер у тонометра 123"
+      ]
+    },
+    {
+      "id": "inventory.devices.archive",
+      "title": "Archive device",
+      "mode": "write",
+      "description": "Archive a medical device.",
+      "allowed_tools": [
+        "inventory.devices.archive",
+        "devices.list"
+      ],
+      "required_slots": [
+        "device_id"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Спиши аппарат 123",
+        "Отправь в архив рентген"
+      ]
+    },
+    {
+      "id": "analytics.summary.status",
+      "title": "Status analytics summary",
+      "mode": "read",
+      "description": "Return a summary of work orders grouped by status.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по статусам"
+      ]
+    },
+    {
+      "id": "analytics.summary.departments",
+      "title": "Departments analytics summary",
+      "mode": "read",
+      "description": "Return a summary of work orders grouped by department.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по отделениям"
+      ]
+    },
+    {
+      "id": "analytics.summary.assignees",
+      "title": "Assignees analytics summary",
+      "mode": "read",
+      "description": "Return a summary of work orders grouped by assignee.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по исполнителям"
       ]
     }
   ]

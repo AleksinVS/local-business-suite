@@ -61,3 +61,9 @@ def confirm_closure(*, workorder: WorkOrder, user) -> WorkOrder:
         actor=user,
     )
     return workorder
+
+
+def rate_workorder(*, workorder: WorkOrder, user, rating: int) -> WorkOrder:
+    workorder.rating = rating
+    workorder.save(update_fields=["rating"])
+    return workorder

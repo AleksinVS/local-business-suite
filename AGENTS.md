@@ -66,9 +66,10 @@ make contracts
 ```
 
 - Bounded executable task types currently cover:
-  - `workorders.list`
-  - `workorders.create`
-  - `workorders.transition`
+  - `workorders` (list, detail, create, transition, comment, confirm_closure, rate)
+  - `lookup` (departments, devices)
+  - `inventory` (devices.create, devices.update, devices.archive)
+  - `analytics` (summary.status, summary.departments, summary.assignees)
 - Keep task-type logic aligned with:
   - `config/ai/task_types.json`
   - `services/agent_runtime/task_types.py`

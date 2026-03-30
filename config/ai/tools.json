@@ -96,6 +96,39 @@
       "required_role_scope": "comment"
     },
     {
+      "id": "workorders.confirm_closure",
+      "title": "Confirm work order closure",
+      "domain": "workorders",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Confirm the closure of a resolved work order.",
+      "inputs": [
+        "workorder_id"
+      ],
+      "outputs": [
+        "workorder"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "confirm_closure"
+    },
+    {
+      "id": "workorders.rate",
+      "title": "Rate work order",
+      "domain": "workorders",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Rate a closed work order.",
+      "inputs": [
+        "workorder_id",
+        "rating"
+      ],
+      "outputs": [
+        "workorder"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "rate"
+    },
+    {
       "id": "departments.list",
       "title": "List departments",
       "domain": "core",
@@ -125,6 +158,76 @@
       ],
       "outputs": [
         "items"
+      ],
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "inventory.devices.create",
+      "title": "Create device",
+      "domain": "inventory",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Create a new medical device in the inventory.",
+      "inputs": [
+        "name",
+        "department_id",
+        "model",
+        "serial_number"
+      ],
+      "outputs": [
+        "device"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "manage"
+    },
+    {
+      "id": "inventory.devices.update",
+      "title": "Update device",
+      "domain": "inventory",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Update an existing medical device.",
+      "inputs": [
+        "device_id",
+        "name",
+        "department_id",
+        "model",
+        "serial_number"
+      ],
+      "outputs": [
+        "device"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "manage"
+    },
+    {
+      "id": "inventory.devices.archive",
+      "title": "Archive device",
+      "domain": "inventory",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Archive a medical device so it can no longer be assigned.",
+      "inputs": [
+        "device_id"
+      ],
+      "outputs": [
+        "device"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "manage"
+    },
+    {
+      "id": "analytics.summary",
+      "title": "Analytics summary",
+      "domain": "analytics",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return read-only analytics summaries for status, departments, or assignees.",
+      "inputs": [
+        "summary_type"
+      ],
+      "outputs": [
+        "summary"
       ],
       "required_role_scope": "visible"
     }

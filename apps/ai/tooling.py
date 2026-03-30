@@ -6,15 +6,21 @@ from .models import AgentActionLog, ChatMessage, PendingAction
 from .services import (
     append_chat_message,
     add_comment_for_actor,
+    archive_device_for_actor,
+    confirm_closure_for_actor,
+    create_device_for_actor,
     create_workorder_for_actor,
     get_workorder_for_actor,
     get_or_create_session,
     list_departments_for_actor,
     list_devices_for_actor,
     list_workorders_for_actor,
+    rate_workorder_for_actor,
     record_action,
     resolve_actor,
     transition_workorder_for_actor,
+    update_device_for_actor,
+    get_analytics_summary_for_actor,
 )
 from .tool_definitions import get_tool_registry
 
@@ -85,6 +91,10 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         return transition_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.comment":
         return {"comment": add_comment_for_actor(actor=actor, payload=payload)}
+    elif tool_code == "workorders.confirm_closure":
+        return confirm_closure_for_actor(actor=actor, payload=payload)
+    elif tool_code == "workorders.rate":
+        return rate_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "departments.list":
         return {"items": list_departments_for_actor(actor=actor, query=payload.get("query", ""), parent_id=payload.get("parent_id"))}
     elif tool_code == "devices.list":
@@ -96,6 +106,14 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
                 archived=payload.get("archived", False),
             )
         }
+    elif tool_code == "inventory.devices.create":
+        return {"device": create_device_for_actor(actor=actor, payload=payload)}
+    elif tool_code == "inventory.devices.update":
+        return {"device": update_device_for_actor(actor=actor, payload=payload)}
+    elif tool_code == "inventory.devices.archive":
+        return {"device": archive_device_for_actor(actor=actor, payload=payload)}
+    elif tool_code == "analytics.summary":
+        return get_analytics_summary_for_actor(actor=actor, payload=payload)
     else:
         raise UnknownToolError(tool_code)
 

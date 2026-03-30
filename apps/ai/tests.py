@@ -903,6 +903,12 @@ class TaskTypeContractTests(TestCase):
                 {"id": "departments.list"},
                 {"id": "devices.list"},
                 {"id": "workorders.comment"},
+                {"id": "workorders.confirm_closure"},
+                {"id": "workorders.rate"},
+                {"id": "inventory.devices.create"},
+                {"id": "inventory.devices.update"},
+                {"id": "inventory.devices.archive"},
+                {"id": "analytics.summary"},
             ]
         }
         errors = validate_bounded_tools_exist_in_catalog(catalog)

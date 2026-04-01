@@ -18,9 +18,9 @@
     <h2>Статусы заявок</h2>
     <div class="table-actions">
       {% if can_manage_inventory %}
-        <a href="{% url 'core:department_list' %}">Подразделения</a>
+        <a href="{% url 'core:department_list' %}" class="btn btn-outline">Подразделения</a>
       {% endif %}
-      <a href="{% url 'workorders:board' %}">Открыть доску</a>
+      <a href="{% url 'workorders:board' %}" class="btn btn-outline">Открыть доску</a>
     </div>
   </div>
   <div class="status-grid">
@@ -36,9 +36,9 @@
 <section class="panel">
   <div class="section-head">
     <h2>Последние заявки</h2>
-    <a href="{% url 'workorders:create' %}">Создать заявку</a>
+    <a href="{% url 'workorders:create' %}" class="btn btn-primary">Создать заявку</a>
   </div>
-  <div class="table-wrap">
+  <div class="table-container">
     <table>
       <thead>
         <tr><th>Номер</th><th>Заголовок</th><th>Статус</th><th>Изделие</th><th>Автор</th></tr>
@@ -53,7 +53,7 @@
             <td>{{ workorder.author.get_full_name|default:workorder.author.username }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">Пока нет заявок.</td></tr>
+          <tr><td colspan="5" class="empty-state">Пока нет заявок.</td></tr>
         {% endfor %}
       </tbody>
     </table>

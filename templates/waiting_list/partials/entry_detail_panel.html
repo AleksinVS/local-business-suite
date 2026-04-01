@@ -1,0 +1,125 @@
+<div class="drawer-header">
+  <div>
+    <p class="eyebrow">Лист ожидания</p>
+    <h2>{{ entry.patient_name }}</h2>
+  </div>
+  <button
+    type="button"
+    class="close-btn"
+    onclick="closeWaitingListDrawer()"
+    aria-label="Закрыть"
+  >&times;</button>
+</div>
+
+<div class="drawer-content">
+  {# Quick Status Actions #}
+  <div class="input-group full-width">
+    <label>Быстрая смена статуса</label>
+    <div class="action-stack">
+      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="waiting">
+        <button type="submit" class="btn btn-status-wait"
+          {% if entry.status == 'waiting' %}disabled{% endif %}>
+          В очереди
+        </button>
+      </form>
+      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="scheduled">
+        <button type="submit" class="btn btn-status-confirm"
+          {% if entry.status == 'scheduled' %}disabled{% endif %}>
+          Назначить
+        </button>
+      </form>
+      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="confirmed">
+        <button type="submit" class="btn btn-status-confirm"
+          {% if entry.status == 'confirmed' %}disabled{% endif %}>
+          Подтвердить
+        </button>
+      </form>
+      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="cancelled">
+        <button type="submit" class="btn btn-status-cancel"
+          {% if entry.status == 'cancelled' %}disabled{% endif %}>
+          Отменить
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# Entry Details #}
+  <div class="form-grid">
+    <div class="input-group full-width">
+      <label>ФИО пациента</label>
+      <p>{{ entry.patient_name }}</p>
+    </div>
+
+    <div class="input-group">
+      <label>Дата рождения</label>
+      <p>{{ entry.patient_dob }}</p>
+    </div>
+
+    <div class="input-group">
+      <label>Телефон</label>
+      <p>{{ entry.patient_phone }}</p>
+    </div>
+
+    <div class="input-group full-width">
+      <label>Услуга</label>
+      <p>{{ entry.get_service_id_display }}</p>
+    </div>
+
+    <div class="input-group">
+      <label>Целевая дата</label>
+      <p>{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+    </div>
+
+    <div class="input-group">
+      <label>Крайняя дата</label>
+      <p>{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+    </div>
+
+    <div class="input-group full-width">
+      <label>Приоритет</label>
+      <p>{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный{% endif %}</p>
+    </div>
+
+    {% if entry.comment %}
+    <div class="input-group full-width">
+      <label>Комментарий</label>
+      <p>{{ entry.comment|linebreaks }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Audit Timeline #}
+  <div class="input-group full-width">
+    <label>История изменений</label>
+    <div class="timeline" id="audit-timeline">
+      {% if entry.audit_logs.all %}
+        {% for log in entry.audit_logs.all reversed %}
+        <div class="timeline-item">
+          <div class="timeline-time">{{ log.created_at|date:"d.m.Y H:i" }}</div>
+          <div class="timeline-text">
+            <span class="timeline-user">{{ log.actor.get_full_name|default:log.actor.username }}</span>
+            {{ log.action }}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="timeline-item">
+          <div class="timeline-text" style="color: var(--text-muted)">Нет истории</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="drawer-footer">
+  <a href="{% url 'waiting_list:update' entry.pk %}" class="btn btn-outline">Редактировать</a>
+  <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Закрыть</button>
+</div>

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "apps.workorders",
     "apps.analytics",
     "apps.ai",
+    "apps.waiting_list",
 ]
 
 MIDDLEWARE = [

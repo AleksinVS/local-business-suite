@@ -19,3 +19,7 @@ mcpServers:
     type: streamable-http
     url: "http://agent-runtime:8090/mcp"
     chatMenu: true
+  context7:
+    type: streamable-http
+    url: "https://mcp.context7.com/mcp"
+    chatMenu: true

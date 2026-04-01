@@ -1,0 +1,59 @@
+{
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "slice_id": "slice-ui-foundation",
+  "task_id": "task-ui-foundation",
+  "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+  "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+  "generated_at": "2026-03-31T00:00:00+03:00",
+  "risk_class": "R1",
+  "forbidden_moves": [
+    "Do not change route wiring or app registrations in this slice.",
+    "Do not remove the HTMX CSRF header or existing block structure from templates/base.html.",
+    "Do not break compatibility with the existing detail-panel drawer contract used by workorders."
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "./.venv/bin/python manage.py check"
+  ],
+  "mandatory_tests": [],
+  "goal": "Implement the shared visual system tokens, shell, and drawer primitives based on waiting_list.html.",
+  "read_files": [
+    "drafts/waiting_list.html",
+    "templates/base.html",
+    "static/src/css/app.css",
+    "templates/workorders/partials/detail_panel.html",
+    "templates/workorders/partials/detail_panel_empty.html"
+  ],
+  "write_files": [
+    "templates/base.html",
+    "static/src/css/app.css"
+  ],
+  "deliverables": [
+    "Updated shared base layout",
+    "Updated shared CSS theme and components",
+    "EXECUTOR_REPORT.md"
+  ],
+  "runtime_binding": {
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high",
+    "fallbacks": [
+      {
+        "launcher": "gemini-cli",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "tier": "medium",
+        "reasoning_effort": "high"
+      },
+      {
+        "launcher": "codex-subagent",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "tier": "medium",
+        "reasoning_effort": "medium"
+      }
+    ]
+  }
+}

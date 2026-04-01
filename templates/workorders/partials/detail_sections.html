@@ -7,7 +7,7 @@
     <div class="detail-actions">
       <span class="badge">{{ workorder.get_status_display }}</span>
       {% if can_edit %}
-        <a href="{% url 'workorders:edit' workorder.pk %}">Редактировать</a>
+        <a href="{% url 'workorders:edit' workorder.pk %}" class="btn btn-outline">Редактировать</a>
       {% endif %}
     </div>
   </div>

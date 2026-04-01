@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.0",
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+  "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+  "output_root": "workflow/block-waiting-list-ui-2026-03-31/slice-tasks",
+  "task_file_template": "{task_id}.json",
+  "tasks": [
+    {
+      "slice_id": "slice-ui-foundation",
+      "task_id": "task-ui-foundation",
+      "output_path": "workflow/block-waiting-list-ui-2026-03-31/slice-tasks/task-ui-foundation.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-ui-foundation].risk_class",
+        "slices[slice-ui-foundation].forbidden_moves",
+        "slices[slice-ui-foundation].required_docs",
+        "slices[slice-ui-foundation].required_checks",
+        "slices[slice-ui-foundation].mandatory_tests",
+        "slices[slice-ui-foundation].tasks[task-ui-foundation].goal",
+        "slices[slice-ui-foundation].tasks[task-ui-foundation].read_files",
+        "slices[slice-ui-foundation].tasks[task-ui-foundation].write_files",
+        "slices[slice-ui-foundation].tasks[task-ui-foundation].deliverables",
+        "slices[slice-ui-foundation].tasks[task-ui-foundation].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "block-waiting-list-ui-2026-03-31",
+        "slice_id": "slice-ui-foundation",
+        "task_id": "task-ui-foundation",
+        "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+        "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+        "generated_at": "2026-03-31T00:00:00+03:00"
+      }
+    },
+    {
+      "slice_id": "slice-existing-app-restyle",
+      "task_id": "task-existing-app-restyle",
+      "output_path": "workflow/block-waiting-list-ui-2026-03-31/slice-tasks/task-existing-app-restyle.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-existing-app-restyle].risk_class",
+        "slices[slice-existing-app-restyle].forbidden_moves",
+        "slices[slice-existing-app-restyle].required_docs",
+        "slices[slice-existing-app-restyle].required_checks",
+        "slices[slice-existing-app-restyle].mandatory_tests",
+        "slices[slice-existing-app-restyle].tasks[task-existing-app-restyle].goal",
+        "slices[slice-existing-app-restyle].tasks[task-existing-app-restyle].read_files",
+        "slices[slice-existing-app-restyle].tasks[task-existing-app-restyle].write_files",
+        "slices[slice-existing-app-restyle].tasks[task-existing-app-restyle].deliverables",
+        "slices[slice-existing-app-restyle].tasks[task-existing-app-restyle].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "block-waiting-list-ui-2026-03-31",
+        "slice_id": "slice-existing-app-restyle",
+        "task_id": "task-existing-app-restyle",
+        "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+        "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+        "generated_at": "2026-03-31T00:00:00+03:00"
+      }
+    },
+    {
+      "slice_id": "slice-waiting-list-domain",
+      "task_id": "task-waiting-list-domain",
+      "output_path": "workflow/block-waiting-list-ui-2026-03-31/slice-tasks/task-waiting-list-domain.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-waiting-list-domain].risk_class",
+        "slices[slice-waiting-list-domain].forbidden_moves",
+        "slices[slice-waiting-list-domain].required_docs",
+        "slices[slice-waiting-list-domain].required_checks",
+        "slices[slice-waiting-list-domain].mandatory_tests",
+        "slices[slice-waiting-list-domain].tasks[task-waiting-list-domain].goal",
+        "slices[slice-waiting-list-domain].tasks[task-waiting-list-domain].read_files",
+        "slices[slice-waiting-list-domain].tasks[task-waiting-list-domain].write_files",
+        "slices[slice-waiting-list-domain].tasks[task-waiting-list-domain].deliverables",
+        "slices[slice-waiting-list-domain].tasks[task-waiting-list-domain].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "block-waiting-list-ui-2026-03-31",
+        "slice_id": "slice-waiting-list-domain",
+        "task_id": "task-waiting-list-domain",
+        "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+        "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+        "generated_at": "2026-03-31T00:00:00+03:00"
+      }
+    },
+    {
+      "slice_id": "slice-waiting-list-ux",
+      "task_id": "task-waiting-list-ux",
+      "output_path": "workflow/block-waiting-list-ui-2026-03-31/slice-tasks/task-waiting-list-ux.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-waiting-list-ux].risk_class",
+        "slices[slice-waiting-list-ux].forbidden_moves",
+        "slices[slice-waiting-list-ux].required_docs",
+        "slices[slice-waiting-list-ux].required_checks",
+        "slices[slice-waiting-list-ux].mandatory_tests",
+        "slices[slice-waiting-list-ux].tasks[task-waiting-list-ux].goal",
+        "slices[slice-waiting-list-ux].tasks[task-waiting-list-ux].read_files",
+        "slices[slice-waiting-list-ux].tasks[task-waiting-list-ux].write_files",
+        "slices[slice-waiting-list-ux].tasks[task-waiting-list-ux].deliverables",
+        "slices[slice-waiting-list-ux].tasks[task-waiting-list-ux].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "block-waiting-list-ui-2026-03-31",
+        "slice_id": "slice-waiting-list-ux",
+        "task_id": "task-waiting-list-ux",
+        "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+        "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+        "generated_at": "2026-03-31T00:00:00+03:00"
+      }
+    }
+  ]
+}

@@ -527,3 +527,88 @@ docker compose up --build
 Для agent-facing execution protocol (tool registry, bounded task types, confirmation flow, verification commands) — см. `AGENTS.md`.
 
 Этого достаточно, чтобы продолжать работу по канбану почти без дополнительной разведки.
+
+## 17. Лист ожидания (Waiting List)
+
+Новое приложение для управления списком пациентов, ожидающих медицинские услуги.
+
+### Маршруты
+
+- `waiting_list:dashboard` — `/waiting-list/` — главная панель со списком
+- `waiting_list:create` — `/waiting-list/new/` — форма создания записи
+- `waiting_list:detail` — `/waiting-list/<pk>/` — детальная информация
+- `waiting_list:update` — `/waiting-list/<pk>/edit/` — редактирование
+- `waiting_list:transition` — `/waiting-list/<pk>/transition/` — смена статуса
+
+### Модели
+
+#### WaitingListEntry
+
+- `external_id` — UUID для внешних интеграций (не первичный ключ)
+- `patient_name` — ФИО пациента
+- `patient_dob` — дата рождения (ДД.ММ.ГГГГ)
+- `patient_phone` — телефон (+7 формат)
+- `service_id` — услуга (s1, s2, s3)
+- `date_tag` — целевая дата
+- `date_end` — крайняя дата
+- `priority_cito` — флаг срочности
+- `status` — статус: waiting, scheduled, confirmed, cancelled
+- `comment` — комментарий
+
+#### WaitingListAuditLog
+
+- `entry` — ссылка на запись
+- `actor` — пользователь
+- `action` — описание действия
+- `created_at` — время
+
+### Визуальная система
+
+Лист ожидания использует общую визуальную систему:
+
+- CSS переменные из `app.css` (primary, surface, badges, etc.)
+- Компоненты: toolbar, table-container, drawer, badges, timeline
+- Классы: `.btn-primary`, `.btn-status-*`, `.badge-*`, `.cito-indicator`
+
+### HTMX взаимодействия
+
+- Таблица обновляется через HTMX при изменении фильтров
+- Смена статуса работает без перезагрузки страницы
+- Drawer панель открывается при клике на запись
+- Клавиатурные сокращения: Alt+N (новая запись), Esc (закрыть drawer)
+
+### Ключевые файлы
+
+- `apps/waiting_list/models.py`
+- `apps/waiting_list/forms.py`
+- `apps/waiting_list/views.py`
+- `apps/waiting_list/services.py`
+- `apps/waiting_list/urls.py`
+- `apps/waiting_list/tests.py`
+- `templates/waiting_list/dashboard.html`
+- `templates/waiting_list/entry_form.html`
+- `templates/waiting_list/entry_detail.html`
+- `templates/waiting_list/partials/entry_table.html`
+- `templates/waiting_list/partials/entry_detail_panel.html`
+
+### Сервисный слой
+
+Все операции создания, обновления и смены статуса проходят через сервисные функции:
+
+- `create_entry()` — создание с валидацией
+- `update_entry()` — обновление с аудитом
+- `transition_entry()` — смена статуса
+
+Валидация телефона и даты рождения — серверная.
+
+### Тесты
+
+```bash
+python manage.py test apps.waiting_list.tests
+```
+
+Тесты покрывают:
+- модель (int PK, UUID external_id, статусы)
+- валидацию (телефон, DOB, имя)
+- маршруты и HTMX поведение
+- аудит изменений

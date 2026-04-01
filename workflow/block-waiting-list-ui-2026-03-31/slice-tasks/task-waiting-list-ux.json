@@ -1,0 +1,80 @@
+{
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "slice_id": "slice-waiting-list-ux",
+  "task_id": "task-waiting-list-ux",
+  "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+  "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+  "generated_at": "2026-03-31T00:00:00+03:00",
+  "risk_class": "R1",
+  "forbidden_moves": [
+    "Do not introduce full-page reloads for flows that can remain HTMX-driven.",
+    "Do not move validation, audit generation, or status mutation logic into client-side-only code.",
+    "Do not widen this slice into unrelated app Python behavior beyond nav integration and shared styling touch-ups."
+  ],
+  "required_docs": [
+    "PROJECT_HANDOFF.md"
+  ],
+  "required_checks": [
+    "make check",
+    "make test",
+    "make contracts",
+    "Manual interaction and visual verification against drafts/waiting_list.html for dashboard filtering, sortable table behavior, drawer flow, quick status actions, timeline presentation, and keyboard shortcuts."
+  ],
+  "mandatory_tests": [
+    "Extend apps.waiting_list.tests with HTMX partial, sort, drawer, quick-action, and navigation coverage."
+  ],
+  "goal": "Build the waiting list dashboard and drawer UX, wire navigation, add progressive enhancement scripts, and update handoff documentation.",
+  "read_files": [
+    "drafts/waiting_list.html",
+    "templates/base.html",
+    "static/src/css/app.css",
+    "apps/waiting_list/models.py",
+    "apps/waiting_list/forms.py",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/services.py",
+    "apps/waiting_list/tests.py",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/detail_panel.html",
+    "PROJECT_HANDOFF.md"
+  ],
+  "write_files": [
+    "templates/base.html",
+    "static/src/css/app.css",
+    "apps/waiting_list/forms.py",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/services.py",
+    "apps/waiting_list/tests.py",
+    "apps/waiting_list/urls.py",
+    "templates/waiting_list/*",
+    "PROJECT_HANDOFF.md"
+  ],
+  "deliverables": [
+    "Waiting list dashboard templates and HTMX partials",
+    "Drawer interactions, keyboard shortcuts, and masking enhancements",
+    "Updated navigation and PROJECT_HANDOFF.md",
+    "EXECUTOR_REPORT.md"
+  ],
+  "runtime_binding": {
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high",
+    "fallbacks": [
+      {
+        "launcher": "gemini-cli",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "tier": "medium",
+        "reasoning_effort": "high"
+      },
+      {
+        "launcher": "codex-subagent",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "tier": "medium",
+        "reasoning_effort": "medium"
+      }
+    ]
+  }
+}

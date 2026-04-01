@@ -1,0 +1,634 @@
+{
+  "schema_version": "1.0",
+  "workflow_version": "v2",
+  "project_kind": "django-htmx-monorepo",
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "block_goal": "Add a waiting list Django app and align existing server-rendered screens with the waiting_list.html visual and interaction model without changing the project stack.",
+  "architect_instructions_for_orchestrator": [
+    "Run PM plan review before execution and do not dispatch any task until Architect confirms the reviewed plan.",
+    "Preserve unrelated uncommitted files in the worktree and keep each worker strictly inside the declared write scope.",
+    "Materialize task packets mechanically from the export spec without paraphrasing task content.",
+    "Use the declared runtime bindings as-is; if an external CLI worker is selected, route execution through the $cli-subagents workflow and wrappers instead of raw shell invocation.",
+    "Do not start a dependent slice until its prerequisites are accepted."
+  ],
+  "slice_task_path_template": "workflow/{block_id}/slice-tasks/{task_id}.json",
+  "role_runtime_bindings": [
+    {
+      "role": "architect",
+      "launcher": "codex-subagent",
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "tier": "high",
+      "reasoning_effort": "high",
+      "fallbacks": [
+        {
+          "launcher": "gemini-cli",
+          "provider": "google",
+          "model": "gemini-3-flash-preview",
+          "tier": "high",
+          "reasoning_effort": "high"
+        }
+      ]
+    },
+    {
+      "role": "orchestrator",
+      "launcher": "codex-subagent",
+      "provider": "openai",
+      "model": "gpt-5.4-mini",
+      "tier": "medium",
+      "reasoning_effort": "medium",
+      "fallbacks": []
+    },
+    {
+      "role": "pm",
+      "launcher": "gemini-cli",
+      "provider": "google",
+      "model": "gemini-3-flash-preview",
+      "tier": "high",
+      "reasoning_effort": "high",
+      "fallbacks": [
+        {
+          "launcher": "codex-subagent",
+          "provider": "openai",
+          "model": "gpt-5.4",
+          "tier": "high",
+          "reasoning_effort": "high"
+        }
+      ]
+    },
+    {
+      "role": "executor",
+      "launcher": "droid",
+      "provider": "minimax",
+      "model": "MiniMax-M2.7",
+      "tier": "medium",
+      "reasoning_effort": "high",
+      "fallbacks": [
+        {
+          "launcher": "gemini-cli",
+          "provider": "google",
+          "model": "gemini-3-flash-preview",
+          "tier": "medium",
+          "reasoning_effort": "high"
+        },
+        {
+          "launcher": "codex-subagent",
+          "provider": "openai",
+          "model": "gpt-5.4-mini",
+          "tier": "medium",
+          "reasoning_effort": "medium"
+        }
+      ]
+    }
+  ],
+  "global_rules": [
+    "Keep the UI stack server-rendered with Django Templates, HTMX, and shared CSS; do not introduce a new frontend framework or build pipeline.",
+    "Do not touch unrelated uncommitted files or revert existing user changes outside the declared task scopes.",
+    "Do not modify AI/runtime/tool-registry files in this block; the feature is bounded to product UI and a new Django app.",
+    "Use service-layer helpers for waiting list write actions so audit records stay server-enforced.",
+    "Update PROJECT_HANDOFF.md when the new app and shared UI conventions are materially introduced."
+  ],
+  "global_acceptance": [
+    "The repository passes make check, make test, and make contracts at block completion.",
+    "Existing primary screens adopt the waiting_list-inspired visual system without breaking current routes, forms, or HTMX targets.",
+    "The new waiting list dashboard supports HTMX-driven filtering, sorting, drawer loading, and status updates without full-page reload.",
+    "The waiting list data model persists the required entry fields and timeline audit records while following repository PK conventions."
+  ],
+  "global_invariants": [
+    "Django remains the system of record for all waiting list reads and writes.",
+    "The waiting list timeline is backed by a persisted audit-log model, not a client-side-only event list.",
+    "The block stays inside the monorepo's current Django app structure and shared static asset conventions.",
+    "Entry does not use UUID as primary key; the repository default int/BigAutoField convention remains in force.",
+    "If a non-guessable identifier becomes necessary, it must be a separate external_id UUID field rather than the primary key."
+  ],
+  "risk_policy": {
+    "R0": "mechanical local change",
+    "R1": "bounded delivery change",
+    "R2": "architecturally risky change"
+  },
+  "escalation_matrix": {
+    "scope_growth": "architect",
+    "dirty_worktree_conflict": "architect",
+    "migration_or_route_conflict": "architect",
+    "acceptance_gap": "pm",
+    "blocked_runtime_binding": "architect"
+  },
+  "slices": [
+    {
+      "slice_id": "slice-ui-foundation",
+      "title": "Shared Waiting List Visual System",
+      "goal": "Move the waiting_list.html visual primitives into the shared base layout and CSS without changing application behavior.",
+      "risk_class": "R1",
+      "depends_on": [],
+      "read_files": [
+        "drafts/waiting_list.html",
+        "templates/base.html",
+        "static/src/css/app.css",
+        "templates/workorders/partials/detail_panel.html",
+        "templates/workorders/partials/detail_panel_empty.html"
+      ],
+      "allowed_files": [
+        "templates/base.html",
+        "static/src/css/app.css"
+      ],
+      "forbidden_moves": [
+        "Do not change route wiring or app registrations in this slice.",
+        "Do not remove the HTMX CSRF header or existing block structure from templates/base.html.",
+        "Do not break compatibility with the existing detail-panel drawer contract used by workorders."
+      ],
+      "required_docs": [],
+      "required_checks": [
+        "./.venv/bin/python manage.py check"
+      ],
+      "control_points": [
+        "Shared CSS tokens and primitives cover toolbar, table surface, badge, keyboard hint, and drawer foundations.",
+        "The base shell remains compatible with existing pages that extend base.html."
+      ],
+      "mandatory_tests": [],
+      "acceptance_criteria": [
+        "The shared layout and CSS align with the waiting_list reference without introducing a new asset pipeline.",
+        "Existing pages still render under the shared shell after the foundation changes."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-ui-foundation",
+          "executor_level": "senior",
+          "goal": "Implement the shared visual system tokens, shell, and drawer primitives based on waiting_list.html.",
+          "inputs": [
+            "drafts/waiting_list.html",
+            "templates/base.html",
+            "static/src/css/app.css",
+            "Existing workorder detail-panel markup"
+          ],
+          "read_files": [
+            "drafts/waiting_list.html",
+            "templates/base.html",
+            "static/src/css/app.css",
+            "templates/workorders/partials/detail_panel.html",
+            "templates/workorders/partials/detail_panel_empty.html"
+          ],
+          "write_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "implementation_notes": [
+            "Keep the current navigation and HTMX hooks intact while replacing the visual language.",
+            "Expose reusable CSS primitives so later slices can restyle screens without redefining component styling.",
+            "Preserve backward-compatible selectors for workorder drawer behavior wherever practical."
+          ],
+          "tests_to_write": [],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py check"
+          ],
+          "deliverables": [
+            "Updated shared base layout",
+            "Updated shared CSS theme and components",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "A required base-layout change would break existing HTMX shell assumptions",
+            "Write scope must expand into application-specific Python modules"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high",
+            "fallbacks": [
+              {
+                "launcher": "gemini-cli",
+                "provider": "google",
+                "model": "gemini-3-flash-preview",
+                "tier": "medium",
+                "reasoning_effort": "high"
+              },
+              {
+                "launcher": "codex-subagent",
+                "provider": "openai",
+                "model": "gpt-5.4-mini",
+                "tier": "medium",
+                "reasoning_effort": "medium"
+              }
+            ]
+          },
+          "runtime_override": null
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-existing-app-restyle",
+      "title": "Existing App Screen Adoption",
+      "goal": "Apply the shared waiting-list visual system to the current core product screens without changing domain logic.",
+      "risk_class": "R1",
+      "depends_on": [
+        "slice-ui-foundation"
+      ],
+      "read_files": [
+        "templates/core/dashboard.html",
+        "templates/inventory/device_list.html",
+        "templates/inventory/device_form.html",
+        "templates/workorders/board.html",
+        "templates/workorders/workorder_form.html",
+        "templates/workorders/workorder_detail.html",
+        "templates/workorders/partials/*",
+        "templates/analytics/dashboard.html",
+        "static/src/css/app.css",
+        "drafts/waiting_list.html"
+      ],
+      "allowed_files": [
+        "templates/core/dashboard.html",
+        "templates/inventory/device_list.html",
+        "templates/inventory/device_form.html",
+        "templates/workorders/board.html",
+        "templates/workorders/workorder_form.html",
+        "templates/workorders/workorder_detail.html",
+        "templates/workorders/partials/*",
+        "templates/analytics/dashboard.html",
+        "static/src/css/app.css"
+      ],
+      "forbidden_moves": [
+        "Do not change business rules or model fields in any existing app.",
+        "Do not introduce new JavaScript infrastructure or client-side state management.",
+        "Do not broaden edits into AI app Python modules in this slice."
+      ],
+      "required_docs": [],
+      "required_checks": [
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py test apps.core.tests apps.inventory.tests apps.workorders.tests apps.analytics.tests",
+        "Manual visual verification against drafts/waiting_list.html for shared layout alignment on desktop and mobile, including toolbar, table surfaces, badges, and drawer styling."
+      ],
+      "control_points": [
+        "Dashboard, inventory, workorders, and analytics screens use the new shared components rather than ad hoc local styling.",
+        "Existing HTMX targets on the workorder board still resolve correctly after markup changes."
+      ],
+      "mandatory_tests": [
+        "Update affected response/content tests if template structure changes invalidate current assertions."
+      ],
+      "acceptance_criteria": [
+        "Existing primary screens visually align with the waiting list reference and still pass their current route-level tests.",
+        "No Python behavior outside template presentation changes in this slice."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-existing-app-restyle",
+          "executor_level": "senior",
+          "goal": "Restyle existing core, inventory, workorders, and analytics screens to the shared waiting-list visual language.",
+          "inputs": [
+            "Shared visual foundation from slice-ui-foundation",
+            "Existing Django templates for dashboard, inventory, workorders, and analytics"
+          ],
+          "read_files": [
+            "templates/core/dashboard.html",
+            "templates/inventory/device_list.html",
+            "templates/inventory/device_form.html",
+            "templates/workorders/board.html",
+            "templates/workorders/workorder_form.html",
+            "templates/workorders/workorder_detail.html",
+            "templates/workorders/partials/*",
+            "templates/analytics/dashboard.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/core/dashboard.html",
+            "templates/inventory/device_list.html",
+            "templates/inventory/device_form.html",
+            "templates/workorders/board.html",
+            "templates/workorders/workorder_form.html",
+            "templates/workorders/workorder_detail.html",
+            "templates/workorders/partials/*",
+            "templates/analytics/dashboard.html",
+            "static/src/css/app.css"
+          ],
+          "implementation_notes": [
+            "Prefer shared component classes over one-off inline structure changes.",
+            "Keep current URLs, form field names, and HTMX attributes stable unless the new markup requires a bounded adjustment.",
+            "If drawer-related workorder partials need markup updates, keep the existing detail-panel semantics intact."
+          ],
+          "tests_to_write": [
+            "Update existing tests in apps.core.tests, apps.inventory.tests, apps.workorders.tests, and apps.analytics.tests only where template expectations must change."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py test apps.core.tests apps.inventory.tests apps.workorders.tests apps.analytics.tests"
+          ],
+          "deliverables": [
+            "Restyled existing application templates",
+            "Adjusted shared CSS utilities if needed",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "A required restyle would force business-logic changes in Python modules",
+            "Existing HTMX interaction contracts cannot be preserved within the declared template scope"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high",
+            "fallbacks": [
+              {
+                "launcher": "gemini-cli",
+                "provider": "google",
+                "model": "gemini-3-flash-preview",
+                "tier": "medium",
+                "reasoning_effort": "high"
+              },
+              {
+                "launcher": "codex-subagent",
+                "provider": "openai",
+                "model": "gpt-5.4-mini",
+                "tier": "medium",
+                "reasoning_effort": "medium"
+              }
+            ]
+          },
+          "runtime_override": null
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-waiting-list-domain",
+      "title": "Waiting List Domain And Routing",
+      "goal": "Add the new waiting list Django app, models, routes, service helpers, and migration in a bounded way.",
+      "risk_class": "R1",
+      "depends_on": [
+        "slice-ui-foundation"
+      ],
+      "read_files": [
+        "config/settings.py",
+        "config/urls.py",
+        "apps/workorders/models.py",
+        "apps/workorders/views.py",
+        "apps/workorders/services.py",
+        "apps/workorders/tests.py",
+        "drafts/waiting_list.html",
+        "AGENTS.md",
+        "PROJECT_HANDOFF.md"
+      ],
+      "allowed_files": [
+        "config/settings.py",
+        "config/urls.py",
+        "apps/waiting_list/*",
+        "apps/waiting_list/migrations/*",
+        "templates/waiting_list/*"
+      ],
+      "forbidden_moves": [
+        "Do not modify existing workorders or inventory schemas in this slice.",
+        "Do not add a separate service catalog model or a new permissions framework.",
+        "Do not wire direct client-side writes; all waiting list mutations must remain in Django views/services."
+      ],
+      "required_docs": [],
+      "required_checks": [
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py test apps.waiting_list.tests"
+      ],
+      "control_points": [
+        "Entry follows the repository default int/BigAutoField primary-key convention and does not use UUID as primary key.",
+        "If a non-guessable identifier is required, it is implemented as a separate external_id UUID field rather than replacing the primary key.",
+        "Audit log records are persisted and generated through server-side write paths for create, edit, and status actions.",
+        "The new app is registered and routed without disturbing existing namespaces."
+      ],
+      "mandatory_tests": [
+        "Add tests for model creation, server-side validation, audit-log generation, and route accessibility in apps.waiting_list.tests."
+      ],
+      "acceptance_criteria": [
+        "The repository contains a new waiting_list app with migration-backed models and bounded route wiring.",
+        "Server-side validation covers required fields and masked-input-compatible formats for phone and date-of-birth.",
+        "The waiting list Entry model uses an int primary key consistent with repository conventions."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-waiting-list-domain",
+          "executor_level": "senior",
+          "goal": "Create the waiting list Django app foundation, schema, services, admin wiring, and route registration.",
+          "inputs": [
+            "User-facing waiting list data model requirements",
+            "Existing Django app patterns in workorders and inventory",
+            "Project routing and settings conventions"
+          ],
+          "read_files": [
+            "config/settings.py",
+            "config/urls.py",
+            "apps/workorders/models.py",
+            "apps/workorders/views.py",
+            "apps/workorders/services.py",
+            "apps/workorders/tests.py",
+            "drafts/waiting_list.html",
+            "AGENTS.md"
+          ],
+          "write_files": [
+            "config/settings.py",
+            "config/urls.py",
+            "apps/waiting_list/__init__.py",
+            "apps/waiting_list/apps.py",
+            "apps/waiting_list/models.py",
+            "apps/waiting_list/forms.py",
+            "apps/waiting_list/views.py",
+            "apps/waiting_list/services.py",
+            "apps/waiting_list/admin.py",
+            "apps/waiting_list/urls.py",
+            "apps/waiting_list/tests.py",
+            "apps/waiting_list/migrations/*",
+            "templates/waiting_list/*"
+          ],
+          "implementation_notes": [
+            "Use the repository default int/BigAutoField primary-key convention for waiting list Entry.",
+            "Do not use UUID as primary key for Entry.",
+            "If the implementation encounters a concrete need for a non-guessable or externally shareable identifier, add a separate external_id UUIDField(default=uuid.uuid4, unique=True, editable=False) instead of replacing the primary key.",
+            "Keep service_id as a bounded string field with an application-local service catalog or choices, not a new relational model.",
+            "Centralize audit-log creation in service helpers so detail drawer actions and future writes share the same persisted timeline source.",
+            "Bound access to authenticated users only in this block."
+          ],
+          "tests_to_write": [
+            "apps/waiting_list/tests.py"
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py test apps.waiting_list.tests"
+          ],
+          "deliverables": [
+            "New waiting_list Django app with models, forms, services, views, urls, admin, and tests",
+            "Schema migration for waiting list models",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "Route wiring or migration conflicts require changes outside the declared file set",
+            "Required validation semantics imply a broader shared form or validation abstraction"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high",
+            "fallbacks": [
+              {
+                "launcher": "gemini-cli",
+                "provider": "google",
+                "model": "gemini-3-flash-preview",
+                "tier": "medium",
+                "reasoning_effort": "high"
+              },
+              {
+                "launcher": "codex-subagent",
+                "provider": "openai",
+                "model": "gpt-5.4-mini",
+                "tier": "medium",
+                "reasoning_effort": "medium"
+              }
+            ]
+          },
+          "runtime_override": null
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-waiting-list-ux",
+      "title": "Waiting List Dashboard, Drawer, And Handoff",
+      "goal": "Implement the waiting list HTMX user experience, keyboard and masking enhancements, nav integration, and project handoff updates.",
+      "risk_class": "R1",
+      "depends_on": [
+        "slice-existing-app-restyle",
+        "slice-waiting-list-domain"
+      ],
+      "read_files": [
+        "drafts/waiting_list.html",
+        "templates/base.html",
+        "static/src/css/app.css",
+        "apps/waiting_list/models.py",
+        "apps/waiting_list/forms.py",
+        "apps/waiting_list/views.py",
+        "apps/waiting_list/services.py",
+        "apps/waiting_list/tests.py",
+        "templates/workorders/board.html",
+        "templates/workorders/partials/detail_panel.html",
+        "PROJECT_HANDOFF.md",
+        "AGENTS.md"
+      ],
+      "allowed_files": [
+        "templates/base.html",
+        "static/src/css/app.css",
+        "apps/waiting_list/*",
+        "templates/waiting_list/*",
+        "PROJECT_HANDOFF.md"
+      ],
+      "forbidden_moves": [
+        "Do not introduce full-page reloads for flows that can remain HTMX-driven.",
+        "Do not move validation, audit generation, or status mutation logic into client-side-only code.",
+        "Do not widen this slice into unrelated app Python behavior beyond nav integration and shared styling touch-ups."
+      ],
+      "required_docs": [
+        "PROJECT_HANDOFF.md"
+      ],
+      "required_checks": [
+        "make check",
+        "make test",
+        "make contracts",
+        "Manual interaction and visual verification against drafts/waiting_list.html for dashboard filtering, sortable table behavior, drawer flow, quick status actions, timeline presentation, and keyboard shortcuts."
+      ],
+      "control_points": [
+        "Filtering, sorting, and drawer rendering use HTMX partial updates and querystring-driven server state.",
+        "Quick status actions persist audit records and refresh the visible UI without leaving the dashboard.",
+        "Keyboard shortcuts and input masks are progressive enhancements that do not block normal form use."
+      ],
+      "mandatory_tests": [
+        "Extend apps.waiting_list.tests with HTMX partial, sort, drawer, quick-action, and navigation coverage."
+      ],
+      "acceptance_criteria": [
+        "The waiting list dashboard follows the mockup's interaction model within the shared project design system.",
+        "Create/detail drawer, live filters, sortable table, status actions, and timeline work without full-page reload.",
+        "PROJECT_HANDOFF documents the new app, route surface, and shared UI conventions added by this block."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-waiting-list-ux",
+          "executor_level": "senior",
+          "goal": "Build the waiting list dashboard and drawer UX, wire navigation, add progressive enhancement scripts, and update handoff documentation.",
+          "inputs": [
+            "waiting_list.html reference UI",
+            "Waiting list domain app from slice-waiting-list-domain",
+            "Shared visual primitives from previous slices"
+          ],
+          "read_files": [
+            "drafts/waiting_list.html",
+            "templates/base.html",
+            "static/src/css/app.css",
+            "apps/waiting_list/models.py",
+            "apps/waiting_list/forms.py",
+            "apps/waiting_list/views.py",
+            "apps/waiting_list/services.py",
+            "apps/waiting_list/tests.py",
+            "templates/workorders/board.html",
+            "templates/workorders/partials/detail_panel.html",
+            "PROJECT_HANDOFF.md"
+          ],
+          "write_files": [
+            "templates/base.html",
+            "static/src/css/app.css",
+            "apps/waiting_list/forms.py",
+            "apps/waiting_list/views.py",
+            "apps/waiting_list/services.py",
+            "apps/waiting_list/tests.py",
+            "apps/waiting_list/urls.py",
+            "templates/waiting_list/*",
+            "PROJECT_HANDOFF.md"
+          ],
+          "implementation_notes": [
+            "Use GET-based filters and HTMX partial targets for table and drawer updates so UI state stays bookmarkable and server-owned.",
+            "Implement quick status actions and timeline refreshes through Django views and services, then swap the relevant partials.",
+            "Keep phone and DOB masking as lightweight progressive enhancement compatible with server-side validation.",
+            "Add the waiting list entry point to the shared navigation only after the route exists."
+          ],
+          "tests_to_write": [
+            "apps/waiting_list/tests.py"
+          ],
+          "tests_to_run": [
+            "make check",
+            "make test",
+            "make contracts"
+          ],
+          "deliverables": [
+            "Waiting list dashboard templates and HTMX partials",
+            "Drawer interactions, keyboard shortcuts, and masking enhancements",
+            "Updated navigation and PROJECT_HANDOFF.md",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "HTMX interactions require widening write scope into unrelated app Python modules",
+            "A client-side enhancement would need a new asset pipeline or third-party bundler"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high",
+            "fallbacks": [
+              {
+                "launcher": "gemini-cli",
+                "provider": "google",
+                "model": "gemini-3-flash-preview",
+                "tier": "medium",
+                "reasoning_effort": "high"
+              },
+              {
+                "launcher": "codex-subagent",
+                "provider": "openai",
+                "model": "gpt-5.4-mini",
+                "tier": "medium",
+                "reasoning_effort": "medium"
+              }
+            ]
+          },
+          "runtime_override": null
+        }
+      ]
+    }
+  ]
+}

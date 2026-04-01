@@ -6,7 +6,7 @@
   <form method="post" class="stack">
     {% csrf_token %}
     {{ form.as_p }}
-    <button type="submit">{% if object %}Сохранить{% else %}Создать{% endif %}</button>
+    <button type="submit" class="btn btn-primary">{% if object %}Сохранить{% else %}Создать{% endif %}</button>
   </form>
 </section>
 {% endblock %}

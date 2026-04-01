@@ -1,0 +1,47 @@
+<tbody id="entry-table">
+  {% if entries %}
+    {% for entry in entries %}
+    <tr
+      hx-get="{% url 'waiting_list:detail' entry.pk %}"
+      hx-target="#entry-detail-panel"
+      hx-swap="innerHTML"
+      onclick="openWaitingListDrawer('{{ entry.pk }}')"
+      style="cursor: pointer;"
+    >
+      <td>
+        {{ entry.created_at|date:"d.m.Y H:i" }}
+      </td>
+      <td>
+        <strong>{{ entry.patient_name }}</strong>
+        <br>
+        <span style="font-size: 0.75rem; color: var(--text-muted)">
+          Дата рожд: {{ entry.patient_dob }}
+        </span>
+      </td>
+      <td>{{ entry.patient_phone }}</td>
+      <td>{{ entry.get_service_id_display }}</td>
+      <td>
+        {% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}
+        {% if entry.priority_cito %}
+          <span class="cito-indicator">CITO!</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if entry.status == 'waiting' %}
+          <span class="badge badge-waiting">В очереди</span>
+        {% elif entry.status == 'scheduled' %}
+          <span class="badge badge-scheduled">Назначена</span>
+        {% elif entry.status == 'confirmed' %}
+          <span class="badge badge-confirmed">Подтверждена</span>
+        {% elif entry.status == 'cancelled' %}
+          <span class="badge badge-cancelled">Отменена</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  {% else %}
+    <tr>
+      <td colspan="6" class="empty-state">Ничего не найдено</td>
+    </tr>
+  {% endif %}
+</tbody>

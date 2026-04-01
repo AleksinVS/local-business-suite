@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block header_context %}
+<nav class="breadcrumbs header-breadcrumbs">
+  <a href="{% url 'core:dashboard' %}">{{ app_display_name }}</a>
+  <span>/</span>
+  <a href="{% url 'waiting_list:dashboard' %}">Лист ожидания</a>
+  <span>/</span>
+  <span>{% if object %}Редактирование{% else %}Новая запись{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="board-page">
+  <div class="panel" style="max-width: 600px; margin: 0 auto;">
+    <div class="panel-header-row">
+      <h2>{% if object %}Редактирование записи{% else %}Новая запись в листе ожидания{% endif %}</h2>
+    </div>
+
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+
+      <div class="input-group full-width">
+        <label for="id_patient_name">ФИО пациента *</label>
+        {{ form.patient_name }}
+        {% if form.patient_name.errors %}
+          <span class="error">{{ form.patient_name.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group">
+        <label for="id_patient_dob">Дата рождения *</label>
+        {{ form.patient_dob }}
+        {% if form.patient_dob.errors %}
+          <span class="error">{{ form.patient_dob.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group">
+        <label for="id_patient_phone">Телефон *</label>
+        {{ form.patient_phone }}
+        {% if form.patient_phone.errors %}
+          <span class="error">{{ form.patient_phone.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group full-width">
+        <label for="id_service_id">Услуга *</label>
+        {{ form.service_id }}
+        {% if form.service_id.errors %}
+          <span class="error">{{ form.service_id.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group">
+        <label for="id_date_tag">Целевая дата</label>
+        {{ form.date_tag }}
+        {% if form.date_tag.errors %}
+          <span class="error">{{ form.date_tag.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group">
+        <label for="id_date_end">Крайняя дата</label>
+        {{ form.date_end }}
+        {% if form.date_end.errors %}
+          <span class="error">{{ form.date_end.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group full-width">
+        <label class="checkbox-group" style="margin-top: 0;">
+          {{ form.priority_cito }}
+          <span>Срочно (CITO!)</span>
+        </label>
+      </div>
+
+      <div class="input-group full-width">
+        <label for="id_comment">Комментарий</label>
+        {{ form.comment }}
+        {% if form.comment.errors %}
+          <span class="error">{{ form.comment.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="input-group full-width" style="margin-top: 1rem;">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{% url 'waiting_list:dashboard' %}" class="btn btn-outline">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Phone mask
+    const phoneInput = document.querySelector('input[name="patient_phone"]');
+    if (phoneInput) {
+      phoneInput.addEventListener('input', function(e) {
+        applyPhoneMask(e.target);
+      });
+    }
+
+    // DOB mask
+    const dobInput = document.querySelector('input[name="patient_dob"]');
+    if (dobInput) {
+      dobInput.addEventListener('input', function(e) {
+        applyDobMask(e.target);
+      });
+    }
+  });
+
+  function applyPhoneMask(input) {
+    let value = input.value.replace(/\D/g, '');
+    if (value.length >= 1) {
+      let formatted = '+7';
+      if (value.length > 1) {
+        formatted += ' (' + value.substring(1, 4);
+      }
+      if (value.length > 4) {
+        formatted += ') ' + value.substring(4, 7);
+      }
+      if (value.length > 7) {
+        formatted += '-' + value.substring(7, 9);
+      }
+      if (value.length > 9) {
+        formatted += '-' + value.substring(9, 11);
+      }
+      input.value = formatted;
+    }
+  }
+
+  function applyDobMask(input) {
+    let value = input.value.replace(/\D/g, '').slice(0, 8);
+    if (value.length >= 5) {
+      input.value = value.slice(0, 2) + '.' + value.slice(2, 4) + '.' + value.slice(4);
+    } else if (value.length >= 3) {
+      input.value = value.slice(0, 2) + '.' + value.slice(2);
+    } else {
+      input.value = value;
+    }
+  }
+</script>
+{% endblock %}

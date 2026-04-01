@@ -16,12 +16,12 @@
       hx-swap="outerHTML"
     >
       {% csrf_token %}
-      <select name="status">
+      <select name="status" class="mini-select">
         {% for value, label in transition_choices %}
           <option value="{{ value }}">{{ label }}</option>
         {% endfor %}
       </select>
-      <button type="submit">Обновить</button>
+      <button type="submit" class="btn btn-primary">Обновить</button>
     </form>
   {% else %}
     <p>Для вашей роли допустимых переходов нет.</p>
@@ -36,7 +36,7 @@
       hx-swap="outerHTML"
     >
       {% csrf_token %}
-      <button type="submit">Подтвердить закрытие</button>
+      <button type="submit" class="btn btn-status-confirm">Подтвердить закрытие</button>
     </form>
   {% endif %}
 </section>

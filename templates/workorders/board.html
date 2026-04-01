@@ -9,74 +9,95 @@
 
 {% block content %}
 <div class="board-page">
-<section class="panel board-header-panel">
-  <form method="get" class="filters filters-compact">
+<div class="toolbar">
+  <form method="get" class="filters">
     <input type="hidden" name="view" value="board">
-    <input
-      type="search"
-      name="q"
-      value="{{ filters.q }}"
-      placeholder="Номер, заголовок, изделие"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-trigger="keyup changed delay:250ms, search"
-      hx-include="closest form"
-    >
-    <select
-      name="department"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-trigger="change"
-      hx-include="closest form"
-    >
-      <option value="">Все подразделения</option>
-      {% for department in departments %}
-        <option value="{{ department.id }}" {% if filters.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.indented_name }}</option>
-      {% endfor %}
-    </select>
-    <select
-      name="status"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-trigger="change"
-      hx-include="closest form"
-    >
-      <option value="">Все статусы</option>
-      {% for value, label in status_choices %}
-        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <select
-      name="assignee"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-trigger="change"
-      hx-include="closest form"
-    >
-      <option value="">Все исполнители</option>
-      {% for assignee in assignees %}
-        <option value="{{ assignee.id }}" {% if filters.assignee == assignee.id|stringformat:"s" %}selected{% endif %}>{{ assignee.get_full_name|default:assignee.username }}</option>
-      {% endfor %}
-    </select>
-    <select
-      name="device"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-trigger="change"
-      hx-include="closest form"
-    >
-      <option value="">Все изделия</option>
-      {% for device in devices %}
-        <option value="{{ device.id }}" {% if filters.device == device.id|stringformat:"s" %}selected{% endif %}>{{ device.name }}</option>
-      {% endfor %}
-    </select>
+    <div class="input-group">
+      <label for="boardSearch">Поиск</label>
+      <input
+        type="search"
+        id="boardSearch"
+        name="q"
+        value="{{ filters.q }}"
+        placeholder="Номер, заголовок, изделие"
+        hx-get="{% url 'workorders:board' %}"
+        hx-target="#board-columns"
+        hx-swap="outerHTML"
+        hx-trigger="keyup changed delay:250ms, search"
+        hx-include="closest form"
+      >
+    </div>
+    <div class="input-group">
+      <label for="boardDept">Подразделение</label>
+      <select
+        id="boardDept"
+        name="department"
+        hx-get="{% url 'workorders:board' %}"
+        hx-target="#board-columns"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <option value="">Все</option>
+        {% for department in departments %}
+          <option value="{{ department.id }}" {% if filters.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.indented_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="input-group">
+      <label for="boardStatus">Статус</label>
+      <select
+        id="boardStatus"
+        name="status"
+        hx-get="{% url 'workorders:board' %}"
+        hx-target="#board-columns"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <option value="">Все</option>
+        {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="input-group">
+      <label for="boardAssignee">Исполнитель</label>
+      <select
+        id="boardAssignee"
+        name="assignee"
+        hx-get="{% url 'workorders:board' %}"
+        hx-target="#board-columns"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <option value="">Все</option>
+        {% for assignee in assignees %}
+          <option value="{{ assignee.id }}" {% if filters.assignee == assignee.id|stringformat:"s" %}selected{% endif %}>{{ assignee.get_full_name|default:assignee.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="input-group">
+      <label for="boardDevice">Изделие</label>
+      <select
+        id="boardDevice"
+        name="device"
+        hx-get="{% url 'workorders:board' %}"
+        hx-target="#board-columns"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <option value="">Все</option>
+        {% for device in devices %}
+          <option value="{{ device.id }}" {% if filters.device == device.id|stringformat:"s" %}selected{% endif %}>{{ device.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <button
       type="submit"
+      class="btn btn-outline"
       hx-get="{% url 'workorders:board' %}"
       hx-target="#board-columns"
       hx-swap="outerHTML"
@@ -84,9 +105,9 @@
     >
       Применить
     </button>
-    <a href="{% url 'workorders:create' %}" class="compact-link-button">Создать заявку</a>
   </form>
-</section>
+  <a href="{% url 'workorders:create' %}" class="btn btn-primary">Создать заявку</a>
+</div>
 {% include "workorders/partials/board_columns.html" %}
 {% include "workorders/partials/detail_panel_empty.html" %}
 </div>

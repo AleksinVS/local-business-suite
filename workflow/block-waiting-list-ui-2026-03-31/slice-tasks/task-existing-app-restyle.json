@@ -1,0 +1,74 @@
+{
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "slice_id": "slice-existing-app-restyle",
+  "task_id": "task-existing-app-restyle",
+  "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+  "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+  "generated_at": "2026-03-31T00:00:00+03:00",
+  "risk_class": "R1",
+  "forbidden_moves": [
+    "Do not change business rules or model fields in any existing app.",
+    "Do not introduce new JavaScript infrastructure or client-side state management.",
+    "Do not broaden edits into AI app Python modules in this slice."
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.core.tests apps.inventory.tests apps.workorders.tests apps.analytics.tests",
+    "Manual visual verification against drafts/waiting_list.html for shared layout alignment on desktop and mobile, including toolbar, table surfaces, badges, and drawer styling."
+  ],
+  "mandatory_tests": [
+    "Update affected response/content tests if template structure changes invalidate current assertions."
+  ],
+  "goal": "Restyle existing core, inventory, workorders, and analytics screens to the shared waiting-list visual language.",
+  "read_files": [
+    "templates/core/dashboard.html",
+    "templates/inventory/device_list.html",
+    "templates/inventory/device_form.html",
+    "templates/workorders/board.html",
+    "templates/workorders/workorder_form.html",
+    "templates/workorders/workorder_detail.html",
+    "templates/workorders/partials/*",
+    "templates/analytics/dashboard.html",
+    "static/src/css/app.css"
+  ],
+  "write_files": [
+    "templates/core/dashboard.html",
+    "templates/inventory/device_list.html",
+    "templates/inventory/device_form.html",
+    "templates/workorders/board.html",
+    "templates/workorders/workorder_form.html",
+    "templates/workorders/workorder_detail.html",
+    "templates/workorders/partials/*",
+    "templates/analytics/dashboard.html",
+    "static/src/css/app.css"
+  ],
+  "deliverables": [
+    "Restyled existing application templates",
+    "Adjusted shared CSS utilities if needed",
+    "EXECUTOR_REPORT.md"
+  ],
+  "runtime_binding": {
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high",
+    "fallbacks": [
+      {
+        "launcher": "gemini-cli",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "tier": "medium",
+        "reasoning_effort": "high"
+      },
+      {
+        "launcher": "codex-subagent",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "tier": "medium",
+        "reasoning_effort": "medium"
+      }
+    ]
+  }
+}

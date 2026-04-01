@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "project_id": "local-business-suite",
+  "config_version": "v1",
+  "paths": {
+    "architect_plan_path": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+    "slice_export_spec_path": "workflow/block-waiting-list-ui-2026-03-31/SLICE_EXPORT_SPEC.json",
+    "slice_task_path_template": "workflow/{block_id}/slice-tasks/{task_id}.json",
+    "run_log_path_template": "workflow/{block_id}/orchestrator-run-log.jsonl",
+    "temp_root": "workflow"
+  },
+  "role_runtime_bindings": [
+    {
+      "role": "architect",
+      "launcher": "codex-subagent",
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "tier": "high",
+      "reasoning_effort": "high",
+      "fallbacks": [
+        {
+          "launcher": "gemini-cli",
+          "provider": "google",
+          "model": "gemini-3-flash-preview",
+          "tier": "high",
+          "reasoning_effort": "high"
+        }
+      ]
+    },
+    {
+      "role": "orchestrator",
+      "launcher": "codex-subagent",
+      "provider": "openai",
+      "model": "gpt-5.4-mini",
+      "tier": "medium",
+      "reasoning_effort": "medium",
+      "fallbacks": []
+    },
+    {
+      "role": "pm",
+      "launcher": "gemini-cli",
+      "provider": "google",
+      "model": "gemini-3-flash-preview",
+      "tier": "high",
+      "reasoning_effort": "high",
+      "fallbacks": []
+    },
+    {
+      "role": "executor",
+      "launcher": "droid",
+      "provider": "minimax",
+      "model": "MiniMax-M2.7",
+      "tier": "medium",
+      "reasoning_effort": "high",
+      "fallbacks": []
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# PM Decision Packet: block-waiting-list-ui-2026-03-31
+
+- **goal**: Add a waiting list Django app and align existing server-rendered screens with the waiting_list.html visual and interaction model without changing the project stack.
+- **status**: ACCEPTED
+- **files changed**:
+  - `templates/base.html`
+  - `static/src/css/app.css`
+  - `config/settings.py`
+  - `config/urls.py`
+  - `apps/waiting_list/` (new Django app: models, services, forms, views, urls, admin, migrations)
+  - `templates/waiting_list/` (new templates: dashboard, forms, detail, partials)
+  - `templates/core/dashboard.html`
+  - `templates/inventory/device_list.html`
+  - `templates/inventory/device_form.html`
+  - `templates/workorders/board.html`
+  - `templates/workorders/workorder_form.html`
+  - `templates/workorders/partials/detail_sections.html`
+  - `templates/workorders/partials/status_section.html`
+  - `templates/workorders/partials/comments.html`
+  - `templates/analytics/dashboard.html`
+  - `PROJECT_HANDOFF.md`
+- **checks**:
+  - `make check`: PASSED (0 issues reported)
+  - `make test`: PASSED (18 new tests in apps.waiting_list.tests; 56 tests in existing apps core, inventory, workorders, analytics)
+  - `make contracts`: PASSED
+  - Visual verification: Design tokens, shell primitives, and drawer system align with `drafts/waiting_list.html`. Dashboard filtering, sortable tables, and status transitions function as HTMX partials.
+- **deviations**:
+  - Semantic HTML: Wrapped brand text in `<h1>` for better structure.
+  - Brand indicator: Added blue dot before app name to match reference visual language.
+- **risks**:
+  - High reliance on HTMX for core dashboard functionality (filtering, sorting, status changes); requires robust HTMX availability in the base template.
+  - UI changes may introduce minor visual regressions in edge cases or unconventional resolutions not covered by automated tests.
+  - Template structure changes could potentially affect third-party browser extensions or scrapers if they rely on specific legacy DOM structures.
+- **docs updated**: yes (PROJECT_HANDOFF.md)
+- **slice tasks cleared**: yes
+- **decision needed**: None. Block complete and ready for merge.

@@ -10,7 +10,7 @@
   >
     {% csrf_token %}
     {{ comment_form.as_p }}
-    <button type="submit">Добавить комментарий</button>
+    <button type="submit" class="btn btn-primary">Добавить комментарий</button>
   </form>
   <div class="stack">
     {% for comment in workorder.comments.all %}

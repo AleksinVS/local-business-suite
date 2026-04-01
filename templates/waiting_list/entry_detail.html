@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block header_context %}
+<nav class="breadcrumbs header-breadcrumbs">
+  <a href="{% url 'core:dashboard' %}">{{ app_display_name }}</a>
+  <span>/</span>
+  <a href="{% url 'waiting_list:dashboard' %}">Лист ожидания</a>
+  <span>/</span>
+  <span>{{ entry.patient_name }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="board-page">
+  <div class="panel" style="max-width: 800px; margin: 0 auto;">
+    <div class="panel-header-row">
+      <h2>{{ entry.patient_name }}</h2>
+      <div class="detail-actions">
+        <a href="{% url 'waiting_list:update' entry.pk %}" class="btn btn-outline">Редактировать</a>
+        <a href="{% url 'waiting_list:dashboard' %}" class="btn btn-ghost">Назад</a>
+      </div>
+    </div>
+
+    {# Status Badges #}
+    <div class="status-inline" style="margin-bottom: 1.5rem;">
+      {% if entry.status == 'waiting' %}
+        <span class="badge badge-waiting">В очереди</span>
+      {% elif entry.status == 'scheduled' %}
+        <span class="badge badge-scheduled">Назначена</span>
+      {% elif entry.status == 'confirmed' %}
+        <span class="badge badge-confirmed">Подтверждена</span>
+      {% elif entry.status == 'cancelled' %}
+        <span class="badge badge-cancelled">Отменена</span>
+      {% endif %}
+
+      {% if entry.priority_cito %}
+        <span class="cito-indicator">CITO!</span>
+      {% endif %}
+    </div>
+
+    {# Quick Status Actions #}
+    <div class="input-group full-width" style="margin-bottom: 1.5rem;">
+      <label>Быстрая смена статуса</label>
+      <div class="action-stack">
+        <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="waiting">
+          <button type="submit" class="btn btn-status-wait"
+            {% if entry.status == 'waiting' %}disabled{% endif %}>
+            В очереди
+          </button>
+        </form>
+        <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="scheduled">
+          <button type="submit" class="btn btn-status-confirm"
+            {% if entry.status == 'scheduled' %}disabled{% endif %}>
+            Назначить
+          </button>
+        </form>
+        <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="confirmed">
+          <button type="submit" class="btn btn-status-confirm"
+            {% if entry.status == 'confirmed' %}disabled{% endif %}>
+            Подтвердить
+          </button>
+        </form>
+        <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="cancelled">
+          <button type="submit" class="btn btn-status-cancel"
+            {% if entry.status == 'cancelled' %}disabled{% endif %}>
+            Отменить
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {# Entry Details #}
+    <div class="detail-grid" style="margin-bottom: 1.5rem;">
+      <div class="detail-item">
+        <label>Дата рождения</label>
+        <p>{{ entry.patient_dob }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Телефон</label>
+        <p>{{ entry.patient_phone }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Услуга</label>
+        <p>{{ entry.get_service_id_display }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Целевая дата</label>
+        <p>{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="detail-item">
+        <label>Крайняя дата</label>
+        <p>{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="detail-item">
+        <label>Создана</label>
+        <p>{{ entry.created_at|date:"d.m.Y H:i" }}</p>
+      </div>
+    </div>
+
+    {% if entry.comment %}
+    <div class="input-group full-width" style="margin-bottom: 1.5rem;">
+      <label>Комментарий</label>
+      <div class="comment">{{ entry.comment|linebreaks }}</div>
+    </div>
+    {% endif %}
+
+    {# Audit Timeline #}
+    <div class="input-group full-width">
+      <label>История изменений</label>
+      <div class="timeline">
+        {% if entry.audit_logs.all %}
+          {% for log in entry.audit_logs.all reversed %}
+          <div class="timeline-item">
+            <div class="timeline-time">{{ log.created_at|date:"d.m.Y H:i" }}</div>
+            <div class="timeline-text">
+              <span class="timeline-user">{{ log.actor.get_full_name|default:log.actor.username }}</span>
+              {{ log.action }}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="timeline-item">
+            <div class="timeline-text" style="color: var(--text-muted)">Нет истории</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -11,7 +11,9 @@
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <header class="site-header">
       <div class="site-header-main">
-        <a href="{% url 'core:dashboard' %}" class="brand">{{ app_display_name }}</a>
+        <a href="{% url 'core:dashboard' %}" class="brand">
+          <h1>{{ app_display_name }}</h1>
+        </a>
         {% block header_context %}{% endblock %}
       </div>
       <nav class="main-nav">
@@ -31,6 +33,7 @@
           <a href="{% url 'admin:index' %}">Django admin</a>
         {% endif %}
         <a href="{% url 'analytics:dashboard' %}">Аналитика</a>
+        <a href="{% url 'waiting_list:dashboard' %}">Лист ожидания</a>
         {% if user.is_authenticated %}
           <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}

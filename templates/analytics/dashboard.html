@@ -16,14 +16,14 @@
 
 <section class="panel">
   <h2>По статусам</h2>
-  <div class="table-wrap">
+  <div class="table-container">
     <table>
       <thead><tr><th>Статус</th><th>Количество</th></tr></thead>
       <tbody>
         {% for row in status_summary %}
           <tr><td>{{ row.status }}</td><td>{{ row.total }}</td></tr>
         {% empty %}
-          <tr><td colspan="2">Нет данных.</td></tr>
+          <tr><td colspan="2" class="empty-state">Нет данных.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -32,14 +32,14 @@
 
 <section class="panel">
   <h2>По подразделениям</h2>
-  <div class="table-wrap">
+  <div class="table-container">
     <table>
       <thead><tr><th>Подразделение</th><th>Количество</th></tr></thead>
       <tbody>
         {% for row in department_summary %}
           <tr><td>{{ row.department_label }}</td><td>{{ row.total }}</td></tr>
         {% empty %}
-          <tr><td colspan="2">Нет данных.</td></tr>
+          <tr><td colspan="2" class="empty-state">Нет данных.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -48,7 +48,7 @@
 
 <section class="panel">
   <h2>По исполнителям</h2>
-  <div class="table-wrap">
+  <div class="table-container">
     <table>
       <thead><tr><th>Исполнитель</th><th>Количество</th></tr></thead>
       <tbody>
@@ -64,7 +64,7 @@
             <td>{{ row.total }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="2">Нет данных.</td></tr>
+          <tr><td colspan="2" class="empty-state">Нет данных.</td></tr>
         {% endfor %}
       </tbody>
     </table>

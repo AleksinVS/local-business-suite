@@ -5,10 +5,11 @@
   "paths": {
     "architect_plan_path": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
     "slice_export_spec_path": "workflow/block-waiting-list-ui-2026-03-31/SLICE_EXPORT_SPEC.json",
-    "slice_task_path_template": "workflow/{block_id}/slice-tasks/{task_id}.json",
+    "task_packet_path_template": "workflow/{block_id}/task-packets/{task_id}.json",
     "run_log_path_template": "workflow/{block_id}/orchestrator-run-log.jsonl",
     "temp_root": "workflow"
   },
+  "method_role_runtime_bindings": {},
   "role_runtime_bindings": [
     {
       "role": "architect",

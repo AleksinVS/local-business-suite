@@ -199,7 +199,7 @@ class WorkOrderViewPermissionTests(TestCase):
             HTTP_HX_REQUEST="true",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="detail-panel"')
+        self.assertContains(response, 'drawer-header')
         self.assertContains(response, self.workorder.title)
 
     def test_board_can_restore_empty_detail_panel(self):
@@ -211,7 +211,7 @@ class WorkOrderViewPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Выбери карточку на доске")
-        self.assertContains(response, "is-hidden")
+        self.assertContains(response, "detail-panel-placeholder")
 
     def test_default_board_columns_are_configured(self):
         self.assertEqual(

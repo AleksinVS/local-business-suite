@@ -1,0 +1,51 @@
+{
+  "block_id": "kanban-ui-polish-2026-04-07",
+  "slice_id": "slice-header-polish",
+  "task_id": "task-header-rebranding",
+  "goal": "Move branding from sidebar to site header and ensure breadcrumb alignment.",
+  "risk_class": "R1",
+  "read_files": [
+    "templates/base.html",
+    "static/src/css/app.css"
+  ],
+  "write_files": [
+    "templates/base.html",
+    "static/src/css/app.css"
+  ],
+  "forbidden_moves": [
+    "Do not remove the sidebar toggle button.",
+    "Do not change the underlying HTMX CSRF headers or block structure in base.html."
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "./.venv/bin/python manage.py check"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Updated templates/base.html with new header layout",
+    "Updated static/src/css/app.css with header alignment fixes",
+    "EXECUTOR_REPORT.md"
+  ],
+  "escalation_path": [
+    "Header changes break the sidebar toggle animation",
+    "Breadcrumb content overflows the header on narrow screens"
+  ],
+  "source_plan": "workflow/kanban-ui-polish-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high"
+  },
+  "development_method": null,
+  "method_phase": null,
+  "method_step_id": null,
+  "review_scope": null,
+  "iteration": null,
+  "contract_scope": null,
+  "rework_of": null,
+  "artifact_expectations": []
+}

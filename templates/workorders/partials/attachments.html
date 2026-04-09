@@ -1,36 +1,43 @@
-<section class="panel" id="attachments-panel">
-  <h2>Вложения</h2>
+<div id="attachments-panel">
+  <div class="block-header">
+    <span class="detail-label">Вложения ({{ workorder.attachments.count }})</span>
+    {% if can_upload_attachment %}
+      <label for="attachment-input" class="btn btn-ghost btn-xs cursor-pointer">Добавить</label>
+    {% endif %}
+  </div>
+  
+  <div class="attachment-grid">
+    {% for attachment in workorder.attachments.all %}
+      <div class="attachment-card">
+        <a href="{{ attachment.file.url }}" target="_blank" class="attachment-preview">
+          {% if attachment.is_image %}
+            <img src="{{ attachment.file.url }}" alt="{{ attachment.filename }}">
+          {% else %}
+            <span class="attachment-preview-icon">📄</span>
+          {% endif %}
+        </a>
+        <div class="attachment-info">
+          <span title="{{ attachment.filename }}">{{ attachment.filename }}</span>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-text-xs">Нет вложений</div>
+    {% endfor %}
+  </div>
+
+  {% if can_upload_attachment %}
   <form
     method="post"
     enctype="multipart/form-data"
     action="{% url 'workorders:attachment' workorder.pk %}"
-    class="stack"
+    class="hidden-form"
     hx-post="{% url 'workorders:attachment' workorder.pk %}"
     hx-encoding="multipart/form-data"
-    hx-target="#attachments-panel"
-    hx-swap="outerHTML"
+    hx-target="#detail-panel-content"
+    hx-trigger="change from:#attachment-input"
   >
     {% csrf_token %}
-    {{ attachment_form.as_p }}
-    <button type="submit">Загрузить файл</button>
+    <input type="file" id="attachment-input" name="file" class="hidden">
   </form>
-  <div class="stack">
-    {% for attachment in workorder.attachments.all %}
-      <article class="comment">
-        <strong><a href="{{ attachment.file.url }}">{{ attachment.filename }}</a></strong>
-        <small>{{ attachment.created_at }} · {{ attachment.uploaded_by.get_full_name|default:attachment.uploaded_by.username }}</small>
-        {% if attachment.is_image %}
-          <div class="attachment-preview">
-            <a href="{{ attachment.file.url }}">
-              <img src="{{ attachment.file.url }}" alt="{{ attachment.filename }}">
-            </a>
-          </div>
-        {% else %}
-          <p class="subtitle">Тип: {{ attachment.content_type|default:"не определен" }}</p>
-        {% endif %}
-      </article>
-    {% empty %}
-      <p>Файлы пока не загружены.</p>
-    {% endfor %}
-  </div>
-</section>
+  {% endif %}
+</div>

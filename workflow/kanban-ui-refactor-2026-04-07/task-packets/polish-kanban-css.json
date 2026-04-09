@@ -1,0 +1,42 @@
+{
+  "block_id": "kanban-ui-refactor-2026-04-07",
+  "slice_id": "slice-kanban-layout-polish",
+  "task_id": "polish-kanban-css",
+  "goal": "Improve the visual appearance and layout of the kanban board components.",
+  "risk_class": "R0",
+  "read_files": [
+    "static/src/css/app.css",
+    "templates/workorders/board.html"
+  ],
+  "write_files": [
+    "static/src/css/app.css"
+  ],
+  "forbidden_moves": [
+    "Adding new CSS frameworks",
+    "Using inline styles"
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "Verify layout on multiple screen sizes",
+    "Check hover and active states on kanban cards"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Updated app.css with kanban polish styles"
+  ],
+  "escalation_path": [
+    "CSS changes cause regressions in other parts of the app",
+    "Browser-specific rendering issues"
+  ],
+  "source_plan": "workflow/kanban-ui-refactor-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+  "runtime_binding": null,
+  "development_method": null,
+  "method_phase": null,
+  "method_step_id": null,
+  "review_scope": null,
+  "iteration": null,
+  "contract_scope": null,
+  "rework_of": null,
+  "artifact_expectations": []
+}

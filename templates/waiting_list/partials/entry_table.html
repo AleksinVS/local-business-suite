@@ -3,7 +3,7 @@
     {% for entry in entries %}
     <tr
       hx-get="{% url 'waiting_list:detail' entry.pk %}"
-      hx-target="#entry-detail-panel"
+      hx-target="#entry-detail-panel-content"
       hx-swap="innerHTML"
       onclick="openWaitingListDrawer('{{ entry.pk }}')"
       style="cursor: pointer;"

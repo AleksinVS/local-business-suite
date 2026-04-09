@@ -106,16 +106,72 @@
       Применить
     </button>
   </form>
-  <a href="{% url 'workorders:create' %}" class="btn btn-primary">Создать заявку</a>
+    <button
+      class="btn btn-primary"
+      hx-get="{% url 'workorders:create' %}"
+      hx-target="#detail-panel-content"
+      hx-swap="innerHTML"
+      onclick="openKanbanDrawer()"
+    >
+      Создать заявку
+    </button>
 </div>
 {% include "workorders/partials/board_columns.html" %}
-{% include "workorders/partials/detail_panel_empty.html" %}
+
+{# Drawer Overlay & Panel for Kanban #}
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeKanbanDrawer()"></div>
+<aside class="drawer drawer-large" id="detail-panel">
+  <div id="detail-panel-content" style="height: 100%; display: flex; flex-direction: column;">
+    {% include "workorders/partials/detail_panel_empty.html" %}
+  </div>
+</aside>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
   {{ block.super }}
   <script>
+    function openKanbanDrawer() {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('drawerOverlay');
+      if (panel) panel.classList.add('active');
+      if (overlay) overlay.classList.add('active');
+    }
+
+    function closeKanbanDrawer() {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('drawerOverlay');
+      if (panel) panel.classList.remove('active');
+      if (overlay) overlay.classList.remove('active');
+    }
+
+    function toggleColumn(column) {
+      column.classList.toggle('collapsed');
+      const code = column.dataset.columnCode;
+      const collapsed = column.classList.contains('collapsed');
+      const state = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '{}');
+      state[code] = collapsed;
+      localStorage.setItem('kanban_collapsed_columns', JSON.stringify(state));
+    }
+
+    function restoreColumnStates() {
+      const state = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '{}');
+      Object.entries(state).forEach(([code, collapsed]) => {
+        if (collapsed) {
+          const col = document.querySelector(`.kanban-column[data-column-code="${code}"]`);
+          if (col) col.classList.add('collapsed');
+        }
+      });
+    }
+
+    document.addEventListener('htmx:afterOnLoad', function(evt) {
+      if (evt.detail.target.id === 'board-columns') {
+        restoreColumnStates();
+      }
+    });
+
+    restoreColumnStates();
+
     (function () {
       function csrfToken() {
         const body = document.body.getAttribute("hx-headers");
@@ -182,9 +238,17 @@
 
         if (!response.ok) return;
         const markup = await response.text();
-        const board = document.getElementById("board-columns");
-        if (board) {
-          board.outerHTML = markup;
+        if (markup.trim()) {
+          // If response contains OOB elements, HTMX will handle them if we swap into a dummy or handle manually.
+          // Since we used render() for columns, we can just let HTMX process it or swap it into a temporary div.
+          const temp = document.createElement("div");
+          temp.innerHTML = markup;
+          // Process OOB swaps manually if not using htmx.process
+          temp.querySelectorAll("[hx-swap-oob='true']").forEach(el => {
+            const target = document.getElementById(el.id);
+            if (target) target.outerHTML = el.outerHTML;
+          });
+          restoreColumnStates();
         }
       });
     })();

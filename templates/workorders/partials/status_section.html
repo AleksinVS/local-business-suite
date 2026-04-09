@@ -1,42 +1,38 @@
-<section class="panel" id="status-panel">
-  <h2>Смена статуса</h2>
-  <div class="status-inline">
-    <span class="badge">{{ workorder.get_status_display }}</span>
-    {% if workorder.closure_confirmed %}
-      <small>Подтверждено {{ workorder.closure_confirmed_at }}</small>
-    {% endif %}
+<div class="status-stepper" id="status-panel">
+  <div class="stepper-track">
+    {% for status_val, status_label in status_choices %}
+      {% if status_val == workorder.status %}
+        <div class="step-item active" data-status="{{ status_val }}">
+          <span class="step-label">{{ status_label }}</span>
+        </div>
+      {% else %}
+        {% with can_go=False %}
+          {# Django templates are limited, but we can check if status_val is in transition_choices #}
+          <form hx-post="{% url 'workorders:transition' workorder.pk %}"
+                hx-target="#detail-panel-content"
+                hx-swap="innerHTML"
+                class="step-form">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="{{ status_val }}">
+            <button type="submit" 
+                    class="step-item {% if status_val in transition_choices_vals %}available{% else %}disabled{% endif %}" 
+                    data-status="{{ status_val }}"
+                    {% if status_val not in transition_choices_vals %}disabled{% endif %}>
+              <span class="step-label">{{ status_label }}</span>
+            </button>
+          </form>
+        {% endwith %}
+      {% endif %}
+    {% endfor %}
   </div>
-  {% if transition_choices %}
-    <form
-      action="{% url 'workorders:transition' workorder.pk %}"
-      method="post"
-      class="inline-form"
-      hx-post="{% url 'workorders:transition' workorder.pk %}"
-      hx-target="#status-panel"
-      hx-swap="outerHTML"
-    >
-      {% csrf_token %}
-      <select name="status" class="mini-select">
-        {% for value, label in transition_choices %}
-          <option value="{{ value }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn btn-primary">Обновить</button>
-    </form>
-  {% else %}
-    <p>Для вашей роли допустимых переходов нет.</p>
-  {% endif %}
+  
   {% if can_confirm_closure %}
-    <form
-      action="{% url 'workorders:confirm_closure' workorder.pk %}"
-      method="post"
-      class="inline-form"
-      hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
-      hx-target="#status-panel"
-      hx-swap="outerHTML"
-    >
+    <form hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
+          hx-target="#detail-panel-content"
+          hx-swap="innerHTML"
+          class="confirm-closure-inline">
       {% csrf_token %}
-      <button type="submit" class="btn btn-status-confirm">Подтвердить закрытие</button>
+      <button type="submit" class="btn btn-primary btn-xs">Подтвердить выполнение</button>
     </form>
   {% endif %}
-</section>
+</div>

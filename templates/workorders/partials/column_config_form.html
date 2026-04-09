@@ -9,6 +9,10 @@
 >
   {% csrf_token %}
   {{ rename_form.title }}
+  <div class="input-group-inline">
+    <label>WIP:</label>
+    {{ rename_form.wip_limit }}
+  </div>
   <button type="submit" class="mini-button">Сохранить</button>
   <button
     type="button"

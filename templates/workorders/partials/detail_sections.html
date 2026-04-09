@@ -1,31 +1,42 @@
-<section class="panel">
-  <div class="section-head">
-    <div>
-      <p class="eyebrow">{{ workorder.number }}</p>
-      <h1>{{ workorder.title }}</h1>
+<div class="drawer-sections-wrapper">
+  <div class="detail-grid">
+    <div class="info-item">
+      <span class="info-label">Подразделение</span>
+      <span class="info-value">{{ workorder.department }}</span>
     </div>
-    <div class="detail-actions">
-      <span class="badge">{{ workorder.get_status_display }}</span>
+    <div class="info-item">
+      <span class="info-label">Исполнитель</span>
+      <span class="info-value">
+        {% if workorder.assignee %}{{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% else %}Не назначен{% endif %}
+      </span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Изделие</span>
+      <span class="info-value">{{ workorder.device|default:"—" }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Приоритет</span>
+      <span class="info-value"><span class="chip chip-priority-{{ workorder.priority|lower }}">{{ workorder.get_priority_display }}</span></span>
+    </div>
+  </div>
+
+  <div class="content-block">
+    <div class="block-header">
+      <span class="detail-label">Описание</span>
       {% if can_edit %}
-        <a href="{% url 'workorders:edit' workorder.pk %}" class="btn btn-outline">Редактировать</a>
+        <button class="btn btn-ghost btn-xs" 
+                hx-get="{% url 'workorders:edit' workorder.pk %}" 
+                hx-target="#detail-panel-content">Изменить</button>
       {% endif %}
     </div>
+    <div class="description-text">{{ workorder.description }}</div>
   </div>
-  <p>{{ workorder.description }}</p>
-  <div class="detail-grid">
-    <div><strong>Подразделение:</strong> {{ workorder.department }}</div>
-    <div><strong>Приоритет:</strong> {{ workorder.get_priority_display }}</div>
-    <div><strong>Изделие:</strong> {{ workorder.device|default:"Без привязки к медизделию" }}</div>
-    <div><strong>Исполнитель:</strong> {{ workorder.assignee.get_full_name|default:workorder.assignee.username|default:"Не назначен" }}</div>
-    <div><strong>Обновлено:</strong> {{ workorder.updated_at }}</div>
-  </div>
-</section>
 
-{% include "workorders/partials/status_section.html" %}
-{% include "workorders/partials/rating_section.html" %}
-{% if can_comment %}
-  {% include "workorders/partials/comments.html" %}
-{% endif %}
-{% if can_upload_attachment %}
-  {% include "workorders/partials/attachments.html" %}
-{% endif %}
+  <div class="content-block">
+    {% include "workorders/partials/rating_section.html" %}
+  </div>
+
+  <div class="content-block">
+    {% include "workorders/partials/attachments.html" %}
+  </div>
+</div>

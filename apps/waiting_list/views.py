@@ -90,6 +90,11 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
     form_class = WaitingListEntryForm
     template_name = "waiting_list/entry_form.html"
 
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["waiting_list/partials/entry_form_partial.html"]
+        return [self.template_name]
+
     def get_success_url(self):
         return reverse("waiting_list:dashboard")
 
@@ -106,8 +111,12 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
                 priority_cito=form.cleaned_data.get("priority_cito", False),
                 comment=form.cleaned_data.get("comment", ""),
             )
-            messages.success(self.request, "Запись добавлена в лист ожидания.")
-            return redirect("waiting_list:dashboard")
+            response = redirect("waiting_list:dashboard")
+            if self.request.htmx:
+                response["HX-Redirect"] = self.get_success_url()
+            else:
+                messages.success(self.request, "Запись добавлена в лист ожидания.")
+            return response
         except WaitingListValidationError as e:
             form.add_error(None, str(e))
             return self.form_invalid(form)
@@ -131,7 +140,8 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["status_form"] = WaitingListStatusForm(instance=self.object)
-        context["transition_choices"] = WaitingListStatus.choices
+        context["status_choices"] = WaitingListStatus.choices
+        context["transition_choices_vals"] = WaitingListStatus.values  # Simplified for now
         return context
 
 
@@ -146,12 +156,19 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
     def get_queryset(self):
         return WaitingListEntry.objects.all()
 
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["waiting_list/partials/entry_form_partial.html"]
+        return [self.template_name]
+
     def get_success_url(self):
+        if self.request.htmx:
+            return reverse("waiting_list:detail", kwargs={"pk": self.object.pk})
         return reverse("waiting_list:detail", kwargs={"pk": self.object.pk})
 
     def form_valid(self, form):
         try:
-            update_entry(
+            entry = update_entry(
                 entry=self.object,
                 user=self.request.user,
                 patient_name=form.cleaned_data["patient_name"],
@@ -163,6 +180,18 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
                 priority_cito=form.cleaned_data.get("priority_cito", False),
                 comment=form.cleaned_data.get("comment", ""),
             )
+            if self.request.htmx:
+                # After successful update in htmx, return the detail view of that entry
+                detail_view = WaitingListEntryDetailView()
+                detail_view.request = self.request
+                detail_view.args = self.args
+                detail_view.kwargs = self.kwargs
+                detail_view.object = entry
+                return render(
+                    self.request,
+                    "waiting_list/partials/entry_detail_panel.html",
+                    detail_view.get_context_data(object=entry),
+                )
             messages.success(self.request, "Запись обновлена.")
             return redirect("waiting_list:detail", pk=self.object.pk)
         except WaitingListValidationError as e:
@@ -191,7 +220,8 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                     {
                         "entry": entry,
                         "status_form": WaitingListStatusForm(instance=entry),
-                        "transition_choices": WaitingListStatus.choices,
+                        "status_choices": WaitingListStatus.choices,
+                        "transition_choices_vals": WaitingListStatus.values,
                     },
                 )
             messages.success(request, "Статус обновлен.")

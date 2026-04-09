@@ -1,0 +1,83 @@
+<div class="kanban-column {% if column.config.wip_limit and column.items|length > column.config.wip_limit %}wip-exceeded{% endif %}" 
+     id="kanban-column-{{ column.key }}" 
+     data-column-code="{{ column.key }}"
+     data-column-title="{{ column.label }}"
+     onclick="if(this.classList.contains('collapsed')) toggleColumn(this)"
+     {% if is_oob %}hx-swap-oob="true"{% endif %}>
+  <div class="column-collapse-toggle" onclick="event.stopPropagation(); toggleColumn(this.closest('.kanban-column'))" title="Свернуть/Развернуть">
+    <span class="toggle-icon">❮</span>
+  </div>
+  <header>
+    {% if can_manage_board_columns %}
+      {% include "workorders/partials/column_config_card.html" with column_config=column.config column_count=column.items|length wip_limit=column.config.wip_limit %}
+    {% else %}
+      <div class="column-head">
+        <h2>{{ column.label }}</h2>
+        <div class="column-stats">
+          <span class="count">{{ column.items|length }}</span>
+          {% if column.config.wip_limit %}
+            <span class="wip-limit">/ {{ column.config.wip_limit }}</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </header>
+  {% for item in column.items %}
+    {% with workorder=item.workorder %}
+    <article class="work-card {% if item.can_drag %}work-card-draggable{% endif %} cursor-pointer" 
+             data-workorder-id="{{ workorder.pk }}" 
+             {% if item.can_drag %}draggable="true"{% endif %}
+             hx-get="{% url 'workorders:detail' workorder.pk %}"
+             hx-target="#detail-panel-content"
+             hx-swap="innerHTML"
+             hx-trigger="click consume"
+             onclick="openKanbanDrawer()">
+      <div class="work-card-content">
+        <a
+          href="{% url 'workorders:detail' workorder.pk %}"
+          class="work-card-title"
+          title="{{ workorder.description }}"
+          onclick="event.preventDefault()"
+        >
+          {{ workorder.number }}. {{ workorder.title }}
+        </a>
+        <p class="work-card-desc" title="{{ workorder.description }}">{{ workorder.description|truncatechars:100 }}</p>
+        <p class="work-card-device">{{ workorder.device|default:"Без привязки к медизделию" }}</p>
+        <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
+        <div class="card-meta card-meta-inline">
+          <span class="chip chip-priority-{{ workorder.priority|lower }}">
+            {{ workorder.get_priority_display }}
+          </span>
+          <div class="card-meta-indicators">
+            {% if workorder.comment_count %}
+              <span class="indicator" title="Комментарии">💬 {{ workorder.comment_count }}</span>
+            {% endif %}
+            {% if workorder.attachment_count %}
+              <span class="indicator" title="Вложения">📎 {{ workorder.attachment_count }}</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% if item.can_confirm_closure %}
+        <div class="card-actions" onclick="event.stopPropagation()">
+            <form
+              action="{% url 'workorders:confirm_closure' workorder.pk %}"
+              method="post"
+              hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
+              hx-target="#board-columns"
+              hx-swap="outerHTML"
+            >
+              {% csrf_token %}
+              <button type="submit" class="mini-button mini-button-strong">Подтвердить</button>
+            </form>
+        </div>
+      {% endif %}
+    </article>
+    {% endwith %}
+  {% empty %}
+    <div class="work-card work-card-empty">
+      <div class="empty-icon">📂</div>
+      <p>В этой колонке пусто</p>
+    </div>
+  {% endfor %}
+</div>

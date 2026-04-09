@@ -30,9 +30,9 @@
     },
     {
       "role": "orchestrator",
-      "launcher": "codex-subagent",
-      "provider": "openai",
-      "model": "gpt-5.4-mini",
+      "launcher": "gemini-cli",
+      "provider": "google",
+      "model": "gemini-3-flash-preview",
       "tier": "medium",
       "reasoning_effort": "medium",
       "fallbacks": []

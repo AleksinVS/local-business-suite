@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "block_id": "kanban-ui-polish-2026-04-07",
+  "source_plan": "workflow/kanban-ui-polish-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+  "output_root": "workflow/kanban-ui-polish-2026-04-07/task-packets",
+  "task_file_template": "{task_id}.json",
+  "tasks": [
+    {
+      "slice_id": "slice-header-polish",
+      "task_id": "task-header-rebranding",
+      "output_path": "workflow/kanban-ui-polish-2026-04-07/task-packets/task-header-rebranding.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-header-polish].risk_class",
+        "slices[slice-header-polish].forbidden_moves",
+        "slices[slice-header-polish].required_docs",
+        "slices[slice-header-polish].required_checks",
+        "slices[slice-header-polish].mandatory_tests",
+        "slices[slice-header-polish].tasks[task-header-rebranding].goal",
+        "slices[slice-header-polish].tasks[task-header-rebranding].read_files",
+        "slices[slice-header-polish].tasks[task-header-rebranding].write_files",
+        "slices[slice-header-polish].tasks[task-header-rebranding].deliverables",
+        "slices[slice-header-polish].tasks[task-header-rebranding].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "kanban-ui-polish-2026-04-07",
+        "slice_id": "slice-header-polish",
+        "task_id": "task-header-rebranding",
+        "source_plan": "workflow/kanban-ui-polish-2026-04-07/ARCHITECT_PLAN.json",
+        "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+        "generated_at": "2026-04-07T12:00:00Z"
+      }
+    },
+    {
+      "slice_id": "slice-kanban-polish",
+      "task_id": "task-kanban-grid-fix",
+      "output_path": "workflow/kanban-ui-polish-2026-04-07/task-packets/task-kanban-grid-fix.json",
+      "copy_from": [
+        "block_id",
+        "slices[slice-kanban-polish].risk_class",
+        "slices[slice-kanban-polish].forbidden_moves",
+        "slices[slice-kanban-polish].required_docs",
+        "slices[slice-kanban-polish].required_checks",
+        "slices[slice-kanban-polish].mandatory_tests",
+        "slices[slice-kanban-polish].tasks[task-kanban-grid-fix].goal",
+        "slices[slice-kanban-polish].tasks[task-kanban-grid-fix].read_files",
+        "slices[slice-kanban-polish].tasks[task-kanban-grid-fix].write_files",
+        "slices[slice-kanban-polish].tasks[task-kanban-grid-fix].deliverables",
+        "slices[slice-kanban-polish].tasks[task-kanban-grid-fix].runtime_binding"
+      ],
+      "inject_fields": {
+        "block_id": "kanban-ui-polish-2026-04-07",
+        "slice_id": "slice-kanban-polish",
+        "task_id": "task-kanban-grid-fix",
+        "source_plan": "workflow/kanban-ui-polish-2026-04-07/ARCHITECT_PLAN.json",
+        "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+        "generated_at": "2026-04-07T12:00:00Z"
+      }
+    }
+  ]
+}

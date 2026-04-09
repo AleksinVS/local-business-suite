@@ -2,7 +2,12 @@
   <div class="column-head">
     <div class="column-head-title">
       <h2>{{ column_config.title }}</h2>
-      <span>{{ column_count }}</span>
+      <div class="column-stats">
+        <span class="count">{{ column_count }}</span>
+        {% if column_config.wip_limit %}
+          <span class="wip-limit">/ {{ column_config.wip_limit }}</span>
+        {% endif %}
+      </div>
     </div>
     <div class="column-head-actions">
       <button

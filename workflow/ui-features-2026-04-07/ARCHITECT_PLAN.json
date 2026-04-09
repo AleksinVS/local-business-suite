@@ -1,0 +1,106 @@
+{
+  "block_id": "ui-features-2026-04-07",
+  "methodology": "vertical-slices",
+  "plan_status": {
+    "review_required": false,
+    "status": "active"
+  },
+  "architecture_decisions": [
+    {
+      "id": "ADR-0003-client-side-favorites",
+      "title": "Client-side Favorites Persistence",
+      "description": "Use localStorage for favorites to keep it lightweight and server-independent.",
+      "rationale": "Favorites are user-specific UI preferences and don't require server-side state for this MVP."
+    },
+    {
+      "id": "ADR-0004-css-only-tooltips",
+      "title": "CSS-only Sidebar Tooltips",
+      "description": "Use data-tooltip attribute and ::after pseudo-element for sidebar tooltips.",
+      "rationale": "Avoids JS overhead for simple hover state tooltips in the sidebar."
+    }
+  ],
+  "technical_constraints": [
+    "Favor CSS over JS for UI state where possible.",
+    "Ensure favorites are updated immediately in the UI when toggled.",
+    "Maintain backward compatibility with the existing sidebar toggle logic."
+  ],
+  "slices": [
+    {
+      "slice_id": "slice-sidebar-tooltips",
+      "risk_class": "R1",
+      "forbidden_moves": [],
+      "required_checks": [
+        "Verify CSS specificity doesn't break existing sidebar styles"
+      ],
+      "acceptance_criteria": [
+        "Collapse sidebar and verify tooltip visibility on hover."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-sidebar-tooltips-implement",
+          "goal": "Implement CSS-driven tooltips for sidebar links, visible when the sidebar is collapsed.",
+          "read_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "deliverables": [
+            "Updated templates/base.html with data-tooltip attributes",
+            "Updated static/src/css/app.css with tooltip styles"
+          ],
+          "escalate_if": "CSS-only tooltips cannot be implemented without additional JS."
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-favorites-feature",
+      "risk_class": "R1",
+      "forbidden_moves": [],
+      "required_checks": [
+        "Check localStorage compatibility",
+        "Verify UI responsiveness during toggle"
+      ],
+      "acceptance_criteria": [
+        "Star a menu item and verify it appears in the header.",
+        "Unstar a menu item and verify it is removed from the header.",
+        "Refresh page and verify favorites persist."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-favorites-scaffold",
+          "goal": "Add favorites UI components to the sidebar and header.",
+          "read_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "deliverables": [
+            "Updated templates/base.html with star toggle buttons and favorites container",
+            "Updated static/src/css/app.css with favorites UI styles"
+          ],
+          "escalate_if": "UI layout breaks significantly when adding star buttons."
+        },
+        {
+          "task_id": "task-favorites-logic",
+          "goal": "Implement client-side logic for favorites persistence and rendering.",
+          "read_files": [
+            "templates/base.html"
+          ],
+          "write_files": [
+            "templates/base.html"
+          ],
+          "deliverables": [
+            "Updated templates/base.html with JavaScript logic for localStorage favorites"
+          ],
+          "escalate_if": "localStorage is unavailable or restricted in the target environment."
+        }
+      ]
+    }
+  ]
+}

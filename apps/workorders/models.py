@@ -39,6 +39,7 @@ class KanbanColumnConfig(models.Model):
     title = models.CharField("Название", max_length=120)
     position = models.PositiveIntegerField("Позиция", default=0)
     statuses = models.JSONField("Статусы", default=list)
+    wip_limit = models.PositiveIntegerField("WIP Лимит", default=0, help_text="0 - без лимита")
 
     class Meta:
         ordering = ["position", "id"]

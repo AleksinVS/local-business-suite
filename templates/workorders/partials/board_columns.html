@@ -1,73 +1,7 @@
 <section class="board-scroll" id="board-columns">
   <div class="board-grid" style="--board-columns: {{ board_columns|length }}; --board-visible-slots: {{ board_visible_slots }};">
   {% for column in board_columns %}
-    <div class="kanban-column" data-column-code="{{ column.key }}">
-      <header>
-        {% if can_manage_board_columns %}
-          {% include "workorders/partials/column_config_card.html" with column_config=column.config column_count=column.items|length %}
-        {% else %}
-          <div class="column-head">
-            <h2>{{ column.label }}</h2>
-            <span>{{ column.items|length }}</span>
-          </div>
-        {% endif %}
-      </header>
-      {% for item in column.items %}
-        {% with workorder=item.workorder %}
-        <article class="work-card {% if item.can_drag %}work-card-draggable{% endif %}" data-workorder-id="{{ workorder.pk }}" {% if item.can_drag %}draggable="true"{% endif %}>
-          <a
-            href="{% url 'workorders:detail' workorder.pk %}"
-            class="work-card-title"
-            hx-get="{% url 'workorders:detail' workorder.pk %}"
-            hx-target="#detail-panel"
-            hx-swap="outerHTML"
-          >
-            {{ workorder.number }}. {{ workorder.title }}
-          </a>
-          <p>{{ workorder.device|default:"Без привязки к медизделию" }}</p>
-          <small>{{ workorder.department }}{% if workorder.assignee %} · {{ workorder.assignee.get_full_name|default:workorder.assignee.username }}{% endif %}</small>
-          <div class="card-meta card-meta-inline">
-            <span class="chip">{{ workorder.get_priority_display }}</span>
-            {% if item.quick_transitions %}
-              <form
-                action="{% url 'workorders:transition' workorder.pk %}"
-                method="post"
-                class="card-status-form"
-                hx-post="{% url 'workorders:transition' workorder.pk %}"
-                hx-target="#board-columns"
-                hx-swap="outerHTML"
-                hx-trigger="change"
-              >
-                {% csrf_token %}
-                <select name="status" class="mini-select">
-                  {% for value, label in item.quick_transitions %}
-                    <option value="{{ value }}">{{ label }}</option>
-                  {% endfor %}
-                </select>
-              </form>
-            {% endif %}
-          </div>
-          {% if item.can_confirm_closure %}
-            <div class="card-actions">
-                <form
-                  action="{% url 'workorders:confirm_closure' workorder.pk %}"
-                  method="post"
-                  hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
-                  hx-target="#board-columns"
-                  hx-swap="outerHTML"
-                >
-                  {% csrf_token %}
-                  <button type="submit" class="mini-button mini-button-strong">Подтвердить</button>
-                </form>
-              
-            </div>
-          {% endif %}
-        </article>
-        {% endwith %}
-      {% empty %}
-        <div class="work-card work-card-empty">Пусто</div>
-      {% endfor %}
-    </div>
+    {% include "workorders/partials/kanban_column.html" with column=column %}
   {% endfor %}
   </div>
 </section>

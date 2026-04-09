@@ -9,56 +9,161 @@
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
-    <header class="site-header">
-      <div class="site-header-main">
-        <a href="{% url 'core:dashboard' %}" class="brand">
-          <h1>{{ app_display_name }}</h1>
-        </a>
-        {% block header_context %}{% endblock %}
+    <div class="app-layout">
+      <aside class="sidebar-nav" id="sidebar">
+        <div class="sidebar-header">
+        </div>
+        <nav class="side-nav">
+          <a href="{% url 'workorders:board' %}" data-tooltip="Доска">
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">Доска</span>
+            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button>
+          </a>
+          <a href="{% url 'inventory:list' %}" data-tooltip="Медизделия">
+            <span class="nav-icon">📦</span>
+            <span class="nav-text">Медизделия</span>
+            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button>
+          </a>
+          {% if show_department_nav %}
+            <a href="{% url 'core:department_list' %}" data-tooltip="Подразделения">
+              <span class="nav-icon">🏢</span>
+              <span class="nav-text">Подразделения</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
+            </a>
+            <a href="{% url 'core:role_rules' %}" data-tooltip="Роли">
+              <span class="nav-icon">👥</span>
+              <span class="nav-text">Роли</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли', '👥', '{% url 'core:role_rules' %}')">☆</button>
+            </a>
+          {% endif %}
+          {% if show_ai_nav %}
+            <a href="{% url 'ai:chat_index' %}" data-tooltip="AI чат">
+              <span class="nav-icon">🤖</span>
+              <span class="nav-text">AI чат</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'AI чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
+            </a>
+          {% endif %}
+          {% if show_ai_admin_nav %}
+            <a href="{% url 'ai:hub' %}" data-tooltip="AI Hub">
+              <span class="nav-icon">⚙️</span>
+              <span class="nav-text">AI Hub</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'AI Hub', '⚙️', '{% url 'ai:hub' %}')">☆</button>
+            </a>
+          {% endif %}
+          {% if show_admin_nav %}
+            <a href="{% url 'admin:index' %}" data-tooltip="Django admin">
+              <span class="nav-icon">🛠️</span>
+              <span class="nav-text">Django admin</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Django admin', '🛠️', '{% url 'admin:index' %}')">☆</button>
+            </a>
+          {% endif %}
+          <a href="{% url 'analytics:dashboard' %}" data-tooltip="Аналитика">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Аналитика</span>
+            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
+          </a>
+          <a href="{% url 'waiting_list:dashboard' %}" data-tooltip="Лист ожидания">
+            <span class="nav-icon">⏳</span>
+            <span class="nav-text">Лист ожидания</span>
+            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
+          </a>
+          {% if user.is_authenticated %}
+            <form action="{% url 'logout' %}" method="post" class="logout-form">
+              {% csrf_token %}
+              <button type="submit" data-tooltip="Выйти">
+                <span class="nav-icon">🚪</span>
+                <span class="nav-text">Выйти</span>
+              </button>
+            </form>
+          {% endif %}
+        </nav>
+      </aside>
+
+      <div class="app-main">
+        <header class="site-header">
+          <div class="site-header-main">
+            <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+            <a href="{% url 'core:dashboard' %}" class="brand">
+              <h1>{{ app_display_name }}</h1>
+            </a>
+            {% block header_context %}{% endblock %}
+            <div id="header-favorites" class="header-favorites"></div>
+          </div>
+        </header>
+
+        {% if messages %}
+          <section class="flash-stack">
+            {% for message in messages %}
+              <div class="flash {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+
+        <main class="page-shell">
+          {% block content %}{% endblock %}
+        </main>
       </div>
-      <nav class="main-nav">
-        <a href="{% url 'workorders:board' %}">Доска</a>
-        <a href="{% url 'inventory:list' %}">Медизделия</a>
-        {% if show_department_nav %}
-          <a href="{% url 'core:department_list' %}">Подразделения</a>
-          <a href="{% url 'core:role_rules' %}">Роли</a>
-        {% endif %}
-        {% if show_ai_nav %}
-          <a href="{% url 'ai:chat_index' %}">AI чат</a>
-        {% endif %}
-        {% if show_ai_admin_nav %}
-          <a href="{% url 'ai:hub' %}">AI Hub</a>
-        {% endif %}
-        {% if show_admin_nav %}
-          <a href="{% url 'admin:index' %}">Django admin</a>
-        {% endif %}
-        <a href="{% url 'analytics:dashboard' %}">Аналитика</a>
-        <a href="{% url 'waiting_list:dashboard' %}">Лист ожидания</a>
-        {% if user.is_authenticated %}
-          <form action="{% url 'logout' %}" method="post">
-            {% csrf_token %}
-            <button type="submit">Выйти</button>
-          </form>
-        {% endif %}
-      </nav>
-    </header>
-    {% if messages %}
-      <section class="flash-stack">
-        {% for message in messages %}
-          <div class="flash {{ message.tags }}">{{ message }}</div>
-        {% endfor %}
-      </section>
-    {% endif %}
-    <main class="page-shell">
-      {% block content %}{% endblock %}
-    </main>
+    </div>
+
     <script>
-      document.addEventListener("click", function (event) {
-        const panel = document.getElementById("detail-panel");
-        if (!panel || panel.classList.contains("is-hidden")) return;
-        if (panel.contains(event.target)) return;
-        if (event.target.closest("[hx-target='#detail-panel'], [hx-target=\"#detail-panel\"]")) return;
-        panel.outerHTML = '<section id="detail-panel" class="detail-panel is-hidden"><div class="detail-panel-placeholder detail-panel-empty">Выберите заявку, чтобы открыть быстрый просмотр.</div></section>';
+      function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('collapsed');
+        localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+      }
+
+      // Initialize sidebar state
+      if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.getElementById('sidebar').classList.add('collapsed');
+      }
+
+      function toggleFavorite(event, id, label, icon, url) {
+        event.preventDefault();
+        event.stopPropagation();
+        let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        const index = favorites.findIndex(f => f.id === id);
+        if (index > -1) {
+          favorites.splice(index, 1);
+        } else {
+          favorites.push({ id, label, icon, url });
+        }
+        localStorage.setItem('favorites', JSON.stringify(favorites));
+        renderFavorites();
+        updateStars();
+      }
+
+      function renderFavorites() {
+        const container = document.getElementById('header-favorites');
+        if (!container) return;
+        const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        container.innerHTML = favorites.map(f => `
+          <a href="${f.url}" class="favorite-chip" title="${f.label}">
+            <span class="chip-icon">${f.icon}</span>
+            <span class="chip-label">${f.label}</span>
+          </a>
+        `).join('');
+      }
+
+      function updateStars() {
+        const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        const favoriteIds = favorites.map(f => f.id);
+        document.querySelectorAll('.favorite-toggle').forEach(btn => {
+          const onclickAttr = btn.getAttribute('onclick');
+          const match = onclickAttr.match(/toggleFavorite\(event, '([^']+)'/);
+          if (match && favoriteIds.includes(match[1])) {
+            btn.innerText = '★';
+            btn.classList.add('active');
+          } else {
+            btn.innerText = '☆';
+            btn.classList.remove('active');
+          }
+        });
+      }
+
+      // Initialize favorites on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        renderFavorites();
+        updateStars();
       });
     </script>
     {% block extra_scripts %}{% endblock %}

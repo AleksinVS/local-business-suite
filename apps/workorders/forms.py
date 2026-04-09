@@ -101,4 +101,4 @@ class WorkOrderRatingForm(forms.ModelForm):
 class KanbanColumnTitleForm(forms.ModelForm):
     class Meta:
         model = KanbanColumnConfig
-        fields = ["title"]
+        fields = ["title", "wip_limit"]

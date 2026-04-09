@@ -1,104 +1,81 @@
+<button type="button" class="close-btn close-btn-global" onclick="closeWaitingListDrawer()">&times;</button>
+
 <div class="drawer-header">
-  <div>
-    <p class="eyebrow">Лист ожидания</p>
+  <div class="header-main-info">
     <h2>{{ entry.patient_name }}</h2>
   </div>
-  <button
-    type="button"
-    class="close-btn"
-    onclick="closeWaitingListDrawer()"
-    aria-label="Закрыть"
-  >&times;</button>
 </div>
 
 <div class="drawer-content">
-  {# Quick Status Actions #}
-  <div class="input-group full-width">
-    <label>Быстрая смена статуса</label>
-    <div class="action-stack">
-      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
-        {% csrf_token %}
-        <input type="hidden" name="status" value="waiting">
-        <button type="submit" class="btn btn-status-wait"
-          {% if entry.status == 'waiting' %}disabled{% endif %}>
-          В очереди
-        </button>
-      </form>
-      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
-        {% csrf_token %}
-        <input type="hidden" name="status" value="scheduled">
-        <button type="submit" class="btn btn-status-confirm"
-          {% if entry.status == 'scheduled' %}disabled{% endif %}>
-          Назначить
-        </button>
-      </form>
-      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
-        {% csrf_token %}
-        <input type="hidden" name="status" value="confirmed">
-        <button type="submit" class="btn btn-status-confirm"
-          {% if entry.status == 'confirmed' %}disabled{% endif %}>
-          Подтвердить
-        </button>
-      </form>
-      <form method="post" action="{% url 'waiting_list:transition' entry.pk %}" style="display:inline;">
-        {% csrf_token %}
-        <input type="hidden" name="status" value="cancelled">
-        <button type="submit" class="btn btn-status-cancel"
-          {% if entry.status == 'cancelled' %}disabled{% endif %}>
-          Отменить
-        </button>
-      </form>
+  <div class="status-stepper-container" style="margin-bottom: 2rem;">
+    <div class="status-stepper">
+      <div class="stepper-track">
+        {% for status_val, status_label in status_choices %}
+          {% if status_val == entry.status %}
+            <div class="step-item active" data-status="{{ status_val }}">
+              <span class="step-label">{{ status_label }}</span>
+            </div>
+          {% else %}
+            <form hx-post="{% url 'waiting_list:transition' entry.pk %}"
+                  hx-target="#entry-detail-panel-content"
+                  hx-swap="innerHTML"
+                  class="step-form">
+              {% csrf_token %}
+              <input type="hidden" name="status" value="{{ status_val }}">
+              <button type="submit" class="step-item available" data-status="{{ status_val }}">
+                <span class="step-label">{{ status_label }}</span>
+              </button>
+            </form>
+          {% endif %}
+        {% endfor %}
+      </div>
     </div>
   </div>
 
-  {# Entry Details #}
-  <div class="form-grid">
-    <div class="input-group full-width">
-      <label>ФИО пациента</label>
-      <p>{{ entry.patient_name }}</p>
+  <div class="detail-grid">
+    <div class="info-item">
+      <span class="info-label">ФИО пациента</span>
+      <span class="info-value">{{ entry.patient_name }}</span>
     </div>
-
-    <div class="input-group">
-      <label>Дата рождения</label>
-      <p>{{ entry.patient_dob }}</p>
+    <div class="info-item">
+      <span class="info-label">Дата рождения</span>
+      <span class="info-value">{{ entry.patient_dob }}</span>
     </div>
-
-    <div class="input-group">
-      <label>Телефон</label>
-      <p>{{ entry.patient_phone }}</p>
+    <div class="info-item">
+      <span class="info-label">Телефон</span>
+      <span class="info-value">{{ entry.patient_phone }}</span>
     </div>
-
-    <div class="input-group full-width">
-      <label>Услуга</label>
-      <p>{{ entry.get_service_id_display }}</p>
+    <div class="info-item">
+      <span class="info-label">Услуга</span>
+      <span class="info-value">{{ entry.get_service_id_display }}</span>
     </div>
-
-    <div class="input-group">
-      <label>Целевая дата</label>
-      <p>{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+    <div class="info-item">
+      <span class="info-label">Целевая дата</span>
+      <span class="info-value">{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</span>
     </div>
-
-    <div class="input-group">
-      <label>Крайняя дата</label>
-      <p>{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</p>
+    <div class="info-item">
+      <span class="info-label">Крайняя дата</span>
+      <span class="info-value">{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</span>
     </div>
-
-    <div class="input-group full-width">
-      <label>Приоритет</label>
-      <p>{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный{% endif %}</p>
+    <div class="info-item full-width">
+      <span class="info-label">Приоритет</span>
+      <span class="info-value">{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный{% endif %}</span>
     </div>
-
-    {% if entry.comment %}
-    <div class="input-group full-width">
-      <label>Комментарий</label>
-      <p>{{ entry.comment|linebreaks }}</p>
-    </div>
-    {% endif %}
   </div>
 
-  {# Audit Timeline #}
-  <div class="input-group full-width">
-    <label>История изменений</label>
+  {% if entry.comment %}
+  <div class="content-block">
+    <div class="block-header">
+      <span class="detail-label">Комментарий</span>
+    </div>
+    <div class="description-text">{{ entry.comment|linebreaks }}</div>
+  </div>
+  {% endif %}
+
+  <div class="content-block" style="margin-top: 2rem;">
+    <div class="block-header">
+      <span class="detail-label">История изменений</span>
+    </div>
     <div class="timeline" id="audit-timeline">
       {% if entry.audit_logs.all %}
         {% for log in entry.audit_logs.all reversed %}
@@ -120,6 +97,9 @@
 </div>
 
 <div class="drawer-footer">
-  <a href="{% url 'waiting_list:update' entry.pk %}" class="btn btn-outline">Редактировать</a>
+  <button class="btn btn-outline"
+          hx-get="{% url 'waiting_list:update' entry.pk %}"
+          hx-target="#entry-detail-panel-content"
+          hx-swap="innerHTML">Редактировать</button>
   <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Закрыть</button>
 </div>

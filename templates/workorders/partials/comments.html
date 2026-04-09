@@ -1,26 +1,26 @@
-<section class="panel" id="comments-panel">
-  <h2>Комментарии</h2>
-  <form
-    method="post"
-    action="{% url 'workorders:comment' workorder.pk %}"
-    class="stack"
-    hx-post="{% url 'workorders:comment' workorder.pk %}"
-    hx-target="#comments-panel"
-    hx-swap="outerHTML"
-  >
-    {% csrf_token %}
-    {{ comment_form.as_p }}
-    <button type="submit" class="btn btn-primary">Добавить комментарий</button>
-  </form>
-  <div class="stack">
+<div class="chat-container">
+  <div class="chat-messages" id="comment-list">
     {% for comment in workorder.comments.all %}
-      <article class="comment">
-        <strong>{{ comment.author.get_full_name|default:comment.author.username }}</strong>
-        <small>{{ comment.created_at }}</small>
-        <p>{{ comment.body }}</p>
-      </article>
+      <div class="chat-message {% if comment.author == user %}mine{% endif %}">
+        <div class="message-meta">
+          <span class="message-author">{{ comment.author.get_full_name|default:comment.author.username }}</span>
+          <span class="message-time">{{ comment.created_at|date:"H:i" }}</span>
+        </div>
+        <div class="message-bubble">{{ comment.body }}</div>
+      </div>
     {% empty %}
-      <p>Комментариев пока нет.</p>
+      <div class="chat-empty">Нет сообщений. Начните обсуждение!</div>
     {% endfor %}
   </div>
-</section>
+
+  <div class="chat-input-area">
+    <form hx-post="{% url 'workorders:comment' workorder.pk %}"
+          hx-target="#detail-panel-content"
+          hx-swap="innerHTML"
+          class="chat-form">
+      {% csrf_token %}
+      <textarea name="body" placeholder="Написать сообщение..." required></textarea>
+      <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+    </form>
+  </div>
+</div>

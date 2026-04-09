@@ -1,18 +1,17 @@
-<aside class="detail-panel" id="detail-panel">
-  <div class="detail-panel-head">
-    <div>
-      <p class="eyebrow">Быстрый просмотр</p>
-      <h2>{{ workorder.number }}</h2>
+<div class="drawer-layout">
+  <button type="button" class="close-btn close-btn-global" onclick="closeKanbanDrawer()">&times;</button>
+  <div class="drawer-main">
+    <div class="drawer-header-left">
+      <div class="header-main-info">
+        <h2><span class="text-muted">{{ workorder.number }}.</span> {{ workorder.title }}</h2>
+      </div>
+      {% include "workorders/partials/status_section.html" %}
     </div>
-    <button
-      type="button"
-      class="ghost-button"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#detail-panel"
-      hx-swap="outerHTML"
-    >
-      Закрыть
-    </button>
+    <div class="drawer-scroll-content">
+      {% include "workorders/partials/detail_sections.html" %}
+    </div>
   </div>
-  {% include "workorders/partials/detail_sections.html" %}
-</aside>
+  <aside class="drawer-chat">
+    {% include "workorders/partials/comments.html" %}
+  </aside>
+</div>

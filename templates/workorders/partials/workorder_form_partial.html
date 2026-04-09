@@ -1,0 +1,52 @@
+<div class="drawer-header">
+  <div>
+    <h3>Новая заявка</h3>
+    <h2>Заполните данные</h2>
+  </div>
+  <button type="button" class="close-btn" onclick="closeKanbanDrawer()">&times;</button>
+</div>
+<div class="drawer-content">
+  <form id="workorder-create-form"
+    hx-post="{% url 'workorders:create' %}"
+    hx-target="#detail-panel-content"
+    hx-swap="innerHTML"
+  >
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="input-group full-width">
+        <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+        {{ form.title }}
+        {{ form.title.errors }}
+      </div>
+      <div class="input-group full-width">
+        <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.department.id_for_label }}">{{ form.department.label }}</label>
+        {{ form.department }}
+        {{ form.department.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.priority.id_for_label }}">{{ form.priority.label }}</label>
+        {{ form.priority }}
+        {{ form.priority.errors }}
+      </div>
+      <div class="input-group full-width">
+        <label for="{{ form.device.id_for_label }}">{{ form.device.label }}</label>
+        {{ form.device }}
+        {{ form.device.errors }}
+      </div>
+      <div class="input-group full-width">
+        <label for="{{ form.assignee.id_for_label }}">{{ form.assignee.label }}</label>
+        {{ form.assignee }}
+        {{ form.assignee.errors }}
+      </div>
+    </div>
+  </form>
+</div>
+<div class="drawer-footer">
+  <button type="button" class="btn btn-ghost" onclick="closeKanbanDrawer()">Отмена</button>
+  <button type="submit" form="workorder-create-form" class="btn btn-primary">Создать</button>
+</div>

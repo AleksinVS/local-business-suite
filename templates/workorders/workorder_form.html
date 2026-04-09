@@ -7,6 +7,7 @@
     {% csrf_token %}
     {{ form.as_p }}
     <button type="submit" class="btn btn-primary">{% if object %}Сохранить{% else %}Создать{% endif %}</button>
+    <a href="{% if object %}{% url 'workorders:detail' object.pk %}{% else %}{% url 'workorders:board' %}{% endif %}" class="btn btn-outline">Отмена</a>
   </form>
 </section>
 {% endblock %}

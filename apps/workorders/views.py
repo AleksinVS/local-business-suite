@@ -3,7 +3,7 @@ from collections import OrderedDict
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -69,6 +69,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_queryset(self):
         queryset = visible_workorders_queryset(self.request.user).order_by("-updated_at")
+        queryset = queryset.annotate(
+            comment_count=Count("comments", distinct=True),
+            attachment_count=Count("attachments", distinct=True),
+        )
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("status", "").strip()
@@ -163,7 +167,14 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     form_class = WorkOrderForm
     template_name = "workorders/workorder_form.html"
 
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["workorders/partials/workorder_form_partial.html"]
+        return [self.template_name]
+
     def get_success_url(self):
+        if self.request.htmx:
+            return reverse("workorders:board")
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
     def dispatch(self, request, *args, **kwargs):
@@ -175,7 +186,11 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         form.instance.author = self.request.user
         if not can_manage_assignments(self.request.user):
             form.instance.assignee = None
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if self.request.htmx:
+            # Full page redirect to board to show new card
+            response["HX-Redirect"] = self.get_success_url()
+        return response
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
@@ -190,12 +205,29 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = WorkOrderUpdateForm
     template_name = "workorders/workorder_form.html"
 
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["workorders/partials/workorder_edit_form_partial.html"]
+        return [self.template_name]
+
     def test_func(self):
         return can_edit(self.request.user, self.get_object())
 
     def form_valid(self, form):
         self.object = form.save()
         messages.success(self.request, "Заявка обновлена.")
+        if self.request.htmx:
+            # Re-render the detail panel for this workorder
+            detail_view = WorkOrderDetailView()
+            detail_view.request = self.request
+            detail_view.args = self.args
+            detail_view.kwargs = self.kwargs
+            detail_view.object = self.object
+            return render(
+                self.request,
+                "workorders/partials/detail_panel.html",
+                detail_view.get_context_data(object=self.object),
+            )
         return super().form_valid(form)
 
     def get_form(self, form_class=None):
@@ -204,6 +236,11 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
             form.fields["assignee"].disabled = True
             form.fields["assignee"].required = False
         return form
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["workorder"] = self.get_object()
+        return context
 
     def get_success_url(self):
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
@@ -234,6 +271,8 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
             for status, label in WorkOrderStatus.choices
             if can_transition(self.request.user, self.object, status)
         ]
+        context["transition_choices_vals"] = [s for s, l in context["transition_choices"]]
+        context["status_choices"] = WorkOrderStatus.choices
         context["can_edit"] = can_edit(self.request.user, self.object)
         context["can_confirm_closure"] = can_confirm_closure(self.request.user, self.object)
         context["can_rate"] = can_rate(self.request.user, self.object)
@@ -352,6 +391,7 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
 class WorkOrderBoardMoveView(LoginRequiredMixin, View):
     def post(self, request, pk):
         workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
+        old_status = workorder.status
         column_code = request.POST.get("column", "").strip()
         column = get_object_or_404(KanbanColumnConfig, code=column_code)
         target_status = drop_status_for_column(request.user, workorder, column)
@@ -361,15 +401,40 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         elif workorder.status not in column.statuses:
             return HttpResponseForbidden("Перемещение в колонку запрещено")
 
+        # Determine which columns to update
         board_view = WorkOrderBoardView()
         board_view.request = request
         board_view.args = ()
         board_view.kwargs = {}
-        return render(
-            request,
-            "workorders/partials/board_columns.html",
-            board_view.get_context_data(),
-        )
+        context = board_view.get_context_data()
+        
+        # Find the old column and the new column configs
+        updated_columns = []
+        # We need to find the column key for the old status
+        status_to_column = {}
+        column_configs = configured_columns()
+        for cfg in column_configs:
+            for s in cfg.statuses:
+                status_to_column[s] = cfg.code
+        
+        old_column_key = status_to_column.get(old_status)
+        new_column_key = column.code
+
+        for col in context["board_columns"]:
+            if col["key"] == old_column_key or col["key"] == new_column_key:
+                updated_columns.append(col)
+
+        # Render only the affected columns with is_oob=True
+        response_html = ""
+        for col in updated_columns:
+            response_html += render(
+                request,
+                "workorders/partials/kanban_column.html",
+                {**context, "column": col, "is_oob": True},
+            ).content.decode("utf-8")
+        
+        from django.http import HttpResponse
+        return HttpResponse(response_html)
 
 
 class WorkOrderConfirmClosureView(LoginRequiredMixin, View):

@@ -27,15 +27,7 @@
         {% endif %}
       </td>
       <td>
-        {% if entry.status == 'waiting' %}
-          <span class="badge badge-waiting">В очереди</span>
-        {% elif entry.status == 'scheduled' %}
-          <span class="badge badge-scheduled">Назначена</span>
-        {% elif entry.status == 'confirmed' %}
-          <span class="badge badge-confirmed">Подтверждена</span>
-        {% elif entry.status == 'cancelled' %}
-          <span class="badge badge-cancelled">Отменена</span>
-        {% endif %}
+        <span class="badge" data-status="{{ entry.status }}">{{ entry.get_status_display }}</span>
       </td>
     </tr>
     {% endfor %}

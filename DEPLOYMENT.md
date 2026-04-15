@@ -140,6 +140,11 @@ LibreChat запускается отдельным compose-проектом, н
 
 Если позже понадобится HTTPS через домен, Caddy можно перевести с `:80` на доменное имя и включить автоматические сертификаты.
 
+## IIS и доменная авторизация
+
+Для Windows/IIS доступны четыре режима авторизации через `DJANGO_AUTH_MODE`: `local`, `ldap`, `remote_user`, `hybrid`.
+Подробная настройка IIS Windows Authentication, fallback-формы и LDAP/LDAPS транспорта описана в [IIS_SSO.md](/home/abc/.openclaw/workspace/projects/local-business-suite/IIS_SSO.md).
+
 ## Проверка после деплоя
 
 Проверить вручную:

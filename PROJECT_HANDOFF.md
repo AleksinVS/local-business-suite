@@ -491,6 +491,8 @@ docker compose up --build
 ## 14. Что важно не сломать
 
 - role-based access должен оставаться серверным, а не только шаблонным;
+- auth-режимы задаются через `DJANGO_AUTH_MODE`: `local`, `ldap`, `remote_user`, `hybrid`; основной быстрый режим для доменной сети — `hybrid`;
+- plain LDAP разрешается только при явном `AD_LDAP_ALLOW_INSECURE=true`; для нормального контура переводить на `ldaps` или `starttls` с проверкой сертификата;
 - `resolved` и `closed` нельзя снова схлопывать в одно состояние;
 - канбан-колонки должны оставаться конфигурируемыми через БД;
 - drawer быстрого просмотра должен быть скрыт по умолчанию;
@@ -506,6 +508,7 @@ docker compose up --build
 - inline create заявки на доске;
 - richer analytics/SLA метрики;
 - LDAP этап;
+- IIS SSO и LDAP/LDAPS настройка описаны в `IIS_SSO.md`;
 - более явный settings-driven env management;
 - улучшение admin для `KanbanColumnConfig`.
 

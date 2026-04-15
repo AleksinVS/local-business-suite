@@ -26,6 +26,18 @@
   </div>
 
   {% if can_upload_attachment %}
+  {% if attachment_form.errors %}
+    <div class="form-errors">
+      {% for field in attachment_form %}
+        {% for error in field.errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      {% endfor %}
+      {% for error in attachment_form.non_field_errors %}
+        <div>{{ error }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
   <form
     method="post"
     enctype="multipart/form-data"

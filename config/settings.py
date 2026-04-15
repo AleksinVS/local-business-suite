@@ -114,10 +114,28 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-AUTHENTICATION_BACKENDS = [
-    "apps.accounts.ldap_backend.LDAPBackend",
-    "django.contrib.auth.backends.ModelBackend",
-]
+DJANGO_AUTH_MODE = os.environ.get("DJANGO_AUTH_MODE", "hybrid").strip().lower()
+if DJANGO_AUTH_MODE not in {"local", "ldap", "remote_user", "hybrid"}:
+    raise ImproperlyConfigured("DJANGO_AUTH_MODE must be one of: local, ldap, remote_user, hybrid")
+
+if DJANGO_AUTH_MODE == "local":
+    AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+elif DJANGO_AUTH_MODE == "ldap":
+    AUTHENTICATION_BACKENDS = ["apps.accounts.ldap_backend.LDAPBackend"]
+elif DJANGO_AUTH_MODE == "remote_user":
+    AUTHENTICATION_BACKENDS = ["apps.accounts.ldap_backend.RemoteUserLDAPBackend"]
+else:
+    AUTHENTICATION_BACKENDS = [
+        "apps.accounts.ldap_backend.RemoteUserLDAPBackend",
+        "apps.accounts.ldap_backend.LDAPBackend",
+        "django.contrib.auth.backends.ModelBackend",
+    ]
+
+if DJANGO_AUTH_MODE in {"remote_user", "hybrid"}:
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
+        "django.contrib.auth.middleware.PersistentRemoteUserMiddleware",
+    )
 
 LANGUAGE_CODE = "ru-ru"
 TIME_ZONE = "Europe/Moscow"

@@ -102,3 +102,13 @@ class KanbanColumnTitleForm(forms.ModelForm):
     class Meta:
         model = KanbanColumnConfig
         fields = ["title", "wip_limit"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["wip_limit"].required = False
+
+    def clean_wip_limit(self):
+        value = self.cleaned_data.get("wip_limit")
+        if value in (None, "") and self.instance and self.instance.pk:
+            return self.instance.wip_limit
+        return value or 0

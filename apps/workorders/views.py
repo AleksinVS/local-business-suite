@@ -336,6 +336,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
                     {
                         "workorder": workorder,
                         "attachment_form": WorkOrderAttachmentForm(),
+                        "can_upload_attachment": True,
                     },
                 )
             messages.success(request, "Файл добавлен.")
@@ -344,7 +345,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
             return render(
                 request,
                 "workorders/partials/attachments.html",
-                {"workorder": workorder, "attachment_form": form},
+                {"workorder": workorder, "attachment_form": form, "can_upload_attachment": True},
                 status=400,
             )
         messages.error(request, "Не удалось загрузить файл.")

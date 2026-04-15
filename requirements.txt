@@ -4,3 +4,4 @@ whitenoise>=6.12,<7
 gunicorn>=25,<26
 Pillow>=12,<13
 httpx>=0.28,<0.29
+ldap3>=2.9,<3

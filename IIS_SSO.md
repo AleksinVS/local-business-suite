@@ -189,6 +189,60 @@ http://local-business-suite/
 
 Для fallback-формы через `/accounts/login/` настройте IIS так, чтобы этот путь мог открываться anonymous. Иначе IIS перехватит запрос раньше Django.
 
+## Безопасное хранение секретов
+
+Хранить пароли в `web.config` небезопасно. Рекомендуется использовать Environment Variables.
+
+### Environment Variables (Рекомендуемый вариант)
+
+Установите секреты как системные переменные окружения:
+
+```powershell
+# Установить учетную запись сервиса AD
+[Environment]::SetEnvironmentVariable('AD_SERVICE_ACCOUNT', 'svc_portal_read@mscher.local', 'Machine')
+
+# Установить пароль (выполните вручную с реальным паролем)
+[Environment]::SetEnvironmentVariable('AD_SERVICE_PASSWORD', 'ВАШ_РЕАЛЬНЫЙ_ПАРОЛЬ', 'Machine')
+
+# Проверить установку
+[Environment]::GetEnvironmentVariable('AD_SERVICE_ACCOUNT', 'Machine')
+[Environment]::GetEnvironmentVariable('AD_SERVICE_PASSWORD', 'Machine')
+```
+
+После этого очистите `web.config` от паролей:
+
+```xml
+<add key="AD_SERVICE_ACCOUNT" value="" />
+<add key="AD_SERVICE_PASSWORD" value="" />
+<!-- Пустые значения будут браться из environment variables -->
+```
+
+Перезапустите IIS:
+
+```powershell
+iisreset
+```
+
+### Альтернативы
+
+**Windows Registry:**
+- Дополнительный уровень защиты
+- Контроль доступа через ACL
+
+**Windows Credential Manager:**
+- Шифрование DPAPI
+- Максимальная безопасность
+
+Подробнее: см. `SECURE_SECRETS.md`
+
+### Безопасные практики
+
+✅ Никогда не коммитьте секреты в git (web.config уже в .gitignore)
+✅ Используйте разные пароли для разных окружений
+✅ Регулярно меняйте пароли сервисных учетных записей
+✅ Ограничивайте доступ к файлам с секретами
+✅ Используйте минимальные права для сервисных учетных записей
+
 ## Установка на Windows Server
 
 ```powershell

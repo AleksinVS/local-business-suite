@@ -1,0 +1,3 @@
+[submodule "VOB3"]
+	path = VOB3
+	url = https://github.com/AleksinVS/vob3-deployment.git

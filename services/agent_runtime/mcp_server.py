@@ -6,7 +6,7 @@ from .gateway_client import DjangoGatewayClient
 
 def build_mcp_server() -> FastMCP:
     mcp = FastMCP(
-        "Local Business Suite MCP",
+        "Корпоративный портал ВОБ №3 MCP",
         stateless_http=True,
         json_response=True,
         streamable_http_path="/",
@@ -20,7 +20,14 @@ def build_mcp_server() -> FastMCP:
         )
 
     @mcp.tool()
-    def workorders_list(user_id: int, username: str, roles: list[str], session_id: str, status: str = "", limit: int = 20):
+    def workorders_list(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        status: str = "",
+        limit: int = 20,
+    ):
         """List work orders visible to the current user."""
         result = gateway_client().execute_tool(
             tool_code="workorders.list",
@@ -140,7 +147,9 @@ def build_mcp_server() -> FastMCP:
         return result
 
     @mcp.tool()
-    def departments_list(user_id: int, username: str, roles: list[str], session_id: str, query: str = ""):
+    def departments_list(
+        user_id: int, username: str, roles: list[str], session_id: str, query: str = ""
+    ):
         """List departments for lookup and selection."""
         result = gateway_client().execute_tool(
             tool_code="departments.list",

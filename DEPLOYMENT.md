@@ -1,4 +1,4 @@
-# Развертывание Local Business Suite на VPS
+# Развертывание Корпоративный портал ВОБ №3 на VPS
 
 ## Назначение
 
@@ -69,7 +69,7 @@ OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1
 AI_AGENT_MODEL_NAME=gpt-4.1-mini
 LIBRECHAT_PUBLIC_URL=http://188.120.246.243/librechat
-LIBRECHAT_APP_TITLE=Local Business Suite AI Chat
+LIBRECHAT_APP_TITLE=Корпоративный портал ВОБ №3 AI Chat
 LIBRECHAT_JWT_SECRET=replace-with-64-hex-chars
 LIBRECHAT_JWT_REFRESH_SECRET=replace-with-64-hex-chars
 LIBRECHAT_CREDS_KEY=replace-with-64-hex-chars

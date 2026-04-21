@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="Local Business Suite Agent Runtime", lifespan=lifespan)
+app = FastAPI(title="Корпоративный портал ВОБ №3 Agent Runtime", lifespan=lifespan)
 app.mount("/mcp", mcp_server.streamable_http_app())
 
 

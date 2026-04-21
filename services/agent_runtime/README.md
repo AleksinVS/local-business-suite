@@ -1,6 +1,6 @@
 # Agent Runtime
 
-External AI runtime for the Local Business Suite chat/agent block.
+External AI runtime for the Корпоративный портал ВОБ №3 chat/agent block.
 
 Responsibilities:
 

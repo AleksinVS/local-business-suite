@@ -9,7 +9,7 @@ random_hex() {
 
 cat > "$TARGET" <<EOF
 ALLOW_REGISTRATION=true
-APP_TITLE=Local Business Suite AI Chat
+APP_TITLE=Корпоративный портал ВОБ №3 AI Chat
 ENDPOINTS=openAI
 OPENAI_MODELS=gpt-4.1-mini,gpt-4.1,gpt-4o-mini
 LIBRECHAT_PUBLIC_URL=http://localhost:3080

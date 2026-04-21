@@ -64,7 +64,7 @@ LIBRECHAT_PUBLIC_URL=http://188.120.246.243/librechat
 - `docker-compose.librechat.yml` only layers the external chat client and its dependencies.
 - `docker-compose.librechat.local.yml` adds the local-only port mappings for direct access.
 - If upstream LibreChat image tags change, override `LIBRECHAT_IMAGE` in your shell or `.env`.
-- LibreChat will see the Local Business Suite MCP server at `agent-runtime:8090/mcp`.
+- LibreChat will see the Корпоративный портал ВОБ №3 MCP server at `agent-runtime:8090/mcp`.
 
 ### Z.AI Example
 

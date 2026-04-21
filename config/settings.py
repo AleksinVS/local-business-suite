@@ -22,10 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
-APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Local Business Suite")
+APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Корпоративный портал ВОБ №3")
 ALLOWED_HOSTS = [
     host
-    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,127.0.0.1:8888"
+    ).split(",")
     if host
 ]
 ALLOWED_HOSTS += [
@@ -33,6 +35,8 @@ ALLOWED_HOSTS += [
     for host in os.environ.get("DJANGO_INTERNAL_ALLOWED_HOSTS", "web").split(",")
     if host and host not in ALLOWED_HOSTS
 ]
+if DEBUG:
+    ALLOWED_HOSTS.append("*")
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
@@ -84,6 +88,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# FastCGI/IIS compatibility
+FORCE_SCRIPT_NAME = ""
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -116,7 +126,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 DJANGO_AUTH_MODE = os.environ.get("DJANGO_AUTH_MODE", "hybrid").strip().lower()
 if DJANGO_AUTH_MODE not in {"local", "ldap", "remote_user", "hybrid"}:
-    raise ImproperlyConfigured("DJANGO_AUTH_MODE must be one of: local, ldap, remote_user, hybrid")
+    raise ImproperlyConfigured(
+        "DJANGO_AUTH_MODE must be one of: local, ldap, remote_user, hybrid"
+    )
 
 if DJANGO_AUTH_MODE == "local":
     AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
@@ -165,35 +177,65 @@ WHITENOISE_USE_FINDERS = DEBUG
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOCAL_BUSINESS_ROLE_RULES_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_ROLE_RULES_FILE", BASE_DIR / "config" / "role_rules.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_ROLE_RULES_FILE", BASE_DIR / "config" / "role_rules.json"
+    )
 )
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_WORKFLOW_RULES_FILE", BASE_DIR / "config" / "workflow_rules.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_WORKFLOW_RULES_FILE",
+        BASE_DIR / "config" / "workflow_rules.json",
+    )
 )
 LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", BASE_DIR / "config" / "integrations" / "registry.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE",
+        BASE_DIR / "config" / "integrations" / "registry.json",
+    )
 )
 LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", BASE_DIR / "analytics_store" / "datasets.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE",
+        BASE_DIR / "analytics_store" / "datasets.json",
+    )
 )
 LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE", BASE_DIR / "ai" / "task_briefs" / "template.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE",
+        BASE_DIR / "ai" / "task_briefs" / "template.json",
+    )
 )
 LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE", BASE_DIR / "ai" / "change_plans" / "template.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE",
+        BASE_DIR / "ai" / "change_plans" / "template.json",
+    )
 )
 LOCAL_BUSINESS_AI_REGISTRY_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_AI_REGISTRY_FILE", BASE_DIR / "config" / "ai" / "registry.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_AI_REGISTRY_FILE", BASE_DIR / "config" / "ai" / "registry.json"
+    )
 )
 LOCAL_BUSINESS_AI_TOOLS_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_AI_TOOLS_FILE", BASE_DIR / "config" / "ai" / "tools.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_AI_TOOLS_FILE", BASE_DIR / "config" / "ai" / "tools.json"
+    )
 )
 LOCAL_BUSINESS_AI_TASK_TYPES_FILE = Path(
-    os.environ.get("LOCAL_BUSINESS_AI_TASK_TYPES_FILE", BASE_DIR / "config" / "ai" / "task_types.json")
+    os.environ.get(
+        "LOCAL_BUSINESS_AI_TASK_TYPES_FILE",
+        BASE_DIR / "config" / "ai" / "task_types.json",
+    )
 )
-LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get("LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token")
-LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_URL", "http://127.0.0.1:8090")
-LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90"))
+LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
+    "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
+)
+LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
+    "LOCAL_BUSINESS_AGENT_RUNTIME_URL", "http://127.0.0.1:8090"
+)
+LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
+    os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
+)
 
 try:
     LOCAL_BUSINESS_WORKFLOW_RULES = load_json_file(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
@@ -205,16 +247,24 @@ try:
         workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
     )
 
-    LOCAL_BUSINESS_INTEGRATION_REGISTRY = load_json_file(LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE)
+    LOCAL_BUSINESS_INTEGRATION_REGISTRY = load_json_file(
+        LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE
+    )
     validate_integration_registry_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY)
 
-    LOCAL_BUSINESS_ANALYTICS_DATASETS = load_json_file(LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE)
+    LOCAL_BUSINESS_ANALYTICS_DATASETS = load_json_file(
+        LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE
+    )
     validate_dataset_registry_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS)
 
-    LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = load_json_file(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE)
+    LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = load_json_file(
+        LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE
+    )
     validate_task_brief_payload(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE)
 
-    LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = load_json_file(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE)
+    LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = load_json_file(
+        LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE
+    )
     validate_change_plan_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE)
 
     LOCAL_BUSINESS_AI_REGISTRY = load_json_file(LOCAL_BUSINESS_AI_REGISTRY_FILE)
@@ -226,4 +276,6 @@ try:
     LOCAL_BUSINESS_AI_TASK_TYPES = load_json_file(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
     validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
 except (OSError, json.JSONDecodeError, ValidationError) as exc:
-    raise ImproperlyConfigured(f"Invalid Local Business Suite configuration: {exc}") from exc
+    raise ImproperlyConfigured(
+        f"Invalid Корпоративный портал ВОБ №3 configuration: {exc}"
+    ) from exc

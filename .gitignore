@@ -10,3 +10,9 @@ staticfiles/
 *.log
 .env.production
 caddy_data/
+web.config
+wfastcgi.ini
+*.cer
+*.crt
+*.key
+*.pem

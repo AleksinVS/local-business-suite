@@ -60,7 +60,7 @@ AD_GROUP_ROLE_MAP={"Domain Admins":"manager","IT Support":"technician","Employee
 
 Пример:
 
-- Site name: `Local Business Suite`
+- Site name: `Корпоративный портал ВОБ №3`
 - Physical path: `C:\inetpub\local-business-suite`
 - Binding: `https`, host name `suite.mscher.local`, port `443`
 - Application Pool: отдельный pool, например `LocalBusinessSuite`
@@ -77,7 +77,7 @@ https://suite.mscher.local/
 https://suite.mscher.local/local-business-suite/
 ```
 
-Если на этом IIS уже есть 1С-сервис с SSO, например `http://stc-web/WL/`, самый безопасный вариант - оставить его как есть и дать Local Business Suite отдельное имя хоста на том же сервере:
+Если на этом IIS уже есть 1С-сервис с SSO, например `http://stc-web/WL/`, самый безопасный вариант - оставить его как есть и дать Корпоративный портал ВОБ №3 отдельное имя хоста на том же сервере:
 
 ```text
 http://stc-lbs/
@@ -98,7 +98,7 @@ http://local-business-suite/
 
 Для временной проверки можно прописать имя в `hosts` на одной машине, но для доменного SSO лучше использовать нормальную DNS-запись. Браузер должен открывать приложение по тому же имени, для которого настроены IIS binding и Kerberos/SPN.
 
-Если принципиально нужно разместить Local Business Suite в корне `http://stc-web/`, оставьте `/WL/` отдельным IIS application с собственным application pool и проверьте, что корневой `web.config` Django не перехватывает `/WL/`. В этом варианте особенно важно изолировать handler mappings и authentication rules для `/WL/`.
+Если принципиально нужно разместить Корпоративный портал ВОБ №3 в корне `http://stc-web/`, оставьте `/WL/` отдельным IIS application с собственным application pool и проверьте, что корневой `web.config` Django не перехватывает `/WL/`. В этом варианте особенно важно изолировать handler mappings и authentication rules для `/WL/`.
 
 При отдельном host header для Kerberos SSO может понадобиться SPN для нового имени, например `HTTP/stc-lbs`, на учетной записи application pool или компьютера IIS. Если используется прежнее имя `stc-web`, существующий SPN, скорее всего, уже настроен для 1С.
 

@@ -24,7 +24,7 @@ SSH_OPTS=(
   -o ConnectTimeout=8
 )
 
-echo -e "${YELLOW}=== Deploying Local Business Suite ===${NC}"
+echo -e "${YELLOW}=== Deploying Корпоративный портал ВОБ №3 ===${NC}"
 echo "VPS: ${VPS_USER}@${VPS_HOST}:${VPS_PORT}"
 echo "Project dir: ${PROJECT_DIR}"
 
@@ -96,7 +96,7 @@ target.write_text(
         [
             f"ALLOW_REGISTRATION={librechat.get('ALLOW_REGISTRATION', 'true')}",
             f"ALLOW_SOCIAL_LOGIN={librechat.get('ALLOW_SOCIAL_LOGIN', 'false')}",
-            f"APP_TITLE={librechat.get('APP_TITLE', 'Local Business Suite AI Chat')}",
+            f"APP_TITLE={librechat.get('APP_TITLE', 'Корпоративный портал ВОБ №3 AI Chat')}",
             f"ENDPOINTS={librechat.get('ENDPOINTS', 'openAI')}",
             f"OPENAI_MODELS={librechat.get('OPENAI_MODELS', prod.get('AI_AGENT_MODEL_NAME', 'gpt-4.1-mini'))}",
             f"LIBRECHAT_PUBLIC_URL={prod.get('LIBRECHAT_PUBLIC_URL', os.environ['LIBRECHAT_PUBLIC_URL_VALUE'])}",

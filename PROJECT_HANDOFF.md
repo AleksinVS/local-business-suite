@@ -25,7 +25,23 @@ Backend:
 - Django 5.2
 - SQLite
 - WhiteNoise
-- Gunicorn
+- Gunicorn (Linux) / wfastcgi (Windows IIS)
+
+## 1.1 Поддерживаемые платформы развертывания
+
+Проект поддерживает две основные платформы:
+
+### Linux/VPS (Docker Compose)
+- Docker + Docker Compose
+- Gunicorn + Caddy
+- Рекомендуется для production
+
+### Windows Server (IIS)
+- IIS 10.0+ с FastCGI
+- wfastcgi 3.0.0
+- Python 3.11.9 (важно: 3.13+ несовместим с wfastcgi)
+- Windows Authentication SSO + LDAP fallback
+- Требуется специальный middleware для исправления PATH_INFO (см. `IIS_SSO.md`)
 
 ## 2. Текущее состояние проекта
 

@@ -1,8 +1,12 @@
-# Развертывание Корпоративный портал ВОБ №3 на VPS
+# Развертывание Корпоративный портал ВОБ №3
 
 ## Назначение
 
-Production-развертывание строится на трех контейнерах:
+Production-развертывание поддерживает две конфигурации:
+
+### 1. Docker (рекомендуется для Linux/VPS)
+
+Строится на трех контейнерах:
 - `web` — Django + Gunicorn
 - `agent-runtime` — LangGraph runtime и MCP bridge
 - `caddy` — reverse proxy
@@ -17,6 +21,21 @@ LibreChat разворачивается отдельным compose-проект
 Статические файлы не монтируются в отдельный volume. Они собираются внутри image во время старта `web`.
 
 `agent-runtime` не публикуется наружу отдельным портом. Он доступен только внутри Docker-сети и используется Django AI chat surface.
+
+### 2. IIS (для Windows Server)
+
+Развертывание на IIS через FastCGI (wfastcgi):
+
+- **Веб-сервер**: IIS 10.0+
+- **Python**: 3.11.9 (важно: 3.13+ несовместим с wfastcgi 3.0.0)
+- **FastCGI**: wfastcgi 3.0.0
+- **Аутентификация**: Windows Authentication (SSO) с fallback на LDAP
+
+**Важные особенности IIS развертывания**:
+- Используйте отдельный IIS Site для приложения, а не application внутри другого сайта
+- Требуется middleware для исправления проблемы с PATH_INFO (см. `IIS_SSO.md`)
+- Секреты хранятся в `.env` файле, не в `web.config`
+- Статические файлы обслуживаются через Whitenoise middleware
 
 ## Что должно быть на VPS
 

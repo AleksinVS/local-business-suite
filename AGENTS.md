@@ -56,6 +56,16 @@ When touching AI/runtime code, also run:
 ./.venv/bin/python -m py_compile services/agent_runtime/*.py apps/ai/*.py apps/core/*.py
 ```
 
+## IIS Deployment Specifics
+
+When working with IIS deployment (Windows Server), be aware of:
+
+1. **Python Version**: Must use Python 3.11.9 (3.13+ is incompatible with wfastcgi 3.0.0)
+2. **PATH_INFO Fix**: Project includes `apps/core/middleware.PathInfoDebugMiddleware` to fix IIS FastCGI PATH_INFO issues
+3. **Secret Storage**: Use `.env` file, not `web.config` (see `SECURE_SECRETS.md`)
+4. **Authentication**: Windows Authentication SSO with LDAP fallback (see `IIS_SSO.md`)
+5. **Debug Logging**: In DEBUG mode, middleware logs to `C:\inetpub\portal\debug_path.log`
+
 ## AI Contract Rules
 
 - Edit tool definitions in `apps/ai/tool_definitions.py`, then sync generated registry:

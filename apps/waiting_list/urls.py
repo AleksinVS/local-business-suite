@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import re_path
 
 from .views import (
     WaitingListDashboardView,
@@ -11,9 +11,15 @@ from .views import (
 app_name = "waiting_list"
 
 urlpatterns = [
-    path("", WaitingListDashboardView.as_view(), name="dashboard"),
-    path("new/", WaitingListEntryCreateView.as_view(), name="create"),
-    path("<int:pk>/", WaitingListEntryDetailView.as_view(), name="detail"),
-    path("<int:pk>/edit/", WaitingListEntryUpdateView.as_view(), name="update"),
-    path("<int:pk>/transition/", WaitingListTransitionView.as_view(), name="transition"),
+    re_path(r"^/?$", WaitingListDashboardView.as_view(), name="dashboard"),
+    re_path(r"^new/?$", WaitingListEntryCreateView.as_view(), name="create"),
+    re_path(r"^(?P<pk>\d+)/?$", WaitingListEntryDetailView.as_view(), name="detail"),
+    re_path(
+        r"^(?P<pk>\d+)/edit/?$", WaitingListEntryUpdateView.as_view(), name="update"
+    ),
+    re_path(
+        r"^(?P<pk>\d+)/transition/?$",
+        WaitingListTransitionView.as_view(),
+        name="transition",
+    ),
 ]

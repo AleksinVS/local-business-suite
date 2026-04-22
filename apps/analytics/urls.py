@@ -1,9 +1,9 @@
-from django.urls import path
+from django.urls import re_path
 
 from .views import AnalyticsDashboardView
 
 app_name = "analytics"
 
 urlpatterns = [
-    path("", AnalyticsDashboardView.as_view(), name="dashboard"),
+    re_path(r"^/?$", AnalyticsDashboardView.as_view(), name="dashboard"),
 ]

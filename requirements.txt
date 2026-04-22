@@ -5,3 +5,4 @@ gunicorn>=25,<26
 Pillow>=12,<13
 httpx>=0.28,<0.29
 ldap3>=2.9,<3
+python-dotenv>=1.0.0

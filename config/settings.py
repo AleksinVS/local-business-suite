@@ -66,6 +66,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "apps.core.middleware.PathInfoDebugMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -77,6 +78,9 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 
 APPEND_SLASH = True
+
+# IIS/FastCGI compatibility
+FORCE_SCRIPT_NAME = ""
 
 TEMPLATES = [
     {

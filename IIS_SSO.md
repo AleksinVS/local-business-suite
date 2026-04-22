@@ -20,6 +20,67 @@ AD_LDAP_VERIFY_CERT=false
 
 Этот режим не требует сертификатов, но доменные пароли при LDAP bind не защищены TLS. Используйте его только как временный первый этап в доверенной сети.
 
+## IIS FastCGI URL Routing Issue
+
+### Проблема
+
+При развертывании Django на IIS с FastCGI (wfastcgi) может возникнуть проблема с маршрутизацией URL: все внутренние страницы (`/workorders/`, `/inventory/`, и т.д.) перенаправляют на главную страницу.
+
+### Причина
+
+IIS FastCGI неправильно передает переменную окружения `PATH_INFO` в Django. Вместо правильного пути (`/workorders/`), Django получает только `/`:
+
+```
+REQUEST_URI: /workorders/  (правильно)
+PATH_INFO: /              (неправильно!)
+```
+
+Django использует `PATH_INFO` для маршрутизации, поэтому думает, что вы на главной странице.
+
+### Решение
+
+В проекте добавлен middleware `PathInfoDebugMiddleware` в `apps/core/middleware.py`, который автоматически исправляет эту проблему:
+
+- Обнаруживает несоответствие между `PATH_INFO` и `REQUEST_URI`
+- Исправляет `PATH_INFO` на основе `REQUEST_URI`
+- Безопасен для других веб-серверов (Apache, Nginx, Gunicorn)
+- Включает DEBUG-only логирование для отладки
+
+### Конфигурация
+
+Middleware уже добавлен в `config/settings.py` в список `MIDDLEWARE`:
+
+```python
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "apps.core.middleware.PathInfoDebugMiddleware",  # <-- IIS PATH_INFO fix
+    "django.middleware.common.CommonMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+```
+
+Дополнительно добавлена настройка для IIS совместимости:
+
+```python
+FORCE_SCRIPT_NAME = ""
+```
+
+### Отладка
+
+В режиме DEBUG (`DJANGO_DEBUG=1`) middleware пишет логи в файл `C:\inetpub\portal\debug_path.log`:
+
+```
+2026-04-22 14:22:04.673730 - Path: /workorders/ | Path Info: /workorders/ | SCRIPT_NAME:  | PATH_INFO: /workorders/ | REQUEST_URI: /workorders/
+```
+
+Если middleware работает правильно, вы увидите исправленные значения в логах.
+
 ## Как работает hybrid
 
 1. Если IIS передал `REMOTE_USER`, Django создает или находит локального пользователя.

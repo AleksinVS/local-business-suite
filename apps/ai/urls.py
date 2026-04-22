@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import re_path
 
 from .views import (
     AIChatDetailView,
@@ -12,10 +12,26 @@ from .views import (
 app_name = "ai"
 
 urlpatterns = [
-    path("chat/", AIChatIndexView.as_view(), name="chat_index"),
-    path("chat/<uuid:external_id>/", AIChatDetailView.as_view(), name="chat_detail"),
-    path("chat/<uuid:external_id>/send/", AIChatMessageCreateView.as_view(), name="chat_send"),
-    path("", AIHubView.as_view(), name="hub"),
-    path("gateway/tools/<str:tool_code>/execute/", AIToolExecuteView.as_view(), name="tool_execute"),
-    path("gateway/pending/<uuid:token>/confirm/", AIToolConfirmView.as_view(), name="tool_confirm"),
+    re_path(r"^chat/?$", AIChatIndexView.as_view(), name="chat_index"),
+    re_path(
+        r"^chat/(?P<external_id>[0-9a-f-]+)/?$",
+        AIChatDetailView.as_view(),
+        name="chat_detail",
+    ),
+    re_path(
+        r"^chat/(?P<external_id>[0-9a-f-]+)/send/?$",
+        AIChatMessageCreateView.as_view(),
+        name="chat_send",
+    ),
+    re_path(r"^/?$", AIHubView.as_view(), name="hub"),
+    re_path(
+        r"^gateway/tools/(?P<tool_code>[^/]+)/execute/?$",
+        AIToolExecuteView.as_view(),
+        name="tool_execute",
+    ),
+    re_path(
+        r"^gateway/pending/(?P<token>[0-9a-f-]+)/confirm/?$",
+        AIToolConfirmView.as_view(),
+        name="tool_confirm",
+    ),
 ]

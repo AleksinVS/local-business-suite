@@ -1,4 +1,4 @@
-from django.urls import re_path
+from django.urls import path
 
 from .views import (
     WorkOrderAttachmentCreateView,
@@ -19,49 +19,29 @@ from .views import (
 app_name = "workorders"
 
 urlpatterns = [
-    re_path(r"^/?$", WorkOrderBoardView.as_view(), name="board"),
-    re_path(
-        r"^columns/(?P<pk>\d+)/?$",
-        KanbanColumnDisplayView.as_view(),
-        name="column_display",
-    ),
-    re_path(
-        r"^columns/(?P<pk>\d+)/edit/?$",
-        KanbanColumnEditView.as_view(),
-        name="column_edit",
-    ),
-    re_path(
-        r"^columns/(?P<pk>\d+)/rename/?$",
+    path("", WorkOrderBoardView.as_view(), name="board"),
+    path("columns/<int:pk>/", KanbanColumnDisplayView.as_view(), name="column_display"),
+    path("columns/<int:pk>/edit/", KanbanColumnEditView.as_view(), name="column_edit"),
+    path(
+        "columns/<int:pk>/rename/",
         KanbanColumnRenameView.as_view(),
         name="column_rename",
     ),
-    re_path(r"^new/?$", WorkOrderCreateView.as_view(), name="create"),
-    re_path(r"^(?P<pk>\d+)/?$", WorkOrderDetailView.as_view(), name="detail"),
-    re_path(r"^(?P<pk>\d+)/edit/?$", WorkOrderUpdateView.as_view(), name="edit"),
-    re_path(
-        r"^(?P<pk>\d+)/comments/?$",
-        WorkOrderCommentCreateView.as_view(),
-        name="comment",
-    ),
-    re_path(
-        r"^(?P<pk>\d+)/attachments/?$",
+    path("new/", WorkOrderCreateView.as_view(), name="create"),
+    path("<int:pk>/", WorkOrderDetailView.as_view(), name="detail"),
+    path("<int:pk>/edit/", WorkOrderUpdateView.as_view(), name="edit"),
+    path("<int:pk>/comments/", WorkOrderCommentCreateView.as_view(), name="comment"),
+    path(
+        "<int:pk>/attachments/",
         WorkOrderAttachmentCreateView.as_view(),
         name="attachment",
     ),
-    re_path(
-        r"^(?P<pk>\d+)/confirm-closure/?$",
+    path(
+        "<int:pk>/confirm-closure/",
         WorkOrderConfirmClosureView.as_view(),
         name="confirm_closure",
     ),
-    re_path(r"^(?P<pk>\d+)/rate/?$", WorkOrderRateView.as_view(), name="rate"),
-    re_path(
-        r"^(?P<pk>\d+)/transition/?$",
-        WorkOrderTransitionView.as_view(),
-        name="transition",
-    ),
-    re_path(
-        r"^(?P<pk>\d+)/board-move/?$",
-        WorkOrderBoardMoveView.as_view(),
-        name="board_move",
-    ),
+    path("<int:pk>/rate/", WorkOrderRateView.as_view(), name="rate"),
+    path("<int:pk>/transition/", WorkOrderTransitionView.as_view(), name="transition"),
+    path("<int:pk>/board-move/", WorkOrderBoardMoveView.as_view(), name="board_move"),
 ]

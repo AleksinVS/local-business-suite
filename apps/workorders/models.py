@@ -34,8 +34,62 @@ class WorkOrderPriority(models.TextChoices):
     CRITICAL = "critical", "Критичный"
 
 
+class Board(models.Model):
+    title = models.CharField("Название", max_length=120)
+    slug = models.SlugField("Слаг", max_length=50, unique=True)
+    allowed_groups = models.ManyToManyField(
+        "auth.Group",
+        related_name="allowed_boards",
+        verbose_name="Разрешенные группы",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+        verbose_name = "Канбан-доска"
+        verbose_name_plural = "Канбан-доски"
+
+    def __str__(self):
+        return self.title
+
+    def clone(self, new_title=None, new_slug=None):
+        """
+        Creates a copy of this board and all its columns.
+        Does NOT copy work orders.
+        """
+        old_pk = self.pk
+        old_columns = list(self.columns.all())
+        old_groups = list(self.allowed_groups.all())
+
+        # Create new board instance
+        self.pk = None
+        self.id = None
+        self.title = new_title or f"{self.title} (копия)"
+        self.slug = new_slug or f"{self.slug}-copy"
+        self.save()
+
+        # Restore many-to-many groups
+        self.allowed_groups.set(old_groups)
+
+        # Clone columns
+        for col in old_columns:
+            col.pk = None
+            col.id = None
+            col.board = self
+            col.save()
+        
+        return self
+
+
 class KanbanColumnConfig(models.Model):
-    code = models.SlugField("Код", max_length=50, unique=True)
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        related_name="columns",
+        verbose_name="Доска",
+    )
+    code = models.SlugField("Код", max_length=50)
     title = models.CharField("Название", max_length=120)
     position = models.PositiveIntegerField("Позиция", default=0)
     statuses = models.JSONField("Статусы", default=list)
@@ -43,14 +97,21 @@ class KanbanColumnConfig(models.Model):
 
     class Meta:
         ordering = ["position", "id"]
+        unique_together = ("board", "code")
         verbose_name = "Колонка канбана"
         verbose_name_plural = "Колонки канбана"
 
     def __str__(self):
-        return self.title
+        return f"[{self.board.title}] {self.title}"
 
 
 class WorkOrder(models.Model):
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        related_name="workorders",
+        verbose_name="Доска",
+    )
     number = models.CharField("Номер", max_length=32, unique=True, editable=False)
     title = models.CharField("Заголовок", max_length=255)
     description = models.TextField("Описание")

@@ -20,6 +20,7 @@ app_name = "workorders"
 
 urlpatterns = [
     path("", WorkOrderBoardView.as_view(), name="board"),
+    path("b/<slug:board_slug>/", WorkOrderBoardView.as_view(), name="board_specific"),
     path("columns/<int:pk>/", KanbanColumnDisplayView.as_view(), name="column_display"),
     path("columns/<int:pk>/edit/", KanbanColumnEditView.as_view(), name="column_edit"),
     path(

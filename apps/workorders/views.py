@@ -21,7 +21,7 @@ from .forms import (
     WorkOrderRatingForm,
     WorkOrderUpdateForm,
 )
-from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     can_comment,
     can_confirm_closure,
@@ -33,7 +33,7 @@ from .policies import (
     can_transition,
     can_upload_attachment,
 )
-from .selectors import visible_workorders_queryset
+from .selectors import visible_boards_queryset, visible_workorders_queryset
 from .services import confirm_closure, transition_workorder
 
 
@@ -67,8 +67,16 @@ def column_card_context(column):
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
-    def get_queryset(self):
-        queryset = visible_workorders_queryset(self.request.user).order_by("-updated_at")
+    def get_board(self):
+        slug = self.kwargs.get("board_slug")
+        boards = visible_boards_queryset(self.request.user)
+        if slug:
+            return get_object_or_404(boards, slug=slug)
+        board = boards.first()
+        return board
+
+    def get_queryset(self, board):
+        queryset = visible_workorders_queryset(self.request.user, board=board).order_by("-updated_at")
         queryset = queryset.annotate(
             comment_count=Count("comments", distinct=True),
             attachment_count=Count("attachments", distinct=True),
@@ -104,8 +112,13 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        queryset = self.get_queryset()
-        column_configs = configured_columns()
+        board = self.get_board()
+        if not board:
+            context["no_boards"] = True
+            return context
+        
+        queryset = self.get_queryset(board)
+        column_configs = list(board.columns.order_by("position", "id"))
         columns = OrderedDict((column.code, {"config": column, "items": []}) for column in column_configs)
         status_to_column = {}
         for column in column_configs:
@@ -130,6 +143,8 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 }
             )
         board_column_count = len(columns) if columns else 1
+        context["current_board"] = board
+        context["visible_boards"] = visible_boards_queryset(self.request.user)
         context["board_columns"] = [
             {
                 "key": code,
@@ -166,6 +181,18 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     model = WorkOrder
     form_class = WorkOrderForm
     template_name = "workorders/workorder_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        board_id = self.request.GET.get("board")
+        if board_id:
+            initial["board"] = board_id
+        return initial
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
 
     def get_template_names(self):
         if self.request.htmx:
@@ -204,6 +231,11 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = WorkOrder
     form_class = WorkOrderUpdateForm
     template_name = "workorders/workorder_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
 
     def get_template_names(self):
         if self.request.htmx:

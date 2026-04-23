@@ -3,7 +3,11 @@
 {% block header_context %}
 <nav class="breadcrumbs header-breadcrumbs">
   <span>/</span>
-  <span>Канбан заявок ТО и ремонтов</span>
+  <a href="{% url 'workorders:board' %}">Канбан заявок</a>
+  {% if current_board %}
+    <span>/</span>
+    <span>{{ current_board.title }}</span>
+  {% endif %}
 </nav>
 {% endblock %}
 
@@ -11,6 +15,7 @@
 <div class="toolbar">
   <form method="get" class="filters">
     <input type="hidden" name="view" value="board">
+
     <div class="input-group">
       <label for="boardSearch">Поиск</label>
       <input
@@ -19,19 +24,32 @@
         name="q"
         value="{{ filters.q }}"
         placeholder="Номер, заголовок, изделие"
-        hx-get="{% url 'workorders:board' %}"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"
         hx-trigger="keyup changed delay:250ms, search"
         hx-include="closest form"
       >
     </div>
+
+    <div class="input-group">
+      <label for="boardSelect">Доска</label>
+      <select id="boardSelect" onchange="window.location.href=this.value">
+        {% for board in visible_boards %}
+          <option value="{% url 'workorders:board_specific' board.slug %}" {% if current_board.id == board.id %}selected{% endif %}>{{ board.title }}</option>
+        {% empty %}
+          <option value="">Нет доступных досок</option>
+        {% endfor %}
+      </select>
+    </div>
+
     <div class="input-group">
       <label for="boardDept">Подразделение</label>
       <select
         id="boardDept"
         name="department"
-        hx-get="{% url 'workorders:board' %}"
+
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"
         hx-trigger="change"
@@ -48,7 +66,7 @@
       <select
         id="boardStatus"
         name="status"
-        hx-get="{% url 'workorders:board' %}"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"
         hx-trigger="change"
@@ -65,7 +83,7 @@
       <select
         id="boardAssignee"
         name="assignee"
-        hx-get="{% url 'workorders:board' %}"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"
         hx-trigger="change"
@@ -82,7 +100,7 @@
       <select
         id="boardDevice"
         name="device"
-        hx-get="{% url 'workorders:board' %}"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"
         hx-trigger="change"
@@ -94,28 +112,27 @@
         {% endfor %}
       </select>
     </div>
-    <button
-      type="submit"
-      class="btn btn-outline"
-      hx-get="{% url 'workorders:board' %}"
-      hx-target="#board-columns"
-      hx-swap="outerHTML"
-      hx-include="closest form"
-    >
-      Применить
-    </button>
   </form>
+    {% if current_board %}
     <button
       class="btn btn-primary"
-      hx-get="{% url 'workorders:create' %}"
+      hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}"
       hx-target="#detail-panel-content"
       hx-swap="innerHTML"
       onclick="openKanbanDrawer()"
     >
       Создать заявку
     </button>
+    {% endif %}
 </div>
+{% if no_boards %}
+<div class="empty-state" style="padding: 4rem; text-align: center;">
+  <h3>Нет доступных досок</h3>
+  <p>У вас нет прав на просмотр ни одной канбан-доски.</p>
+</div>
+{% else %}
 {% include "workorders/partials/board_columns.html" %}
+{% endif %}
 
 {# Drawer Overlay & Panel for Kanban #}
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeKanbanDrawer()"></div>

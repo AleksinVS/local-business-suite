@@ -5,11 +5,13 @@ from apps.core.models import Department
 from .models import (
     ATTACHMENT_ALLOWED_TYPES,
     ATTACHMENT_MAX_SIZE,
+    Board,
     KanbanColumnConfig,
     WorkOrder,
     WorkOrderAttachment,
     WorkOrderComment,
 )
+from .selectors import visible_boards_queryset
 
 
 class DepartmentChoiceField(forms.ModelChoiceField):
@@ -25,6 +27,7 @@ class WorkOrderForm(forms.ModelForm):
     class Meta:
         model = WorkOrder
         fields = [
+            "board",
             "title",
             "description",
             "department",
@@ -36,9 +39,14 @@ class WorkOrderForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"rows": 5}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["device"].required = False
+        if user:
+            self.fields["board"].queryset = visible_boards_queryset(user)
+            # If only one board is visible, set it as initial
+            if self.fields["board"].queryset.count() == 1:
+                self.fields["board"].initial = self.fields["board"].queryset.first()
 
 
 class WorkOrderUpdateForm(forms.ModelForm):
@@ -49,6 +57,7 @@ class WorkOrderUpdateForm(forms.ModelForm):
     class Meta:
         model = WorkOrder
         fields = [
+            "board",
             "title",
             "description",
             "department",
@@ -60,9 +69,11 @@ class WorkOrderUpdateForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"rows": 5}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["device"].required = False
+        if user:
+            self.fields["board"].queryset = visible_boards_queryset(user)
 
 
 class WorkOrderCommentForm(forms.ModelForm):

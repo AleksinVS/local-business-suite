@@ -30,12 +30,11 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Корпоративный портал ВОБ №3")
 ALLOWED_HOSTS = [
-    host
-    for host in os.environ.get(
-        "DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,127.0.0.1:8888"
-    ).split(",")
-    if host
+    host.strip()
+    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    if host.strip()
 ]
+
 ALLOWED_HOSTS += [
     host
     for host in os.environ.get("DJANGO_INTERNAL_ALLOWED_HOSTS", "web").split(",")

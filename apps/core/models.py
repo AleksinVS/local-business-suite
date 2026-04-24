@@ -1,4 +1,5 @@
 from django.db import models
+from .models_ou import OrganizationalUnit
 
 
 class Department(models.Model):
@@ -39,7 +40,9 @@ class Department(models.Model):
 
     def descendant_ids(self):
         children_map = {}
-        for department in Department.objects.select_related("parent").order_by("name", "id"):
+        for department in Department.objects.select_related("parent").order_by(
+            "name", "id"
+        ):
             children_map.setdefault(department.parent_id, []).append(department.id)
         collected = []
         stack = [self.id]

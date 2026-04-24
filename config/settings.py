@@ -135,11 +135,15 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTH_USER_MODEL = "accounts.User"
 DJANGO_AUTH_MODE = os.environ.get("DJANGO_AUTH_MODE", "hybrid").strip().lower()
 if DJANGO_AUTH_MODE not in {"local", "ldap", "remote_user", "hybrid"}:
     raise ImproperlyConfigured(
         "DJANGO_AUTH_MODE must be one of: local, ldap, remote_user, hybrid"
     )
+
+# Deployment-specific email override (for users without mail attribute in AD)
+AD_EMAIL_DOMAIN_OVERRIDE = os.environ.get("AD_EMAIL_DOMAIN_OVERRIDE", "")
 
 if DJANGO_AUTH_MODE == "local":
     AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]

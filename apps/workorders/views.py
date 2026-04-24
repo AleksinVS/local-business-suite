@@ -2,8 +2,10 @@ from collections import OrderedDict
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db.models import Q, Count
+
+User = get_user_model()
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -21,7 +23,14 @@ from .forms import (
     WorkOrderRatingForm,
     WorkOrderUpdateForm,
 )
-from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import (
+    Board,
+    KanbanColumnConfig,
+    WorkOrder,
+    WorkOrderAttachment,
+    WorkOrderComment,
+    WorkOrderStatus,
+)
 from .policies import (
     can_comment,
     can_confirm_closure,
@@ -64,6 +73,7 @@ def column_card_context(column):
         "rename_form": KanbanColumnTitleForm(instance=column),
     }
 
+
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
@@ -76,7 +86,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         return board
 
     def get_queryset(self, board):
-        queryset = visible_workorders_queryset(self.request.user, board=board).order_by("-updated_at")
+        queryset = visible_workorders_queryset(self.request.user, board=board).order_by(
+            "-updated_at"
+        )
         queryset = queryset.annotate(
             comment_count=Count("comments", distinct=True),
             attachment_count=Count("attachments", distinct=True),
@@ -99,7 +111,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         if department:
             selected_department = Department.objects.filter(pk=department).first()
             if selected_department:
-                queryset = queryset.filter(department_id__in=selected_department.descendant_ids())
+                queryset = queryset.filter(
+                    department_id__in=selected_department.descendant_ids()
+                )
             else:
                 queryset = queryset.none()
         if status_value:
@@ -116,10 +130,12 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         if not board:
             context["no_boards"] = True
             return context
-        
+
         queryset = self.get_queryset(board)
         column_configs = list(board.columns.order_by("position", "id"))
-        columns = OrderedDict((column.code, {"config": column, "items": []}) for column in column_configs)
+        columns = OrderedDict(
+            (column.code, {"config": column, "items": []}) for column in column_configs
+        )
         status_to_column = {}
         for column in column_configs:
             for status in column.statuses:
@@ -131,14 +147,20 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             drop_targets = {
                 column.code: status
                 for column in column_configs
-                for status in [drop_status_for_column(self.request.user, workorder, column)]
+                for status in [
+                    drop_status_for_column(self.request.user, workorder, column)
+                ]
                 if status
             }
             columns[column_code]["items"].append(
                 {
                     "workorder": workorder,
-                    "quick_transitions": quick_transition_choices_for(self.request.user, workorder),
-                    "can_confirm_closure": can_confirm_closure(self.request.user, workorder),
+                    "quick_transitions": quick_transition_choices_for(
+                        self.request.user, workorder
+                    ),
+                    "can_confirm_closure": can_confirm_closure(
+                        self.request.user, workorder
+                    ),
                     "can_drag": bool(drop_targets),
                 }
             )
@@ -156,7 +178,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         ]
         context["board_visible_slots"] = min(max(board_column_count, 1), 5)
         context["status_choices"] = WorkOrderStatus.choices
-        context["departments"] = Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+        context["departments"] = Department.objects.select_related("parent").order_by(
+            "parent_id", "name", "id"
+        )
         context["assignees"] = User.objects.order_by("first_name", "username")
         context["devices"] = MedicalDevice.objects.order_by("name")
         context["filters"] = {
@@ -166,7 +190,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             "assignee": self.request.GET.get("assignee", ""),
             "device": self.request.GET.get("device", ""),
         }
-        context["can_manage_board_columns"] = can_manage_board_columns(self.request.user)
+        context["can_manage_board_columns"] = can_manage_board_columns(
+            self.request.user
+        )
         return context
 
     def get_template_names(self):
@@ -303,12 +329,18 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
             for status, label in WorkOrderStatus.choices
             if can_transition(self.request.user, self.object, status)
         ]
-        context["transition_choices_vals"] = [s for s, l in context["transition_choices"]]
+        context["transition_choices_vals"] = [
+            s for s, l in context["transition_choices"]
+        ]
         context["status_choices"] = WorkOrderStatus.choices
         context["can_edit"] = can_edit(self.request.user, self.object)
-        context["can_confirm_closure"] = can_confirm_closure(self.request.user, self.object)
+        context["can_confirm_closure"] = can_confirm_closure(
+            self.request.user, self.object
+        )
         context["can_rate"] = can_rate(self.request.user, self.object)
-        context["can_upload_attachment"] = can_upload_attachment(self.request.user, self.object)
+        context["can_upload_attachment"] = can_upload_attachment(
+            self.request.user, self.object
+        )
         context["can_comment"] = can_comment(self.request.user, self.object)
         return context
 
@@ -377,7 +409,11 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
             return render(
                 request,
                 "workorders/partials/attachments.html",
-                {"workorder": workorder, "attachment_form": form, "can_upload_attachment": True},
+                {
+                    "workorder": workorder,
+                    "attachment_form": form,
+                    "can_upload_attachment": True,
+                },
                 status=400,
             )
         messages.error(request, "Не удалось загрузить файл.")
@@ -390,7 +426,9 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
         target_status = request.POST.get("status", "")
         if not can_transition(request.user, workorder, target_status):
             return HttpResponseForbidden("Переход запрещен")
-        transition_workorder(workorder=workorder, user=request.user, to_status=target_status)
+        transition_workorder(
+            workorder=workorder, user=request.user, to_status=target_status
+        )
         workorder.refresh_from_db()
         transition_choices = [
             (status, label)
@@ -430,7 +468,9 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         target_status = drop_status_for_column(request.user, workorder, column)
 
         if target_status:
-            transition_workorder(workorder=workorder, user=request.user, to_status=target_status)
+            transition_workorder(
+                workorder=workorder, user=request.user, to_status=target_status
+            )
         elif workorder.status not in column.statuses:
             return HttpResponseForbidden("Перемещение в колонку запрещено")
 
@@ -440,7 +480,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         board_view.args = ()
         board_view.kwargs = {}
         context = board_view.get_context_data()
-        
+
         # Find the old column and the new column configs
         updated_columns = []
         # We need to find the column key for the old status
@@ -449,7 +489,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         for cfg in column_configs:
             for s in cfg.statuses:
                 status_to_column[s] = cfg.code
-        
+
         old_column_key = status_to_column.get(old_status)
         new_column_key = column.code
 
@@ -465,8 +505,9 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
                 "workorders/partials/kanban_column.html",
                 {**context, "column": col, "is_oob": True},
             ).content.decode("utf-8")
-        
+
         from django.http import HttpResponse
+
         return HttpResponse(response_html)
 
 
@@ -508,7 +549,9 @@ class WorkOrderRateView(LoginRequiredMixin, View):
                 "can_rate": can_rate(request.user, workorder),
             }
             if request.htmx:
-                return render(request, "workorders/partials/rating_section.html", context)
+                return render(
+                    request, "workorders/partials/rating_section.html", context
+                )
             messages.success(request, "Оценка сохранена.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:

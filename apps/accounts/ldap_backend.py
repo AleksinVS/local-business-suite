@@ -30,7 +30,9 @@ class LDAPConfig:
     def from_env(cls):
         transport = os.environ.get("AD_LDAP_TRANSPORT", "plain").strip().lower()
         if transport not in {"plain", "starttls", "ldaps"}:
-            raise ImproperlyConfigured("AD_LDAP_TRANSPORT must be one of: plain, starttls, ldaps")
+            raise ImproperlyConfigured(
+                "AD_LDAP_TRANSPORT must be one of: plain, starttls, ldaps"
+            )
 
         allow_insecure = _env_bool("AD_LDAP_ALLOW_INSECURE", False)
         verify_cert = _env_bool("AD_LDAP_VERIFY_CERT", transport != "plain")
@@ -52,8 +54,12 @@ class LDAPConfig:
             allow_insecure=allow_insecure,
             verify_cert=verify_cert,
             ca_file=os.environ.get("AD_LDAP_CA_FILE", ""),
-            user_filter=os.environ.get("AD_LDAP_USER_FILTER", "(sAMAccountName={username})"),
-            group_role_map=_load_group_role_map(os.environ.get("AD_GROUP_ROLE_MAP", "")),
+            user_filter=os.environ.get(
+                "AD_LDAP_USER_FILTER", "(sAMAccountName={username})"
+            ),
+            group_role_map=_load_group_role_map(
+                os.environ.get("AD_GROUP_ROLE_MAP", "")
+            ),
         )
 
 
@@ -72,7 +78,9 @@ class LDAPBackend(BaseBackend):
             with ldap_connection(config, user=user_dn, password=password):
                 pass
 
-            user, _created = User.objects.get_or_create(username=username, defaults={"is_active": True})
+            user, _created = User.objects.get_or_create(
+                username=username, defaults={"is_active": True}
+            )
             sync_user_from_ad(user, attributes, config.group_role_map)
             return user
         except ImproperlyConfigured as exc:
@@ -116,11 +124,24 @@ def find_ad_user(config, username):
     if not config.search_base:
         raise ImproperlyConfigured("AD_SEARCH_DN is required for LDAP authentication")
 
-    attributes = ["mail", "displayName", "givenName", "sn", "memberOf", "sAMAccountName", "userPrincipalName"]
+    attributes = [
+        "mail",
+        "displayName",
+        "givenName",
+        "sn",
+        "memberOf",
+        "sAMAccountName",
+        "userPrincipalName",
+    ]
     search_filter = config.user_filter.format(username=escape_filter_value(username))
 
     with service_connection(config) as conn:
-        conn.search(config.search_base, search_filter, search_scope=_ldap().SUBTREE, attributes=attributes)
+        conn.search(
+            config.search_base,
+            search_filter,
+            search_scope=_ldap().SUBTREE,
+            attributes=attributes,
+        )
         if not conn.entries:
             return None, {}
 
@@ -130,15 +151,21 @@ def find_ad_user(config, username):
 
 def service_connection(config):
     if not config.service_account or not config.service_password:
-        raise ImproperlyConfigured("AD_SERVICE_ACCOUNT and AD_SERVICE_PASSWORD are required for LDAP search")
-    return ldap_connection(config, user=config.service_account, password=config.service_password)
+        raise ImproperlyConfigured(
+            "AD_SERVICE_ACCOUNT and AD_SERVICE_PASSWORD are required for LDAP search"
+        )
+    return ldap_connection(
+        config, user=config.service_account, password=config.service_password
+    )
 
 
 def ldap_connection(config, *, user, password):
     ldap3 = _ldap()
     server_kwargs = {}
     if config.transport in {"starttls", "ldaps"}:
-        tls_kwargs = {"validate": ssl.CERT_REQUIRED if config.verify_cert else ssl.CERT_NONE}
+        tls_kwargs = {
+            "validate": ssl.CERT_REQUIRED if config.verify_cert else ssl.CERT_NONE
+        }
         if config.ca_file:
             tls_kwargs["ca_certs_file"] = config.ca_file
         server_kwargs["tls"] = ldap3.Tls(**tls_kwargs)
@@ -172,7 +199,40 @@ class _ConnectionContext:
 
 
 def sync_user_from_ad(user, attributes, group_role_map):
-    user.email = attributes.get("mail", user.email)
+    from django.conf import settings
+    from apps.core.models import OrganizationalUnit, Department
+
+    # Sync email
+    email = attributes.get("mail")
+    email_domain = getattr(settings, "AD_EMAIL_DOMAIN_OVERRIDE", None)
+
+    if email:
+        user.email = email
+    elif email_domain:
+        sam_account_name = attributes.get("sAMAccountName", "")
+        if sam_account_name:
+            user.email = f"{sam_account_name}{email_domain}"
+
+    # Sync organizational structure (OU and Department)
+    member_of = attributes.get("memberOf", [])
+    if member_of:
+        # Находим OU пользователя на основе групп
+        for group_dn in member_of:
+            # Извлекаем OU из DN группы
+            ou_dn = _extract_ou_from_dn(group_dn)
+            if ou_dn:
+                # Находим OU в базе
+                ou = OrganizationalUnit.objects.filter(distinguished_name=ou_dn).first()
+                if ou:
+                    user.organizational_unit = ou
+
+                    # Находим соответствующий Department (уровень 3 или выше)
+                    dept = _find_department_for_ou(ou)
+                    if dept:
+                        user.department = dept
+                    break  # Используем первую найденную группу с OU
+
+    # Sync names
     display_name = attributes.get("displayName", "")
     given_name = attributes.get("givenName", "")
     surname = attributes.get("sn", "")
@@ -187,6 +247,44 @@ def sync_user_from_ad(user, attributes, group_role_map):
     sync_user_groups(user, attributes.get("memberOf", []), group_role_map)
 
 
+def _extract_ou_from_dn(dn):
+    """Извлекает distinguished name OU из DN группы"""
+    # Пример: CN=Группа,OU=Отдел,OU=Подразделение,DC=domain,DC=local
+    # Нужно найти OU компонент и всё что выше него
+    parts = dn.split(",")
+    ou_parts = []
+
+    for part in reversed(parts):
+        if part.startswith("OU="):
+            ou_name = part[3:]
+            ou_parts.insert(0, ou_name)
+        elif part.startswith("DC="):
+            break
+
+    if ou_parts:
+        # Формируем DN OU
+        dc_parts = [part for part in parts if part.startswith("DC=")]
+        return ",".join(["OU=" + ou for ou in ou_parts] + dc_parts)
+    return None
+
+
+def _find_department_for_ou(ou):
+    """Находит соответствующий Department для OU"""
+    if not ou:
+        return None
+
+    # Если OU уровня 3 или выше, ищем Department на основе name
+    if ou.level >= 3:
+        dept = Department.objects.filter(name=ou.name).first()
+        return dept
+    # Если OU уровня 2, используем его как Department
+    elif ou.level == 2:
+        dept = dept = Department.objects.filter(name=ou.name).first()
+        return dept
+
+    return None
+
+
 def sync_user_groups(user, member_of, group_role_map):
     if not group_role_map:
         return
@@ -199,7 +297,9 @@ def sync_user_groups(user, member_of, group_role_map):
     if not desired_roles:
         return
 
-    groups = [Group.objects.get_or_create(name=role)[0] for role in sorted(desired_roles)]
+    groups = [
+        Group.objects.get_or_create(name=role)[0] for role in sorted(desired_roles)
+    ]
     user.groups.add(*groups)
 
 
@@ -267,7 +367,9 @@ def _ldap():
     try:
         import ldap3
     except ImportError as exc:
-        raise ImproperlyConfigured("LDAP auth requires ldap3. Install requirements.txt first.") from exc
+        raise ImproperlyConfigured(
+            "LDAP auth requires ldap3. Install requirements.txt first."
+        ) from exc
     return ldap3
 
 
@@ -275,5 +377,7 @@ def _ldap_escape_filter_chars():
     try:
         from ldap3.utils.conv import escape_filter_chars
     except ImportError as exc:
-        raise ImproperlyConfigured("LDAP auth requires ldap3. Install requirements.txt first.") from exc
+        raise ImproperlyConfigured(
+            "LDAP auth requires ldap3. Install requirements.txt first."
+        ) from exc
     return escape_filter_chars

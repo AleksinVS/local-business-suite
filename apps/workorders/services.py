@@ -1,9 +1,21 @@
 from django.utils import timezone
 
-from .models import WorkOrder, WorkOrderStatus, WorkOrderTransitionLog
+from .models import WorkOrder, WorkOrderStatus, WorkOrderTransitionLog, Board
 
 
-def create_workorder(*, author, title: str, description: str, department, priority, device_id=None, assignee=None) -> WorkOrder:
+def create_workorder(
+    *,
+    author,
+    title: str,
+    description: str,
+    department,
+    priority,
+    device_id=None,
+    assignee=None,
+    board=None,
+) -> WorkOrder:
+    if not board:
+        board = Board.objects.filter(slug="main").first()
     return WorkOrder.objects.create(
         author=author,
         title=title,
@@ -12,6 +24,7 @@ def create_workorder(*, author, title: str, description: str, department, priori
         priority=priority,
         device_id=device_id,
         assignee=assignee,
+        board=board,
     )
 
 

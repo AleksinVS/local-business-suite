@@ -35,6 +35,14 @@ def health():
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest):
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"Received chat request: session_id={payload.session_id}, prompt={payload.prompt[:100]}"
+    )
+    logger.info(f"Actor: {payload.actor}")
+
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
     try:
@@ -45,6 +53,7 @@ def chat(payload: ChatRequest):
             history=payload.history,
         )
     except Exception as exc:
+        logger.error(f"Error in run_agent: {exc}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ChatResponse(
         session_id=payload.session_id,

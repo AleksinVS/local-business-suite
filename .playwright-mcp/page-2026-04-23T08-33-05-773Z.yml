@@ -1,0 +1,180 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - navigation [ref=e5]:
+      - link "📋 Доска ☆" [ref=e6] [cursor=pointer]:
+        - /url: /workorders/
+        - generic [ref=e7]: 📋
+        - generic [ref=e8]: Доска
+        - button "☆" [ref=e9]
+      - link "📦 Медизделия ☆" [ref=e10] [cursor=pointer]:
+        - /url: /inventory/
+        - generic [ref=e11]: 📦
+        - generic [ref=e12]: Медизделия
+        - button "☆" [ref=e13]
+      - link "🏢 Подразделения ☆" [ref=e14] [cursor=pointer]:
+        - /url: /departments/
+        - generic [ref=e15]: 🏢
+        - generic [ref=e16]: Подразделения
+        - button "☆" [ref=e17]
+      - link "👥 Роли ☆" [ref=e18] [cursor=pointer]:
+        - /url: /settings/roles/
+        - generic [ref=e19]: 👥
+        - generic [ref=e20]: Роли
+        - button "☆" [ref=e21]
+      - link "🤖 AI чат ☆" [ref=e22] [cursor=pointer]:
+        - /url: /ai/chat/
+        - generic [ref=e23]: 🤖
+        - generic [ref=e24]: AI чат
+        - button "☆" [ref=e25]
+      - link "⚙️ AI Hub ☆" [ref=e26] [cursor=pointer]:
+        - /url: /ai/
+        - generic [ref=e27]: ⚙️
+        - generic [ref=e28]: AI Hub
+        - button "☆" [ref=e29]
+      - link "🛠️ Django admin ☆" [ref=e30] [cursor=pointer]:
+        - /url: /admin/
+        - generic [ref=e31]: 🛠️
+        - generic [ref=e32]: Django admin
+        - button "☆" [ref=e33]
+      - link "📊 Аналитика ☆" [ref=e34] [cursor=pointer]:
+        - /url: /analytics/
+        - generic [ref=e35]: 📊
+        - generic [ref=e36]: Аналитика
+        - button "☆" [ref=e37]
+      - link "⏳ Лист ожидания ☆" [ref=e38] [cursor=pointer]:
+        - /url: /waiting-list/
+        - generic [ref=e39]: ⏳
+        - generic [ref=e40]: Лист ожидания
+        - button "☆" [ref=e41]
+      - button "🚪 Выйти" [ref=e43] [cursor=pointer]:
+        - generic [ref=e44]: 🚪
+        - generic [ref=e45]: Выйти
+  - generic [ref=e46]:
+    - banner [ref=e47]:
+      - generic [ref=e48]:
+        - button "☰" [ref=e49] [cursor=pointer]
+        - link "Корпоративный портал ВОБ №3" [ref=e50] [cursor=pointer]:
+          - /url: /
+          - heading "Корпоративный портал ВОБ №3" [level=1] [ref=e51]
+    - main [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - paragraph [ref=e56]: MVP
+            - heading "Операционный центр отдела ТО и ремонтов" [level=1] [ref=e57]
+            - paragraph [ref=e58]: Каркас уже включает локальную авторизацию, справочник медицинских изделий и общую канбан-доску заявок.
+          - generic [ref=e59]:
+            - article [ref=e60]:
+              - generic [ref=e61]: "1"
+              - text: медизделий
+            - article [ref=e62]:
+              - generic [ref=e63]: "5"
+              - text: открытых заявок
+        - generic [ref=e64]:
+          - generic [ref=e65]:
+            - heading "Статусы заявок" [level=2] [ref=e66]
+            - generic [ref=e67]:
+              - link "Подразделения" [ref=e68] [cursor=pointer]:
+                - /url: /departments/
+              - link "Открыть доску" [ref=e69] [cursor=pointer]:
+                - /url: /workorders/
+          - generic [ref=e70]:
+            - article [ref=e71]:
+              - strong [ref=e72]: Новая
+              - generic [ref=e73]: "3"
+            - article [ref=e74]:
+              - strong [ref=e75]: Принята
+              - generic [ref=e76]: "2"
+            - article [ref=e77]:
+              - strong [ref=e78]: В работе
+              - generic [ref=e79]: "0"
+            - article [ref=e80]:
+              - strong [ref=e81]: Ожидание
+              - generic [ref=e82]: "0"
+            - article [ref=e83]:
+              - strong [ref=e84]: Выполнена
+              - generic [ref=e85]: "0"
+            - article [ref=e86]:
+              - strong [ref=e87]: Закрыта
+              - generic [ref=e88]: "1"
+            - article [ref=e89]:
+              - strong [ref=e90]: Отменена
+              - generic [ref=e91]: "2"
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - heading "Последние заявки" [level=2] [ref=e94]
+            - link "Создать заявку" [ref=e95] [cursor=pointer]:
+              - /url: /workorders/new/
+          - table [ref=e97]:
+            - rowgroup [ref=e98]:
+              - row "Номер Заголовок Статус Изделие Автор" [ref=e99]:
+                - columnheader "Номер" [ref=e100] [cursor=pointer]
+                - columnheader "Заголовок" [ref=e101] [cursor=pointer]
+                - columnheader "Статус" [ref=e102] [cursor=pointer]
+                - columnheader "Изделие" [ref=e103] [cursor=pointer]
+                - columnheader "Автор" [ref=e104] [cursor=pointer]
+            - rowgroup [ref=e105]:
+              - row "8 Тестовая 4 Новая Без привязки abc" [ref=e106]:
+                - cell "8" [ref=e107]:
+                  - link "8" [ref=e108] [cursor=pointer]:
+                    - /url: /workorders/8/
+                - cell "Тестовая 4" [ref=e109]
+                - cell "Новая" [ref=e110]
+                - cell "Без привязки" [ref=e111]
+                - cell "abc" [ref=e112]
+              - row "7 Debug WO2 Принята Без привязки debug2" [ref=e113]:
+                - cell "7" [ref=e114]:
+                  - link "7" [ref=e115] [cursor=pointer]:
+                    - /url: /workorders/7/
+                - cell "Debug WO2" [ref=e116]
+                - cell "Принята" [ref=e117]
+                - cell "Без привязки" [ref=e118]
+                - cell "debug2" [ref=e119]
+              - row "6 x Новая Без привязки c1" [ref=e120]:
+                - cell "6" [ref=e121]:
+                  - link "6" [ref=e122] [cursor=pointer]:
+                    - /url: /workorders/6/
+                - cell "x" [ref=e123]
+                - cell "Новая" [ref=e124]
+                - cell "Без привязки" [ref=e125]
+                - cell "c1" [ref=e126]
+              - row "5 Сломался тестовый светильник Принята Без привязки abc" [ref=e127]:
+                - cell "5" [ref=e128]:
+                  - link "5" [ref=e129] [cursor=pointer]:
+                    - /url: /workorders/5/
+                - cell "Сломался тестовый светильник" [ref=e130]
+                - cell "Принята" [ref=e131]
+                - cell "Без привязки" [ref=e132]
+                - cell "abc" [ref=e133]
+              - row "4 Четвертая тестовая заявка (большая)) Отменена Тестовое МИ (01) abc" [ref=e134]:
+                - cell "4" [ref=e135]:
+                  - link "4" [ref=e136] [cursor=pointer]:
+                    - /url: /workorders/4/
+                - cell "Четвертая тестовая заявка (большая))" [ref=e137]
+                - cell "Отменена" [ref=e138]
+                - cell "Тестовое МИ (01)" [ref=e139]
+                - cell "abc" [ref=e140]
+              - row "3 Тестовая 3 Новая Тестовое МИ (01) abc" [ref=e141]:
+                - cell "3" [ref=e142]:
+                  - link "3" [ref=e143] [cursor=pointer]:
+                    - /url: /workorders/3/
+                - cell "Тестовая 3" [ref=e144]
+                - cell "Новая" [ref=e145]
+                - cell "Тестовое МИ (01)" [ref=e146]
+                - cell "abc" [ref=e147]
+              - row "2 Тестовая 2 Отменена Тестовое МИ (01) abc" [ref=e148]:
+                - cell "2" [ref=e149]:
+                  - link "2" [ref=e150] [cursor=pointer]:
+                    - /url: /workorders/2/
+                - cell "Тестовая 2" [ref=e151]
+                - cell "Отменена" [ref=e152]
+                - cell "Тестовое МИ (01)" [ref=e153]
+                - cell "abc" [ref=e154]
+              - row "1 Тестовая Закрыта Тестовое МИ (01) abc" [ref=e155]:
+                - cell "1" [ref=e156]:
+                  - link "1" [ref=e157] [cursor=pointer]:
+                    - /url: /workorders/1/
+                - cell "Тестовая" [ref=e158]
+                - cell "Закрыта" [ref=e159]
+                - cell "Тестовое МИ (01)" [ref=e160]
+                - cell "abc" [ref=e161]

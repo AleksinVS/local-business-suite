@@ -381,3 +381,118 @@ def get_analytics_summary_for_actor(*, actor, payload):
         }
     else:
         raise ValidationError(f"Invalid summary_type: {summary_type}")
+
+def update_role_permissions_for_actor(*, actor, payload):
+    """
+    Updates permissions for a specific role in config/role_rules.json.
+    STRICT SECURITY GATE: Only superusers can perform this action.
+    """
+    if not actor.is_superuser:
+        raise PermissionDenied("CRITICAL: Only administrators with full rights can modify role permissions.")
+
+    from django.conf import settings
+    import json
+    from apps.core.json_utils import pretty_json
+
+    role_name = payload.get("role_name")
+    permissions_map = payload.get("permissions_map", {})
+
+    if not role_name:
+        raise ValidationError("role_name is required.")
+
+    current_rules = settings.LOCAL_BUSINESS_ROLE_RULES.copy()
+    if role_name not in current_rules:
+        raise ValidationError(f"Role '{role_name}' does not exist.")
+
+    # Update permissions
+    for key, value in permissions_map.items():
+        if key in current_rules[role_name] or key == "display_name":
+            current_rules[role_name][key] = value
+
+    # Save to file
+    settings.LOCAL_BUSINESS_ROLE_RULES_FILE.write_text(pretty_json(current_rules) + "\n", encoding="utf-8")
+    settings.LOCAL_BUSINESS_ROLE_RULES = current_rules
+
+    return {
+        "ok": True,
+        "message": f"Permissions for role '{role_name}' updated successfully.",
+        "role_name": role_name,
+        "updated_keys": list(permissions_map.keys())
+    }
+
+def get_role_rules_for_actor(*, actor, payload):
+    """Returns the current role configuration from role_rules.json."""
+    if not actor.is_authenticated:
+        raise PermissionDenied("Authentication required.")
+    from django.conf import settings
+    return {"rules": settings.LOCAL_BUSINESS_ROLE_RULES}
+
+def list_users_for_actor(*, actor, payload):
+    """Lists users with their roles and departments. Only for superusers."""
+    if not actor.is_superuser:
+        raise PermissionDenied("Only administrators can list all users.")
+    
+    User = get_user_model()
+    query = payload.get("query", "")
+    queryset = User.objects.select_related("department", "organizational_unit").prefetch_related("groups").all()
+    
+    if query:
+        queryset = queryset.filter(username__icontains=query) | queryset.filter(first_name__icontains=query) | queryset.filter(last_name__icontains=query)
+        
+    return {
+        "items": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "full_name": u.get_full_name(),
+                "email": u.email,
+                "is_active": u.is_active,
+                "is_superuser": u.is_superuser,
+                "department": u.department.name if u.department else None,
+                "groups": list(u.groups.values_list("name", flat=True))
+            }
+            for u in queryset[:50]
+        ]
+    }
+
+def update_user_for_actor(*, actor, payload):
+    """Updates user details. Only for superusers."""
+    if not actor.is_superuser:
+        raise PermissionDenied("Only administrators can update user data.")
+    
+    User = get_user_model()
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise ValidationError("user_id is required.")
+        
+    target_user = User.objects.get(pk=user_id)
+    
+    if "is_active" in payload:
+        target_user.is_active = payload["is_active"]
+    
+    if "department_id" in payload:
+        target_user.department_id = payload["department_id"]
+        
+    if "group_names" in payload:
+        from django.contrib.auth.models import Group
+        groups = Group.objects.filter(name__in=payload["group_names"])
+        target_user.groups.set(groups)
+        
+    target_user.save()
+    
+    return {
+        "ok": True,
+        "user": {
+            "id": target_user.id,
+            "username": target_user.username,
+            "is_active": target_user.is_active,
+            "groups": list(target_user.groups.values_list("name", flat=True))
+        }
+    }
+
+def list_groups_for_actor(*, actor, payload):
+    """Lists all available Django groups. Only for superusers."""
+    if not actor.is_superuser:
+        raise PermissionDenied("Only administrators can list groups.")
+    from django.contrib.auth.models import Group
+    return {"items": list(Group.objects.values_list("name", flat=True))}

@@ -1,5 +1,6 @@
 import json
 import uuid
+import logging
 
 from django.conf import settings
 from django.contrib import messages
@@ -7,7 +8,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpResponse
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
 from django.utils.decorators import method_decorator
@@ -21,6 +22,7 @@ from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import append_chat_message, serialize_session_history
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
+logger = logging.getLogger(__name__)
 
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
@@ -151,6 +153,76 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             session.title = prompt[:80]
             session.save(update_fields=["title", "updated_at"])
         return redirect("ai:chat_detail", external_id=session.external_id)
+
+
+class AIChatMessageStreamView(LoginRequiredMixin, View):
+    def get(self, request, external_id):
+        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        prompt = request.GET.get("prompt")
+        if not prompt:
+            return JsonResponse({"error": "Prompt is required."}, status=400)
+
+        conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
+        request_id = str(uuid.uuid4())
+
+        append_chat_message(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content=prompt,
+            metadata={
+                "conversation_id": conversation_id,
+                "request_id": request_id,
+                "origin_channel": session.channel,
+            },
+        )
+
+        def stream_generator():
+            client = AgentRuntimeClient()
+            full_content = []
+            
+            try:
+                for event in client.chat_stream(
+                    user=request.user,
+                    session_id=session.external_id,
+                    prompt=prompt,
+                    history=serialize_session_history(session),
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                    origin_channel=session.channel,
+                ):
+                    yield f"{event.decode('utf-8')}\n\n"
+                    
+                    # Accumulate for saving at the end
+                    if event.startswith(b"data: "):
+                        data_str = event[6:]
+                        if data_str != b"[DONE]":
+                            try:
+                                data_json = json.loads(data_str.decode('utf-8'))
+                                if "content" in data_json:
+                                    full_content.append(data_json["content"])
+                            except:
+                                pass
+            except Exception as e:
+                logger.error(f"Stream error: {e}", exc_info=True)
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+            if full_content:
+                append_chat_message(
+                    session=session,
+                    role=ChatMessage.Role.ASSISTANT,
+                    content="".join(full_content),
+                    metadata={
+                        "conversation_id": conversation_id,
+                        "request_id": request_id,
+                        "streamed": True
+                    },
+                )
+            
+            if not session.title:
+                session.title = prompt[:80]
+                session.save(update_fields=["title", "updated_at"])
+
+        return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
 
 
 @method_decorator(csrf_exempt, name="dispatch")

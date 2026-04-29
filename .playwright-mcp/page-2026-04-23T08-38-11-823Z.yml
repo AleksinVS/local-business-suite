@@ -1,0 +1,215 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - navigation [ref=e5]:
+      - link "📋 Доска ☆" [ref=e6] [cursor=pointer]:
+        - /url: /workorders/
+        - generic [ref=e7]: 📋
+        - generic [ref=e8]: Доска
+        - button "☆" [ref=e9]
+      - link "📦 Медизделия ☆" [ref=e10] [cursor=pointer]:
+        - /url: /inventory/
+        - generic [ref=e11]: 📦
+        - generic [ref=e12]: Медизделия
+        - button "☆" [ref=e13]
+      - link "🏢 Подразделения ☆" [ref=e14] [cursor=pointer]:
+        - /url: /departments/
+        - generic [ref=e15]: 🏢
+        - generic [ref=e16]: Подразделения
+        - button "☆" [ref=e17]
+      - link "👥 Роли ☆" [ref=e18] [cursor=pointer]:
+        - /url: /settings/roles/
+        - generic [ref=e19]: 👥
+        - generic [ref=e20]: Роли
+        - button "☆" [ref=e21]
+      - link "🤖 AI чат ☆" [ref=e22] [cursor=pointer]:
+        - /url: /ai/chat/
+        - generic [ref=e23]: 🤖
+        - generic [ref=e24]: AI чат
+        - button "☆" [ref=e25]
+      - link "⚙️ AI Hub ☆" [ref=e26] [cursor=pointer]:
+        - /url: /ai/
+        - generic [ref=e27]: ⚙️
+        - generic [ref=e28]: AI Hub
+        - button "☆" [ref=e29]
+      - link "🛠️ Django admin ☆" [ref=e30] [cursor=pointer]:
+        - /url: /admin/
+        - generic [ref=e31]: 🛠️
+        - generic [ref=e32]: Django admin
+        - button "☆" [ref=e33]
+      - link "📊 Аналитика ☆" [ref=e34] [cursor=pointer]:
+        - /url: /analytics/
+        - generic [ref=e35]: 📊
+        - generic [ref=e36]: Аналитика
+        - button "☆" [ref=e37]
+      - link "⏳ Лист ожидания ☆" [ref=e38] [cursor=pointer]:
+        - /url: /waiting-list/
+        - generic [ref=e39]: ⏳
+        - generic [ref=e40]: Лист ожидания
+        - button "☆" [ref=e41]
+      - button "🚪 Выйти" [ref=e43] [cursor=pointer]:
+        - generic [ref=e44]: 🚪
+        - generic [ref=e45]: Выйти
+  - generic [ref=e46]:
+    - banner [ref=e47]:
+      - generic [ref=e48]:
+        - button "☰" [ref=e49] [cursor=pointer]
+        - link "Корпоративный портал ВОБ №3" [ref=e50] [cursor=pointer]:
+          - /url: /
+          - heading "Корпоративный портал ВОБ №3" [level=1] [ref=e51]
+        - navigation [ref=e52]:
+          - generic [ref=e53]: /
+          - link "Канбан заявок" [ref=e54] [cursor=pointer]:
+            - /url: /workorders/
+          - generic [ref=e55]: /
+          - generic [ref=e56]: Основная доска
+    - main [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - generic [ref=e62]: Поиск
+              - searchbox "Поиск" [ref=e63]
+            - generic [ref=e64]:
+              - generic [ref=e65]: Доска
+              - combobox "Доска" [ref=e66]:
+                - option "Основная доска" [selected]
+                - option "Основная доска 2"
+            - generic [ref=e67]:
+              - generic [ref=e68]: Подразделение
+              - combobox "Подразделение" [ref=e69]:
+                - option "Все" [selected]
+                - option "Debug Dept2"
+                - option "Dept"
+                - option "ОИТ"
+                - option "ПО"
+                - option "ТО"
+            - generic [ref=e70]:
+              - generic [ref=e71]: Статус
+              - combobox "Статус" [ref=e72]:
+                - option "Все" [selected]
+                - option "Новая"
+                - option "Принята"
+                - option "В работе"
+                - option "Ожидание"
+                - option "Выполнена"
+                - option "Закрыта"
+                - option "Отменена"
+            - generic [ref=e73]:
+              - generic [ref=e74]: Исполнитель
+              - combobox "Исполнитель" [ref=e75]:
+                - option "Все" [selected]
+                - option "abc"
+                - option "admin"
+                - option "c1"
+                - option "debug2"
+                - option "m1"
+            - generic [ref=e76]:
+              - generic [ref=e77]: Изделие
+              - combobox "Изделие" [ref=e78]:
+                - option "Все" [selected]
+                - option "Тестовое МИ"
+          - button "Создать заявку" [ref=e79] [cursor=pointer]
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - generic "Свернуть/Развернуть" [ref=e83] [cursor=pointer]:
+              - generic [ref=e84]: ❮
+            - generic [ref=e87]:
+              - generic [ref=e88]:
+                - heading "Новые" [level=2] [ref=e89]
+                - generic [ref=e91]: "3"
+              - button "Переименовать" [ref=e93] [cursor=pointer]: ✎
+            - article [ref=e94]:
+              - generic [ref=e95]:
+                - link "8. Тестовая 4" [ref=e96] [cursor=pointer]:
+                  - /url: /workorders/8/
+                - paragraph [ref=e97]: Четвертая тестовая заявка
+                - paragraph [ref=e98]: Без привязки к медизделию
+                - generic [ref=e99]: ОИТ
+                - generic [ref=e101]: Средний
+            - article [ref=e102]:
+              - generic [ref=e103]:
+                - link "6. x" [ref=e104] [cursor=pointer]:
+                  - /url: /workorders/6/
+                - paragraph [ref=e105]: "y"
+                - paragraph [ref=e106]: Без привязки к медизделию
+                - generic [ref=e107]: Dept
+                - generic [ref=e109]: Средний
+            - article [ref=e110]:
+              - generic [ref=e111]:
+                - link "3. Тестовая 3" [ref=e112] [cursor=pointer]:
+                  - /url: /workorders/3/
+                - paragraph [ref=e113]: Тестовая заявка №3
+                - paragraph [ref=e114]: Тестовое МИ (01)
+                - generic [ref=e115]: ТО · abc
+                - generic [ref=e117]: Критичный
+          - generic [ref=e118]:
+            - generic "Свернуть/Развернуть" [ref=e119] [cursor=pointer]:
+              - generic [ref=e120]: ❮
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - heading "В работе" [level=2] [ref=e125]
+                - generic [ref=e127]: "2"
+              - button "Переименовать" [ref=e129] [cursor=pointer]: ✎
+            - article [ref=e130]:
+              - generic [ref=e131]:
+                - link "5. Сломался тестовый светильник" [ref=e132] [cursor=pointer]:
+                  - /url: /workorders/5/
+                - paragraph [ref=e133]: Сломался тестовый светильник, требуется проверка и ремонт
+                - paragraph [ref=e134]: Без привязки к медизделию
+                - generic [ref=e135]: ТО
+                - generic [ref=e137]: Средний
+            - article [ref=e138]:
+              - generic [ref=e139]:
+                - link "7. Debug WO2" [ref=e140] [cursor=pointer]:
+                  - /url: /workorders/7/
+                - paragraph [ref=e141]: Desc
+                - paragraph [ref=e142]: Без привязки к медизделию
+                - generic [ref=e143]: Debug Dept2
+                - generic [ref=e145]: Средний
+          - generic [ref=e146]:
+            - generic "Свернуть/Развернуть" [ref=e147] [cursor=pointer]:
+              - generic [ref=e148]: ❮
+            - generic [ref=e151]:
+              - generic [ref=e152]:
+                - heading "Выполнены" [level=2] [ref=e153]
+                - generic [ref=e155]: "0"
+              - button "Переименовать" [ref=e157] [cursor=pointer]: ✎
+            - generic [ref=e158]:
+              - generic [ref=e159]: 📂
+              - paragraph [ref=e160]: В этой колонке пусто
+          - generic [ref=e161]:
+            - generic "Свернуть/Развернуть" [ref=e162] [cursor=pointer]:
+              - generic [ref=e163]: ❮
+            - generic [ref=e166]:
+              - generic [ref=e167]:
+                - heading "Архив" [level=2] [ref=e168]
+                - generic [ref=e170]: "3"
+              - button "Переименовать" [ref=e172] [cursor=pointer]: ✎
+            - article [ref=e173]:
+              - generic [ref=e174]:
+                - link "4. Четвертая тестовая заявка (большая))" [ref=e175] [cursor=pointer]:
+                  - /url: /workorders/4/
+                - paragraph [ref=e176]: Тестовая четвертая заявка Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod…
+                - paragraph [ref=e177]: Тестовое МИ (01)
+                - generic [ref=e178]: ОИТ · abc
+                - generic [ref=e179]:
+                  - generic [ref=e180]: Средний
+                  - generic [ref=e181]:
+                    - generic "Комментарии" [ref=e182]: 💬 1
+                    - generic "Вложения" [ref=e183]: 📎 1
+            - article [ref=e184]:
+              - generic [ref=e185]:
+                - link "1. Тестовая" [ref=e186] [cursor=pointer]:
+                  - /url: /workorders/1/
+                - paragraph [ref=e187]: Тестовая заявка
+                - paragraph [ref=e188]: Тестовое МИ (01)
+                - generic [ref=e189]: ТО · abc
+                - generic [ref=e191]: Средний
+            - article [ref=e192]:
+              - generic [ref=e193]:
+                - link "2. Тестовая 2" [ref=e194] [cursor=pointer]:
+                  - /url: /workorders/2/
+                - paragraph [ref=e195]: Тестовая заявка 2
+                - paragraph [ref=e196]: Тестовое МИ (01)
+                - generic [ref=e197]: ПО · abc
+                - generic [ref=e199]: Средний

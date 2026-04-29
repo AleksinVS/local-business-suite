@@ -1,5 +1,7 @@
 {
+  "$schema": "./schemas/role_rules.schema.json",
   "customer": {
+    "display_name": "Заказчик (Пользователь)",
     "view_scope": "all",
     "create_workorder": true,
     "edit_scope": "authored",
@@ -14,6 +16,7 @@
     "manage_assignments": false
   },
   "technician": {
+    "display_name": "Техник (Медтехник)",
     "view_scope": "assigned_or_unassigned_or_authored",
     "create_workorder": false,
     "edit_scope": "none",
@@ -28,6 +31,7 @@
     "manage_assignments": false
   },
   "manager": {
+    "display_name": "Менеджер (Администратор)",
     "view_scope": "all",
     "create_workorder": true,
     "edit_scope": "all",

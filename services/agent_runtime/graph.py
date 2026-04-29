@@ -37,14 +37,9 @@ def run_agent(
 ):
     """
     Run the LangGraph agent for a single user prompt.
-
-    Identity/correlation fields (conversation_id, request_id, origin_channel,
-    actor_version) are propagated through the gateway client and into the
-    tool execution audit trail.
     """
     settings = load_runtime_settings()
 
-    # Ensure trace context is populated
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
     if not request_id:
@@ -80,7 +75,6 @@ def run_agent(
         tool = tools_by_name[tool_call["name"]]
         result = tool.invoke(tool_call)
 
-        # Resolve task type for this tool call and enrich the trace entry
         slot_values = tool_call.get("args", {})
         resolution = resolve_task_type_for_tool(tool_call["name"], slot_values)
 
@@ -118,3 +112,76 @@ def run_agent(
         "conversation_id": conversation_id,
         "request_id": request_id,
     }
+
+
+def stream_agent(
+    *,
+    actor: dict,
+    session_id: str,
+    prompt: str,
+    history,
+    conversation_id: str = "",
+    request_id: str = "",
+    origin_channel: str = "",
+    actor_version: str = "",
+):
+    """
+    Stream the LangGraph agent for a single user prompt.
+    Yields chunks of text or tool execution events.
+    """
+    settings = load_runtime_settings()
+
+    if not conversation_id:
+        conversation_id = str(uuid.uuid4())
+    if not request_id:
+        request_id = str(uuid.uuid4())
+    if not origin_channel:
+        origin_channel = actor.get("channel", "internal")
+
+    gateway_client = DjangoGatewayClient(
+        base_url=settings.django_gateway_url,
+        token=settings.django_gateway_token,
+    )
+    tools = build_tools(
+        actor=actor,
+        session_id=session_id,
+        gateway_client=gateway_client,
+        conversation_id=conversation_id,
+        request_id=request_id,
+        origin_channel=origin_channel,
+        actor_version=actor_version,
+    )
+    tools_by_name = {tool.name: tool for tool in tools}
+    model = init_chat_model(settings.model, temperature=0)
+    model_with_tools = model.bind_tools(tools)
+    system_prompt = build_system_prompt()
+
+    @task
+    def call_llm(messages):
+        return model_with_tools.invoke([SystemMessage(content=system_prompt)] + messages)
+
+    @task
+    def call_tool(tool_call):
+        tool = tools_by_name[tool_call["name"]]
+        result = tool.invoke(tool_call)
+        return result
+
+    @entrypoint()
+    def agent(messages):
+        model_response = call_llm(messages).result()
+        while True:
+            if not model_response.tool_calls:
+                break
+            tool_results = [call_tool(tool_call).result() for tool_call in model_response.tool_calls]
+            messages = add_messages(messages, [model_response, *tool_results])
+            model_response = call_llm(messages).result()
+        return add_messages(messages, [model_response])
+
+    history_messages = _history_to_messages(history)
+    history_messages.append(HumanMessage(content=prompt))
+
+    for chunk in agent.stream(history_messages, stream_mode="messages"):
+        if isinstance(chunk, tuple) and len(chunk) >= 2:
+            msg = chunk[0]
+            if isinstance(msg, AIMessage) and not msg.tool_calls:
+                yield msg.content

@@ -130,6 +130,102 @@ def build_tools(
         )
         return result
 
+    @tool("access.update_role_permissions")
+    def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
+        """
+        Updates permissions for a specific role. 
+        Example permissions_map: {"create_workorder": true, "view_scope": "all"}.
+        Requires administrator privileges.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="access.update_role_permissions",
+            actor=actor,
+            payload={"role_name": role_name, "permissions_map": permissions_map},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.get_role_rules")
+    def get_role_rules() -> dict:
+        """
+        Returns the current role and permission configuration from the system.
+        Use this to see what permissions roles currently have.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="access.get_role_rules",
+            actor=actor,
+            payload={},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.users.list")
+    def list_users(query: str = "") -> dict:
+        """
+        Returns a list of users with their roles and departments.
+        Requires administrator privileges.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="access.users.list",
+            actor=actor,
+            payload={"query": query},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.users.update")
+    def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None, group_names: list[str] | None = None) -> dict:
+        """
+        Updates user details. Use this to change user groups, department or activation status.
+        Requires administrator privileges.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="access.users.update",
+            actor=actor,
+            payload={
+                "user_id": user_id,
+                "is_active": is_active,
+                "department_id": department_id,
+                "group_names": group_names
+            },
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.groups.list")
+    def list_groups() -> dict:
+        """
+        Returns a list of all security groups available in the system.
+        Requires administrator privileges.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="access.groups.list",
+            actor=actor,
+            payload={},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     return [
         list_workorders,
         get_workorder,
@@ -138,4 +234,9 @@ def build_tools(
         comment_workorder,
         list_departments,
         list_devices,
+        update_role_permissions,
+        get_role_rules,
+        list_users,
+        update_user,
+        list_groups,
     ]

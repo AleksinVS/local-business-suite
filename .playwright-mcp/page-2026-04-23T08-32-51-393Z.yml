@@ -1,0 +1,41 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - navigation [ref=e5]:
+      - link "📋 Доска ☆" [ref=e6] [cursor=pointer]:
+        - /url: /workorders/
+        - generic [ref=e7]: 📋
+        - generic [ref=e8]: Доска
+        - button "☆" [ref=e9]
+      - link "📦 Медизделия ☆" [ref=e10] [cursor=pointer]:
+        - /url: /inventory/
+        - generic [ref=e11]: 📦
+        - generic [ref=e12]: Медизделия
+        - button "☆" [ref=e13]
+      - link "📊 Аналитика ☆" [ref=e14] [cursor=pointer]:
+        - /url: /analytics/
+        - generic [ref=e15]: 📊
+        - generic [ref=e16]: Аналитика
+        - button "☆" [ref=e17]
+      - link "⏳ Лист ожидания ☆" [ref=e18] [cursor=pointer]:
+        - /url: /waiting-list/
+        - generic [ref=e19]: ⏳
+        - generic [ref=e20]: Лист ожидания
+        - button "☆" [ref=e21]
+  - generic [ref=e22]:
+    - banner [ref=e23]:
+      - generic [ref=e24]:
+        - button "☰" [ref=e25] [cursor=pointer]
+        - link "Корпоративный портал ВОБ №3" [ref=e26] [cursor=pointer]:
+          - /url: /
+          - heading "Корпоративный портал ВОБ №3" [level=1] [ref=e27]
+    - main [ref=e28]:
+      - generic [ref=e30]:
+        - heading "Вход в систему" [level=1] [ref=e31]
+        - generic [ref=e32]:
+          - paragraph [ref=e33]:
+            - text: "Имя пользователя:"
+            - textbox "Имя пользователя:" [active] [ref=e34]
+          - paragraph [ref=e35]:
+            - text: "Пароль:"
+            - textbox "Пароль:" [ref=e36]
+          - button "Войти" [ref=e37] [cursor=pointer]

@@ -230,6 +230,85 @@
         "summary"
       ],
       "required_role_scope": "visible"
-    }
-  ]
-}
+    },
+    {
+      "id": "access.update_role_permissions",
+      "title": "Update Role Permissions",
+      "domain": "core",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Updates permissions for a specific role. Requires administrator privileges.",
+      "inputs": [
+        "role_name",
+        "permissions_map"
+      ],
+      "outputs": [
+        "ok",
+        "message"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "manage"
+      },
+      {
+      "id": "access.get_role_rules",
+      "title": "Get Role Rules",
+      "domain": "core",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Returns the current role and permission configuration. Useful before making changes.",
+      "inputs": [],
+      "outputs": [
+        "rules"
+      ],
+      "required_role_scope": "visible"
+      },
+      {
+      "id": "access.users.list",
+      "title": "List Users",
+      "domain": "core",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Returns a list of users with their roles and departments. Requires administrator privileges.",
+      "inputs": [
+        "query"
+      ],
+      "outputs": [
+        "items"
+      ],
+      "required_role_scope": "manage"
+      },
+      {
+      "id": "access.users.update",
+      "title": "Update User",
+      "domain": "core",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Updates user details like department, active status or groups. Requires administrator privileges.",
+      "inputs": [
+        "user_id",
+        "is_active",
+        "department_id",
+        "group_names"
+      ],
+      "outputs": [
+        "ok",
+        "user"
+      ],
+      "requires_confirmation": true,
+      "required_role_scope": "manage"
+      },
+      {
+      "id": "access.groups.list",
+      "title": "List Groups",
+      "domain": "core",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Returns a list of all available security groups in the system. Requires administrator privileges.",
+      "inputs": [],
+      "outputs": [
+        "items"
+      ],
+      "required_role_scope": "manage"
+      }
+      ]
+      }

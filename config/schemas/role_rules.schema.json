@@ -1,21 +1,33 @@
 {
-  "title": "Role Rules",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Role Rules Configuration",
   "type": "object",
-  "additionalProperties": {
-    "type": "object",
-    "required": [
-      "view_scope",
-      "create_workorder",
-      "edit_scope",
-      "comment_scope",
-      "upload_attachment_scope",
-      "confirm_closure_scope",
-      "rate_scope",
-      "transition_scope",
-      "transition_targets",
-      "manage_inventory",
-      "manage_board_columns",
-      "manage_assignments"
-    ]
+  "patternProperties": {
+    "^[a-zA-Z0-9_]+$": {
+      "type": "object",
+      "properties": {
+        "display_name": { "type": "string" },
+        "view_scope": {
+          "enum": ["all", "assigned_or_unassigned_or_authored", "authored", "none"]
+        },
+        "create_workorder": { "type": "boolean" },
+        "edit_scope": { "type": "string" },
+        "comment_scope": { "type": "string" },
+        "upload_attachment_scope": { "type": "string" },
+        "confirm_closure_scope": { "type": "string" },
+        "rate_scope": { "type": "string" },
+        "transition_scope": { "type": "string" },
+        "transition_targets": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" } },
+            { "enum": ["*"] }
+          ]
+        },
+        "manage_inventory": { "type": "boolean" },
+        "manage_board_columns": { "type": "boolean" },
+        "manage_assignments": { "type": "boolean" }
+      },
+      "required": ["view_scope", "create_workorder"]
+    }
   }
 }

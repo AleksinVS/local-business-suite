@@ -114,6 +114,21 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         return {"device": archive_device_for_actor(actor=actor, payload=payload)}
     elif tool_code == "analytics.summary":
         return get_analytics_summary_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.update_role_permissions":
+        from .services import update_role_permissions_for_actor
+        return update_role_permissions_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.get_role_rules":
+        from .services import get_role_rules_for_actor
+        return get_role_rules_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.users.list":
+        from .services import list_users_for_actor
+        return list_users_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.users.update":
+        from .services import update_user_for_actor
+        return update_user_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.groups.list":
+        from .services import list_groups_for_actor
+        return list_groups_for_actor(actor=actor, payload=payload)
     else:
         raise UnknownToolError(tool_code)
 

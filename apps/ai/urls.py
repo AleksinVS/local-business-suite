@@ -4,6 +4,7 @@ from .views import (
     AIChatDetailView,
     AIChatIndexView,
     AIChatMessageCreateView,
+    AIChatMessageStreamView,
     AIHubView,
     AIToolConfirmView,
     AIToolExecuteView,
@@ -18,6 +19,11 @@ urlpatterns = [
         "chat/<uuid:external_id>/send/",
         AIChatMessageCreateView.as_view(),
         name="chat_send",
+    ),
+    path(
+        "chat/<uuid:external_id>/stream/",
+        AIChatMessageStreamView.as_view(),
+        name="chat_stream",
     ),
     path("", AIHubView.as_view(), name="hub"),
     path(

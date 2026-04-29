@@ -11,7 +11,7 @@
       </div>
       <ul class="compact-list">
         {% for session in chat_sessions %}
-          <li>
+          <li {% if session.id == chat_session.id %}class="active"{% endif %}>
             <a href="{% url 'ai:chat_detail' session.external_id %}">
               {{ session.title|default:"Новый чат" }}
             </a>
@@ -26,7 +26,7 @@
         <a class="button-link button-link-muted" href="{% url 'ai:hub' %}">AI Hub</a>
       </div>
 
-      <div class="ai-message-list">
+      <div class="ai-message-list" id="ai-message-list">
         {% for message in chat_session.messages.all %}
           <article class="ai-message ai-message-{{ message.role }}">
             <div class="ai-message-meta">
@@ -43,11 +43,120 @@
         {% endfor %}
       </div>
 
-      <form method="post" action="{% url 'ai:chat_send' chat_session.external_id %}" class="ai-chat-form">
+      <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" class="ai-chat-form">
         {% csrf_token %}
-        {{ form.prompt }}
-        <button type="submit">Отправить</button>
+        <textarea name="prompt" id="ai-prompt-input" placeholder="Введите ваше сообщение..." required></textarea>
+        <button type="submit" id="ai-send-button">Отправить</button>
       </form>
     </section>
   </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatForm = document.getElementById('ai-chat-form');
+      const messageList = document.getElementById('ai-message-list');
+      const promptInput = document.getElementById('ai-prompt-input');
+      const sendButton = document.getElementById('ai-send-button');
+
+      chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const prompt = promptInput.value.trim();
+        if (!prompt) return;
+
+        // Disable input
+        promptInput.disabled = true;
+        sendButton.disabled = true;
+
+        // Append user message to UI
+        const userMsgHtml = `
+          <article class="ai-message ai-message-user">
+            <div class="ai-message-meta">
+              <strong>Пользователь</strong>
+              <span>только что</span>
+            </div>
+            <div class="ai-message-body">${prompt}</div>
+          </article>
+        `;
+        messageList.insertAdjacentHTML('beforeend', userMsgHtml);
+        messageList.scrollTop = messageList.scrollHeight;
+
+        // Create container for assistant message
+        const assistantMsgId = 'assistant-msg-' + Date.now();
+        const assistantMsgHtml = `
+          <article class="ai-message ai-message-assistant" id="${assistantMsgId}">
+            <div class="ai-message-meta">
+              <strong>Ассистент</strong>
+              <span>печатает...</span>
+            </div>
+            <div class="ai-message-body ai-streaming-content"></div>
+          </article>
+        `;
+        messageList.insertAdjacentHTML('beforeend', assistantMsgHtml);
+        const assistantContentDiv = document.querySelector(`#${assistantMsgId} .ai-message-body`);
+        messageList.scrollTop = messageList.scrollHeight;
+
+        // Start SSE
+        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?prompt=" + encodeURIComponent(prompt);
+        const eventSource = new EventSource(streamUrl);
+
+        let accumulatedContent = "";
+
+        eventSource.onmessage = function(event) {
+          if (event.data === "[DONE]") {
+            eventSource.close();
+            promptInput.value = "";
+            promptInput.disabled = false;
+            sendButton.disabled = false;
+            promptInput.focus();
+            
+            // Reload page or update UI to final state (to get proper timestamps and DB state)
+            // For now just mark as done
+            document.querySelector(`#${assistantMsgId} .ai-message-meta span`).textContent = 'сейчас';
+            return;
+          }
+
+          try {
+            const data = JSON.parse(event.data);
+            if (data.content) {
+              accumulatedContent += data.content;
+              // Simple markdown-ish line breaks
+              assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
+              messageList.scrollTop = messageList.scrollHeight;
+            }
+            if (data.error) {
+              assistantContentDiv.innerHTML += '<div class="error-msg">Ошибка: ' + data.error + '</div>';
+              eventSource.close();
+              promptInput.disabled = false;
+              sendButton.disabled = false;
+            }
+          } catch (err) {
+            console.error('Error parsing SSE:', err);
+          }
+        };
+
+        eventSource.onerror = function(err) {
+          console.error('SSE Error:', err);
+          eventSource.close();
+          promptInput.disabled = false;
+          sendButton.disabled = false;
+        };
+      });
+    });
+  </script>
+
+  <style>
+    .ai-streaming-content {
+      border-left: 2px solid #ddd;
+      padding-left: 10px;
+    }
+    #ai-prompt-input {
+      width: 100%;
+      min-height: 80px;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+  </style>
 {% endblock %}

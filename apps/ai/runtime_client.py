@@ -73,3 +73,55 @@ class AgentRuntimeClient:
         data["conversation_id"] = conversation_id
         data["request_id"] = request_id
         return data
+
+    def chat_stream(
+        self,
+        *,
+        user,
+        session_id,
+        prompt,
+        history,
+        conversation_id: str = "",
+        request_id: str = "",
+        origin_channel: str = "",
+        actor_version: str = "",
+    ):
+        """
+        Stream chat messages from the LangGraph agent runtime.
+        Returns a generator of SSE events.
+        """
+        if not conversation_id:
+            conversation_id = str(uuid.uuid4())
+        if not request_id:
+            request_id = str(uuid.uuid4())
+        if not origin_channel:
+            origin_channel = "django-chat-stream"
+
+        payload = {
+            "session_id": str(session_id),
+            "prompt": prompt,
+            "history": history,
+            "actor": {
+                "user_id": user.id,
+                "username": user.username,
+                "roles": list(user.groups.values_list("name", flat=True)),
+                "is_superuser": user.is_superuser,
+                "channel": "internal",
+                "source": "django-chat",
+                "conversation_id": conversation_id,
+                "request_id": request_id,
+                "origin_channel": origin_channel,
+                "actor_version": actor_version,
+            },
+        }
+        
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/chat/stream",
+            json=payload,
+            timeout=self.timeout,
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if line:
+                    yield line

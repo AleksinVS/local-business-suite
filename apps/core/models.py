@@ -1,5 +1,4 @@
 from django.db import models
-from .models_ou import OrganizationalUnit
 
 
 class Department(models.Model):

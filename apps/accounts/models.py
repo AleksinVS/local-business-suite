@@ -16,15 +16,6 @@ class User(AbstractUser):
         verbose_name="Подразделение",
         help_text="Подразделение пользователя (синхронизируется с AD OU)",
     )
-    organizational_unit = models.ForeignKey(
-        "core.OrganizationalUnit",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="users",
-        verbose_name="Организационная единица",
-        help_text="Полный путь OU в Active Directory",
-    )
 
     class Meta:
         verbose_name = "Пользователь"

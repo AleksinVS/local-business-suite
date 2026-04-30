@@ -51,6 +51,10 @@ def run_agent(
         base_url=settings.django_gateway_url,
         token=settings.django_gateway_token,
     )
+
+    # 1. Fetch skills catalog
+    skills_catalog = gateway_client.get_skills_catalog().get("skills", [])
+    
     tools = build_tools(
         actor=actor,
         session_id=session_id,
@@ -63,17 +67,26 @@ def run_agent(
     tools_by_name = {tool.name: tool for tool in tools}
     model = init_chat_model(settings.model, temperature=0)
     model_with_tools = model.bind_tools(tools)
-    system_prompt = build_system_prompt()
-    tool_trace = []
+    
+    # Dynamic state for instructions
+    current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
 
     @task
     def call_llm(messages):
-        return model_with_tools.invoke([SystemMessage(content=system_prompt)] + messages)
+        return model_with_tools.invoke([SystemMessage(content=current_instructions["body"])] + messages)
 
     @task
     def call_tool(tool_call):
         tool = tools_by_name[tool_call["name"]]
         result = tool.invoke(tool_call)
+
+        # Handle skill activation specially
+        if tool_call["name"] == "activate_skill" and isinstance(result, dict) and result.get("ok"):
+            # Update instructions for the next LLM call in the loop
+            current_instructions["body"] = build_system_prompt(
+                skills_catalog=skills_catalog, 
+                active_skill_content=result.get("instructions", "")
+            )
 
         slot_values = tool_call.get("args", {})
         resolution = resolve_task_type_for_tool(tool_call["name"], slot_values)

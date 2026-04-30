@@ -15,9 +15,6 @@ def build_tools(
 ):
     """
     Build LangChain tools with identity/correlation context.
-
-    All tools forward the trace context (conversation_id, request_id,
-    origin_channel, actor_version) to the Django gateway for audit persistence.
     """
 
     @tool("workorders.list")
@@ -132,11 +129,7 @@ def build_tools(
 
     @tool("access.update_role_permissions")
     def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
-        """
-        Updates permissions for a specific role. 
-        Example permissions_map: {"create_workorder": true, "view_scope": "all"}.
-        Requires administrator privileges.
-        """
+        """Updates permissions for a specific role. Requires administrator privileges."""
         result = gateway_client.execute_tool(
             tool_code="access.update_role_permissions",
             actor=actor,
@@ -151,10 +144,7 @@ def build_tools(
 
     @tool("access.get_role_rules")
     def get_role_rules() -> dict:
-        """
-        Returns the current role and permission configuration from the system.
-        Use this to see what permissions roles currently have.
-        """
+        """Returns current role and permission configuration. Useful before making changes."""
         result = gateway_client.execute_tool(
             tool_code="access.get_role_rules",
             actor=actor,
@@ -169,10 +159,7 @@ def build_tools(
 
     @tool("access.users.list")
     def list_users(query: str = "") -> dict:
-        """
-        Returns a list of users with their roles and departments.
-        Requires administrator privileges.
-        """
+        """Returns a list of users with roles and departments. Requires administrator privileges."""
         result = gateway_client.execute_tool(
             tool_code="access.users.list",
             actor=actor,
@@ -187,10 +174,7 @@ def build_tools(
 
     @tool("access.users.update")
     def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None, group_names: list[str] | None = None) -> dict:
-        """
-        Updates user details. Use this to change user groups, department or activation status.
-        Requires administrator privileges.
-        """
+        """Updates user details. Requires administrator privileges."""
         result = gateway_client.execute_tool(
             tool_code="access.users.update",
             actor=actor,
@@ -210,10 +194,7 @@ def build_tools(
 
     @tool("access.groups.list")
     def list_groups() -> dict:
-        """
-        Returns a list of all security groups available in the system.
-        Requires administrator privileges.
-        """
+        """Returns a list of all security groups. Requires administrator privileges."""
         result = gateway_client.execute_tool(
             tool_code="access.groups.list",
             actor=actor,
@@ -225,6 +206,23 @@ def build_tools(
             actor_version=actor_version,
         )
         return result
+
+    @tool("activate_skill")
+    def activate_skill(skill_id: str) -> dict:
+        """
+        Activates a specific skill by loading its instructions.
+        Use this when a user's request requires specific knowledge (e.g. access management).
+        """
+        result = gateway_client.load_skill_content(skill_id)
+        if "error" in result:
+            return {"ok": False, "error": result["error"]}
+        
+        return {
+            "ok": True, 
+            "skill_id": skill_id, 
+            "instructions": result["instructions"],
+            "message": f"Skill '{skill_id}' activated. I have updated my instructions."
+        }
 
     return [
         list_workorders,
@@ -239,4 +237,5 @@ def build_tools(
         list_users,
         update_user,
         list_groups,
+        activate_skill,
     ]

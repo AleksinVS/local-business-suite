@@ -158,6 +158,8 @@ def validate_role_rules_payload(payload, workflow_payload=None):
         known_statuses = set(workflow_payload.get("statuses", []))
 
     for role, config in payload.items():
+        if role == "$schema":
+            continue
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")
         missing = REQUIRED_ROLE_KEYS - set(config.keys())

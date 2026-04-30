@@ -3,101 +3,372 @@
 {% block title %}AI чат | {{ app_display_name }}{% endblock %}
 
 {% block content %}
-  <section class="ai-chat-layout">
-    <aside class="ai-chat-sidebar panel">
-      <div class="panel-header-row">
-        <h1>AI чат</h1>
-        <a class="button-link" href="{% url 'ai:chat_index' %}">Новый чат</a>
-      </div>
-      <ul class="compact-list">
-        {% for session in chat_sessions %}
-          <li {% if session.id == chat_session.id %}class="active"{% endif %}>
-            <a href="{% url 'ai:chat_detail' session.external_id %}">
-              {{ session.title|default:"Новый чат" }}
+<div class="flex h-[calc(100vh-100px)] antialiased text-gray-800 bg-white rounded-lg shadow border border-gray-200 overflow-hidden" style="margin-top: -10px;">
+    <!-- Chat Sidebar -->
+    <div class="hidden md:flex flex-col w-64 bg-gray-50 border-r border-gray-200">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
+            <h1 class="font-semibold text-gray-800">AI чат</h1>
+            <a href="{% url 'ai:chat_index' %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Новый</a>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+            {% for session in chat_sessions %}
+            <a href="{% url 'ai:chat_detail' session.external_id %}" class="block p-3 border-b border-gray-200 hover:bg-gray-100 transition-colors {% if session.id == chat_session.id %}bg-blue-50 border-l-4 border-l-blue-600{% endif %}">
+                <div class="text-sm truncate text-gray-700">{{ session.title|default:"Новый чат" }}</div>
+                <div class="text-xs text-gray-500 mt-1">{{ session.updated_at|date:"d.m.Y H:i" }}</div>
             </a>
-          </li>
-        {% endfor %}
-      </ul>
-    </aside>
+            {% endfor %}
+        </div>
+    </div>
 
-    <section class="ai-chat-thread panel">
-      <div class="panel-header-row">
-        <h2>{{ chat_session.title|default:"Новый чат" }}</h2>
-        <a class="button-link button-link-muted" href="{% url 'ai:hub' %}">AI Hub</a>
-      </div>
-
-      <div class="ai-message-list" id="ai-message-list">
-        {% for message in chat_session.messages.all %}
-          <article class="ai-message ai-message-{{ message.role }}">
-            <div class="ai-message-meta">
-              <strong>{{ message.get_role_display }}</strong>
-              <span>{{ message.created_at|date:"d.m.Y H:i" }}</span>
-              {% if message.tool_name %}
-                <code>{{ message.tool_name }}</code>
-              {% endif %}
+    <!-- Chat Area -->
+    <div class="flex flex-col flex-1 bg-white relative">
+        <!-- Chat Header -->
+        <div class="p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm z-10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+                <div>
+                    <h2 class="font-semibold text-gray-800">{{ chat_session.title|default:"Новый чат" }}</h2>
+                    <p class="text-xs text-green-500 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Online</p>
+                </div>
             </div>
-            <div class="ai-message-body">{{ message.content|linebreaksbr }}</div>
-          </article>
-        {% empty %}
-          <div class="detail-panel-empty">Диалог пока пуст. Начни с вопроса про заявки.</div>
-        {% endfor %}
-      </div>
+            <a href="{% url 'ai:hub' %}" class="text-gray-500 hover:text-gray-800 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </a>
+        </div>
 
-      <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" class="ai-chat-form">
-        {% csrf_token %}
-        <textarea name="prompt" id="ai-prompt-input" placeholder="Введите ваше сообщение..." required></textarea>
-        <button type="submit" id="ai-send-button">Отправить</button>
-      </form>
-    </section>
-  </section>
+        <!-- Messages -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50" id="ai-message-list">
+            {% for message in chat_session.messages.all %}
+                {% if message.role == 'user' %}
+                    <!-- User Message -->
+                    <div class="flex justify-end">
+                        <div class="flex flex-col items-end gap-1 max-w-[85%] md:max-w-[70%]">
+                            <div class="flex items-center space-x-2 rtl:space-x-reverse mb-1">
+                                <span class="text-sm font-semibold text-gray-900">Вы</span>
+                                <span class="text-xs font-normal text-gray-500">{{ message.created_at|date:"H:i" }}</span>
+                            </div>
+                            
+                            <!-- Attachments Preview inside User Message -->
+                            {% if message.attachments.all %}
+                            <div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-2 w-full">
+                                {% for att in message.attachments.all %}
+                                    {% if att.file_type == 'image' %}
+                                        <a href="{{ att.file.url }}" target="_blank" class="block rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:opacity-90 transition">
+                                            <img src="{{ att.file.url }}" class="w-full h-32 object-cover">
+                                        </a>
+                                    {% else %}
+                                        <a href="{{ att.file.url }}" target="_blank" class="flex items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 transition">
+                                            <div class="bg-blue-100 p-2 rounded-full mr-3 text-blue-600">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                            </div>
+                                            <div class="overflow-hidden">
+                                                <div class="text-sm font-medium text-gray-900 truncate">{{ att.file_name }}</div>
+                                                <div class="text-xs text-gray-500">{{ att.file_size|filesizeformat }}</div>
+                                            </div>
+                                        </a>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            <div class="bg-blue-600 text-white rounded-l-2xl rounded-br-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed">
+                                {{ message.content|linebreaksbr }}
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <!-- Assistant Message -->
+                    <div class="flex justify-start">
+                        <div class="flex flex-col items-start gap-1 max-w-[85%] md:max-w-[70%]">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <span class="text-sm font-semibold text-gray-900">Ассистент</span>
+                                <span class="text-xs font-normal text-gray-500">{{ message.created_at|date:"H:i" }}</span>
+                                {% if message.tool_name %}
+                                    <span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200 shadow-sm">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+                                        {{ message.tool_name }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="bg-white border border-gray-200 text-gray-800 rounded-r-2xl rounded-bl-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed markdown-content prose max-w-none">
+                                {{ message.content|linebreaksbr }}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% empty %}
+                <div class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                    <svg class="w-16 h-16 opacity-20" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"></path></svg>
+                    <p class="text-lg font-medium">Диалог пока пуст</p>
+                    <p class="text-sm">Напишите сообщение или прикрепите документ для анализа.</p>
+                </div>
+            {% endfor %}
+        </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const chatForm = document.getElementById('ai-chat-form');
-      const messageList = document.getElementById('ai-message-list');
-      const promptInput = document.getElementById('ai-prompt-input');
-      const sendButton = document.getElementById('ai-send-button');
+        <!-- Input Area -->
+        <div class="p-4 bg-white border-t border-gray-200">
+            <!-- Attachment Preview Area (Dynamic via JS) -->
+            <div id="attachment-preview-container" class="hidden mb-3 flex gap-2 overflow-x-auto pb-2"></div>
 
-      chatForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const prompt = promptInput.value.trim();
-        if (!prompt) return;
+            <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" enctype="multipart/form-data" class="flex items-end gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
+                {% csrf_token %}
+                
+                <div class="flex items-center pb-1 pl-1">
+                    <label for="chat-file-upload" class="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer rounded-full transition-colors" title="Прикрепить файл">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                        <input type="file" id="chat-file-upload" name="files" multiple class="hidden">
+                    </label>
+                </div>
+                
+                <div class="relative w-full flex items-center">
+                    <textarea name="prompt" id="ai-prompt-input" rows="1" class="block w-full p-2.5 text-[15px] text-gray-900 bg-transparent border-0 focus:ring-0 resize-none overflow-hidden placeholder-gray-400" style="min-height: 44px; max-height: 200px;" placeholder="Введите сообщение..." required></textarea>
+                </div>
+                
+                <div class="flex items-center pb-1 pr-1">
+                    <button type="submit" id="ai-send-button" class="p-2 text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5 translate-x-[1px] translate-y-[-1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V6m0 0l-5 5m5-5l5 5"></path></svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
-        // Disable input
-        promptInput.disabled = true;
-        sendButton.disabled = true;
+{% block extra_scripts %}
+<!-- Tailwind CSS via CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Typography Plugin for Markdown styling -->
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<!-- Flowbite via CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
 
-        // Append user message to UI
-        const userMsgHtml = `
-          <article class="ai-message ai-message-user">
-            <div class="ai-message-meta">
-              <strong>Пользователь</strong>
-              <span>только что</span>
+<script>
+    tailwind.config = {
+        corePlugins: {
+            preflight: false, // Prevent Tailwind from breaking existing styles outside this component
+        }
+    }
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const chatForm = document.getElementById('ai-chat-form');
+    const messageList = document.getElementById('ai-message-list');
+    const promptInput = document.getElementById('ai-prompt-input');
+    const sendButton = document.getElementById('ai-send-button');
+    const fileInput = document.getElementById('chat-file-upload');
+    const previewContainer = document.getElementById('attachment-preview-container');
+
+    // Auto-resize textarea
+    promptInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+        if (this.value === '') this.style.height = '44px';
+    });
+
+    // Enter to submit
+    promptInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (this.value.trim() || fileInput.files.length > 0) chatForm.dispatchEvent(new Event('submit'));
+        }
+    });
+
+    // File Preview Logic
+    let selectedFiles = [];
+    
+    fileInput.addEventListener('change', function(e) {
+        selectedFiles = Array.from(e.target.files);
+        renderPreviews();
+    });
+
+    function renderPreviews() {
+        previewContainer.innerHTML = '';
+        if (selectedFiles.length > 0) {
+            previewContainer.classList.remove('hidden');
+            selectedFiles.forEach((file, index) => {
+                const isImage = file.type.startsWith('image/');
+                
+                const card = document.createElement('div');
+                card.className = "flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 shadow-sm min-w-[150px] max-w-[200px] relative group";
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = "absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md";
+                removeBtn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+                removeBtn.onclick = () => {
+                    selectedFiles.splice(index, 1);
+                    // Update input files using DataTransfer
+                    const dt = new DataTransfer();
+                    selectedFiles.forEach(f => dt.items.add(f));
+                    fileInput.files = dt.files;
+                    renderPreviews();
+                };
+
+                if (isImage) {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.className = "w-8 h-8 object-cover rounded";
+                    card.appendChild(img);
+                } else {
+                    const icon = document.createElement('div');
+                    icon.className = "bg-blue-100 text-blue-600 rounded p-1.5";
+                    icon.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>';
+                    card.appendChild(icon);
+                }
+
+                const textDiv = document.createElement('div');
+                textDiv.className = "overflow-hidden";
+                textDiv.innerHTML = `
+                    <div class="text-xs font-medium text-gray-700 truncate">${file.name}</div>
+                    <div class="text-[10px] text-gray-400">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                `;
+
+                card.appendChild(textDiv);
+                card.appendChild(removeBtn);
+                previewContainer.appendChild(card);
+            });
+        } else {
+            previewContainer.classList.add('hidden');
+        }
+    }
+
+    // Form Submission
+    chatForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const prompt = promptInput.value.trim();
+      if (!prompt && selectedFiles.length === 0) return;
+
+      // Disable input
+      promptInput.disabled = true;
+      sendButton.disabled = true;
+      fileInput.disabled = true;
+
+      // Build FormData
+      const formData = new FormData(chatForm);
+
+      // Optimistic UI for User Message
+      const userMsgId = 'user-msg-' + Date.now();
+      let attachmentsHtml = '';
+      
+      if (selectedFiles.length > 0) {
+          attachmentsHtml = '<div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-2 w-full">';
+          selectedFiles.forEach(file => {
+              const isImage = file.type.startsWith('image/');
+              if (isImage) {
+                  const tempUrl = URL.createObjectURL(file);
+                  attachmentsHtml += `
+                    <div class="block rounded-lg overflow-hidden border border-gray-200 shadow-sm opacity-70">
+                        <img src="${tempUrl}" class="w-full h-32 object-cover">
+                    </div>`;
+              } else {
+                  attachmentsHtml += `
+                    <div class="flex items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm opacity-70">
+                        <div class="bg-blue-100 p-2 rounded-full mr-3 text-blue-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        </div>
+                        <div class="overflow-hidden">
+                            <div class="text-sm font-medium text-gray-900 truncate">${file.name}</div>
+                            <div class="text-xs text-gray-500">Загрузка...</div>
+                        </div>
+                    </div>`;
+              }
+          });
+          attachmentsHtml += '</div>';
+      }
+
+      const userMsgHtml = `
+        <div class="flex justify-end" id="${userMsgId}">
+            <div class="flex flex-col items-end gap-1 max-w-[85%] md:max-w-[70%]">
+                <div class="flex items-center space-x-2 rtl:space-x-reverse mb-1">
+                    <span class="text-sm font-semibold text-gray-900">Вы</span>
+                    <span class="text-xs font-normal text-gray-500">только что</span>
+                </div>
+                ${attachmentsHtml}
+                ${prompt ? `<div class="bg-blue-600 text-white rounded-l-2xl rounded-br-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed opacity-70">${prompt.replace(/\n/g, '<br>')}</div>` : ''}
             </div>
-            <div class="ai-message-body">${prompt}</div>
-          </article>
-        `;
-        messageList.insertAdjacentHTML('beforeend', userMsgHtml);
-        messageList.scrollTop = messageList.scrollHeight;
+        </div>
+      `;
+      
+      const emptyState = document.querySelector('#ai-message-list > .flex-col.items-center');
+      if (emptyState) emptyState.remove();
+      
+      messageList.insertAdjacentHTML('beforeend', userMsgHtml);
+      messageList.scrollTop = messageList.scrollHeight;
 
+      // Clear preview immediately
+      selectedFiles = [];
+      renderPreviews();
+      
+      // Send data via fetch to create the message and upload files
+      fetch(chatForm.action, {
+          method: 'POST',
+          body: formData,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+          }
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.status === 'ok') {
+              // Message saved, start SSE
+              const msgElem = document.getElementById(userMsgId);
+              if (msgElem) {
+                  const bubbles = msgElem.querySelectorAll('.opacity-70');
+                  bubbles.forEach(b => b.classList.remove('opacity-70'));
+              }
+              startSSE(prompt, data.message_id);
+          } else {
+              alert('Ошибка загрузки: ' + data.error);
+              resetInput();
+          }
+      })
+      .catch(error => {
+          console.error('Error:', error);
+          alert('Ошибка соединения при отправке.');
+          resetInput();
+      });
+    });
+
+    function resetInput() {
+        promptInput.value = "";
+        promptInput.style.height = '44px';
+        fileInput.value = '';
+        promptInput.disabled = false;
+        sendButton.disabled = false;
+        fileInput.disabled = false;
+        promptInput.focus();
+    }
+
+    function startSSE(promptText, messageId) {
         // Create container for assistant message
         const assistantMsgId = 'assistant-msg-' + Date.now();
         const assistantMsgHtml = `
-          <article class="ai-message ai-message-assistant" id="${assistantMsgId}">
-            <div class="ai-message-meta">
-              <strong>Ассистент</strong>
-              <span>печатает...</span>
+            <div class="flex justify-start" id="${assistantMsgId}">
+                <div class="flex flex-col items-start gap-1 max-w-[85%] md:max-w-[70%]">
+                    <div class="flex items-center space-x-2 mb-1">
+                        <span class="text-sm font-semibold text-gray-900">Ассистент</span>
+                        <span class="text-xs font-normal text-gray-500">печатает...</span>
+                    </div>
+                    <div class="bg-white border border-gray-200 text-gray-800 rounded-r-2xl rounded-bl-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed prose max-w-none ai-streaming-content">
+                        <span class="flex gap-1 items-center h-4">
+                            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+                            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+                            <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+                        </span>
+                    </div>
+                </div>
             </div>
-            <div class="ai-message-body ai-streaming-content"></div>
-          </article>
         `;
         messageList.insertAdjacentHTML('beforeend', assistantMsgHtml);
-        const assistantContentDiv = document.querySelector(`#${assistantMsgId} .ai-message-body`);
+        const assistantContentDiv = document.querySelector(`#${assistantMsgId} .ai-streaming-content`);
         messageList.scrollTop = messageList.scrollHeight;
 
         // Start SSE
-        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?prompt=" + encodeURIComponent(prompt);
+        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?msg_id=" + encodeURIComponent(messageId) + "&prompt=" + encodeURIComponent(promptText);
         const eventSource = new EventSource(streamUrl);
 
         let accumulatedContent = "";
@@ -105,14 +376,8 @@
         eventSource.onmessage = function(event) {
           if (event.data === "[DONE]") {
             eventSource.close();
-            promptInput.value = "";
-            promptInput.disabled = false;
-            sendButton.disabled = false;
-            promptInput.focus();
-            
-            // Reload page or update UI to final state (to get proper timestamps and DB state)
-            // For now just mark as done
-            document.querySelector(`#${assistantMsgId} .ai-message-meta span`).textContent = 'сейчас';
+            resetInput();
+            document.querySelector(`#${assistantMsgId} .text-gray-500`).textContent = 'только что';
             return;
           }
 
@@ -120,15 +385,13 @@
             const data = JSON.parse(event.data);
             if (data.content) {
               accumulatedContent += data.content;
-              // Simple markdown-ish line breaks
               assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
               messageList.scrollTop = messageList.scrollHeight;
             }
             if (data.error) {
-              assistantContentDiv.innerHTML += '<div class="error-msg">Ошибка: ' + data.error + '</div>';
+              assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + data.error + '</div>';
               eventSource.close();
-              promptInput.disabled = false;
-              sendButton.disabled = false;
+              resetInput();
             }
           } catch (err) {
             console.error('Error parsing SSE:', err);
@@ -138,25 +401,10 @@
         eventSource.onerror = function(err) {
           console.error('SSE Error:', err);
           eventSource.close();
-          promptInput.disabled = false;
-          sendButton.disabled = false;
+          resetInput();
         };
-      });
-    });
-  </script>
-
-  <style>
-    .ai-streaming-content {
-      border-left: 2px solid #ddd;
-      padding-left: 10px;
     }
-    #ai-prompt-input {
-      width: 100%;
-      min-height: 80px;
-      margin-bottom: 10px;
-      padding: 10px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-    }
-  </style>
+  });
+</script>
+{% endblock %}
 {% endblock %}

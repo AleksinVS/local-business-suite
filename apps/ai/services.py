@@ -76,14 +76,20 @@ def append_chat_message(*, session, role, content, tool_name="", metadata=None):
 
 
 def serialize_session_history(session):
-    return [
-        {
+    history = []
+    for message in session.messages.prefetch_related('attachments').order_by("created_at", "id"):
+        content = message.content
+        attachments = list(message.attachments.all())
+        if attachments:
+            att_info = "\n\n[Прикрепленные файлы: " + ", ".join(f"{a.file_name} ({a.get_file_type_display()})" for a in attachments) + "]"
+            content = (content + att_info).strip()
+            
+        history.append({
             "role": message.role,
-            "content": message.content,
+            "content": content,
             "tool_name": message.tool_name,
-        }
-        for message in session.messages.order_by("created_at", "id")
-    ]
+        })
+    return history
 
 
 def list_workorders_for_actor(*, actor, status=None, limit=20):

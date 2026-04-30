@@ -25,23 +25,6 @@ class User(AbstractUser):
         verbose_name="Организационная единица",
         help_text="Полный путь OU в Active Directory",
     )
-    # Для избежания конфликтов со стандартной моделью User
-    groups = models.ManyToManyField(
-        Group,
-        verbose_name="Группы",
-        blank=True,
-        help_text="Группы, к которым принадлежит пользователь",
-        related_name="custom_user_set",
-        related_query_name="custom_user",
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        verbose_name="Пользовательские права",
-        blank=True,
-        help_text="Специальные права для этого пользователя",
-        related_name="custom_user_set",
-        related_query_name="custom_user",
-    )
 
     class Meta:
         verbose_name = "Пользователь"

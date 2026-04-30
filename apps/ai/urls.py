@@ -6,6 +6,8 @@ from .views import (
     AIChatMessageCreateView,
     AIChatMessageStreamView,
     AIHubView,
+    AISkillCatalogView,
+    AISkillLoadView,
     AIToolConfirmView,
     AIToolExecuteView,
 )
@@ -26,6 +28,8 @@ urlpatterns = [
         name="chat_stream",
     ),
     path("", AIHubView.as_view(), name="hub"),
+    path("gateway/skills/catalog/", AISkillCatalogView.as_view(), name="skill_catalog"),
+    path("gateway/skills/<str:skill_id>/load/", AISkillLoadView.as_view(), name="skill_load"),
     path(
         "gateway/tools/<str:tool_code>/execute/",
         AIToolExecuteView.as_view(),

@@ -308,3 +308,28 @@ class AIToolConfirmView(View):
         if result.get("ok"):
             return JsonResponse(result, status=200)
         return JsonResponse(result, status=400)
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AISkillCatalogView(View):
+    def get(self, request):
+        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
+        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
+        if not expected_token or gateway_token != expected_token:
+            return HttpResponseForbidden("AI gateway token is invalid.")
+        
+        from .skills_service import discover_skills
+        return JsonResponse({"skills": discover_skills()})
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AISkillLoadView(View):
+    def get(self, request, skill_id):
+        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
+        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
+        if not expected_token or gateway_token != expected_token:
+            return HttpResponseForbidden("AI gateway token is invalid.")
+        
+        from .skills_service import load_skill_content
+        content = load_skill_content(skill_id)
+        if content:
+            return JsonResponse({"id": skill_id, "instructions": content})
+        return JsonResponse({"error": "Skill not found"}, status=404)

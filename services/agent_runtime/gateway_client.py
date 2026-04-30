@@ -20,17 +20,12 @@ class DjangoGatewayClient:
     ) -> dict:
         """
         Execute a tool via the Django AI gateway.
-
-        Identity/correlation fields (conversation_id, request_id, origin_channel,
-        actor_version) are forwarded to the gateway so they can be persisted
-        in the audit trail and message/session metadata.
         """
         request_payload = {
             "actor": actor,
             "payload": payload,
             "session_id": session_id,
         }
-        # Forward trace context when provided
         if conversation_id:
             request_payload["conversation_id"] = conversation_id
         if request_id:
@@ -41,10 +36,36 @@ class DjangoGatewayClient:
             request_payload["actor_version"] = actor_version
 
         response = httpx.post(
-            f"{self.base_url}/tools/{tool_code}/execute/",
+            f"{self.base_url}/gateway/tools/{tool_code}/execute/",
             json=request_payload,
             headers={"X-AI-Gateway-Token": self.token},
             timeout=90,
         )
         response.raise_for_status()
         return response.json()
+
+    def get_skills_catalog(self):
+        """Fetches the available skills catalog from Django."""
+        try:
+            response = httpx.get(
+                f"{self.base_url}/gateway/skills/catalog/",
+                headers={"X-AI-Gateway-Token": self.token},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError:
+            return {"skills": []}
+
+    def load_skill_content(self, skill_id):
+        """Loads specific skill instructions from Django."""
+        try:
+            response = httpx.get(
+                f"{self.base_url}/gateway/skills/{skill_id}/load/",
+                headers={"X-AI-Gateway-Token": self.token},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as exc:
+            return {"error": str(exc)}

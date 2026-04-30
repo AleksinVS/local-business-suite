@@ -1,12 +1,15 @@
 # Запуск Agent Runtime в фоновом режиме
 # Используйте этот скрипт для временного запуска без создания Windows Service
+# Uses relative paths to be deployment-agnostic
 
 $ErrorActionPreference = "Stop"
 $env:PYTHONUNBUFFERED = "1"
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host "Запуск Agent Runtime..." -ForegroundColor Green
+Write-Host "Рабочая директория: $scriptPath" -ForegroundColor Cyan
 
-cd "C:\inetpub\portal"
+cd $scriptPath
 
 # Проверка порта
 $port = 8090
@@ -19,9 +22,10 @@ if ($connection.TcpTestSucceeded) {
 
 # Запуск в фоновом задании
 $job = Start-Job -ScriptBlock {
+    $scriptPath = $using:scriptPath
     $env:PYTHONUNBUFFERED = "1"
-    cd "C:\inetpub\portal"
-    & ".\.venv\Scripts\python.exe" -m uvicorn services.agent_runtime.app:app --host 127.0.0.1 --port 8090 --timeout-keep-alive 300
+    cd $scriptPath
+    & ".\.venv\Scripts\python.exe" -m uvicorn services.agent_runtime.app:app --host 127.0.0.1 --port 8090 -timeout-keep-alive 300
 }
 
 Write-Host "Agent Runtime запущен в фоновом режиме (Job ID: $($job.Id))" -ForegroundColor Green

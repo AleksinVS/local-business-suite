@@ -17,7 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.workorders.policies import can_manage_inventory
 
 from .forms import AIChatInputForm
-from .models import AgentActionLog, ChatMessage, ChatSession
+from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import append_chat_message, serialize_session_history
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
@@ -64,7 +64,7 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "chat_session"
 
     def get_queryset(self):
-        return ChatSession.objects.filter(user=self.request.user).prefetch_related("messages")
+        return ChatSession.objects.filter(user=self.request.user).prefetch_related("messages", "messages__attachments")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -76,18 +76,17 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
 class AIChatMessageCreateView(LoginRequiredMixin, View):
     def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        form = AIChatInputForm(request.POST)
-        if not form.is_valid():
-            messages.error(request, "Сообщение не прошло валидацию.")
+        
+        prompt = request.POST.get("prompt", "").strip()
+        files = request.FILES.getlist("files")
+        
+        if not prompt and not files:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"error": "Empty message"}, status=400)
+            messages.error(request, "Сообщение пустое.")
             return redirect("ai:chat_detail", external_id=session.external_id)
 
-        prompt = form.cleaned_data["prompt"]
-
-        # Generate or recover trace context for this request.
-        # Persist conversation_id in session metadata so subsequent turns share it.
-        conversation_id = (
-            session.metadata.get("conversation_id") or str(uuid.uuid4())
-        )
+        conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
         request_id = str(uuid.uuid4())
 
         user_msg = append_chat_message(
@@ -100,6 +99,30 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 "origin_channel": session.channel,
             },
         )
+
+        # Handle attachments
+        for f in files:
+            file_type = ChatAttachment.FileType.OTHER
+            content_type = f.content_type or ""
+            if content_type.startswith("image/"):
+                file_type = ChatAttachment.FileType.IMAGE
+            elif content_type.startswith("audio/"):
+                file_type = ChatAttachment.FileType.AUDIO
+            elif "pdf" in content_type or "word" in content_type or "text" in content_type:
+                file_type = ChatAttachment.FileType.DOCUMENT
+                
+            ChatAttachment.objects.create(
+                message=user_msg,
+                file=f,
+                file_name=f.name,
+                file_type=file_type,
+                file_size=f.size
+            )
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"status": "ok", "message_id": user_msg.id})
+
+        # Non-AJAX fallback (synchronous call)
         try:
             response = AgentRuntimeClient().chat(
                 user=request.user,
@@ -120,9 +143,6 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             messages.error(request, "AI runtime недоступен или вернул ошибку.")
             return redirect("ai:chat_detail", external_id=session.external_id)
 
-        # Enrich tool trace entries with trace context for auditability.
-        # Use direct assignment to ensure the view-generated trace IDs take precedence
-        # for proper end-to-end correlation, overriding any values from the runtime.
         tool_trace = response.get("tool_trace", [])
         runtime_conversation_id = response.get("conversation_id") or conversation_id
         runtime_request_id = response.get("request_id") or request_id
@@ -142,7 +162,6 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             },
         )
 
-        # Persist trace context in session metadata using the runtime-returned ID
         session.metadata["conversation_id"] = runtime_conversation_id
         if "request_ids" not in session.metadata:
             session.metadata["request_ids"] = []
@@ -158,23 +177,30 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
 class AIChatMessageStreamView(LoginRequiredMixin, View):
     def get(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        prompt = request.GET.get("prompt")
-        if not prompt:
-            return JsonResponse({"error": "Prompt is required."}, status=400)
-
+        msg_id = request.GET.get("msg_id")
+        prompt = request.GET.get("prompt", "")
+        
         conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
         request_id = str(uuid.uuid4())
 
-        append_chat_message(
-            session=session,
-            role=ChatMessage.Role.USER,
-            content=prompt,
-            metadata={
-                "conversation_id": conversation_id,
-                "request_id": request_id,
-                "origin_channel": session.channel,
-            },
-        )
+        # If msg_id is provided, the message was already created by AIChatMessageCreateView
+        if msg_id:
+            user_msg = get_object_or_404(ChatMessage, id=msg_id, session=session)
+            prompt = user_msg.content
+        elif prompt:
+            # Fallback for older clients that don't use the two-step upload process
+            append_chat_message(
+                session=session,
+                role=ChatMessage.Role.USER,
+                content=prompt,
+                metadata={
+                    "conversation_id": conversation_id,
+                    "request_id": request_id,
+                    "origin_channel": session.channel,
+                },
+            )
+        else:
+            return JsonResponse({"error": "Prompt or msg_id is required."}, status=400)
 
         def stream_generator():
             client = AgentRuntimeClient()
@@ -192,7 +218,6 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                 ):
                     yield f"{event.decode('utf-8')}\n\n"
                     
-                    # Accumulate for saving at the end
                     if event.startswith(b"data: "):
                         data_str = event[6:]
                         if data_str != b"[DONE]":
@@ -218,7 +243,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     },
                 )
             
-            if not session.title:
+            if not session.title and prompt:
                 session.title = prompt[:80]
                 session.save(update_fields=["title", "updated_at"])
 

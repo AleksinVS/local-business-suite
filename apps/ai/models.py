@@ -122,3 +122,32 @@ class AgentActionLog(models.Model):
         ordering = ["-created_at", "-id"]
         verbose_name = "AI action log"
         verbose_name_plural = "AI action logs"
+
+
+class ChatAttachment(models.Model):
+    class FileType(models.TextChoices):
+        IMAGE = "image", "Image"
+        DOCUMENT = "document", "Document"
+        AUDIO = "audio", "Audio"
+        OTHER = "other", "Other"
+
+    message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        blank=True,
+        null=True,
+    )
+    file = models.FileField(upload_to="chat_attachments/%Y/%m/%d/")
+    file_type = models.CharField(max_length=32, choices=FileType.choices, default=FileType.OTHER)
+    file_name = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(help_text="File size in bytes", default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "Chat attachment"
+        verbose_name_plural = "Chat attachments"
+
+    def __str__(self):
+        return f"{self.file_name} ({self.get_file_type_display()})"

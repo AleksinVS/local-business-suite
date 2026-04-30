@@ -200,7 +200,7 @@ class _ConnectionContext:
 
 def sync_user_from_ad(user, attributes, group_role_map):
     from django.conf import settings
-    from apps.core.models import OrganizationalUnit, Department
+    from apps.core.models import Department
 
     # Sync email
     email = attributes.get("mail")
@@ -214,23 +214,26 @@ def sync_user_from_ad(user, attributes, group_role_map):
             user.email = f"{sam_account_name}{email_domain}"
 
     # Sync organizational structure (OU and Department)
-    member_of = attributes.get("memberOf", [])
-    if member_of:
-        # Находим OU пользователя на основе групп
-        for group_dn in member_of:
-            # Извлекаем OU из DN группы
-            ou_dn = _extract_ou_from_dn(group_dn)
-            if ou_dn:
-                # Находим OU в базе
-                ou = OrganizationalUnit.objects.filter(distinguished_name=ou_dn).first()
-                if ou:
-                    user.organizational_unit = ou
-
-                    # Находим соответствующий Department (уровень 3 или выше)
-                    dept = _find_department_for_ou(ou)
-                    if dept:
-                        user.department = dept
-                    break  # Используем первую найденную группу с OU
+    # VOB3 specific code - moved to VOB3 submodule
+    # Uncomment and use VOB3 specific LDAP backend for AD OU synchronization
+    # member_of = attributes.get("memberOf", [])
+    # if member_of:
+    #     from apps.core.models import OrganizationalUnit
+    #     # Находим OU пользователя на основе групп
+    #     for group_dn in member_of:
+    #         # Извлекаем OU из DN группы
+    #         ou_dn = _extract_ou_from_dn(group_dn)
+    #         if ou_dn:
+    #             # Находим OU в базе
+    #             ou = OrganizationalUnit.objects.filter(distinguished_name=ou_dn).first()
+    #             if ou:
+    #                 user.organizational_unit = ou
+    #
+    #                 # Находим соответствующий Department (уровень 3 или выше)
+    #                 dept = _find_department_for_ou(ou)
+    #                 if dept:
+    #                     user.department = dept
+    #                 break  # Используем первую найденную группу с OU
 
     # Sync names
     display_name = attributes.get("displayName", "")

@@ -45,13 +45,15 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
     permanent = False
 
     def get_redirect_url(self, *args, **kwargs):
-        session = (
-            ChatSession.objects.filter(user=self.request.user, status=ChatSession.Status.ACTIVE)
-            .order_by("-updated_at", "-id")
-            .first()
-        )
-        if session:
-            return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
+        create_new = self.request.GET.get("new") == "1"
+        if not create_new:
+            session = (
+                ChatSession.objects.filter(user=self.request.user, status=ChatSession.Status.ACTIVE)
+                .order_by("-updated_at", "-id")
+                .first()
+            )
+            if session:
+                return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
         session = ChatSession.objects.create(user=self.request.user, title="Новый чат")
         return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
 

@@ -8,7 +8,7 @@
     <div class="hidden md:flex flex-col w-64 bg-gray-50 border-r border-gray-200">
         <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
             <h1 class="font-semibold text-gray-800">AI чат</h1>
-            <a href="{% url 'ai:chat_index' %}" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Новый</a>
+            <a href="{% url 'ai:chat_index' %}?new=1" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Новый</a>
         </div>
         <div class="flex-1 overflow-y-auto">
             {% for session in chat_sessions %}
@@ -39,7 +39,13 @@
         </div>
 
         <!-- Messages -->
-        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50" id="ai-message-list">
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50 relative" id="ai-message-list">
+            <!-- Drop overlay for drag-and-drop -->
+            <div id="drop-overlay" class="hidden absolute inset-0 z-20 bg-blue-50/80 border-2 border-dashed border-blue-400 rounded-lg items-center justify-center flex-col pointer-events-none">
+                <svg class="w-12 h-12 text-blue-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                <p class="text-blue-500 font-medium text-sm">Перетащите файлы сюда</p>
+            </div>
+
             {% for message in chat_session.messages.all %}
                 {% if message.role == 'user' %}
                     <!-- User Message -->
@@ -49,7 +55,7 @@
                                 <span class="text-sm font-semibold text-gray-900">Вы</span>
                                 <span class="text-xs font-normal text-gray-500">{{ message.created_at|date:"H:i" }}</span>
                             </div>
-                            
+
                             <!-- Attachments Preview inside User Message -->
                             {% if message.attachments.all %}
                             <div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-2 w-full">
@@ -72,7 +78,7 @@
                                 {% endfor %}
                             </div>
                             {% endif %}
-                            
+
                             <div class="bg-blue-600 text-white rounded-l-2xl rounded-br-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed">
                                 {{ message.content|linebreaksbr }}
                             </div>
@@ -92,9 +98,8 @@
                                     </span>
                                 {% endif %}
                             </div>
-                            <div class="bg-white border border-gray-200 text-gray-800 rounded-r-2xl rounded-bl-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed markdown-content prose max-w-none">
-                                {{ message.content|linebreaksbr }}
-                            </div>
+                            <div class="bg-white border border-gray-200 text-gray-800 rounded-r-2xl rounded-bl-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed markdown-content prose max-w-none assistant-content">{{ message.content|linebreaksbr }}</div>
+                            <script type="application/json" class="assistant-raw-content">"{{ message.content|escapejs }}"</script>
                         </div>
                     </div>
                 {% endif %}
@@ -114,18 +119,18 @@
 
             <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" enctype="multipart/form-data" class="flex items-end gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
                 {% csrf_token %}
-                
+
                 <div class="flex items-center pb-1 pl-1">
                     <label for="chat-file-upload" class="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer rounded-full transition-colors" title="Прикрепить файл">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
                         <input type="file" id="chat-file-upload" name="files" multiple class="hidden">
                     </label>
                 </div>
-                
+
                 <div class="relative w-full flex items-center">
                     <textarea name="prompt" id="ai-prompt-input" rows="1" class="block w-full p-2.5 text-[15px] text-gray-900 bg-transparent border-0 focus:ring-0 resize-none overflow-hidden placeholder-gray-400" style="min-height: 44px; max-height: 200px;" placeholder="Введите сообщение..." required></textarea>
                 </div>
-                
+
                 <div class="flex items-center pb-1 pr-1">
                     <button type="submit" id="ai-send-button" class="p-2 text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
                         <svg class="w-5 h-5 translate-x-[1px] translate-y-[-1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V6m0 0l-5 5m5-5l5 5"></path></svg>
@@ -143,16 +148,68 @@
 <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
 <!-- Flowbite via CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
+<!-- DOMPurify for HTML sanitization -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.6/purify.min.js"></script>
+<!-- Marked.js for Markdown rendering -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
 
 <script>
     tailwind.config = {
         corePlugins: {
-            preflight: false, // Prevent Tailwind from breaking existing styles outside this component
+            preflight: false,
         }
     }
 </script>
 
 <script>
+  // Configure DOMPurify to allow safe interactive HTML
+  DOMPurify.setConfig({
+    ALLOWED_TAGS: [
+      'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'a', 'span', 'sub', 'sup',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+      'pre', 'code', 'blockquote', 'hr',
+      'details', 'summary', 'button', 'input', 'select', 'option', 'label',
+      'img', 'div', 'section', 'article', 'aside', 'header', 'footer', 'nav',
+      'figure', 'figcaption', 'mark', 'abbr', 'kbd', 'var', 'samp',
+    ],
+    ALLOWED_ATTR: [
+      'href', 'target', 'rel', 'class', 'id', 'title', 'alt',
+      'src', 'width', 'height', 'colspan', 'rowspan',
+      'type', 'value', 'name', 'disabled', 'placeholder', 'checked', 'selected',
+      'data-*',
+    ],
+    ALLOW_DATA_ATTR: true,
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'math', 'svg'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  });
+
+  // Configure marked
+  marked.setOptions({
+    breaks: true,
+    gfm: true,
+  });
+
+  function renderAssistantContent(rawContent) {
+    if (!rawContent) return '';
+    var hasHtmlTags = /<[a-zA-Z][^>]*>/.test(rawContent);
+    if (hasHtmlTags) {
+      return DOMPurify.sanitize(rawContent);
+    }
+    var hasMarkdown = /^#{1,6}\s|^\*\s|^\-\s|^\d+\.\s|\*\*[^*]+\*\*|`[^`]+`|^\>|^\|/m.test(rawContent);
+    if (hasMarkdown) {
+      return DOMPurify.sanitize(marked.parse(rawContent));
+    }
+    return rawContent.replace(/\n/g, '<br>');
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     const chatForm = document.getElementById('ai-chat-form');
     const messageList = document.getElementById('ai-message-list');
@@ -160,8 +217,19 @@
     const sendButton = document.getElementById('ai-send-button');
     const fileInput = document.getElementById('chat-file-upload');
     const previewContainer = document.getElementById('attachment-preview-container');
+    const dropOverlay = document.getElementById('drop-overlay');
 
     let isSubmitting = false;
+
+    // Render server-rendered assistant messages
+    document.querySelectorAll('.assistant-content').forEach(function(el) {
+      var scriptEl = el.nextElementSibling;
+      if (scriptEl && scriptEl.classList.contains('assistant-raw-content')) {
+        var raw = JSON.parse(scriptEl.textContent);
+        el.innerHTML = renderAssistantContent(raw);
+        scriptEl.remove();
+      }
+    });
 
     // Auto-resize textarea
     promptInput.addEventListener('input', function() {
@@ -185,9 +253,47 @@
         }
     });
 
+    // Drag-and-drop
+    var dragCounter = 0;
+
+    messageList.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragCounter++;
+        dropOverlay.classList.remove('hidden');
+        dropOverlay.classList.add('flex');
+    });
+
+    messageList.addEventListener('dragover', function(e) {
+        e.preventDefault();
+    });
+
+    messageList.addEventListener('dragleave', function(e) {
+        dragCounter--;
+        if (dragCounter === 0) {
+            dropOverlay.classList.add('hidden');
+            dropOverlay.classList.remove('flex');
+        }
+    });
+
+    messageList.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.add('hidden');
+        dropOverlay.classList.remove('flex');
+
+        var files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+
+        selectedFiles = selectedFiles.concat(files);
+        var dt = new DataTransfer();
+        selectedFiles.forEach(function(f) { dt.items.add(f); });
+        fileInput.files = dt.files;
+        renderPreviews();
+    });
+
     // File Preview Logic
     let selectedFiles = [];
-    
+
     fileInput.addEventListener('change', function(e) {
         selectedFiles = Array.from(e.target.files);
         renderPreviews();
@@ -199,17 +305,16 @@
             previewContainer.classList.remove('hidden');
             selectedFiles.forEach((file, index) => {
                 const isImage = file.type.startsWith('image/');
-                
+
                 const card = document.createElement('div');
                 card.className = "flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 shadow-sm min-w-[150px] max-w-[200px] relative group";
-                
+
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
                 removeBtn.className = "absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md";
                 removeBtn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
                 removeBtn.onclick = () => {
                     selectedFiles.splice(index, 1);
-                    // Update input files using DataTransfer
                     const dt = new DataTransfer();
                     selectedFiles.forEach(f => dt.items.add(f));
                     fileInput.files = dt.files;
@@ -248,7 +353,7 @@
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
       if (isSubmitting) return;
-      
+
       const prompt = promptInput.value.trim();
       if (!prompt && selectedFiles.length === 0) return;
 
@@ -267,7 +372,7 @@
       // Optimistic UI for User Message
       const userMsgId = 'user-msg-' + Date.now();
       let attachmentsHtml = '';
-      
+
       if (selectedFiles.length > 0) {
           attachmentsHtml = '<div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-2 w-full">';
           selectedFiles.forEach(file => {
@@ -302,21 +407,21 @@
                     <span class="text-xs font-normal text-gray-500">только что</span>
                 </div>
                 ${attachmentsHtml}
-                ${prompt ? `<div class="bg-blue-600 text-white rounded-l-2xl rounded-br-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed opacity-70">${prompt.replace(/\n/g, '<br>')}</div>` : ''}
+                ${prompt ? `<div class="bg-blue-600 text-white rounded-l-2xl rounded-br-2xl px-5 py-3 shadow-md text-[15px] leading-relaxed opacity-70">${escapeHtml(prompt).replace(/\n/g, '<br>')}</div>` : ''}
             </div>
         </div>
       `;
-      
+
       const emptyState = document.querySelector('#ai-message-list > .flex-col.items-center');
       if (emptyState) emptyState.remove();
-      
+
       messageList.insertAdjacentHTML('beforeend', userMsgHtml);
       messageList.scrollTop = messageList.scrollHeight;
 
       // Clear preview immediately
       selectedFiles = [];
       renderPreviews();
-      
+
       // Send data via fetch to create the message and upload files
       fetch(chatForm.action, {
           method: 'POST',
@@ -336,7 +441,7 @@
               }
               startSSE(prompt, data.message_id);
           } else {
-              alert('Ошибка загрузки: ' + data.error);
+              alert('Ошибка загрузки: ' + escapeHtml(data.error));
               resetInput();
           }
       })
@@ -391,6 +496,8 @@
         eventSource.onmessage = function(event) {
           if (event.data === "[DONE]") {
             eventSource.close();
+            // Re-render with full markdown/HTML processing
+            assistantContentDiv.innerHTML = renderAssistantContent(accumulatedContent);
             resetInput();
             document.querySelector(`#${assistantMsgId} .text-gray-500`).textContent = 'только что';
             return;
@@ -400,11 +507,12 @@
             const data = JSON.parse(event.data);
             if (data.content) {
               accumulatedContent += data.content;
+              // Show plain text during streaming to avoid flickering partial markdown
               assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
               messageList.scrollTop = messageList.scrollHeight;
             }
             if (data.error) {
-              assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + data.error + '</div>';
+              assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + escapeHtml(data.error) + '</div>';
               eventSource.close();
               resetInput();
             }
@@ -415,6 +523,10 @@
 
         eventSource.onerror = function(err) {
           console.error('SSE Error:', err);
+          // Try to re-render whatever we accumulated
+          if (accumulatedContent) {
+            assistantContentDiv.innerHTML = renderAssistantContent(accumulatedContent);
+          }
           eventSource.close();
           resetInput();
         };

@@ -2,11 +2,6 @@
   "version": "1.0",
   "name": "chat_agent_registry",
   "description": "Runtime profile for the local chat and agent block.",
-  "primary_chat_ui": {
-    "name": "LibreChat",
-    "mode": "self-hosted",
-    "purpose": "Multi-user chat interface"
-  },
   "agent_orchestrator": {
     "name": "LangGraph",
     "mode": "self-hosted",
@@ -36,4 +31,3 @@
     "audit_all_tool_calls": true
   }
 }
-

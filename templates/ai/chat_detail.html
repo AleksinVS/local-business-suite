@@ -161,6 +161,8 @@
     const fileInput = document.getElementById('chat-file-upload');
     const previewContainer = document.getElementById('attachment-preview-container');
 
+    let isSubmitting = false;
+
     // Auto-resize textarea
     promptInput.addEventListener('input', function() {
         this.style.height = 'auto';
@@ -172,7 +174,14 @@
     promptInput.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (this.value.trim() || fileInput.files.length > 0) chatForm.dispatchEvent(new Event('submit'));
+            if (isSubmitting) return;
+            if (this.value.trim() || fileInput.files.length > 0) {
+                if (typeof chatForm.requestSubmit === 'function') {
+                    chatForm.requestSubmit(sendButton);
+                } else {
+                    sendButton.click();
+                }
+            }
         }
     });
 
@@ -238,17 +247,22 @@
     // Form Submission
     chatForm.addEventListener('submit', function(e) {
       e.preventDefault();
+      if (isSubmitting) return;
       
       const prompt = promptInput.value.trim();
       if (!prompt && selectedFiles.length === 0) return;
 
-      // Disable input
+      isSubmitting = true;
+
+      // Build FormData BEFORE disabling inputs (FormData skips disabled fields)
+      const formData = new FormData(chatForm);
+
+      // Disable input and clear after reading
       promptInput.disabled = true;
       sendButton.disabled = true;
       fileInput.disabled = true;
-
-      // Build FormData
-      const formData = new FormData(chatForm);
+      promptInput.value = '';
+      promptInput.style.height = '44px';
 
       // Optimistic UI for User Message
       const userMsgId = 'user-msg-' + Date.now();
@@ -334,6 +348,7 @@
     });
 
     function resetInput() {
+        isSubmitting = false;
         promptInput.value = "";
         promptInput.style.height = '44px';
         fileInput.value = '';

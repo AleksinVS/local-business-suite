@@ -85,7 +85,6 @@ REQUIRED_AI_REGISTRY_KEYS = {
     "version",
     "name",
     "description",
-    "primary_chat_ui",
     "agent_orchestrator",
     "tool_protocol",
     "tool_catalog",

@@ -62,7 +62,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat", "user_prompt": "Покажи новые заявки"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal", "user_prompt": "Покажи новые заявки"},
                     "payload": {"status": WorkOrderStatus.NEW, "limit": 10},
                 }
             ),
@@ -86,7 +86,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.create"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
                     "payload": {
                         "department_id": self.department.id,
                         "subject": "Починить раковину",
@@ -141,7 +141,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
                     "payload": {"status": WorkOrderStatus.NEW, "limit": 10},
                     "session_id": "external-session-42",
                 }
@@ -177,7 +177,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.get"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
                     "payload": {"workorder_id": 99999},
                 }
             ),
@@ -200,7 +200,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.create"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
                     "payload": {
                         "department_id": self.department.id,
                         "subject": "Test pending",
@@ -234,7 +234,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.transition"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.manager.id, "channel": "librechat"},
+                    "actor": {"user_id": self.manager.id, "channel": "internal"},
                     "payload": {
                         "workorder_id": self.customer_workorder.id,
                         "target_status": "in_progress",
@@ -363,7 +363,7 @@ class AIViewsTests(TestCase):
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
             data=json.dumps(
                 {
-                    "actor": {"user_id": self.customer.id, "channel": "librechat"},
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
                     "payload": {"status": WorkOrderStatus.NEW},
                 }
             ),
@@ -403,7 +403,7 @@ class IdentityContextPropagationTests(TestCase):
                 "session_id": "session-trace-1",
                 "conversation_id": "conv-abc123",
                 "request_id": "req-def456",
-                "origin_channel": "librechat",
+                "origin_channel": "internal",
                 "actor_version": "1.0.0",
             }),
             content_type="application/json",

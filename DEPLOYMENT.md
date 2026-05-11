@@ -11,8 +11,6 @@ Production-развертывание поддерживает две конфи
 - `agent-runtime` — LangGraph runtime и MCP bridge
 - `caddy` — reverse proxy
 
-LibreChat разворачивается отдельным compose-проектом и доступен через `Caddy` по пути `/librechat/`, без отдельного внешнего порта.
-
 База данных и пользовательские файлы хранятся на хосте:
 - `db/`
 - `media/`
@@ -65,13 +63,6 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `OPENAI_API_KEY=<provider-key>`
 - `OPENAI_BASE_URL=<openai-compatible-base-url>`
 - `AI_AGENT_MODEL_NAME=<provider-model-name>`
-- `LIBRECHAT_PUBLIC_URL=http://<host>/librechat`
-- `LIBRECHAT_APP_TITLE=<chat-title>`
-- `LIBRECHAT_JWT_SECRET=<64-hex>`
-- `LIBRECHAT_JWT_REFRESH_SECRET=<64-hex>`
-- `LIBRECHAT_CREDS_KEY=<64-hex>`
-- `LIBRECHAT_CREDS_IV=<32-hex>`
-- `LIBRECHAT_MEILI_MASTER_KEY=<64-hex>`
 - при необходимости `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`
 
 Минимальный пример:
@@ -87,13 +78,6 @@ LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90
 OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1
 AI_AGENT_MODEL_NAME=gpt-4.1-mini
-LIBRECHAT_PUBLIC_URL=http://188.120.246.243/librechat
-LIBRECHAT_APP_TITLE=Корпоративный портал ВОБ №3 AI Chat
-LIBRECHAT_JWT_SECRET=replace-with-64-hex-chars
-LIBRECHAT_JWT_REFRESH_SECRET=replace-with-64-hex-chars
-LIBRECHAT_CREDS_KEY=replace-with-64-hex-chars
-LIBRECHAT_CREDS_IV=replace-with-32-hex-chars
-LIBRECHAT_MEILI_MASTER_KEY=replace-with-64-hex-chars
 SECURE_SSL_REDIRECT=False
 SESSION_COOKIE_SECURE=False
 CSRF_COOKIE_SECURE=False
@@ -111,12 +95,9 @@ CSRF_COOKIE_SECURE=False
 - проверяет SSH-доступ;
 - синхронизирует проект на VPS через `rsync --delete`;
 - загружает `.env.production`;
-- генерирует production `services/librechat/.env` из `.env.production`;
 - создает общий Docker network `local-business-suite_internal`, если его еще нет;
 - при наличии старого standalone `docker-compose` делает cleanup legacy-контейнеров;
-- пересобирает и поднимает production-стек через `docker compose`;
-- пересобирает и поднимает LibreChat-стек отдельным `docker compose` project;
-- публикует LibreChat через `/librechat/` на основном хосте.
+- пересобирает и поднимает production-стек через `docker compose`.
 
 По умолчанию используются:
 - host: `188.120.246.243`
@@ -125,7 +106,6 @@ CSRF_COOKIE_SECURE=False
 - dir: `/home/admin/local-business-suite`
 - compose command: `sudo docker compose`
 - prod project: `local-business-suite-prod`
-- librechat project: `local-business-suite-librechat`
 
 Их можно переопределить через переменные окружения:
 
@@ -147,13 +127,10 @@ VPS_HOST=example.com VPS_USER=deploy VPS_PORT=22 PROJECT_DIR=/opt/local-business
 
 `agent-runtime` запускается отдельно и читает provider variables из `.env.production`.
 
-LibreChat запускается отдельным compose-проектом, но в общей internal-сети, и публикуется только через Caddy. Внешний URL должен указывать на путь `/librechat/`.
-
 ## Caddy
 
-Текущий [Caddyfile](/home/abc/.openclaw/workspace/projects/local-business-suite/Caddyfile) обрабатывает два публичных маршрута:
+Текущий [Caddyfile](/home/abc/.openclaw/workspace/projects/local-business-suite/Caddyfile) обрабатывает публичный маршрут:
 - `/` -> `web:8000`
-- `/librechat/` -> `librechat:3080`
 
 Статика обслуживается Django/WhiteNoise. Это проще и надежнее для текущего состава проекта.
 
@@ -171,14 +148,12 @@ LibreChat запускается отдельным compose-проектом, н
 ```bash
 curl -I http://<host>/health/
 curl -I http://<host>/accounts/login/
-curl -I http://<host>/librechat/
 curl -I http://<host>/
 ```
 
 Ожидаемое поведение:
 - `/health/` -> `200`
 - `/accounts/login/` -> `200`
-- `/librechat/` -> `200`
 - `/` -> `302` на login или dashboard
 
 ## Полезные команды
@@ -189,22 +164,10 @@ curl -I http://<host>/
 ssh -i ~/.ssh/openclaw_vps_ed25519 -p 2222 admin@188.120.246.243 'cd /home/admin/local-business-suite && sudo docker compose -p local-business-suite-prod -f docker-compose.prod.yml logs -f'
 ```
 
-Логи LibreChat:
-
-```bash
-ssh -i ~/.ssh/openclaw_vps_ed25519 -p 2222 admin@188.120.246.243 'cd /home/admin/local-business-suite && sudo docker compose -p local-business-suite-librechat -f docker-compose.librechat.yml -f docker-compose.librechat.prod.yml logs -f'
-```
-
 Статус контейнеров:
 
 ```bash
 ssh -i ~/.ssh/openclaw_vps_ed25519 -p 2222 admin@188.120.246.243 'cd /home/admin/local-business-suite && sudo docker compose -p local-business-suite-prod -f docker-compose.prod.yml ps'
-```
-
-Статус LibreChat:
-
-```bash
-ssh -i ~/.ssh/openclaw_vps_ed25519 -p 2222 admin@188.120.246.243 'cd /home/admin/local-business-suite && sudo docker compose -p local-business-suite-librechat -f docker-compose.librechat.yml -f docker-compose.librechat.prod.yml ps'
 ```
 
 Ручной rebuild:

@@ -37,14 +37,6 @@ Endpoints:
 - `POST /chat`
 - `MCP /mcp`
 
-LibreChat MCP example:
-
-- [librechat.mcp.example.yaml](/home/abc/.openclaw/workspace/projects/local-business-suite/services/agent_runtime/librechat.mcp.example.yaml)
-
-End-to-end local stack:
-
-- [services/librechat/README.md](/home/abc/.openclaw/workspace/projects/local-business-suite/services/librechat/README.md)
-
 For `z.ai` coding endpoint, set:
 
 ```bash

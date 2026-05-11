@@ -5,13 +5,6 @@
 :80 {
     encode zstd gzip
 
-    @librechat_root path /librechat
-    redir @librechat_root /librechat/ permanent
-
-    handle_path /librechat/* {
-        reverse_proxy librechat:3080
-    }
-
     handle {
         reverse_proxy web:8000
     }

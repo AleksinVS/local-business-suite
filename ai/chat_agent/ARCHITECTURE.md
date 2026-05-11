@@ -16,7 +16,6 @@ The block is not a parallel business system. It is an interaction layer over the
 
 ## Recommended MVP Stack
 
-- `LibreChat` as the multi-user chat UI.
 - `LangGraph` as the agent orchestrator for multi-step flows and human-in-the-loop execution.
 - `MCP` as the tool protocol between the chat/agent layer and the application-specific tools.
 - A Python tool gateway that calls the existing domain services and policy checks.

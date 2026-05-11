@@ -23,7 +23,7 @@ The initial runtime and Django integration now exist, so the next implementation
 6. Continue with the next missing pieces:
    - wire an MCP-compatible server surface in front of the Django AI gateway or agent runtime;
    - add richer tool coverage such as attachments and assignment actions;
-   - connect an external chat frontend such as LibreChat to the runtime.
+   - connect an external chat frontend to the runtime.
 
 ## Non-Goals For The First Slice
 

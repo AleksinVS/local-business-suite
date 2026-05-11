@@ -216,13 +216,13 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     request_id=request_id,
                     origin_channel=session.channel,
                 ):
-                    yield f"{event.decode('utf-8')}\n\n"
+                    yield f"{event}\n\n"
                     
-                    if event.startswith(b"data: "):
+                    if event.startswith("data: "):
                         data_str = event[6:]
-                        if data_str != b"[DONE]":
+                        if data_str != "[DONE]":
                             try:
-                                data_json = json.loads(data_str.decode('utf-8'))
+                                data_json = json.loads(data_str)
                                 if "content" in data_json:
                                     full_content.append(data_json["content"])
                             except:

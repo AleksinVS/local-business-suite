@@ -7,7 +7,6 @@ from django.db import models
 class ChatSession(models.Model):
     class Channel(models.TextChoices):
         INTERNAL = "internal", "Internal"
-        LIBRECHAT = "librechat", "LibreChat"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"

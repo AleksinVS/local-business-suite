@@ -24,6 +24,7 @@ class AgentRuntimeClient:
         request_id: str = "",
         origin_channel: str = "",
         actor_version: str = "",
+        model_id: str = "",
     ):
         """
         Send a chat message to the LangGraph agent runtime.
@@ -44,6 +45,7 @@ class AgentRuntimeClient:
             "session_id": str(session_id),
             "prompt": prompt,
             "history": history,
+            "model_id": model_id,
             "actor": {
                 "user_id": user.id,
                 "username": user.username,
@@ -85,6 +87,7 @@ class AgentRuntimeClient:
         request_id: str = "",
         origin_channel: str = "",
         actor_version: str = "",
+        model_id: str = "",
     ):
         """
         Stream chat messages from the LangGraph agent runtime.
@@ -101,6 +104,7 @@ class AgentRuntimeClient:
             "session_id": str(session_id),
             "prompt": prompt,
             "history": history,
+            "model_id": model_id,
             "actor": {
                 "user_id": user.id,
                 "username": user.username,
@@ -119,7 +123,7 @@ class AgentRuntimeClient:
             "POST",
             f"{self.base_url}/chat/stream",
             json=payload,
-            timeout=self.timeout,
+            timeout=httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0),
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():

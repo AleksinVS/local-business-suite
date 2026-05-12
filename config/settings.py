@@ -242,6 +242,12 @@ LOCAL_BUSINESS_AI_TASK_TYPES_FILE = Path(
         BASE_DIR / "config" / "ai" / "task_types.json",
     )
 )
+LOCAL_BUSINESS_AI_MODELS_FILE = Path(
+    os.environ.get(
+        "LOCAL_BUSINESS_AI_MODELS_FILE",
+        BASE_DIR / "config" / "ai" / "models.json",
+    )
+)
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
 )
@@ -290,6 +296,8 @@ try:
 
     LOCAL_BUSINESS_AI_TASK_TYPES = load_json_file(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
     validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
+
+    LOCAL_BUSINESS_AI_MODELS = load_json_file(LOCAL_BUSINESS_AI_MODELS_FILE)
 except (OSError, json.JSONDecodeError, ValidationError) as exc:
     raise ImproperlyConfigured(
         f"Invalid Корпоративный портал ВОБ №3 configuration: {exc}"

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "glm-4.5-air",
+    "name": "GLM-4.5 Air",
+    "model": "openai:glm-4.5-air",
+    "base_url": "https://api.z.ai/api/coding/paas/v4/",
+    "api_key_env": "OPENAI_API_KEY",
+    "default": true
+  },
+  {
+    "id": "nemotron-3-nano",
+    "name": "nemotron-3-nano",
+    "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "provider": "openai",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "default": false
+  }
+]

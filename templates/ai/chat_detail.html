@@ -12,10 +12,15 @@
         </div>
         <div class="flex-1 overflow-y-auto">
             {% for session in chat_sessions %}
-            <a href="{% url 'ai:chat_detail' session.external_id %}" class="block p-3 border-b border-gray-200 hover:bg-gray-100 transition-colors {% if session.id == chat_session.id %}bg-blue-50 border-l-4 border-l-blue-600{% endif %}">
-                <div class="text-sm truncate text-gray-700">{{ session.title|default:"Новый чат" }}</div>
-                <div class="text-xs text-gray-500 mt-1">{{ session.updated_at|date:"d.m.Y H:i" }}</div>
-            </a>
+            <div class="group relative border-b border-gray-200 {% if session.id == chat_session.id %}bg-blue-50 border-l-4 border-l-blue-600{% endif %} hover:bg-gray-100 transition-colors">
+                <a href="{% url 'ai:chat_detail' session.external_id %}" class="block p-3 pr-9">
+                    <div class="text-sm truncate text-gray-700">{{ session.title|default:"Новый чат" }}</div>
+                    <div class="text-xs text-gray-500 mt-1">{{ session.updated_at|date:"d.m.Y H:i" }}</div>
+                </a>
+                <button type="button" onclick="deleteChat('{{ session.external_id }}', this)" class="absolute top-3 right-2 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить чат">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -33,9 +38,19 @@
                     <p class="text-xs text-green-500 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Online</p>
                 </div>
             </div>
-            <a href="{% url 'ai:hub' %}" class="text-gray-500 hover:text-gray-800 transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            </a>
+            <div class="flex items-center gap-3">
+                <select id="ai-model-select" class="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer" title="Выбор модели ИИ">
+                  {% for model in ai_models %}
+                  <option value="{{ model.id }}" {% if model.id == current_model_id %}selected{% elif model.default and not current_model_id %}selected{% endif %}>{{ model.name }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" onclick="deleteCurrentChat()" class="p-1 text-gray-400 hover:text-red-500 transition-colors" title="Удалить чат">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+                <a href="{% url 'ai:hub' %}" class="text-gray-500 hover:text-gray-800 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </a>
+            </div>
         </div>
 
         <!-- Messages -->
@@ -119,6 +134,7 @@
 
             <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" enctype="multipart/form-data" class="flex items-end gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
                 {% csrf_token %}
+                <input type="hidden" name="model_id" id="ai-model-id-input" value="{{ current_model_id }}">
 
                 <div class="flex items-center pb-1 pl-1">
                     <label for="chat-file-upload" class="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer rounded-full transition-colors" title="Прикрепить файл">
@@ -210,6 +226,15 @@
     return div.innerHTML;
   }
 
+  // Stream continues in background when user navigates away.
+  // Django saves the response to DB, so it will appear on next page load.
+  // Only abort if explicitly requested (e.g. page hidden for a long time).
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden && window._activeChatStream) {
+      // Don't abort — let it finish in background
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', function() {
     const chatForm = document.getElementById('ai-chat-form');
     const messageList = document.getElementById('ai-message-list');
@@ -220,6 +245,45 @@
     const dropOverlay = document.getElementById('drop-overlay');
 
     let isSubmitting = false;
+    let currentModelId = '{{ current_model_id|default:"" }}';
+    {% if not current_model_id %}
+    {% for model in ai_models %}
+    {% if model.default %}currentModelId = '{{ model.id }}';{% endif %}
+    {% endfor %}
+    {% endif %}
+    const modelUpdateUrl = '{% url "ai:chat_update_model" chat_session.external_id %}';
+    const csrfToken = '{{ csrf_token }}';
+
+    // Model selector
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelIdInput = document.getElementById('ai-model-id-input');
+
+    modelSelect.addEventListener('change', function() {
+      const newModelId = this.value;
+      fetch(modelUpdateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ model_id: newModelId }),
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          currentModelId = newModelId;
+          modelIdInput.value = newModelId;
+        } else {
+          alert('Ошибка смены модели: ' + data.error);
+          modelSelect.value = currentModelId;
+        }
+      })
+      .catch(error => {
+        alert('Ошибка соединения при смене модели.');
+        modelSelect.value = currentModelId;
+      });
+    });
 
     // Render server-rendered assistant messages
     document.querySelectorAll('.assistant-content').forEach(function(el) {
@@ -464,7 +528,6 @@
     }
 
     function startSSE(promptText, messageId) {
-        // Create container for assistant message
         const assistantMsgId = 'assistant-msg-' + Date.now();
         const assistantMsgHtml = `
             <div class="flex justify-start" id="${assistantMsgId}">
@@ -487,51 +550,107 @@
         const assistantContentDiv = document.querySelector(`#${assistantMsgId} .ai-streaming-content`);
         messageList.scrollTop = messageList.scrollHeight;
 
-        // Start SSE
-        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?msg_id=" + encodeURIComponent(messageId) + "&prompt=" + encodeURIComponent(promptText);
-        const eventSource = new EventSource(streamUrl);
-
+        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?msg_id=" + encodeURIComponent(messageId) + "&prompt=" + encodeURIComponent(promptText) + "&model_id=" + encodeURIComponent(currentModelId);
         let accumulatedContent = "";
+        const controller = new AbortController();
 
-        eventSource.onmessage = function(event) {
-          if (event.data === "[DONE]") {
-            eventSource.close();
-            // Re-render with full markdown/HTML processing
-            assistantContentDiv.innerHTML = renderAssistantContent(accumulatedContent);
-            resetInput();
-            document.querySelector(`#${assistantMsgId} .text-gray-500`).textContent = 'только что';
-            return;
-          }
-
-          try {
-            const data = JSON.parse(event.data);
-            if (data.content) {
-              accumulatedContent += data.content;
-              // Show plain text during streaming to avoid flickering partial markdown
-              assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
-              messageList.scrollTop = messageList.scrollHeight;
-            }
-            if (data.error) {
-              assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + escapeHtml(data.error) + '</div>';
-              eventSource.close();
-              resetInput();
-            }
-          } catch (err) {
-            console.error('Error parsing SSE:', err);
-          }
+        window._activeChatStream = {
+          abort: function() { controller.abort(); },
+          accumulatedContent: accumulatedContent,
+          div: assistantContentDiv,
+          msgId: assistantMsgId,
         };
 
-        eventSource.onerror = function(err) {
-          console.error('SSE Error:', err);
-          // Try to re-render whatever we accumulated
+        fetch(streamUrl, { signal: controller.signal })
+          .then(function(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            function read() {
+              reader.read().then(function(result) {
+                if (result.done) { finishStream(); return; }
+                const text = decoder.decode(result.value, { stream: true });
+                const lines = text.split('\n');
+                lines.forEach(function(line) {
+                  if (!line.startsWith('data: ')) return;
+                  const dataStr = line.slice(6);
+                  if (dataStr === '[DONE]') { finishStream(); return; }
+                  try {
+                    const data = JSON.parse(dataStr);
+                    if (data.content) {
+                      accumulatedContent += data.content;
+                      if (window._activeChatStream) window._activeChatStream.accumulatedContent = accumulatedContent;
+                      assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
+                      messageList.scrollTop = messageList.scrollHeight;
+                    }
+                    if (data.error) {
+                      assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + escapeHtml(data.error) + '</div>';
+                      controller.abort();
+                      resetInput();
+                    }
+                  } catch (err) {}
+                });
+                read();
+              }).catch(function(err) {
+                if (err.name !== 'AbortError') console.error('Stream read error:', err);
+                finishStream();
+              });
+            }
+            read();
+          }).catch(function(err) {
+            if (err.name !== 'AbortError') console.error('Fetch error:', err);
+            finishStream();
+          });
+
+        function finishStream() {
+          window._activeChatStream = null;
           if (accumulatedContent) {
             assistantContentDiv.innerHTML = renderAssistantContent(accumulatedContent);
           }
-          eventSource.close();
           resetInput();
-        };
+          var timeEl = document.querySelector('#' + assistantMsgId + ' .text-gray-500');
+          if (timeEl) timeEl.textContent = 'только что';
+        }
     }
   });
+
+  function deleteCurrentChat() {
+    if (!confirm('Удалить этот чат? Это действие нельзя отменить.')) return;
+    fetch('{% url "ai:chat_delete" chat_session.external_id %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    }).then(response => response.json()).then(data => {
+      if (data.status === 'ok') {
+        window.location.href = '{% url "ai:chat_index" %}?new=1';
+      } else {
+        alert('Ошибка удаления чата.');
+      }
+    }).catch(() => alert('Ошибка соединения.'));
+  }
+
+  function deleteChat(externalId, btn) {
+    if (!confirm('Удалить этот чат?')) return;
+    fetch('/ai/chat/' + externalId + '/delete/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    }).then(response => response.json()).then(data => {
+      if (data.status === 'ok') {
+        const row = btn.closest('.group');
+        if (row) row.remove();
+        if (externalId === '{{ chat_session.external_id }}') {
+          window.location.href = '{% url "ai:chat_index" %}?new=1';
+        }
+      } else {
+        alert('Ошибка удаления чата.');
+      }
+    }).catch(() => alert('Ошибка соединения.'));
+  }
 </script>
 {% endblock %}
 {% endblock %}

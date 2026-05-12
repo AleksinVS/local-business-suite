@@ -56,6 +56,7 @@ class ChatRequest(BaseModel):
     prompt: str
     actor: ActorContext
     history: list[HistoryMessage] = Field(default_factory=list)
+    model_id: str = ""
 
 
 class TaskTypeReport(BaseModel):

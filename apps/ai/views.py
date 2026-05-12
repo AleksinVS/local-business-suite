@@ -72,14 +72,17 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["chat_sessions"] = ChatSession.objects.filter(user=self.request.user).order_by("-updated_at", "-id")[:20]
         context["form"] = AIChatInputForm()
+        context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
+        context["current_model_id"] = self.object.metadata.get("model_id", "")
         return context
 
 
 class AIChatMessageCreateView(LoginRequiredMixin, View):
     def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        
+
         prompt = request.POST.get("prompt", "").strip()
+        model_id = request.POST.get("model_id", "") or session.metadata.get("model_id", "")
         files = request.FILES.getlist("files")
         
         if not prompt and not files:
@@ -122,7 +125,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             )
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return JsonResponse({"status": "ok", "message_id": user_msg.id})
+            return JsonResponse({"status": "ok", "message_id": user_msg.id, "model_id": model_id})
 
         # Non-AJAX fallback (synchronous call)
         try:
@@ -134,6 +137,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 conversation_id=conversation_id,
                 request_id=request_id,
                 origin_channel=session.channel,
+                model_id=model_id,
             )
         except AgentRuntimeError as exc:
             append_chat_message(
@@ -181,6 +185,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
         msg_id = request.GET.get("msg_id")
         prompt = request.GET.get("prompt", "")
+        model_id = request.GET.get("model_id", "") or session.metadata.get("model_id", "")
         
         conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
         request_id = str(uuid.uuid4())
@@ -217,6 +222,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     conversation_id=conversation_id,
                     request_id=request_id,
                     origin_channel=session.channel,
+                    model_id=model_id,
                 ):
                     yield f"{event}\n\n"
                     
@@ -250,6 +256,31 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                 session.save(update_fields=["title", "updated_at"])
 
         return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+
+
+class AIChatUpdateModelView(LoginRequiredMixin, View):
+    def post(self, request, external_id):
+        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+        model_id = body.get("model_id", "")
+        valid_ids = {m["id"] for m in settings.LOCAL_BUSINESS_AI_MODELS}
+        if model_id and model_id not in valid_ids:
+            return JsonResponse({"error": "Invalid model_id."}, status=400)
+        session.metadata["model_id"] = model_id
+        session.save(update_fields=["metadata", "updated_at"])
+        return JsonResponse({"status": "ok", "model_id": model_id})
+
+
+class AIChatDeleteView(LoginRequiredMixin, View):
+    def post(self, request, external_id):
+        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        session.delete()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"status": "ok"})
+        return redirect("ai:chat_index")
 
 
 @method_decorator(csrf_exempt, name="dispatch")

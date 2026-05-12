@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
-from .config import load_runtime_settings
+from .config import load_runtime_settings, get_available_models
 from .graph import run_agent, stream_agent
 from .mcp_server import build_mcp_server
 from .schemas import ChatRequest, ChatResponse
@@ -36,6 +36,11 @@ def health():
     }
 
 
+@app.get("/models")
+def list_models():
+    return {"models": get_available_models()}
+
+
 @app.post("/chat/stream")
 async def chat_stream(payload: ChatRequest):
     logger = logging.getLogger(__name__)
@@ -50,6 +55,7 @@ async def chat_stream(payload: ChatRequest):
                 session_id=payload.session_id,
                 prompt=payload.prompt,
                 history=payload.history,
+                model_id=payload.model_id,
             ):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             
@@ -77,6 +83,7 @@ def chat(payload: ChatRequest):
             session_id=payload.session_id,
             prompt=payload.prompt,
             history=payload.history,
+            model_id=payload.model_id,
         )
     except Exception as exc:
         logger.error(f"Error in run_agent: {exc}", exc_info=True)

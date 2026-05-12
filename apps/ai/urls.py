@@ -1,10 +1,12 @@
 from django.urls import path
 
 from .views import (
+    AIChatDeleteView,
     AIChatDetailView,
     AIChatIndexView,
     AIChatMessageCreateView,
     AIChatMessageStreamView,
+    AIChatUpdateModelView,
     AIHubView,
     AISkillCatalogView,
     AISkillLoadView,
@@ -26,6 +28,16 @@ urlpatterns = [
         "chat/<uuid:external_id>/stream/",
         AIChatMessageStreamView.as_view(),
         name="chat_stream",
+    ),
+    path(
+        "chat/<uuid:external_id>/model/",
+        AIChatUpdateModelView.as_view(),
+        name="chat_update_model",
+    ),
+    path(
+        "chat/<uuid:external_id>/delete/",
+        AIChatDeleteView.as_view(),
+        name="chat_delete",
     ),
     path("", AIHubView.as_view(), name="hub"),
     path("gateway/skills/catalog/", AISkillCatalogView.as_view(), name="skill_catalog"),

@@ -1,1 +1,0 @@
-Verification: GPT-5.2 is active and Context7 is available

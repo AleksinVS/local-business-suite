@@ -38,7 +38,7 @@ If the slice adds migrations, also run:
 2. Change code first, then generated/derived artifacts.
 3. Keep runtime, gateway, tests, and docs in sync.
 4. If tool signatures change, regenerate and revalidate contracts before finishing.
-5. If behavior changes materially, update `PROJECT_HANDOFF.md` and this file if protocol changed.
+5. If behavior changes materially, update `archive/PROJECT_HANDOFF.md` and this file if protocol changed.
 
 ## Verification
 
@@ -56,15 +56,48 @@ When touching AI/runtime code, also run:
 ./.venv/bin/python -m py_compile services/agent_runtime/*.py apps/ai/*.py apps/core/*.py
 ```
 
+## File Organization
+
+Root directory must stay clean. Follow these rules:
+
+| Category | Location | Examples |
+|---|---|---|
+| Project overview & entry points | Root (`/`) | `README.md`, `AGENTS.md`, `PROJECT_MAP.md`, `Makefile`, `manage.py`, `requirements.txt` |
+| Reference documentation | `docs/` | Architecture, domain models, deployment guides, integration specs |
+| Completed/historical docs | `archive/` | Bugfix reports, completed migration notes, one-off plans, handoff records |
+| Architecture decisions | `adr/` | ADR records (`ADR-NNNN-*.md`) |
+| Agent/AI configs & templates | `ai/` | Change plan schemas, task brief templates, agent architecture docs |
+| Deployment configs | Root (`/`) | `Dockerfile`, `docker-compose*.yml`, `Caddyfile`, `deploy.sh`, `.env.example` |
+| Django project config | `config/` | `settings.py`, `urls.py`, `wsgi.py`, `asgi.py` |
+| Django apps | `apps/` | `accounts/`, `ai/`, `analytics/`, `core/`, `inventory/`, `waiting_list/`, `workorders/` |
+| Services (standalone processes) | `services/` | `agent_runtime/` |
+| Database files | `db/` | SQLite databases |
+| HTML templates | `templates/` | Per-app subdirectories |
+| Static source assets | `static/src/` | CSS, JS source files |
+| Collected static files | `staticfiles/` | `collectstatic` output (gitignored) |
+| Scripts & tooling | `scripts/` | PowerShell helpers, setup scripts |
+| Workflow snapshots | `workflow/` | Per-feature workflow dirs |
+| Drafts & WIP | `drafts/` | Unfinished plans, prototype HTML |
+| VOB3 (IIS submodule) | `VOB3/` | IIS-specific configs |
+| Runtime logs | — | Never committed; gitignored (`*.log`, `server_log.txt`) |
+| Temp/session artifacts | `.tmp/`, `.playwright-mcp/` | Gitignored; auto-generated, never track |
+
+**Rules:**
+- Do not create markdown files in root unless they are `README.md`, `AGENTS.md`, or `PROJECT_MAP.md`.
+- Bugfix reports, completed task docs, and one-off plans go to `archive/`.
+- Reference docs (architecture, models, deployment) go to `docs/`.
+- Logs are gitignored. Never commit `*.log` or `server_log.txt`.
+- Never commit `.playwright-mcp/` or `.tmp/` contents.
+
 ## IIS Deployment Specifics
 
 When working with IIS deployment (Windows Server), be aware of:
 
 1. **Python Version**: Must use Python 3.11.9 (3.13+ is incompatible with wfastcgi 3.0.0)
 2. **PATH_INFO Fix**: Project includes `apps/core/middleware.PathInfoDebugMiddleware` to fix IIS FastCGI PATH_INFO issues
-3. **Secret Storage**: Use `.env` file, not `web.config` (see `SECURE_SECRETS.md`)
-4. **Authentication**: Windows Authentication SSO with LDAP fallback (see `IIS_SSO.md`)
-5. **Debug Logging**: In DEBUG mode, middleware logs to `C:\inetpub\portal\debug_path.log`
+3. **Secret Storage**: Use `.env` file, not `web.config` (see `docs/SECURE_SECRETS.md` → now in `archive/`)
+4. **Authentication**: Windows Authentication SSO with LDAP fallback (see `docs/IIS_SSO.md`)
+5. **Debug Logging**: In DEBUG mode, middleware logs to a local debug file — never commit logs
 
 ## AI Contract Rules
 
@@ -98,6 +131,6 @@ make contracts
 
 ## Handoff
 
-- `PROJECT_HANDOFF.md` is the human/project overview.
+- `archive/PROJECT_HANDOFF.md` is the human/project overview (historical).
 - `AGENTS.md` is the short execution protocol for future agents.
 - If you change enforced AI behavior, update both when needed.

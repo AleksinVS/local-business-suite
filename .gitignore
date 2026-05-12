@@ -8,6 +8,7 @@ db/*.sqlite3-wal
 media/
 staticfiles/
 *.log
+server_log.txt
 .env.production
 caddy_data/
 web.config
@@ -16,3 +17,6 @@ wfastcgi.ini
 *.crt
 *.key
 *.pem
+.playwright-mcp/
+.tmp/
+.codex/

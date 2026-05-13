@@ -1,4 +1,4 @@
-.venv/
+﻿.venv/
 __pycache__/
 *.pyc
 .env
@@ -21,3 +21,6 @@ wfastcgi.ini
 .playwright-mcp/
 .tmp/
 .codex/
+
+# Logs directory (created during runtime)
+logs/

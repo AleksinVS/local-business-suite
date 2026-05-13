@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/db /app/media /app/staticfiles
+RUN mkdir -p /app/db /app/media /app/staticfiles /app/logs
 RUN chmod +x /app/docker/entrypoint.prod.sh
 
 CMD ["/app/docker/entrypoint.prod.sh"]

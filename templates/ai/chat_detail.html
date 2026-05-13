@@ -550,7 +550,7 @@
         const assistantContentDiv = document.querySelector(`#${assistantMsgId} .ai-streaming-content`);
         messageList.scrollTop = messageList.scrollHeight;
 
-        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}?msg_id=" + encodeURIComponent(messageId) + "&prompt=" + encodeURIComponent(promptText) + "&model_id=" + encodeURIComponent(currentModelId);
+        const streamUrl = "{% url 'ai:chat_stream' chat_session.external_id %}";
         let accumulatedContent = "";
         const controller = new AbortController();
 
@@ -561,7 +561,20 @@
           msgId: assistantMsgId,
         };
 
-        fetch(streamUrl, { signal: controller.signal })
+        fetch(streamUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            msg_id: messageId,
+            prompt: promptText,
+            model_id: currentModelId,
+          }),
+          signal: controller.signal,
+        })
           .then(function(response) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -652,5 +665,4 @@
     }).catch(() => alert('Ошибка соединения.'));
   }
 </script>
-{% endblock %}
 {% endblock %}

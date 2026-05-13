@@ -274,8 +274,11 @@ def rate_workorder_for_actor(*, actor, payload):
     workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
     if not can_rate(actor, workorder):
         raise PermissionDenied("Rating is not allowed for this user.")
+    rating = payload.get("rating")
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        raise ValidationError("Rating must be an integer between 1 and 5.")
     workorder = rate_workorder(
-        workorder=workorder, user=actor, rating=payload["rating"]
+        workorder=workorder, user=actor, rating=rating
     )
     return {
         "id": workorder.id,

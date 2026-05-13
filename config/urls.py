@@ -4,9 +4,16 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
 
+from . import views as config_views
+
 admin.site.site_header = settings.APP_DISPLAY_NAME
 admin.site.site_title = settings.APP_DISPLAY_NAME
 admin.site.index_title = settings.APP_DISPLAY_NAME
+
+handler400 = config_views.handler400
+handler403 = config_views.handler403
+handler404 = config_views.handler404
+handler500 = config_views.handler500
 
 urlpatterns = [
     path("admin/", admin.site.urls),

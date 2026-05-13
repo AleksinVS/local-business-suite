@@ -97,7 +97,9 @@ class KanbanColumnConfig(models.Model):
 
     class Meta:
         ordering = ["position", "id"]
-        unique_together = ("board", "code")
+        constraints = [
+            models.UniqueConstraint(fields=["board", "code"], name="unique_board_code"),
+        ]
         verbose_name = "Колонка канбана"
         verbose_name_plural = "Колонки канбана"
 

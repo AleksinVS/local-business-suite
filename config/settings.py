@@ -100,10 +100,55 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # FastCGI/IIS compatibility
-FORCE_SCRIPT_NAME = ""
 SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{asctime}] {levelname} {name} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs" / "app.log",
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+        "apps": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+        "services": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+    },
+}
 
 DATABASES = {
     "default": {

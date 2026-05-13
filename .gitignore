@@ -8,6 +8,7 @@ db/*.sqlite3-wal
 media/
 staticfiles/
 *.log
+logs/*.log
 server_log.txt
 .env.production
 caddy_data/

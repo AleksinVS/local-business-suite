@@ -181,11 +181,17 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
 
 
 class AIChatMessageStreamView(LoginRequiredMixin, View):
-    def get(self, request, external_id):
+    def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        msg_id = request.GET.get("msg_id")
-        prompt = request.GET.get("prompt", "")
-        model_id = request.GET.get("model_id", "") or session.metadata.get("model_id", "")
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+        msg_id = body.get("msg_id")
+        prompt = body.get("prompt", "")
+        if len(prompt) > 10000:
+            prompt = prompt[:10000]
+        model_id = body.get("model_id", "") or session.metadata.get("model_id", "")
         
         conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
         request_id = str(uuid.uuid4())

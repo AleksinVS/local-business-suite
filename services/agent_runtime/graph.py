@@ -174,6 +174,10 @@ def stream_agent(
         base_url=settings.django_gateway_url,
         token=settings.django_gateway_token,
     )
+
+    # Fetch skills catalog so the system prompt includes available skills
+    skills_catalog = gateway_client.get_skills_catalog().get("skills", [])
+
     tools = build_tools(
         actor=actor,
         session_id=session_id,
@@ -193,11 +197,13 @@ def stream_agent(
         init_kwargs["base_url"] = resolved.base_url
     model = init_chat_model(resolved.model, **init_kwargs)
     model_with_tools = model.bind_tools(tools)
-    system_prompt = build_system_prompt()
+
+    # Dynamic state for instructions — updated when activate_skill succeeds
+    current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
 
     @task
     def call_llm(messages):
-        return model_with_tools.invoke([SystemMessage(content=system_prompt)] + messages)
+        return model_with_tools.invoke([SystemMessage(content=current_instructions["body"])] + messages)
 
     @task
     def call_tool(tool_call):
@@ -209,6 +215,28 @@ def stream_agent(
         except Exception as exc:
             logger.error("Tool %s failed: %s", tool_name, exc)
             return ToolMessage(content=f"Error: {exc}", tool_call_id=tool_call_id)
+
+        # Handle skill activation — dynamically update the system prompt
+        if tool_name == "activate_skill" and isinstance(result, dict) and result.get("ok"):
+            current_instructions["body"] = build_system_prompt(
+                skills_catalog=skills_catalog,
+                active_skill_content=result.get("instructions", "")
+            )
+
+        slot_values = tool_call.get("args", {})
+        resolution = resolve_task_type_for_tool(tool_name, slot_values)
+
+        trace_entry = {
+            "tool": tool_name,
+            "args": slot_values,
+            "conversation_id": conversation_id,
+            "request_id": request_id,
+            "origin_channel": origin_channel,
+            "actor_version": actor_version,
+        }
+        if resolution:
+            trace_entry.update(resolution.to_trace_dict())
+        tool_trace.append(trace_entry)
         return result
 
     @entrypoint()

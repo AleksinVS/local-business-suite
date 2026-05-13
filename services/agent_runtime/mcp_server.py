@@ -189,4 +189,164 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
+    @mcp.tool()
+    def workorders_confirm_closure(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        workorder_id: int,
+    ):
+        """Confirm the closure of a resolved work order."""
+        result = gateway_client().execute_tool(
+            tool_code="workorders.confirm_closure",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={"workorder_id": workorder_id},
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
+    def workorders_rate(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        workorder_id: int,
+        rating: int,
+    ):
+        """Rate a closed work order (1-5)."""
+        result = gateway_client().execute_tool(
+            tool_code="workorders.rate",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={"workorder_id": workorder_id, "rating": rating},
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
+    def inventory_devices_create(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        name: str,
+        department_id: int,
+        model: str = "",
+        serial_number: str = "",
+    ):
+        """Create a new medical device in the inventory."""
+        result = gateway_client().execute_tool(
+            tool_code="inventory.devices.create",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={
+                "name": name,
+                "department_id": department_id,
+                "model": model,
+                "serial_number": serial_number,
+            },
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
+    def inventory_devices_update(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        device_id: int,
+        name: str | None = None,
+        department_id: int | None = None,
+        model: str | None = None,
+        serial_number: str | None = None,
+    ):
+        """Update an existing medical device."""
+        payload = {"device_id": device_id}
+        if name is not None:
+            payload["name"] = name
+        if department_id is not None:
+            payload["department_id"] = department_id
+        if model is not None:
+            payload["model"] = model
+        if serial_number is not None:
+            payload["serial_number"] = serial_number
+        result = gateway_client().execute_tool(
+            tool_code="inventory.devices.update",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload=payload,
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
+    def inventory_devices_archive(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        device_id: int,
+    ):
+        """Archive a medical device so it can no longer be assigned."""
+        result = gateway_client().execute_tool(
+            tool_code="inventory.devices.archive",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={"device_id": device_id},
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
+    def analytics_summary(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        summary_type: str = "status",
+    ):
+        """Return analytics summaries for status, departments, or assignees."""
+        result = gateway_client().execute_tool(
+            tool_code="analytics.summary",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={"summary_type": summary_type},
+            session_id=session_id,
+        )
+        return result
+
     return mcp

@@ -1,4 +1,54 @@
 {
   "title": "Integration Registry",
-  "type": "array"
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "name", "owner", "transport", "mode", "direction", "status"],
+    "properties": {
+      "code": {
+        "type": "string",
+        "pattern": "^[a-z0-9_]+$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "transport": {
+        "type": "string",
+        "enum": ["file", "http", "ldap", "smtp", "database"]
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["batch", "online", "hybrid"]
+      },
+      "direction": {
+        "type": "string",
+        "enum": ["inbound", "outbound", "bidirectional"]
+      },
+      "status": {
+        "type": "string",
+        "enum": ["planned", "active", "deprecated"]
+      },
+      "source_of_truth": {
+        "type": "string",
+        "enum": ["internal", "external"]
+      },
+      "payloads": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "format", "schedule"],
+          "properties": {
+            "name": { "type": "string" },
+            "format": { "type": "string" },
+            "schedule": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
 }

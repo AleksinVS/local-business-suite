@@ -20,7 +20,7 @@ from .commands import get_predefined_commands, resolve_command, resolve_custom_c
 from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
-from .services import append_chat_message, serialize_session_history
+from .services import append_chat_message, generate_session_title, serialize_session_history
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -214,9 +214,6 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
         session.metadata["request_ids"].append(runtime_request_id)
         session.save(update_fields=["metadata", "updated_at"])
 
-        if not session.title:
-            session.title = prompt[:80]
-            session.save(update_fields=["title", "updated_at"])
         return redirect("ai:chat_detail", external_id=session.external_id)
 
 
@@ -296,10 +293,6 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                         "streamed": True
                     },
                 )
-            
-            if not session.title and prompt:
-                session.title = prompt[:80]
-                session.save(update_fields=["title", "updated_at"])
 
         return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
 
@@ -318,6 +311,41 @@ class AIChatUpdateModelView(LoginRequiredMixin, View):
         session.metadata["model_id"] = model_id
         session.save(update_fields=["metadata", "updated_at"])
         return JsonResponse({"status": "ok", "model_id": model_id})
+
+
+class AIChatUpdateTitleView(LoginRequiredMixin, View):
+    def post(self, request, external_id):
+        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+        title = body.get("title", "").strip()[:255]
+        if not title:
+            return JsonResponse({"error": "Заголовок не может быть пустым."}, status=400)
+        session.title = title
+        session.save(update_fields=["title", "updated_at"])
+        return JsonResponse({"status": "ok", "title": session.title})
+
+
+class AIChatGenerateTitleView(LoginRequiredMixin, View):
+    def post(self, request, external_id):
+        from .services import DEFAULT_CHAT_TITLE
+
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user).prefetch_related("messages"),
+            external_id=external_id,
+        )
+        if session.title and session.title != DEFAULT_CHAT_TITLE:
+            return JsonResponse({"status": "ok", "title": session.title, "generated": False})
+
+        new_title = generate_session_title(session)
+        if new_title:
+            session.title = new_title
+            session.save(update_fields=["title", "updated_at"])
+            return JsonResponse({"status": "ok", "title": session.title, "generated": True})
+
+        return JsonResponse({"status": "ok", "title": session.title or DEFAULT_CHAT_TITLE, "generated": False})
 
 
 class AIChatDeleteView(LoginRequiredMixin, View):

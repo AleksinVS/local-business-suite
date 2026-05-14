@@ -1,5 +1,8 @@
+import logging
+import os
 import uuid
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
@@ -24,8 +27,77 @@ from apps.workorders.services import (
 
 from .models import AgentActionLog, ChatMessage, ChatSession
 
+logger = logging.getLogger(__name__)
 
 AI_SESSION_NAMESPACE = uuid.UUID("4cf98619-f5ff-4f02-9d68-b9240c5778c8")
+
+DEFAULT_CHAT_TITLE = "Новый чат"
+
+
+def generate_session_title(session):
+    """Generate a concise title for a chat session using the configured LLM.
+
+    Sends the first few messages of the conversation to the model with a
+    system prompt asking for a short title. Returns the generated title
+    string on success, or None if generation fails.
+    """
+    messages = list(session.messages.order_by("created_at", "id")[:6])
+    if not messages:
+        return None
+
+    model_config = _resolve_model_config(session.metadata.get("model_id", ""))
+    if not model_config:
+        return None
+
+    api_key = os.environ.get(model_config.get("api_key_env", ""), "")
+    if not api_key:
+        logger.warning("generate_session_title: API key %s not set", model_config.get("api_key_env"))
+        return None
+
+    model_name = model_config.get("model", "")
+    if model_name.startswith("openai:"):
+        model_name = model_name[7:]
+
+    chat_messages = [
+        {"role": "system", "content": (
+            "Сгенерируй краткий заголовок (до 50 символов) для этого диалога. "
+            "Ответь только заголовком, без кавычек и пояснений. "
+            "Язык заголовка должен соответствовать языку диалога."
+        )}
+    ]
+    for msg in messages:
+        role = "user" if msg.role == ChatMessage.Role.USER else "assistant"
+        chat_messages.append({"role": role, "content": msg.content[:500]})
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key, base_url=model_config["base_url"].rstrip("/") + "/")
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=chat_messages,
+            max_tokens=60,
+            temperature=0.3,
+        )
+        title = response.choices[0].message.content.strip().strip('"\'')
+        if title:
+            return title[:255]
+    except Exception:
+        logger.exception("generate_session_title: LLM call failed")
+
+    return None
+
+
+def _resolve_model_config(model_id):
+    """Find the model config dict matching *model_id*, or the default model."""
+    models = getattr(settings, "LOCAL_BUSINESS_AI_MODELS", [])
+    if model_id:
+        for m in models:
+            if m.get("id") == model_id:
+                return m
+    for m in models:
+        if m.get("default"):
+            return m
+    return models[0] if models else None
 
 
 def resolve_actor(*, user_id=None, username=None):

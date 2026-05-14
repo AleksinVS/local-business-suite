@@ -34,7 +34,19 @@
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                 </div>
                 <div>
-                    <h2 class="font-semibold text-gray-800">{{ chat_session.title|default:"Новый чат" }}</h2>
+                    <div class="flex items-center gap-1.5 group/title cursor-pointer" id="chat-title-display" onclick="startEditTitle()">
+                        <h2 class="font-semibold text-gray-800" id="chat-title-text">{{ chat_session.title|default:"Новый чат" }}</h2>
+                        <svg class="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover/title:opacity-100 transition-opacity" id="chat-title-edit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </div>
+                    <div class="hidden items-center gap-2" id="chat-title-edit-row">
+                        <input type="text" id="chat-title-input" maxlength="255" class="text-sm font-semibold text-gray-800 border border-blue-400 rounded px-2 py-0.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-64" value="{{ chat_session.title|default:'Новый чат' }}">
+                        <button type="button" onclick="saveEditTitle()" class="p-1 text-green-600 hover:text-green-800 transition-colors" title="Сохранить">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        </button>
+                        <button type="button" onclick="cancelEditTitle()" class="p-1 text-red-400 hover:text-red-600 transition-colors" title="Отмена">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
                     <p class="text-xs text-green-500 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Online</p>
                 </div>
             </div>
@@ -819,6 +831,10 @@
           resetInput();
           var timeEl = document.querySelector('#' + assistantMsgId + ' .text-gray-500');
           if (timeEl) timeEl.textContent = 'только что';
+          // Auto-generate title if still default
+          if (currentTitle === 'Новый чат' || !currentTitle.trim()) {
+            generateTitle();
+          }
         }
     }
 
@@ -939,6 +955,95 @@
     }
     window.deleteCommand = deleteCommand;
 
+  });
+
+  var titleUpdateUrl = '{% url "ai:chat_update_title" chat_session.external_id %}';
+  var generateTitleUrl = '{% url "ai:chat_generate_title" chat_session.external_id %}';
+  var currentTitle = '{{ chat_session.title|default:"Новый чат"|escapejs }}';
+
+  function updateTitleUI(newTitle) {
+    currentTitle = newTitle;
+    document.getElementById('chat-title-text').textContent = newTitle;
+    var sidebarLinks = document.querySelectorAll('a[href*="' + '{{ chat_session.external_id }}' + '"]');
+    sidebarLinks.forEach(function(link) {
+      var titleDiv = link.querySelector('.truncate');
+      if (titleDiv) titleDiv.textContent = newTitle;
+    });
+  }
+
+  function generateTitle() {
+    fetch(generateTitleUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.status === 'ok' && data.generated && data.title) {
+        updateTitleUI(data.title);
+      }
+    })
+    .catch(function() { /* title generation is best-effort, ignore failures */ });
+  }
+
+  function startEditTitle() {
+    var display = document.getElementById('chat-title-display');
+    var editRow = document.getElementById('chat-title-edit-row');
+    var input = document.getElementById('chat-title-input');
+    display.classList.add('hidden');
+    editRow.classList.remove('hidden');
+    editRow.classList.add('flex');
+    input.value = currentTitle;
+    input.focus();
+    input.select();
+  }
+
+  function saveEditTitle() {
+    var input = document.getElementById('chat-title-input');
+    var newTitle = input.value.trim();
+    if (!newTitle) {
+      input.classList.add('border-red-400');
+      setTimeout(function() { input.classList.remove('border-red-400'); }, 1500);
+      return;
+    }
+    fetch(titleUpdateUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ title: newTitle }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.status === 'ok') {
+        updateTitleUI(data.title);
+        cancelEditTitle();
+      } else {
+        alert('Ошибка: ' + (data.error || 'Не удалось переименовать'));
+      }
+    })
+    .catch(function() { alert('Ошибка соединения.'); });
+  }
+
+  function cancelEditTitle() {
+    var display = document.getElementById('chat-title-display');
+    var editRow = document.getElementById('chat-title-edit-row');
+    editRow.classList.add('hidden');
+    editRow.classList.remove('flex');
+    display.classList.remove('hidden');
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var titleInput = document.getElementById('chat-title-input');
+    titleInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); saveEditTitle(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancelEditTitle(); }
+    });
   });
 
   function deleteCurrentChat() {

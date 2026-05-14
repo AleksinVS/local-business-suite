@@ -1,6 +1,7 @@
 from langchain.tools import tool
 
 from .gateway_client import DjangoGatewayClient
+from .task_types import normalize_status, normalize_priority
 
 
 def build_tools(
@@ -20,6 +21,8 @@ def build_tools(
     @tool("workorders.list")
     def list_workorders(status: str = "", limit: int = 20) -> dict:
         """List work orders visible to the current user, optionally filtered by status."""
+        if status:
+            status = normalize_status(status)
         result = gateway_client.execute_tool(
             tool_code="workorders.list",
             actor=actor,
@@ -50,6 +53,7 @@ def build_tools(
     @tool("workorders.create")
     def create_workorder(department_id: int, subject: str, description: str, priority: str = "medium") -> dict:
         """Create a work order for the current user."""
+        priority = normalize_priority(priority)
         result = gateway_client.execute_tool(
             tool_code="workorders.create",
             actor=actor,
@@ -70,6 +74,7 @@ def build_tools(
     @tool("workorders.transition")
     def transition_workorder(workorder_id: int, target_status: str) -> dict:
         """Move a work order to a target status if policy allows."""
+        target_status = normalize_status(target_status)
         result = gateway_client.execute_tool(
             tool_code="workorders.transition",
             actor=actor,

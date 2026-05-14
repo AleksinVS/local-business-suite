@@ -16,6 +16,15 @@
       ],
       "requires_confirmation": false,
       "output_mode": "structured_list",
+      "status_aliases": {
+        "new": ["Новая", "new"],
+        "accepted": ["Принята", "accepted"],
+        "in_progress": ["В работе", "in_progress"],
+        "on_hold": ["Ожидание", "on_hold"],
+        "resolved": ["Выполнена", "resolved"],
+        "closed": ["Закрыта", "closed"],
+        "cancelled": ["Отменена", "cancelled"]
+      },
       "example_requests": [
         "Покажи новые заявки",
         "Какие заявки в работе у меня сейчас?"
@@ -62,6 +71,12 @@
       ],
       "requires_confirmation": true,
       "output_mode": "confirmation_then_result",
+      "priority_aliases": {
+        "low": ["Низкий", "low"],
+        "medium": ["Средний", "medium"],
+        "high": ["Высокий", "high"],
+        "critical": ["Критичный", "critical"]
+      },
       "example_requests": [
         "Создай заявку на починку раковины в стационаре",
         "Нужна заявка на светильник в поликлинике"
@@ -83,6 +98,15 @@
       "optional_slots": [],
       "requires_confirmation": true,
       "output_mode": "confirmation_then_result",
+      "status_aliases": {
+        "new": ["Новая", "new"],
+        "accepted": ["Принята", "accepted"],
+        "in_progress": ["В работе", "in_progress"],
+        "on_hold": ["Ожидание", "on_hold"],
+        "resolved": ["Выполнена", "resolved"],
+        "closed": ["Закрыта", "closed"],
+        "cancelled": ["Отменена", "cancelled"]
+      },
       "example_requests": [
         "Переведи заявку 12 в работу",
         "Закрой заявку 18"

@@ -317,6 +317,19 @@ def validate_ai_tools_payload(payload):
         for key in ("inputs", "outputs"):
             if not isinstance(item.get(key), list):
                 raise ValidationError(f"Поле '{key}' у AI tool '{item['id']}' должно быть списком.")
+        input_schemas = item.get("input_schemas")
+        if input_schemas:
+            if not isinstance(input_schemas, dict):
+                raise ValidationError(
+                    f"AI tool '{item['id']}' field 'input_schemas' must be a JSON object."
+                )
+            input_names = set(item.get("inputs", []))
+            for schema_key in input_schemas:
+                if schema_key not in input_names:
+                    raise ValidationError(
+                        f"AI tool '{item['id']}' has input_schema key '{schema_key}' "
+                        f"that is not in its inputs list."
+                    )
 
 
 def validate_ai_task_types_payload(payload):

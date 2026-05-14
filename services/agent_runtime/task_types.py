@@ -14,6 +14,93 @@ from enum import Enum
 from typing import Any
 
 
+# ---------------------------------------------------------------------------
+# Status and priority alias mappings
+#
+# These mappings let the agent resolve Russian-language user input
+# (e.g. "В работе") to internal keys (e.g. "in_progress") that the
+# Django backend expects.  The first alias in each list is the canonical
+# Russian label shown on the Kanban board.
+# ---------------------------------------------------------------------------
+
+STATUS_ALIASES: dict[str, list[str]] = {
+    "new": ["Новая", "новая", "new"],
+    "accepted": ["Принята", "принята", "accepted"],
+    "in_progress": ["В работе", "в работе", "in_progress", "в работе"],
+    "on_hold": ["Ожидание", "ожидание", "on_hold", "на удержании", "На удержании"],
+    "resolved": ["Выполнена", "выполнена", "resolved", "выполнено", "Выполнено"],
+    "closed": ["Закрыта", "закрыта", "closed", "закрыто", "Закрыто"],
+    "cancelled": ["Отменена", "отменена", "cancelled", "отменено", "Отменено"],
+}
+
+PRIORITY_ALIASES: dict[str, list[str]] = {
+    "low": ["Низкий", "низкий", "low", "низкая", "Низкая"],
+    "medium": ["Средний", "средний", "medium", "средняя", "Средняя"],
+    "high": ["Высокий", "высокий", "high", "высокая", "Высокая"],
+    "critical": ["Критичный", "критичный", "critical", "критическая", "Критическая"],
+}
+
+# Status transitions — mirrors config/workflow_rules.json so the agent
+# runtime can reference allowed transitions without importing Django.
+STATUS_TRANSITIONS: dict[str, list[str]] = {
+    "new": ["accepted", "cancelled"],
+    "accepted": ["in_progress", "on_hold", "cancelled"],
+    "in_progress": ["on_hold", "resolved", "cancelled"],
+    "on_hold": ["in_progress", "cancelled"],
+    "resolved": ["closed", "in_progress"],
+    "closed": [],
+    "cancelled": [],
+}
+
+
+def _build_reverse_lookup(
+    aliases: dict[str, list[str]],
+) -> dict[str, str]:
+    """Build a case-insensitive reverse lookup from alias to internal key."""
+    result: dict[str, str] = {}
+    for internal_key, alias_list in aliases.items():
+        for alias in alias_list:
+            result[alias.lower()] = internal_key
+    return result
+
+
+_STATUS_LOOKUP = _build_reverse_lookup(STATUS_ALIASES)
+_PRIORITY_LOOKUP = _build_reverse_lookup(PRIORITY_ALIASES)
+
+
+def normalize_status(value: str) -> str:
+    """Resolve a status value (possibly a Russian alias) to its internal key.
+
+    - Internal keys pass through unchanged.
+    - Known aliases (case-insensitive) resolve to their internal key.
+    - Unknown values pass through (Django will reject them).
+    """
+    if not value:
+        return value
+    if value in STATUS_ALIASES:
+        return value
+    return _STATUS_LOOKUP.get(value.lower(), value)
+
+
+def normalize_priority(value: str) -> str:
+    """Resolve a priority value (possibly a Russian alias) to its internal key."""
+    if not value:
+        return value
+    if value in PRIORITY_ALIASES:
+        return value
+    return _PRIORITY_LOOKUP.get(value.lower(), value)
+
+
+def get_allowed_statuses() -> list[str]:
+    """Return the list of valid internal status keys."""
+    return list(STATUS_ALIASES.keys())
+
+
+def get_allowed_priorities() -> list[str]:
+    """Return the list of valid internal priority keys."""
+    return list(PRIORITY_ALIASES.keys())
+
+
 class TaskMode(str, Enum):
     READ = "read"
     WRITE = "write"

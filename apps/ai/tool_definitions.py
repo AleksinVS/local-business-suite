@@ -22,6 +22,16 @@ TOOLS = [
             "status",
             "limit",
         ],
+        "input_schemas": {
+            "status": {
+                "description": "Filter by work order status",
+                "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
+            },
+            "limit": {
+                "description": "Maximum number of results to return",
+                "type": "integer",
+            },
+        },
         "outputs": [
             "items",
         ],
@@ -57,6 +67,12 @@ TOOLS = [
             "device_id",
             "priority",
         ],
+        "input_schemas": {
+            "priority": {
+                "description": "Priority level for the work order",
+                "enum": ["low", "medium", "high", "critical"],
+            },
+        },
         "outputs": [
             "workorder",
         ],
@@ -74,6 +90,12 @@ TOOLS = [
             "workorder_id",
             "target_status",
         ],
+        "input_schemas": {
+            "target_status": {
+                "description": "The target status to transition to. Must be an allowed next status per workflow rules.",
+                "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
+            },
+        },
         "outputs": [
             "workorder",
         ],

@@ -1,9 +1,41 @@
 from .config import load_json, load_runtime_settings
+from .task_types import STATUS_ALIASES, PRIORITY_ALIASES, STATUS_TRANSITIONS
+
+
+def _build_alias_section() -> str:
+    """Generate a Russian-language status/priority/transition mapping section
+    for the system prompt, derived from the canonical alias data in task_types."""
+    lines = [
+        "",
+        "## Статусы заявок (внутренние ключи для параметров инструментов):",
+    ]
+    for key, aliases in STATUS_ALIASES.items():
+        label = aliases[0]
+        lines.append(f"- {key} → {label}")
+    lines.append("")
+    lines.append("## Приоритеты заявок (внутренние ключи для параметров инструментов):")
+    for key, aliases in PRIORITY_ALIASES.items():
+        label = aliases[0]
+        lines.append(f"- {key} → {label}")
+    lines.append("")
+    lines.append("## Допустимые переходы статусов:")
+    for from_status, to_statuses in STATUS_TRANSITIONS.items():
+        targets = ", ".join(to_statuses) if to_statuses else "(нет)"
+        lines.append(f"- {from_status} → {targets}")
+    lines.append("")
+    lines.append(
+        "Всегда используй внутренние ключи (латинские, с подчёркиваниями: "
+        "new, in_progress, on_hold и т.д.) в параметрах инструментов "
+        "status, target_status и priority. "
+        "Если пользователь говорит по-русски, сопоставляй русские названия "
+        "с внутренними ключами."
+    )
+    return "\n".join(lines)
 
 
 def build_system_prompt(skills_catalog: list = None, active_skill_content: str = "") -> str:
     settings = load_runtime_settings()
-    
+
     # Skills sections
     catalog_text = ""
     if skills_catalog:
@@ -16,9 +48,11 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
     if active_skill_content:
         active_skill_text = f"\n## ТЕКУЩИЙ АКТИВНЫЙ НАВЫК:\n{active_skill_content}\n"
 
+    alias_section = _build_alias_section()
+
     if settings.system_prompt_path:
         base_prompt = settings.system_prompt_path.read_text(encoding="utf-8")
-        return f"{base_prompt}\n{catalog_text}{active_skill_text}"
+        return f"{base_prompt}\n{alias_section}\n{catalog_text}{active_skill_text}"
 
     tools_payload = load_json(settings.ai_tools_path)
     task_types_payload = load_json(settings.ai_task_types_path)
@@ -45,5 +79,6 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
             *task_lines,
             "Доступные инструменты:",
             *tool_lines,
+            alias_section,
         ]
     )

@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .config import load_runtime_settings
 from .gateway_client import DjangoGatewayClient
+from .task_types import normalize_status, normalize_priority
 
 
 def build_mcp_server() -> FastMCP:
@@ -29,6 +30,8 @@ def build_mcp_server() -> FastMCP:
         limit: int = 20,
     ):
         """List work orders visible to the current user."""
+        if status:
+            status = normalize_status(status)
         result = gateway_client().execute_tool(
             tool_code="workorders.list",
             actor={
@@ -79,6 +82,7 @@ def build_mcp_server() -> FastMCP:
         priority: str = "medium",
     ):
         """Create a work order for the current user."""
+        priority = normalize_priority(priority)
         result = gateway_client().execute_tool(
             tool_code="workorders.create",
             actor={
@@ -108,6 +112,7 @@ def build_mcp_server() -> FastMCP:
         target_status: str,
     ):
         """Transition a work order to a target status."""
+        target_status = normalize_status(target_status)
         result = gateway_client().execute_tool(
             tool_code="workorders.transition",
             actor={

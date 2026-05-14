@@ -19,6 +19,7 @@ from apps.core.json_utils import (
     validate_task_brief_payload,
     validate_workflow_rules_payload,
 )
+from services.agent_runtime.task_types import STATUS_ALIASES
 
 
 class Command(BaseCommand):
@@ -45,4 +46,19 @@ class Command(BaseCommand):
         validate_ai_task_types_tool_alignment(task_types_payload, tools_payload)
         validate_ai_write_confirmation_alignment(task_types_payload, tools_payload)
         validate_ai_task_types_slot_coverage(task_types_payload)
+        # Validate STATUS_ALIASES keys align with workflow_rules statuses.
+        workflow_statuses = set(workflow_payload.get("statuses", []))
+        alias_keys = set(STATUS_ALIASES.keys())
+        if alias_keys != workflow_statuses:
+            missing_in_aliases = workflow_statuses - alias_keys
+            extra_in_aliases = alias_keys - workflow_statuses
+            msg_parts = []
+            if missing_in_aliases:
+                msg_parts.append(f"missing from STATUS_ALIASES: {sorted(missing_in_aliases)}")
+            if extra_in_aliases:
+                msg_parts.append(f"extra in STATUS_ALIASES: {sorted(extra_in_aliases)}")
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                f"STATUS_ALIASES keys do not match workflow_rules.json statuses: {'; '.join(msg_parts)}."
+            )
         self.stdout.write(self.style.SUCCESS("Architecture contracts are valid."))

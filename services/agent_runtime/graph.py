@@ -82,6 +82,7 @@ def run_agent(
 
     # Dynamic state for instructions
     current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
+    tool_trace = []
 
     @task
     def call_llm(messages):
@@ -200,6 +201,7 @@ def stream_agent(
 
     # Dynamic state for instructions — updated when activate_skill succeeds
     current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
+    tool_trace = []
 
     @task
     def call_llm(messages):

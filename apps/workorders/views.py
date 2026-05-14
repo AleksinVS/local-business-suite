@@ -54,8 +54,11 @@ def quick_transition_choices_for(user, workorder):
     ]
 
 
-def configured_columns():
-    return list(KanbanColumnConfig.objects.order_by("position", "id"))
+def configured_columns(board=None):
+    qs = KanbanColumnConfig.objects.order_by("position", "id")
+    if board is not None:
+        qs = qs.filter(board=board)
+    return list(qs)
 
 
 def drop_status_for_column(user, workorder, column):
@@ -464,7 +467,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         old_status = workorder.status
         column_code = request.POST.get("column", "").strip()
-        column = get_object_or_404(KanbanColumnConfig, code=column_code)
+        column = get_object_or_404(KanbanColumnConfig, code=column_code, board=workorder.board)
         target_status = drop_status_for_column(request.user, workorder, column)
 
         if target_status:
@@ -485,7 +488,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         updated_columns = []
         # We need to find the column key for the old status
         status_to_column = {}
-        column_configs = configured_columns()
+        column_configs = configured_columns(board=workorder.board)
         for cfg in column_configs:
             for s in cfg.statuses:
                 status_to_column[s] = cfg.code

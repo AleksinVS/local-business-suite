@@ -1,11 +1,14 @@
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
-from apps.workorders.models import WorkOrder, WorkOrderStatus
+from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
 from apps.workorders.policies import ROLE_MANAGER
+
+User = get_user_model()
 
 
 class AnalyticsDashboardTests(TestCase):
@@ -20,11 +23,13 @@ class AnalyticsDashboardTests(TestCase):
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         self.manager.groups.add(manager_group)
         self.user = User.objects.create_user(username="guest", password="pass")
+        self.board = Board.objects.create(title="Test Board", slug="test-board-analytics")
         WorkOrder.objects.create(
             title="Плановое ТО",
             description="Проверка питания.",
             department=self.department,
             author=self.manager,
+            board=self.board,
             device=self.device,
             status=WorkOrderStatus.RESOLVED,
         )

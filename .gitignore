@@ -24,3 +24,6 @@ wfastcgi.ini
 
 # Logs directory (created during runtime)
 logs/
+
+# Private deployment repo (see DEPLOY_PRIVATE.md)
+VOB3/

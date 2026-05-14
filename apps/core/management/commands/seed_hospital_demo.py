@@ -1,11 +1,14 @@
 from datetime import date, timedelta
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice, OperationalStatus
-from apps.workorders.models import WorkOrder, WorkOrderPriority, WorkOrderStatus
+from apps.workorders.models import Board, WorkOrder, WorkOrderPriority, WorkOrderStatus
+
+User = get_user_model()
 
 DEMO_PASSWORD = "HospitalDemo-2026!"
 DEMO_EMAIL_DOMAIN = "demo.local"
@@ -17,6 +20,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         groups = {name: Group.objects.get_or_create(name=name)[0] for name in ("manager", "technician", "customer")}
+
+        main_board, _ = Board.objects.get_or_create(
+            slug="main",
+            defaults={"title": "Основная доска"},
+        )
+        main_board.allowed_groups.set(groups.values())
 
         departments = {
             name: Department.objects.get_or_create(name=name, parent=None)[0]
@@ -110,6 +119,7 @@ class Command(BaseCommand):
                 title=title,
                 description=description,
                 defaults={
+                    "board": main_board,
                     "department": department,
                     "device": devices.get(device_serial) if device_serial else None,
                     "author": users[author_key],
@@ -118,6 +128,7 @@ class Command(BaseCommand):
                     "status": status,
                 },
             )
+            workorder.board = main_board
             workorder.department = department
             workorder.device = devices.get(device_serial) if device_serial else None
             workorder.author = users[author_key]

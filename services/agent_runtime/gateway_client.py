@@ -36,7 +36,7 @@ class DjangoGatewayClient:
             request_payload["actor_version"] = actor_version
 
         response = httpx.post(
-            f"{self.base_url}/gateway/tools/{tool_code}/execute/",
+            f"{self.base_url}/tools/{tool_code}/execute/",
             json=request_payload,
             headers={"X-AI-Gateway-Token": self.token},
             timeout=90,
@@ -48,7 +48,7 @@ class DjangoGatewayClient:
         """Fetches the available skills catalog from Django."""
         try:
             response = httpx.get(
-                f"{self.base_url}/gateway/skills/catalog/",
+                f"{self.base_url}/skills/catalog/",
                 headers={"X-AI-Gateway-Token": self.token},
                 timeout=10.0,
             )
@@ -61,7 +61,7 @@ class DjangoGatewayClient:
         """Loads specific skill instructions from Django."""
         try:
             response = httpx.get(
-                f"{self.base_url}/gateway/skills/{skill_id}/load/",
+                f"{self.base_url}/skills/{skill_id}/load/",
                 headers={"X-AI-Gateway-Token": self.token},
                 timeout=10.0,
             )

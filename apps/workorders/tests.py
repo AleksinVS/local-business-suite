@@ -1,4 +1,5 @@
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -6,7 +7,7 @@ from django.urls import reverse
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
-from .models import KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     ROLE_CUSTOMER,
     ROLE_MANAGER,
@@ -17,6 +18,8 @@ from .policies import (
     can_view,
 )
 from .services import confirm_closure, transition_workorder
+
+User = get_user_model()
 
 
 class WorkOrderRoleMatrixTests(TestCase):
@@ -40,11 +43,14 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.manager.groups.add(manager_group)
         self.customer.groups.add(customer_group)
 
+        self.board = Board.objects.create(title="Test Board", slug="test-board-1")
+        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
         self.workorder = WorkOrder.objects.create(
             title="Проверить датчик",
             description="Нестабильные показания.",
             department=self.department,
             author=self.customer,
+            board=self.board,
             assignee=self.technician,
             device=self.device,
         )
@@ -172,11 +178,18 @@ class WorkOrderViewPermissionTests(TestCase):
         self.manager.groups.add(manager_group)
         self.customer.groups.add(customer_group)
 
+        self.board = Board.objects.create(title="Test Board 2", slug="test-board-2")
+        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
+        KanbanColumnConfig.objects.create(board=self.board, code="new", title="Новые", position=10, statuses=["new"])
+        KanbanColumnConfig.objects.create(board=self.board, code="in_progress", title="В работе", position=20, statuses=["accepted", "in_progress", "on_hold"])
+        KanbanColumnConfig.objects.create(board=self.board, code="done", title="Выполнены", position=30, statuses=["resolved"])
+        KanbanColumnConfig.objects.create(board=self.board, code="archive", title="Архив", position=40, statuses=["closed", "cancelled"])
         self.workorder = WorkOrder.objects.create(
             title="Заменить кабель",
             description="Поврежден кабель питания.",
             department=self.sub_department,
             author=self.customer,
+            board=self.board,
             assignee=self.technician,
             device=self.device,
         )
@@ -215,7 +228,7 @@ class WorkOrderViewPermissionTests(TestCase):
 
     def test_default_board_columns_are_configured(self):
         self.assertEqual(
-            list(KanbanColumnConfig.objects.values_list("title", flat=True)),
+            list(self.board.columns.values_list("title", flat=True)),
             ["Новые", "В работе", "Выполнены", "Архив"],
         )
 
@@ -261,6 +274,7 @@ class WorkOrderViewPermissionTests(TestCase):
                 "priority": "medium",
                 "device": self.device.pk,
                 "assignee": self.technician.pk,
+                "board": self.board.pk,
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -279,6 +293,7 @@ class WorkOrderViewPermissionTests(TestCase):
                 "priority": "medium",
                 "device": "",
                 "assignee": "",
+                "board": self.board.pk,
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -369,7 +384,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
 
     def test_manager_can_rename_column_title(self):
-        column = KanbanColumnConfig.objects.get(code="new")
+        column = KanbanColumnConfig.objects.get(code="new", board=self.board)
         self.client.force_login(self.manager)
         response = self.client.post(
             reverse("workorders:column_rename", args=[column.pk]),
@@ -382,7 +397,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, "Свежие заявки")
 
     def test_manager_can_open_inline_column_edit_form(self):
-        column = KanbanColumnConfig.objects.get(code="new")
+        column = KanbanColumnConfig.objects.get(code="new", board=self.board)
         self.client.force_login(self.manager)
         response = self.client.get(
             reverse("workorders:column_edit", args=[column.pk]),
@@ -393,7 +408,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, "Сохранить")
 
     def test_manager_can_restore_column_display_card(self):
-        column = KanbanColumnConfig.objects.get(code="new")
+        column = KanbanColumnConfig.objects.get(code="new", board=self.board)
         self.client.force_login(self.manager)
         response = self.client.get(
             reverse("workorders:column_display", args=[column.pk]),

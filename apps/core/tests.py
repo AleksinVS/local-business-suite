@@ -2,13 +2,16 @@ import json
 import tempfile
 from pathlib import Path
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
+
+User = get_user_model()
 
 
 class DepartmentModelTests(TestCase):
@@ -93,28 +96,24 @@ class DepartmentViewTests(TestCase):
                 LOCAL_BUSINESS_ROLE_RULES=initial_payload,
             ):
                 self.client.force_login(self.manager)
-                updated_payload = {
-                    "dispatcher": {
-                        "view_scope": "all",
-                        "create_workorder": True,
-                        "edit_scope": "none",
-                        "comment_scope": "visible",
-                        "upload_attachment_scope": "none",
-                        "confirm_closure_scope": "none",
-                        "rate_scope": "none",
-                        "transition_scope": "all",
-                        "transition_targets": ["accepted"],
-                        "manage_inventory": False,
-                        "manage_board_columns": False,
-                        "manage_assignments": False,
-                    }
-                }
                 response = self.client.post(
                     reverse("core:role_rules"),
-                    {"rules_json": json.dumps(updated_payload)},
+                    {
+                        "role_manager_create_workorder": "on",
+                        "role_manager_manage_inventory": "",
+                        "role_manager_manage_board_columns": "",
+                        "role_manager_manage_assignments": "",
+                        "role_manager_view_scope": "authored",
+                    },
                 )
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), updated_payload)
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+                # View updates existing roles in-place
+                self.assertTrue(saved["manager"]["create_workorder"])
+                self.assertFalse(saved["manager"]["manage_inventory"])
+                self.assertFalse(saved["manager"]["manage_board_columns"])
+                self.assertFalse(saved["manager"]["manage_assignments"])
+                self.assertEqual(saved["manager"]["view_scope"], "authored")
 
 
 class ArchitectureContractTests(TestCase):

@@ -1,8 +1,13 @@
 from datetime import date
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+
+from apps.workorders.policies import ROLE_MANAGER
+
+User = get_user_model()
 
 from .models import SERVICE_CHOICES, WaitingListAuditLog, WaitingListEntry, WaitingListStatus
 from .services import (

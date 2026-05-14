@@ -2,13 +2,16 @@ import json
 import uuid
 from unittest.mock import patch
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.core.models import Department
-from apps.workorders.models import WorkOrder, WorkOrderStatus
+from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
+
+User = get_user_model()
 
 from .models import AgentActionLog, ChatMessage, ChatSession, PendingAction
 from .services import normalize_session_external_id
@@ -25,11 +28,14 @@ class AIViewsTests(TestCase):
         self.manager.groups.add(manager_group)
         self.customer.groups.add(customer_group)
         self.department = Department.objects.create(name="Стационар")
+        self.board = Board.objects.create(title="Test Board", slug="test-board-ai")
+        self.board.allowed_groups.add(manager_group, customer_group)
         self.customer_workorder = WorkOrder.objects.create(
             title="Сломан светильник",
             description="Нужна замена лампы",
             department=self.department,
             author=self.customer,
+            board=self.board,
             status=WorkOrderStatus.NEW,
         )
 
@@ -264,6 +270,7 @@ class AIViewsTests(TestCase):
             description="Testing valid transition",
             department=self.department,
             author=self.customer,
+            board=self.board,
             status=WorkOrderStatus.ACCEPTED,
         )
         pending = PendingAction.objects.create(

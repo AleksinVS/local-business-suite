@@ -15,7 +15,7 @@
 
   <div class="chat-input-area">
     <form hx-post="{% url 'workorders:comment' workorder.pk %}"
-          hx-target="#detail-panel-content"
+          hx-target="#drawer-chat"
           hx-swap="innerHTML"
           class="chat-form">
       {% csrf_token %}

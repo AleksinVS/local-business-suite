@@ -45,7 +45,8 @@
     class="hidden-form"
     hx-post="{% url 'workorders:attachment' workorder.pk %}"
     hx-encoding="multipart/form-data"
-    hx-target="#detail-panel-content"
+    hx-target="#attachments-panel"
+    hx-swap="outerHTML"
     hx-trigger="change from:#attachment-input"
   >
     {% csrf_token %}

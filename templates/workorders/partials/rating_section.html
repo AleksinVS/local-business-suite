@@ -17,7 +17,8 @@
         action="{% url 'workorders:rate' workorder.pk %}"
         class="compact-inline-form"
         hx-post="{% url 'workorders:rate' workorder.pk %}"
-        hx-target="#detail-panel-content"
+        hx-target="#rating-panel"
+        hx-swap="outerHTML"
       >
         {% csrf_token %}
         <div class="rating-input-group">

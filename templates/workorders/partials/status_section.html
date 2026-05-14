@@ -9,8 +9,8 @@
         {% with can_go=False %}
           {# Django templates are limited, but we can check if status_val is in transition_choices #}
           <form hx-post="{% url 'workorders:transition' workorder.pk %}"
-                hx-target="#detail-panel-content"
-                hx-swap="innerHTML"
+                hx-target="#status-panel"
+                hx-swap="outerHTML"
                 class="step-form">
             {% csrf_token %}
             <input type="hidden" name="status" value="{{ status_val }}">
@@ -28,8 +28,8 @@
   
   {% if can_confirm_closure %}
     <form hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
-          hx-target="#detail-panel-content"
-          hx-swap="innerHTML"
+          hx-target="#status-panel"
+          hx-swap="outerHTML"
           class="confirm-closure-inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary btn-xs">Подтвердить выполнение</button>

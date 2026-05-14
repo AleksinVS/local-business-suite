@@ -16,8 +16,9 @@ from django.views.decorators.csrf import csrf_exempt
 
 from apps.workorders.policies import can_manage_inventory
 
+from .commands import get_predefined_commands, resolve_command, resolve_custom_command
 from .forms import AIChatInputForm
-from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment
+from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import append_chat_message, serialize_session_history
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
@@ -74,6 +75,12 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
         context["form"] = AIChatInputForm()
         context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
         context["current_model_id"] = self.object.metadata.get("model_id", "")
+        context["predefined_commands"] = get_predefined_commands()
+        context["custom_commands"] = list(
+            SlashCommand.objects.filter(user=self.request.user).values(
+                "id", "name", "shortcut", "description", "template"
+            )
+        )
         return context
 
 
@@ -84,7 +91,40 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
         prompt = request.POST.get("prompt", "").strip()
         model_id = request.POST.get("model_id", "") or session.metadata.get("model_id", "")
         files = request.FILES.getlist("files")
-        
+
+        # --- Slash command resolution ---
+        if prompt.startswith("/"):
+            cmd_spec, remainder = resolve_command(prompt)
+            if cmd_spec:
+                if cmd_spec.get("handler") == "commands":
+                    custom_cmds = list(
+                        SlashCommand.objects.filter(user=request.user).values(
+                            "id", "name", "shortcut", "description", "template"
+                        )
+                    )
+                    predefined_cmds = get_predefined_commands()
+                    return JsonResponse({
+                        "status": "command_list",
+                        "predefined": [
+                            {
+                                "name": c["name"],
+                                "aliases": c.get("aliases", []),
+                                "description": c["description"],
+                            }
+                            for c in predefined_cmds
+                        ],
+                        "custom": custom_cmds,
+                    })
+                template = cmd_spec["prompt_template"]
+                prompt = template.replace("{input}", remainder) if remainder else template
+            else:
+                user_cmds = list(SlashCommand.objects.filter(user=request.user))
+                custom_cmd, remainder = resolve_custom_command(prompt, user_cmds)
+                if custom_cmd:
+                    template = custom_cmd.template
+                    prompt = template.replace("{input}", remainder) if remainder else template
+        # --- End slash command resolution ---
+
         if not prompt and not files:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest":
                 return JsonResponse({"error": "Empty message"}, status=400)
@@ -397,3 +437,103 @@ class AISkillLoadView(View):
         if content:
             return JsonResponse({"id": skill_id, "instructions": content})
         return JsonResponse({"error": "Skill not found"}, status=404)
+
+
+class SlashCommandListView(LoginRequiredMixin, View):
+    """GET /ai/chat/<uuid>/commands/ — list all available commands."""
+
+    def get(self, request, external_id):
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user),
+            external_id=external_id,
+        )
+        predefined = get_predefined_commands()
+        custom = SlashCommand.objects.filter(user=request.user)
+        return JsonResponse({
+            "predefined": [
+                {
+                    "name": c["name"],
+                    "aliases": c.get("aliases", []),
+                    "description": c["description"],
+                    "requires_input": c.get("requires_input", False),
+                    "is_custom": False,
+                }
+                for c in predefined
+            ],
+            "custom": [
+                {
+                    "name": c.name,
+                    "shortcut": c.shortcut,
+                    "description": c.description,
+                    "template": c.template,
+                    "is_custom": True,
+                }
+                for c in custom
+            ],
+        })
+
+
+class SlashCommandCreateView(LoginRequiredMixin, View):
+    """POST /ai/chat/commands/create/ — create a custom command."""
+
+    def post(self, request):
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+        name = body.get("name", "").strip().lstrip("/").lower()
+        shortcut = body.get("shortcut", "").strip().lstrip("/").lower()
+        description = body.get("description", "").strip()
+        template = body.get("template", "").strip()
+
+        if not name or not template:
+            return JsonResponse({"error": "Имя и шаблон обязательны."}, status=400)
+
+        if len(name) > 64:
+            return JsonResponse({"error": "Имя команды слишком длинное (максимум 64 символа)."}, status=400)
+
+        # Prevent collision with predefined command names and aliases
+        predefined_names = set()
+        for cmd in get_predefined_commands():
+            predefined_names.add(cmd["name"])
+            predefined_names.update(cmd.get("aliases", []))
+        if name in predefined_names or shortcut in predefined_names:
+            return JsonResponse(
+                {"error": "Имя или сокращение совпадает с встроенной командой."}, status=400
+            )
+
+        if SlashCommand.objects.filter(user=request.user, name=name).exists():
+            return JsonResponse(
+                {"error": "Команда с таким именем уже существует."}, status=400
+            )
+
+        cmd = SlashCommand.objects.create(
+            user=request.user,
+            name=name,
+            shortcut=shortcut,
+            description=description,
+            template=template,
+        )
+        return JsonResponse({
+            "status": "ok",
+            "command": {
+                "id": cmd.id,
+                "name": cmd.name,
+                "shortcut": cmd.shortcut,
+                "description": cmd.description,
+                "template": cmd.template,
+            },
+        })
+
+
+class SlashCommandDeleteView(LoginRequiredMixin, View):
+    """POST /ai/chat/commands/<int:cmd_id>/delete/ — delete a custom command."""
+
+    def post(self, request, cmd_id):
+        cmd = get_object_or_404(
+            SlashCommand.objects.filter(user=request.user),
+            pk=cmd_id,
+        )
+        cmd.delete()
+        return JsonResponse({"status": "ok"})

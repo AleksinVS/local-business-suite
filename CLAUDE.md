@@ -131,6 +131,16 @@ make contracts
   - `services/agent_runtime/task_types.py`
   - `apps/ai/tooling.py`
 
+## AI Slash Commands
+
+- Predefined commands are declared in `apps/ai/commands.py` (not in the database).
+- Custom per-user commands are stored in the `SlashCommand` model (`apps/ai/models.py`).
+- Command resolution: `resolve_command()` checks predefined names/aliases first, then `resolve_custom_command()` checks user commands.
+- `/команды` handler returns JSON `status: "command_list"` without creating a ChatMessage; the frontend renders a management panel.
+- Other commands (`/навыки`, custom) replace the prompt text and proceed as a normal message to the AI agent.
+- Frontend: autocomplete on `/`, menu button, welcome message with `/навыки` link — all in `templates/ai/chat_detail.html`.
+- CRUD API: `SlashCommandListView`, `SlashCommandCreateView`, `SlashCommandDeleteView` in `apps/ai/views.py`.
+
 ## Write Safety
 
 - Write tools must respect confirmation flow.

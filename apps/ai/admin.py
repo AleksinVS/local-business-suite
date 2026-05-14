@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ChatSession, ChatMessage, PendingAction, AgentActionLog, ChatAttachment
+from .models import ChatSession, ChatMessage, PendingAction, AgentActionLog, ChatAttachment, SlashCommand
 
 @admin.register(ChatSession)
 class ChatSessionAdmin(admin.ModelAdmin):
@@ -30,3 +30,10 @@ class AgentActionLogAdmin(admin.ModelAdmin):
     list_display = ("id", "tool_code", "action_kind", "status", "actor", "created_at")
     list_filter = ("action_kind", "status", "created_at")
     search_fields = ("tool_code", "actor__username")
+
+
+@admin.register(SlashCommand)
+class SlashCommandAdmin(admin.ModelAdmin):
+    list_display = ("name", "shortcut", "user", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("name", "shortcut", "description", "user__username")

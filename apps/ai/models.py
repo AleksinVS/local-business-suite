@@ -4,6 +4,40 @@ from django.conf import settings
 from django.db import models
 
 
+class SlashCommand(models.Model):
+    """User-created custom slash command (prompt template)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="slash_commands",
+    )
+    name = models.CharField(
+        max_length=64,
+        help_text="Command name without the leading slash, e.g. 'summary'",
+    )
+    shortcut = models.CharField(
+        max_length=16,
+        blank=True,
+        help_text="Optional short alias, e.g. 'sum'",
+    )
+    description = models.CharField(max_length=255, blank=True)
+    template = models.TextField(
+        help_text="Prompt template. Use {input} as placeholder for user text after the command.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "name")
+        ordering = ["name"]
+        verbose_name = "Слэш-команда"
+        verbose_name_plural = "Слэш-команды"
+
+    def __str__(self):
+        return f"/{self.name}"
+
+
 class ChatSession(models.Model):
     class Channel(models.TextChoices):
         INTERNAL = "internal", "Internal"

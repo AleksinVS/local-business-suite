@@ -12,6 +12,9 @@ from .views import (
     AISkillLoadView,
     AIToolConfirmView,
     AIToolExecuteView,
+    SlashCommandCreateView,
+    SlashCommandDeleteView,
+    SlashCommandListView,
 )
 
 app_name = "ai"
@@ -38,6 +41,21 @@ urlpatterns = [
         "chat/<uuid:external_id>/delete/",
         AIChatDeleteView.as_view(),
         name="chat_delete",
+    ),
+    path(
+        "chat/<uuid:external_id>/commands/",
+        SlashCommandListView.as_view(),
+        name="command_list",
+    ),
+    path(
+        "chat/commands/create/",
+        SlashCommandCreateView.as_view(),
+        name="command_create",
+    ),
+    path(
+        "chat/commands/<int:cmd_id>/delete/",
+        SlashCommandDeleteView.as_view(),
+        name="command_delete",
     ),
     path("", AIHubView.as_view(), name="hub"),
     path("gateway/skills/catalog/", AISkillCatalogView.as_view(), name="skill_catalog"),

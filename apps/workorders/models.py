@@ -78,7 +78,7 @@ class Board(models.Model):
             col.id = None
             col.board = self
             col.save()
-        
+
         return self
 
 
@@ -169,6 +169,36 @@ class WorkOrder(models.Model):
 
     class Meta:
         ordering = ["-updated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["-updated_at", "-created_at"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["priority"]),
+            models.Index(fields=["assignee"]),
+            models.Index(fields=["resolved_at"]),
+            models.Index(fields=["closed_at"]),
+            models.Index(fields=["closure_confirmed"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rating__gte=1, rating__lte=5) | models.Q(rating__isnull=True),
+                name="workorder_rating_range",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(closure_confirmed=False, closure_confirmed_at__isnull=True)
+                | models.Q(closure_confirmed=True, closure_confirmed_at__isnull=False),
+                name="workorder_closure_confirmed_consistent",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=[WorkOrderStatus.RESOLVED, WorkOrderStatus.CLOSED], resolved_at__isnull=False)
+                | models.Q(status__in=[WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.CANCELLED]),
+                name="workorder_resolved_at_consistent",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status=WorkOrderStatus.CLOSED, closed_at__isnull=False)
+                | models.Q(status__in=[WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.RESOLVED, WorkOrderStatus.CANCELLED]),
+                name="workorder_closed_at_consistent",
+            ),
+        ]
         verbose_name = "Заявка"
         verbose_name_plural = "Заявки"
 
@@ -205,6 +235,9 @@ class WorkOrderComment(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["author"]),
+        ]
         verbose_name = "Комментарий к заявке"
         verbose_name_plural = "Комментарии к заявке"
 
@@ -222,6 +255,9 @@ class WorkOrderAttachment(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["content_type"]),
+        ]
         verbose_name = "Вложение"
         verbose_name_plural = "Вложения"
 
@@ -247,5 +283,9 @@ class WorkOrderTransitionLog(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["from_status"]),
+            models.Index(fields=["to_status"]),
+        ]
         verbose_name = "Переход заявки"
         verbose_name_plural = "Переходы заявок"

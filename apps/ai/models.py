@@ -29,7 +29,12 @@ class SlashCommand(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("user", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                name="unique_slash_command_name_per_user",
+            ),
+        ]
         ordering = ["name"]
         verbose_name = "Слэш-команда"
         verbose_name_plural = "Слэш-команды"
@@ -58,6 +63,12 @@ class ChatSession(models.Model):
 
     class Meta:
         ordering = ["-updated_at", "-id"]
+        indexes = [
+            models.Index(fields=["-updated_at", "-id"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["channel"]),
+            models.Index(fields=["last_message_at"]),
+        ]
         verbose_name = "AI chat session"
         verbose_name_plural = "AI chat sessions"
 
@@ -81,6 +92,10 @@ class ChatMessage(models.Model):
 
     class Meta:
         ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["created_at", "id"]),
+            models.Index(fields=["role"]),
+        ]
         verbose_name = "AI chat message"
         verbose_name_plural = "AI chat messages"
 
@@ -109,6 +124,11 @@ class PendingAction(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["-created_at", "-id"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["tool_code"]),
+        ]
         verbose_name = "AI pending action"
         verbose_name_plural = "AI pending actions"
 
@@ -153,6 +173,12 @@ class AgentActionLog(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["-created_at", "-id"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["action_kind"]),
+            models.Index(fields=["tool_code"]),
+        ]
         verbose_name = "AI action log"
         verbose_name_plural = "AI action logs"
 
@@ -179,6 +205,9 @@ class ChatAttachment(models.Model):
 
     class Meta:
         ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["file_type"]),
+        ]
         verbose_name = "Chat attachment"
         verbose_name_plural = "Chat attachments"
 

@@ -41,7 +41,7 @@ class WaitingListEntry(models.Model):
         blank=True,
     )
     patient_name = models.CharField("ФИО пациента", max_length=255)
-    patient_dob = models.CharField("Дата рождения", max_length=10, help_text="ДД.ММ.ГГГГ")
+    patient_dob = models.DateField("Дата рождения", blank=True, null=True)
     patient_phone = models.CharField("Телефон", max_length=20)
     service_id = models.CharField("Услуга", max_length=50, choices=SERVICE_CHOICES)
     date_tag = models.DateField("Целевая дата", blank=True, null=True)
@@ -59,6 +59,23 @@ class WaitingListEntry(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["service_id"]),
+            models.Index(fields=["priority_cito"]),
+            models.Index(fields=["date_tag"]),
+            models.Index(fields=["date_end"]),
+            models.Index(fields=["patient_name"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(date_tag__lte=models.F("date_end"))
+                | models.Q(date_end__isnull=True)
+                | models.Q(date_tag__isnull=True),
+                name="waitinglist_date_range_consistent",
+            ),
+        ]
         verbose_name = "Запись листа ожидания"
         verbose_name_plural = "Записи листа ожидания"
 
@@ -88,6 +105,10 @@ class WaitingListAuditLog(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["action"]),
+            models.Index(fields=["created_at"]),
+        ]
         verbose_name = "Журнал изменений"
         verbose_name_plural = "Журналы изменений"
 

@@ -39,6 +39,18 @@ class MedicalDevice(models.Model):
 
     class Meta:
         ordering = ["name", "serial_number"]
+        indexes = [
+            models.Index(fields=["operational_status"]),
+            models.Index(fields=["is_archived"]),
+            models.Index(fields=["department", "is_archived"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(is_archived=False, archived_at__isnull=True)
+                | models.Q(is_archived=True, archived_at__isnull=False),
+                name="device_archive_consistent",
+            ),
+        ]
         verbose_name = "Медицинское изделие"
         verbose_name_plural = "Медицинские изделия"
 

@@ -1,4 +1,5 @@
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 
 from apps.workorders.models import WorkOrder
 
@@ -193,6 +194,7 @@ def execute_tool(
             token=confirmed_token,
             tool_code=tool_code,
             actor=actor,
+            status=PendingAction.Status.PENDING,
         ).first()
         if pending:
             requires_confirmation = False  # replay confirmed pending action
@@ -279,7 +281,7 @@ def execute_tool(
             action_kind=tool["mode"],
             status=AgentActionLog.Status.DENIED,
             request_payload=audit_request_payload,
-            response_payload={},
+            response_payload={"error": str(exc), **trace_context},
             session=session,
             message=user_message,
             error_message=str(exc),
@@ -303,7 +305,31 @@ def execute_tool(
             action_kind=tool["mode"],
             status=AgentActionLog.Status.FAILED,
             request_payload=audit_request_payload,
-            response_payload={},
+            response_payload={"error": str(exc), **trace_context},
+            session=session,
+            message=user_message,
+            error_message=str(exc),
+        )
+        task_report = _build_task_type_report(tool_code, payload)
+        return {
+            "ok": False,
+            "tool": tool_code,
+            "result": None,
+            "errors": [str(exc)],
+            "meta": {
+                "session_id": str(session.external_id),
+                **trace_context,
+                **({"task_type_report": task_report} if task_report else {}),
+            },
+        }
+    except Exception as exc:
+        record_action(
+            actor=actor,
+            tool_code=tool_code,
+            action_kind=tool["mode"],
+            status=AgentActionLog.Status.FAILED,
+            request_payload=audit_request_payload,
+            response_payload={"error": str(exc), **trace_context},
             session=session,
             message=user_message,
             error_message=str(exc),
@@ -348,168 +374,202 @@ def execute_pending_action(
         # Fallback: try to get from actor_context for replay scenarios
         # where execute_tool calls this with token=None
         token = actor_context.get("token")
-    pending = PendingAction.objects.filter(token=token).first()
-    if not pending:
+
+    try:
+        with transaction.atomic():
+            pending = PendingAction.objects.select_for_update().filter(token=token).first()
+            if not pending:
+                return {
+                    "ok": False,
+                    "tool": None,
+                    "result": None,
+                    "errors": ["Pending action not found or already resolved."],
+                    "meta": {},
+                }
+
+            if pending.status != PendingAction.Status.PENDING:
+                return {
+                    "ok": False,
+                    "tool": pending.tool_code,
+                    "result": None,
+                    "errors": [f"Pending action is already {pending.status}."],
+                    "meta": {"pending_action_status": pending.status},
+                }
+
+            trace_context = {
+                "conversation_id": conversation_id,
+                "request_id": request_id,
+                "origin_channel": origin_channel,
+                "actor_version": actor_version,
+            }
+            audit_request_payload = {**trace_context, **pending.payload}
+
+            if confirmed:
+                registry = tool_registry()
+                tool = registry.get(pending.tool_code)
+                if not tool:
+                    pending.status = PendingAction.Status.CANCELLED
+                    pending.save(update_fields=["status", "updated_at"])
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": [f"Tool {pending.tool_code} no longer available."],
+                        "meta": {},
+                    }
+
+                try:
+                    result = _dispatch_tool(
+                        tool_code=pending.tool_code,
+                        actor=pending.actor,
+                        session=pending.session,
+                        actor_context=actor_context,
+                        payload=pending.payload,
+                        user_message=None,
+                    )
+                except PermissionDenied as exc:
+                    record_action(
+                        actor=pending.actor,
+                        tool_code=pending.tool_code,
+                        action_kind=pending.action_kind,
+                        status=AgentActionLog.Status.DENIED,
+                        request_payload=audit_request_payload,
+                        response_payload={"error": str(exc), **trace_context},
+                        session=pending.session,
+                        message=None,
+                        error_message=str(exc),
+                    )
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": [str(exc)],
+                        "meta": {
+                            "pending_action_token": str(pending.token),
+                            "pending_action_status": pending.status,
+                            **trace_context,
+                        },
+                    }
+                except (ValidationError, KeyError, WorkOrder.DoesNotExist) as exc:
+                    record_action(
+                        actor=pending.actor,
+                        tool_code=pending.tool_code,
+                        action_kind=pending.action_kind,
+                        status=AgentActionLog.Status.FAILED,
+                        request_payload=audit_request_payload,
+                        response_payload={"error": str(exc), **trace_context},
+                        session=pending.session,
+                        message=None,
+                        error_message=str(exc),
+                    )
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": [str(exc)],
+                        "meta": {
+                            "pending_action_token": str(pending.token),
+                            "pending_action_status": pending.status,
+                            **trace_context,
+                        },
+                    }
+                except Exception as exc:
+                    record_action(
+                        actor=pending.actor,
+                        tool_code=pending.tool_code,
+                        action_kind=pending.action_kind,
+                        status=AgentActionLog.Status.FAILED,
+                        request_payload=audit_request_payload,
+                        response_payload={"error": str(exc), **trace_context},
+                        session=pending.session,
+                        message=None,
+                        error_message=str(exc),
+                    )
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": [str(exc)],
+                        "meta": {
+                            "pending_action_token": str(pending.token),
+                            "pending_action_status": pending.status,
+                            **trace_context,
+                        },
+                    }
+
+                # Mark CONFIRMED only after successful execution
+                pending.status = PendingAction.Status.CONFIRMED
+                pending.save(update_fields=["status", "updated_at"])
+
+                record_action(
+                    actor=pending.actor,
+                    tool_code=pending.tool_code,
+                    action_kind=pending.action_kind,
+                    status=AgentActionLog.Status.SUCCEEDED,
+                    request_payload=audit_request_payload,
+                    response_payload={**trace_context, **result},
+                    session=pending.session,
+                    message=None,
+                )
+
+                if pending.session:
+                    append_chat_message(
+                        session=pending.session,
+                        role=ChatMessage.Role.TOOL,
+                        content=f"Tool {pending.tool_code} executed after confirmation.",
+                        tool_name=pending.tool_code,
+                        metadata={**{"result_preview": result, "pending_token": str(pending.token)}, **trace_context},
+                    )
+
+                task_report = _build_task_type_report(pending.tool_code, pending.payload)
+                return {
+                    "ok": True,
+                    "tool": pending.tool_code,
+                    "result": result,
+                    "errors": [],
+                    "meta": {
+                        "pending_action_token": str(pending.token),
+                        "pending_action_status": pending.status,
+                        "session_id": str(pending.session.external_id) if pending.session else None,
+                        **trace_context,
+                        **({"task_type_report": task_report} if task_report else {}),
+                    },
+                }
+            else:
+                pending.status = PendingAction.Status.CANCELLED
+                pending.save(update_fields=["status", "updated_at"])
+
+                record_action(
+                    actor=pending.actor,
+                    tool_code=pending.tool_code,
+                    action_kind=pending.action_kind,
+                    status=AgentActionLog.Status.DENIED,
+                    request_payload=audit_request_payload,
+                    response_payload={},
+                    session=pending.session,
+                    message=None,
+                    error_message="Cancelled by user.",
+                )
+
+                task_report = _build_task_type_report(pending.tool_code, pending.payload)
+                return {
+                    "ok": True,
+                    "tool": pending.tool_code,
+                    "result": None,
+                    "errors": [],
+                    "meta": {
+                        "pending_action_token": str(pending.token),
+                        "pending_action_status": pending.status,
+                        "session_id": str(pending.session.external_id) if pending.session else None,
+                        **trace_context,
+                        **({"task_type_report": task_report} if task_report else {}),
+                    },
+                }
+    except Exception as exc:
         return {
             "ok": False,
             "tool": None,
             "result": None,
-            "errors": ["Pending action not found or already resolved."],
+            "errors": [f"Unexpected error processing pending action: {str(exc)}"],
             "meta": {},
-        }
-
-    if pending.status != PendingAction.Status.PENDING:
-        return {
-            "ok": False,
-            "tool": pending.tool_code,
-            "result": None,
-            "errors": [f"Pending action is already {pending.status}."],
-            "meta": {"pending_action_status": pending.status},
-        }
-
-    trace_context = {
-        "conversation_id": conversation_id,
-        "request_id": request_id,
-        "origin_channel": origin_channel,
-        "actor_version": actor_version,
-    }
-    audit_request_payload = {**trace_context, **pending.payload}
-
-    if confirmed:
-        registry = tool_registry()
-        tool = registry.get(pending.tool_code)
-        if not tool:
-            pending.status = PendingAction.Status.CANCELLED
-            pending.save(update_fields=["status", "updated_at"])
-            return {
-                "ok": False,
-                "tool": pending.tool_code,
-                "result": None,
-                "errors": [f"Tool {pending.tool_code} no longer available."],
-                "meta": {},
-            }
-
-        try:
-            result = _dispatch_tool(
-                tool_code=pending.tool_code,
-                actor=pending.actor,
-                session=pending.session,
-                actor_context=actor_context,
-                payload=pending.payload,
-                user_message=None,
-            )
-        except PermissionDenied as exc:
-            record_action(
-                actor=pending.actor,
-                tool_code=pending.tool_code,
-                action_kind=pending.action_kind,
-                status=AgentActionLog.Status.DENIED,
-                request_payload=audit_request_payload,
-                response_payload={},
-                session=pending.session,
-                message=None,
-                error_message=str(exc),
-            )
-            return {
-                "ok": False,
-                "tool": pending.tool_code,
-                "result": None,
-                "errors": [str(exc)],
-                "meta": {
-                    "pending_action_token": str(pending.token),
-                    "pending_action_status": pending.status,
-                    **trace_context,
-                },
-            }
-        except (ValidationError, KeyError, WorkOrder.DoesNotExist) as exc:
-            record_action(
-                actor=pending.actor,
-                tool_code=pending.tool_code,
-                action_kind=pending.action_kind,
-                status=AgentActionLog.Status.FAILED,
-                request_payload=audit_request_payload,
-                response_payload={},
-                session=pending.session,
-                message=None,
-                error_message=str(exc),
-            )
-            return {
-                "ok": False,
-                "tool": pending.tool_code,
-                "result": None,
-                "errors": [str(exc)],
-                "meta": {
-                    "pending_action_token": str(pending.token),
-                    "pending_action_status": pending.status,
-                    **trace_context,
-                },
-            }
-
-        # Mark CONFIRMED only after successful execution
-        pending.status = PendingAction.Status.CONFIRMED
-        pending.save(update_fields=["status", "updated_at"])
-
-        record_action(
-            actor=pending.actor,
-            tool_code=pending.tool_code,
-            action_kind=pending.action_kind,
-            status=AgentActionLog.Status.SUCCEEDED,
-            request_payload=audit_request_payload,
-            response_payload={**trace_context, **result},
-            session=pending.session,
-            message=None,
-        )
-
-        if pending.session:
-            append_chat_message(
-                session=pending.session,
-                role=ChatMessage.Role.TOOL,
-                content=f"Tool {pending.tool_code} executed after confirmation.",
-                tool_name=pending.tool_code,
-                metadata={**{"result_preview": result, "pending_token": str(pending.token)}, **trace_context},
-            )
-
-        task_report = _build_task_type_report(pending.tool_code, pending.payload)
-        return {
-            "ok": True,
-            "tool": pending.tool_code,
-            "result": result,
-            "errors": [],
-            "meta": {
-                "pending_action_token": str(pending.token),
-                "pending_action_status": pending.status,
-                "session_id": str(pending.session.external_id) if pending.session else None,
-                **trace_context,
-                **({"task_type_report": task_report} if task_report else {}),
-            },
-        }
-    else:
-        pending.status = PendingAction.Status.CANCELLED
-        pending.save(update_fields=["status", "updated_at"])
-
-        record_action(
-            actor=pending.actor,
-            tool_code=pending.tool_code,
-            action_kind=pending.action_kind,
-            status=AgentActionLog.Status.DENIED,
-            request_payload=audit_request_payload,
-            response_payload={},
-            session=pending.session,
-            message=None,
-            error_message="Cancelled by user.",
-        )
-
-        task_report = _build_task_type_report(pending.tool_code, pending.payload)
-        return {
-            "ok": True,
-            "tool": pending.tool_code,
-            "result": None,
-            "errors": [],
-            "meta": {
-                "pending_action_token": str(pending.token),
-                "pending_action_status": pending.status,
-                "session_id": str(pending.session.external_id) if pending.session else None,
-                **trace_context,
-                **({"task_type_report": task_report} if task_report else {}),
-            },
         }

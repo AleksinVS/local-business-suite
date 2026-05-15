@@ -16,13 +16,13 @@
 ### Linux/VPS (рекомендуется)
 - Docker + Docker Compose
 - Gunicorn + Caddy
-- Полная документация в `docs/DEPLOYMENT.md`
+- Полная документация в `docs/deployment/DEPLOYMENT.md`
 
 ### Windows Server (IIS)
 - IIS 10.0+ с FastCGI
 - wfastcgi 3.0.0
 - Python 3.11.9
-- Документация в `docs/IIS_SSO.md`
+- Документация в `docs/deployment/IIS_SSO.md`
 
 ## Быстрый старт
 
@@ -59,17 +59,17 @@ python manage.py runserver
 
 ### Production (IIS)
 
-См. `docs/IIS_SSO.md` и `docs/DEPLOYMENT.md` для детальных инструкций.
+См. `docs/deployment/IIS_SSO.md` и `docs/deployment/DEPLOYMENT.md` для детальных инструкций.
 
 ## Документация
 
 - `AGENTS.md` — протокол для AI-агентов
 - `PROJECT_MAP.md` — карта проекта
-- `docs/DEPLOYMENT.md` — инструкции по развертыванию
-- `docs/IIS_SSO.md` — настройка IIS и Active Directory
-- `docs/ARCHITECTURE.md` — архитектура проекта
-- `docs/DOMAIN_MODEL.md` — доменная модель
-- `docs/INTEGRATIONS.md` — интеграции
+- `docs/deployment/DEPLOYMENT.md` — инструкции по развертыванию
+- `docs/deployment/IIS_SSO.md` — настройка IIS и Active Directory
+- `docs/architecture/blueprint.md` — архитектура проекта
+- `docs/architecture/DOMAIN_MODEL.md` — доменная модель
+- `docs/architecture/INTEGRATIONS.md` — интеграции
 - `archive/` — исторические записи (bugfix-отчёты, завершённые планы)
 
 ## Текущее состояние

@@ -14,7 +14,15 @@ class Department(models.Model):
 
     class Meta:
         ordering = ["parent__id", "name", "id"]
-        unique_together = ("parent", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent", "name"],
+                name="unique_department_parent_name",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["name"]),
+        ]
         verbose_name = "Подразделение"
         verbose_name_plural = "Подразделения"
 
@@ -34,7 +42,7 @@ class Department(models.Model):
         while node is not None:
             depth += 1
             node = node.parent
-        prefix = "\u00a0\u00a0" * depth
+        prefix = "  " * depth
         return f"{prefix}{self.name}"
 
     def descendant_ids(self):

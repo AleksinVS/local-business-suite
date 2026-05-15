@@ -40,8 +40,6 @@ ALLOWED_HOSTS += [
     for host in os.environ.get("DJANGO_INTERNAL_ALLOWED_HOSTS", "web").split(",")
     if host and host not in ALLOWED_HOSTS
 ]
-if DEBUG:
-    ALLOWED_HOSTS.append("*")
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
@@ -99,10 +97,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# FastCGI/IIS compatibility
-SECURE_SSL_REDIRECT = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
+# Security flags read from environment (defaults safe for local dev)
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False") == "True"
+SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SESSION_COOKIE_SECURE", "False") == "True"
+CSRF_COOKIE_SECURE = os.environ.get("DJANGO_CSRF_COOKIE_SECURE", "False") == "True"
 
 LOGGING = {
     "version": 1,

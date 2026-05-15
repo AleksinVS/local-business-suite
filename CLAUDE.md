@@ -75,7 +75,7 @@ Root directory must stay clean. Follow these rules:
 | Project overview & entry points | Root (`/`) | `README.md`, `AGENTS.md`, `PROJECT_MAP.md`, `Makefile`, `manage.py`, `requirements.txt` |
 | Reference documentation | `docs/` | Architecture, domain models, deployment guides, integration specs |
 | Completed/historical docs | `archive/` | Bugfix reports, completed migration notes, one-off plans, handoff records |
-| Architecture decisions | `adr/` | ADR records (`ADR-NNNN-*.md`) |
+| Architecture decisions | `docs/adr/` | ADR records (`ADR-NNNN-*.md`) |
 | Agent/AI configs & templates | `ai/` | Change plan schemas, task brief templates, agent architecture docs |
 | Deployment configs | Root (`/`) | `Dockerfile`, `docker-compose*.yml`, `Caddyfile`, `deploy.sh`, `.env.example` |
 | Django project config | `config/` | `settings.py`, `urls.py`, `wsgi.py`, `asgi.py` |
@@ -109,7 +109,7 @@ When working with IIS deployment (Windows Server), be aware of:
 1. **Python Version**: Must use Python 3.11.9 (3.13+ is incompatible with wfastcgi 3.0.0)
 2. **PATH_INFO Fix**: Project includes `apps/core/middleware.PathInfoDebugMiddleware` to fix IIS FastCGI PATH_INFO issues
 3. **Secret Storage**: Use `.env` file, not `web.config` (see `docs/SECURE_SECRETS.md` → now in `archive/`)
-4. **Authentication**: Windows Authentication SSO with LDAP fallback (see `docs/IIS_SSO.md`)
+4. **Authentication**: Windows Authentication SSO with LDAP fallback (see `docs/deployment/IIS_SSO.md`)
 5. **Debug Logging**: In DEBUG mode, middleware logs to a local debug file — never commit logs
 
 ## AI Contract Rules

@@ -84,6 +84,7 @@ Root directory must stay clean. Follow these rules:
 
 **Rules:**
 - Do not create markdown files in root unless they are `README.md`, `AGENTS.md`, or `PROJECT_MAP.md`.
+- **Architectural Decisions:** Any significant change to the system design, choice of tools, or core logic MUST be documented as an ADR in `docs/adr/`.
 - Bugfix reports, completed task docs, and one-off plans go to `archive/`.
 - Reference docs (architecture, models, deployment) go to `docs/`.
 - Logs are gitignored. Never commit `*.log` or `server_log.txt`.

@@ -52,6 +52,7 @@ def create_entry(
         )
 
     entry = WaitingListEntry.objects.create(
+        author=author,
         patient_name=patient_name.strip(),
         patient_dob=patient_dob,
         patient_phone=patient_phone,

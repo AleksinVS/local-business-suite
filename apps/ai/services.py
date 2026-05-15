@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
-from apps.workorders.models import WorkOrder, WorkOrderPriority
+from apps.workorders.models import Board, WorkOrder, WorkOrderPriority
 from apps.workorders.policies import (
     can_comment,
     can_create,
@@ -102,10 +102,13 @@ def _resolve_model_config(model_id):
 
 def resolve_actor(*, user_id=None, username=None):
     User = get_user_model()
-    if user_id:
-        return User.objects.get(pk=user_id)
-    if username:
-        return User.objects.get(username=username)
+    try:
+        if user_id:
+            return User.objects.get(pk=user_id)
+        if username:
+            return User.objects.get(username=username)
+    except User.DoesNotExist:
+        raise ValidationError("Actor identity not found.")
     raise ValidationError("Actor identity is required.")
 
 
@@ -155,7 +158,7 @@ def serialize_session_history(session):
         if attachments:
             att_info = "\n\n[Прикрепленные файлы: " + ", ".join(f"{a.file_name} ({a.get_file_type_display()})" for a in attachments) + "]"
             content = (content + att_info).strip()
-            
+
         history.append({
             "role": message.role,
             "content": content,
@@ -212,6 +215,9 @@ def create_workorder_for_actor(*, actor, payload):
     if not can_create(actor):
         raise PermissionDenied("Work order creation is not allowed for this user.")
     department = Department.objects.get(pk=payload["department_id"])
+    board = Board.objects.filter(slug="main").first()
+    if not board:
+        raise ValidationError("Default board 'main' does not exist. Contact administrator.")
     workorder = create_workorder(
         author=actor,
         title=payload.get("title") or payload["subject"],
@@ -219,6 +225,7 @@ def create_workorder_for_actor(*, actor, payload):
         department=department,
         priority=payload.get("priority", WorkOrderPriority.MEDIUM),
         device_id=payload.get("device_id"),
+        board=board,
     )
     return {
         "id": workorder.id,
@@ -512,14 +519,14 @@ def list_users_for_actor(*, actor, payload):
     """Lists users with their roles and departments. Only for superusers."""
     if not actor.is_superuser:
         raise PermissionDenied("Only administrators can list all users.")
-    
+
     User = get_user_model()
     query = payload.get("query", "")
-    queryset = User.objects.select_related("department", "organizational_unit").prefetch_related("groups").all()
-    
+    queryset = User.objects.select_related("department").prefetch_related("groups").all()
+
     if query:
         queryset = queryset.filter(username__icontains=query) | queryset.filter(first_name__icontains=query) | queryset.filter(last_name__icontains=query)
-        
+
     return {
         "items": [
             {
@@ -540,27 +547,27 @@ def update_user_for_actor(*, actor, payload):
     """Updates user details. Only for superusers."""
     if not actor.is_superuser:
         raise PermissionDenied("Only administrators can update user data.")
-    
+
     User = get_user_model()
     user_id = payload.get("user_id")
     if not user_id:
         raise ValidationError("user_id is required.")
-        
+
     target_user = User.objects.get(pk=user_id)
-    
+
     if "is_active" in payload:
         target_user.is_active = payload["is_active"]
-    
+
     if "department_id" in payload:
         target_user.department_id = payload["department_id"]
-        
+
     if "group_names" in payload:
         from django.contrib.auth.models import Group
         groups = Group.objects.filter(name__in=payload["group_names"])
         target_user.groups.set(groups)
-        
+
     target_user.save()
-    
+
     return {
         "ok": True,
         "user": {

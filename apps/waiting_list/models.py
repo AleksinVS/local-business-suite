@@ -32,6 +32,14 @@ class WaitingListEntry(models.Model):
         verbose_name="Внешний идентификатор",
         help_text="Не guessable UUID для внешних интеграций",
     )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="waiting_list_entries",
+        verbose_name="Автор",
+        null=True,
+        blank=True,
+    )
     patient_name = models.CharField("ФИО пациента", max_length=255)
     patient_dob = models.CharField("Дата рождения", max_length=10, help_text="ДД.ММ.ГГГГ")
     patient_phone = models.CharField("Телефон", max_length=20)

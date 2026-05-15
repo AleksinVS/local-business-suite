@@ -161,10 +161,11 @@ def execute_tool(
 
     # Persist conversation_id in session metadata for traceability.
     if conversation_id and session.metadata.get("conversation_id") != conversation_id:
-        session.metadata["conversation_id"] = conversation_id
-        if "request_ids" not in session.metadata:
-            session.metadata["request_ids"] = []
-        session.metadata["request_ids"].append(request_id)
+        session.metadata = {
+            **session.metadata,
+            "conversation_id": conversation_id,
+            "request_ids": [*session.metadata.get("request_ids", []), request_id],
+        }
         session.save(update_fields=["metadata", "updated_at"])
 
     # Build trace context metadata to persist across all audit structures.

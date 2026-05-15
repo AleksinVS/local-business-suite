@@ -9,6 +9,12 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from .forms import WaitingListEntryForm, WaitingListStatusForm
 from .models import WaitingListEntry, WaitingListStatus
+from .policies import (
+    can_create_waiting_list,
+    can_edit_waiting_list_entry,
+    can_transition_waiting_list_entry,
+    can_view_waiting_list,
+)
 from .services import (
     WaitingListValidationError,
     create_entry,
@@ -21,7 +27,7 @@ class WaitingListAccessMixin(LoginRequiredMixin):
     """Mixin ensuring only authenticated users access waiting list."""
 
     def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
+        if request.user.is_authenticated and not can_view_waiting_list(request.user):
             return HttpResponseForbidden("Доступ только для авторизованных пользователей.")
         return super().dispatch(request, *args, **kwargs)
 
@@ -58,10 +64,10 @@ class WaitingListDashboardView(WaitingListAccessMixin, ListView):
         sort = self.request.GET.get("sort", "created_at")
         order = self.request.GET.get("order", "desc")
         if order == "asc":
-            sort = sort
+            sort_field = sort
         else:
-            sort = f"-{sort}"
-        queryset = queryset.order_by(sort)
+            sort_field = f"-{sort}"
+        queryset = queryset.order_by(sort_field, "-created_at")
 
         return queryset
 
@@ -89,6 +95,11 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
     model = WaitingListEntry
     form_class = WaitingListEntryForm
     template_name = "waiting_list/entry_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not can_create_waiting_list(request.user):
+            return HttpResponseForbidden("Создание записей запрещено.")
+        return super().dispatch(request, *args, **kwargs)
 
     def get_template_names(self):
         if self.request.htmx:
@@ -141,6 +152,8 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["status_form"] = WaitingListStatusForm(instance=self.object)
         context["status_choices"] = WaitingListStatus.choices
+        context["can_edit"] = can_edit_waiting_list_entry(self.request.user, self.object)
+        context["can_transition"] = can_transition_waiting_list_entry(self.request.user, self.object)
         return context
 
 
@@ -151,6 +164,12 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
     form_class = WaitingListEntryForm
     template_name = "waiting_list/entry_form.html"
     context_object_name = "entry"
+
+    def dispatch(self, request, *args, **kwargs):
+        entry = self.get_object()
+        if not can_edit_waiting_list_entry(request.user, entry):
+            return HttpResponseForbidden("Редактирование этой записи запрещено.")
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return WaitingListEntry.objects.all()
@@ -203,6 +222,9 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
 
     def post(self, request, pk):
         entry = get_object_or_404(WaitingListEntry, pk=pk)
+        if not can_transition_waiting_list_entry(request.user, entry):
+            return HttpResponseForbidden("Смена статуса этой записи запрещена.")
+
         target_status = request.POST.get("status", "")
 
         if target_status not in WaitingListStatus.values:
@@ -220,11 +242,13 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                         "entry": entry,
                         "status_form": WaitingListStatusForm(instance=entry),
                         "status_choices": WaitingListStatus.choices,
+                        "can_edit": can_edit_waiting_list_entry(request.user, entry),
+                        "can_transition": can_transition_waiting_list_entry(request.user, entry),
                     },
                 )
             messages.success(request, "Статус обновлен.")
             return redirect("waiting_list:dashboard")
-        except Exception as e:
+        except WaitingListValidationError as e:
             if request.htmx:
                 return render(
                     request,
@@ -232,7 +256,9 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                     {
                         "entry": entry,
                         "status_form": WaitingListStatusForm(instance=entry),
-                        "transition_choices": WaitingListStatus.choices,
+                        "status_choices": WaitingListStatus.choices,
+                        "can_edit": can_edit_waiting_list_entry(request.user, entry),
+                        "can_transition": can_transition_waiting_list_entry(request.user, entry),
                         "error": str(e),
                     },
                     status=400,

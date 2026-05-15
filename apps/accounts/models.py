@@ -32,6 +32,4 @@ class User(AbstractUser):
 
     def get_ou_path(self):
         """Получить полный путь OU"""
-        if self.organizational_unit:
-            return self.organizational_unit.get_path()
         return "Без OU"

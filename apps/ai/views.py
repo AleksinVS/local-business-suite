@@ -155,7 +155,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 file_type = ChatAttachment.FileType.AUDIO
             elif "pdf" in content_type or "word" in content_type or "text" in content_type:
                 file_type = ChatAttachment.FileType.DOCUMENT
-                
+
             ChatAttachment.objects.create(
                 message=user_msg,
                 file=f,
@@ -208,10 +208,11 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             },
         )
 
-        session.metadata["conversation_id"] = runtime_conversation_id
-        if "request_ids" not in session.metadata:
-            session.metadata["request_ids"] = []
-        session.metadata["request_ids"].append(runtime_request_id)
+        session.metadata = {
+            **session.metadata,
+            "conversation_id": runtime_conversation_id,
+            "request_ids": [*session.metadata.get("request_ids", []), runtime_request_id],
+        }
         session.save(update_fields=["metadata", "updated_at"])
 
         return redirect("ai:chat_detail", external_id=session.external_id)
@@ -229,7 +230,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
         if len(prompt) > 10000:
             prompt = prompt[:10000]
         model_id = body.get("model_id", "") or session.metadata.get("model_id", "")
-        
+
         conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
         request_id = str(uuid.uuid4())
 
@@ -255,7 +256,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
         def stream_generator():
             client = AgentRuntimeClient()
             full_content = []
-            
+
             try:
                 for event in client.chat_stream(
                     user=request.user,
@@ -268,7 +269,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     model_id=model_id,
                 ):
                     yield f"{event}\n\n"
-                    
+
                     if event.startswith("data: "):
                         data_str = event[6:]
                         if data_str != "[DONE]":
@@ -308,7 +309,7 @@ class AIChatUpdateModelView(LoginRequiredMixin, View):
         valid_ids = {m["id"] for m in settings.LOCAL_BUSINESS_AI_MODELS}
         if model_id and model_id not in valid_ids:
             return JsonResponse({"error": "Invalid model_id."}, status=400)
-        session.metadata["model_id"] = model_id
+        session.metadata = {**session.metadata, "model_id": model_id}
         session.save(update_fields=["metadata", "updated_at"])
         return JsonResponse({"status": "ok", "model_id": model_id})
 
@@ -448,7 +449,7 @@ class AISkillCatalogView(View):
         gateway_token = request.headers.get("X-AI-Gateway-Token", "")
         if not expected_token or gateway_token != expected_token:
             return HttpResponseForbidden("AI gateway token is invalid.")
-        
+
         from .skills_service import discover_skills
         return JsonResponse({"skills": discover_skills()})
 
@@ -459,7 +460,7 @@ class AISkillLoadView(View):
         gateway_token = request.headers.get("X-AI-Gateway-Token", "")
         if not expected_token or gateway_token != expected_token:
             return HttpResponseForbidden("AI gateway token is invalid.")
-        
+
         from .skills_service import load_skill_content
         content = load_skill_content(skill_id)
         if content:

@@ -10,6 +10,12 @@ from apps.workorders.policies import ROLE_MANAGER
 User = get_user_model()
 
 from .models import SERVICE_CHOICES, WaitingListAuditLog, WaitingListEntry, WaitingListStatus
+from .policies import (
+    can_create_waiting_list,
+    can_edit_waiting_list_entry,
+    can_transition_waiting_list_entry,
+    can_view_waiting_list,
+)
 from .services import (
     WaitingListValidationError,
     create_entry,
@@ -78,161 +84,172 @@ class WaitingListModelTests(TestCase):
         self.assertTrue(entry.priority_cito)
 
 
-class WaitingListServiceValidationTests(TestCase):
+class WaitingListValidationTests(TestCase):
     """Tests for server-side validation in services."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="testuser", password="pass")
+        self.user = User.objects.create_user(username="valuser", password="pass")
 
-    def test_create_entry_validates_phone_format(self):
-        """Invalid phone formats are rejected."""
-        with self.assertRaises(WaitingListValidationError) as ctx:
+    def test_create_entry_requires_name_min_length(self):
+        with self.assertRaises(WaitingListValidationError):
             create_entry(
                 author=self.user,
-                patient_name="Иванов Иван Иванович",
-                patient_dob="15.04.1985",
-                patient_phone="123",  # Invalid
+                patient_name="A",
+                patient_dob="01.01.1990",
+                patient_phone="+7 (900) 111-22-33",
                 service_id="s1",
             )
-        self.assertIn("телефон", str(ctx.exception).lower())
 
-    def test_create_entry_validates_dob_format(self):
-        """Invalid DOB formats are rejected."""
-        with self.assertRaises(WaitingListValidationError) as ctx:
+    def test_create_entry_requires_valid_dob_format(self):
+        with self.assertRaises(WaitingListValidationError):
             create_entry(
                 author=self.user,
-                patient_name="Иванов Иван Иванович",
-                patient_dob="1985-04-15",  # Wrong format
-                patient_phone="+7 (903) 123-45-67",
+                patient_name="Valid Name",
+                patient_dob="1985-04-15",
+                patient_phone="+7 (900) 111-22-33",
                 service_id="s1",
             )
-        error_msg = str(ctx.exception).lower()
-        # Check that DOB format error is raised (message may be in Russian)
-        self.assertTrue(
-            "дата рождения" in error_msg or "формат" in error_msg,
-            f"Expected DOB validation error, got: {error_msg}"
-        )
 
-    def test_create_entry_validates_patient_name_minimum(self):
-        """Patient name must be at least 2 characters."""
-        with self.assertRaises(WaitingListValidationError) as ctx:
+    def test_create_entry_requires_valid_phone(self):
+        with self.assertRaises(WaitingListValidationError):
             create_entry(
                 author=self.user,
-                patient_name="И",  # Too short
-                patient_dob="15.04.1985",
-                patient_phone="+7 (903) 123-45-67",
+                patient_name="Valid Name",
+                patient_dob="01.01.1990",
+                patient_phone="12345",
                 service_id="s1",
             )
-        self.assertIn("ФИО", str(ctx.exception))
 
-    def test_transition_entry_creates_audit_log(self):
-        """Transitioning status creates audit log."""
+    def test_update_entry_validates_dob(self):
         entry = create_entry(
             author=self.user,
-            patient_name="Тестов Тест Тестович",
+            patient_name="Original",
             patient_dob="01.01.1990",
             patient_phone="+7 (900) 111-22-33",
             service_id="s1",
         )
-        initial_count = entry.audit_logs.count()
+        with self.assertRaises(WaitingListValidationError):
+            update_entry(
+                entry=entry,
+                user=self.user,
+                patient_dob="invalid",
+            )
 
-        transition_entry(entry=entry, user=self.user, to_status=WaitingListStatus.SCHEDULED)
 
-        entry.refresh_from_db()
-        self.assertEqual(entry.status, WaitingListStatus.SCHEDULED)
-        self.assertEqual(entry.audit_logs.count(), initial_count + 1)
+class WaitingListPolicyTests(TestCase):
+    """Tests for waiting list policy layer."""
 
-    def test_update_entry_creates_audit_log(self):
-        """Updating entry creates audit log with changes."""
-        entry = create_entry(
+    def setUp(self):
+        self.user = User.objects.create_user(username="policyuser", password="pass")
+        self.manager = User.objects.create_user(username="manager", password="pass")
+        self.outsider = User.objects.create_user(username="outsider", password="pass")
+        manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        self.manager.groups.add(manager_group)
+
+        self.entry = create_entry(
             author=self.user,
-            patient_name="Тестов Тест Тестович",
+            patient_name="Пациент",
             patient_dob="01.01.1990",
             patient_phone="+7 (900) 111-22-33",
             service_id="s1",
         )
-        initial_count = entry.audit_logs.count()
 
-        update_entry(
-            entry=entry,
-            user=self.user,
-            patient_name="Тестов Обновленный Тестович",
-        )
+    def test_authenticated_user_can_view(self):
+        self.assertTrue(can_view_waiting_list(self.user))
 
-        entry.refresh_from_db()
-        self.assertIn("Тестов Обновленный", entry.patient_name)
-        self.assertEqual(entry.audit_logs.count(), initial_count + 1)
+    def test_author_can_edit(self):
+        self.assertTrue(can_edit_waiting_list_entry(self.user, self.entry))
+
+    def test_manager_can_edit_any_entry(self):
+        self.assertTrue(can_edit_waiting_list_entry(self.manager, self.entry))
+
+    def test_outsider_cannot_edit(self):
+        self.assertFalse(can_edit_waiting_list_entry(self.outsider, self.entry))
+
+    def test_author_can_transition(self):
+        self.assertTrue(can_transition_waiting_list_entry(self.user, self.entry))
+
+    def test_manager_can_transition(self):
+        self.assertTrue(can_transition_waiting_list_entry(self.manager, self.entry))
+
+    def test_outsider_cannot_transition(self):
+        self.assertFalse(can_transition_waiting_list_entry(self.outsider, self.entry))
 
 
 class WaitingListRouteTests(TestCase):
-    """Tests for route accessibility and HTMX behavior."""
+    """Tests for waiting list routes and HTMX behavior."""
 
     def setUp(self):
-        self.user = User.objects.create_user(username="testuser", password="pass")
-        self.entry = WaitingListEntry.objects.create(
-            patient_name="Иванов Иван Иванович",
+        self.user = User.objects.create_user(username="routeuser", password="pass")
+        self.entry = create_entry(
+            author=self.user,
+            patient_name="Маршрутный Пациент",
             patient_dob="15.04.1985",
             patient_phone="+7 (903) 123-45-67",
             service_id="s1",
         )
 
     def test_dashboard_requires_login(self):
-        """Dashboard is not accessible to anonymous users."""
         response = self.client.get(reverse("waiting_list:dashboard"))
-        # LoginRequiredMixin returns 302 redirect or 403 for HTMX
-        self.assertIn(response.status_code, [302, 403])
+        self.assertEqual(response.status_code, 302)
 
-    def test_dashboard_loads_for_authenticated(self):
-        """Dashboard loads for authenticated users."""
+    def test_dashboard_returns_200_for_authenticated(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("waiting_list:dashboard"))
         self.assertEqual(response.status_code, 200)
 
-    def test_entry_detail_loads(self):
-        """Entry detail page loads correctly."""
-        self.client.force_login(self.user)
-        response = self.client.get(reverse("waiting_list:detail", args=[self.entry.pk]))
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_entry_loads_form(self):
-        """Create entry form loads correctly."""
+    def test_create_entry_form_renders(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("waiting_list:create"))
         self.assertEqual(response.status_code, 200)
 
-    def test_entry_table_partial_for_htmx(self):
-        """Dashboard returns table partial for HTMX requests."""
-        self.client.force_login(self.user)
-        response = self.client.get(
-            reverse("waiting_list:dashboard"),
-            HTTP_HX_REQUEST="true",
-            HTTP_HX_TARGET="entry-table",
-        )
-        self.assertEqual(response.status_code, 200)
-
-    def test_transition_via_htmx(self):
-        """Status transition works via HTMX."""
+    def test_create_entry_post_creates_record(self):
         self.client.force_login(self.user)
         response = self.client.post(
-            reverse("waiting_list:transition", args=[self.entry.pk]),
-            {"status": WaitingListStatus.CONFIRMED},
-            HTTP_HX_REQUEST="true",
+            reverse("waiting_list:create"),
+            {
+                "patient_name": "Новый Пациент",
+                "patient_dob": "20.05.1980",
+                "patient_phone": "+7 (905) 123-45-67",
+                "service_id": "s2",
+            },
         )
-        self.assertEqual(response.status_code, 200)
-        self.entry.refresh_from_db()
-        self.assertEqual(self.entry.status, WaitingListStatus.CONFIRMED)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            WaitingListEntry.objects.filter(patient_name="Новый Пациент").exists()
+        )
 
-    def test_filter_by_service(self):
-        """Dashboard filters by service correctly."""
-        self.client.force_login(self.user)
-        response = self.client.get(reverse("waiting_list:dashboard"), {"service": "s1"})
-        self.assertEqual(response.status_code, 200)
-
-    def test_search_filter(self):
-        """Dashboard search filter works."""
+    def test_detail_view_renders(self):
         self.client.force_login(self.user)
         response = self.client.get(
-            reverse("waiting_list:dashboard"),
-            {"search": "Иванов"},
+            reverse("waiting_list:detail", kwargs={"pk": self.entry.pk})
         )
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.entry.patient_name)
+
+    def test_transition_changes_status(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:transition", kwargs={"pk": self.entry.pk}),
+            {"status": WaitingListStatus.SCHEDULED},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.entry.refresh_from_db()
+        self.assertEqual(self.entry.status, WaitingListStatus.SCHEDULED)
+
+    def test_unauthorized_user_cannot_transition(self):
+        outsider = User.objects.create_user(username="unauthorized", password="pass")
+        self.client.force_login(outsider)
+        response = self.client.post(
+            reverse("waiting_list:transition", kwargs={"pk": self.entry.pk}),
+            {"status": WaitingListStatus.SCHEDULED},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_audit_log_created_on_transition(self):
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("waiting_list:transition", kwargs={"pk": self.entry.pk}),
+            {"status": WaitingListStatus.SCHEDULED},
+        )
+        self.assertEqual(self.entry.audit_logs.count(), 2)

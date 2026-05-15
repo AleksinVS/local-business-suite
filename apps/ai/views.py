@@ -321,7 +321,7 @@ class AIChatUpdateTitleView(LoginRequiredMixin, View):
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
             return JsonResponse({"error": "Invalid JSON body."}, status=400)
-        title = body.get("title", "").strip()[:255]
+        title = body.get("title", "").strip()[:50]
         if not title:
             return JsonResponse({"error": "Заголовок не может быть пустым."}, status=400)
         session.title = title

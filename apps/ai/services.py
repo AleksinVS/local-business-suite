@@ -41,7 +41,7 @@ def generate_session_title(session):
     system prompt asking for a short title. Returns the generated title
     string on success, or None if generation fails.
     """
-    messages = list(session.messages.order_by("created_at", "id")[:6])
+    messages = list(session.messages.order_by("created_at", "id")[:20])
     if not messages:
         return None
 
@@ -60,7 +60,11 @@ def generate_session_title(session):
 
     chat_messages = [
         {"role": "system", "content": (
-            "Сгенерируй краткий заголовок (до 50 символов) для этого диалога. "
+            "Проанализируй смысл этого диалога и сгенерируй краткий заголовок, "
+            "который отражает основную тему или цель разговора. "
+            "Не используй текст последнего сообщения — определи общий контекст. "
+            "Заголовок должен содержать строго не более 50 символов. "
+            "Если заголовок получается длиннее 50 символов — сократи его. "
             "Ответь только заголовком, без кавычек и пояснений. "
             "Язык заголовка должен соответствовать языку диалога."
         )}
@@ -80,7 +84,7 @@ def generate_session_title(session):
         )
         title = response.choices[0].message.content.strip().strip('"\'')
         if title:
-            return title[:255]
+            return title[:50]
     except Exception:
         logger.exception("generate_session_title: LLM call failed")
 

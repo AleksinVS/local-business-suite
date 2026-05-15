@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice, OperationalStatus
@@ -115,18 +116,24 @@ class Command(BaseCommand):
 
         for index, (title, department, device_serial, author_key, assignee_key, priority, status) in enumerate(workorders, start=1):
             description = f"{DEMO_MARKER} Демонстрационная заявка №{index} для тестового контура больницы."
+            defaults = {
+                "board": main_board,
+                "department": department,
+                "device": devices.get(device_serial) if device_serial else None,
+                "author": users[author_key],
+                "assignee": users.get(assignee_key) if assignee_key else None,
+                "priority": priority,
+                "status": status,
+            }
+            if status == WorkOrderStatus.RESOLVED:
+                defaults["resolved_at"] = timezone.now()
+            if status == WorkOrderStatus.CLOSED:
+                defaults["resolved_at"] = timezone.now()
+                defaults["closed_at"] = timezone.now()
             workorder, _ = WorkOrder.objects.get_or_create(
                 title=title,
                 description=description,
-                defaults={
-                    "board": main_board,
-                    "department": department,
-                    "device": devices.get(device_serial) if device_serial else None,
-                    "author": users[author_key],
-                    "assignee": users.get(assignee_key) if assignee_key else None,
-                    "priority": priority,
-                    "status": status,
-                },
+                defaults=defaults,
             )
             workorder.board = main_board
             workorder.department = department

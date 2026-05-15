@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime
 
 from django import forms
 
@@ -50,12 +51,18 @@ class WaitingListEntryForm(forms.ModelForm):
 
     def clean_patient_dob(self):
         dob = self.cleaned_data.get("patient_dob", "")
-        pattern = r"^\d{2}\.\d{2}\.\d{4}$"
-        if not re.match(pattern, dob):
+        if isinstance(dob, date) and not isinstance(dob, datetime):
+            return dob
+        match = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", dob)
+        if not match:
             raise forms.ValidationError(
                 "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ."
             )
-        return dob
+        day, month, year = map(int, match.groups())
+        try:
+            return date(year, month, day)
+        except ValueError as exc:
+            raise forms.ValidationError("Некорректная дата.") from exc
 
     def clean_patient_phone(self):
         phone = self.cleaned_data.get("patient_phone", "")

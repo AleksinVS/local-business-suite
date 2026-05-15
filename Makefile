@@ -1,7 +1,7 @@
 PYTHON := ./.venv/bin/python
 PYTHON_INSTALL := $(PYTHON) -m pip install
 
-.PHONY: venv install check test contracts change-plan ai-runtime
+.PHONY: venv install check test test-all contracts change-plan ai-runtime
 
 venv:
 	python3 -m venv .venv
@@ -14,6 +14,9 @@ check:
 
 test:
 	$(PYTHON) manage.py test
+
+test-all:
+	pytest --tb=short -q
 
 contracts:
 	$(PYTHON) manage.py validate_architecture_contracts

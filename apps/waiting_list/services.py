@@ -1,4 +1,5 @@
 import re
+from datetime import date, datetime
 from typing import Optional
 
 from django.db import transaction
@@ -13,10 +14,28 @@ def _phone_valid(phone: str) -> bool:
     return len(cleaned) == 11 and cleaned.startswith(("7", "8"))
 
 
-def _dob_valid(dob: str) -> bool:
-    """Validate DD.MM.YYYY date format"""
-    pattern = r"^\d{2}\.\d{2}\.\d{4}$"
-    return bool(re.match(pattern, dob))
+def _parse_dob(dob):
+    """Parse DD.MM.YYYY string into a date object."""
+    if isinstance(dob, date) and not isinstance(dob, datetime):
+        return dob
+    match = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", dob)
+    if match:
+        day, month, year = map(int, match.groups())
+        return date(year, month, day)
+    # Fallback: try ISO format
+    try:
+        return datetime.strptime(dob, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _dob_valid(dob) -> bool:
+    """Validate date of birth (string or date)."""
+    if isinstance(dob, date) and not isinstance(dob, datetime):
+        return True
+    if not isinstance(dob, str):
+        return False
+    return _parse_dob(dob) is not None
 
 
 class WaitingListValidationError(Exception):
@@ -27,7 +46,7 @@ def create_entry(
     *,
     author,
     patient_name: str,
-    patient_dob: str,
+    patient_dob,
     patient_phone: str,
     service_id: str,
     date_tag=None,
@@ -51,10 +70,12 @@ def create_entry(
             "Неверный формат телефона. Используйте +7 (XXX) XXX-XX-XX."
         )
 
+    parsed_dob = _parse_dob(patient_dob) if isinstance(patient_dob, str) else patient_dob
+
     entry = WaitingListEntry.objects.create(
         author=author,
         patient_name=patient_name.strip(),
-        patient_dob=patient_dob,
+        patient_dob=parsed_dob,
         patient_phone=patient_phone,
         service_id=service_id,
         date_tag=date_tag,
@@ -78,7 +99,7 @@ def update_entry(
     entry: WaitingListEntry,
     user,
     patient_name: Optional[str] = None,
-    patient_dob: Optional[str] = None,
+    patient_dob=None,
     patient_phone: Optional[str] = None,
     service_id: Optional[str] = None,
     date_tag=None,
@@ -103,7 +124,7 @@ def update_entry(
             raise WaitingListValidationError(
                 "Неверный формат даты рождения. Используйте ДД.ММ.ГГГГ."
             )
-        entry.patient_dob = patient_dob
+        entry.patient_dob = _parse_dob(patient_dob) if isinstance(patient_dob, str) else patient_dob
         changes.append("обновлена дата рождения")
 
     if patient_phone is not None:

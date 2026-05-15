@@ -31,7 +31,7 @@ class WaitingListModelTests(TestCase):
         """Entry must use int PK, not UUID."""
         entry = WaitingListEntry.objects.create(
             patient_name="Иванов Иван Иванович",
-            patient_dob="15.04.1985",
+            patient_dob=date(1985, 4, 15),
             patient_phone="+7 (903) 123-45-67",
             service_id="s1",
         )
@@ -42,7 +42,7 @@ class WaitingListModelTests(TestCase):
         """Entry string representation includes name and service."""
         entry = WaitingListEntry.objects.create(
             patient_name="Петрова Анна Сергеевна",
-            patient_dob="22.08.1990",
+            patient_dob=date(1990, 8, 22),
             patient_phone="+7 (916) 987-65-43",
             service_id="s2",
         )
@@ -53,7 +53,7 @@ class WaitingListModelTests(TestCase):
         """New entries default to WAITING status."""
         entry = WaitingListEntry.objects.create(
             patient_name="Тестов Тест Тестович",
-            patient_dob="01.01.1990",
+            patient_dob=date(1990, 1, 1),
             patient_phone="+7 (900) 111-22-33",
             service_id="s1",
         )
@@ -76,7 +76,7 @@ class WaitingListModelTests(TestCase):
         """CITO priority flag works correctly."""
         entry = WaitingListEntry.objects.create(
             patient_name="Срочный Пациент",
-            patient_dob="05.05.1980",
+            patient_dob=date(1980, 5, 5),
             patient_phone="+7 (999) 999-99-99",
             service_id="s1",
             priority_cito=True,
@@ -105,7 +105,7 @@ class WaitingListValidationTests(TestCase):
             create_entry(
                 author=self.user,
                 patient_name="Valid Name",
-                patient_dob="1985-04-15",
+                patient_dob="not-a-date",
                 patient_phone="+7 (900) 111-22-33",
                 service_id="s1",
             )

@@ -1,0 +1,20 @@
+{
+  ".": "Общие словари, дашборд, формы настроек и AI-утилиты",
+  "models.py": "Общие модели (Department и др.)",
+  "views.py": "Представления дашборда и настроек",
+  "forms.py": "Формы настроек",
+  "context_processors.py": "Контекстные процессоры шаблонов",
+  "debug_views.py": "Debug-представления (включаются в DEBUG=True)",
+  "health_views.py": "Health-check endpoint (/health/)",
+  "json_utils.py": "Утилиты валидации JSON-контрактов",
+  "middleware.py": "Middleware (PATH_INFO fix для IIS, debug logging)",
+  "templatetags/core_tags.py": "Пользовательские теги шаблонов",
+  "urls.py": "URL-маршруты приложения",
+  "admin.py": "Регистрация моделей в Django Admin",
+  "apps.py": "Конфигурация приложения",
+  "tests.py": "Тесты приложения",
+  "management/commands/sync_ai_tool_registry.py": "Синхронизация реестра AI-инструментов",
+  "management/commands/validate_architecture_contracts.py": "Валидация JSON-контрактов",
+  "management/commands/generate_change_plan.py": "Генерация плана изменений",
+  "management/commands/seed_hospital_demo.py": "Сидирование демо-данных больницы"
+}

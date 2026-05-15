@@ -42,6 +42,25 @@ If the slice adds migrations, also run:
 ./.venv/bin/python manage.py migrate
 ```
 
+## Management Commands
+
+```bash
+# Сидирование ролей и групп
+python manage.py seed_roles
+
+# Синхронизация реестра AI-инструментов (после изменения tool_definitions.py)
+python manage.py sync_ai_tool_registry
+
+# Валидация JSON-контрактов
+python manage.py validate_architecture_contracts
+
+# Генерация плана изменений из брифа
+python manage.py generate_change_plan <brief_path> --output <output_path>
+
+# Сидирование демо-данных больницы
+python manage.py seed_hospital_demo
+```
+
 ## Slice Workflow
 
 1. Pick one bounded architectural slice.
@@ -68,32 +87,11 @@ When touching AI/runtime code, also run:
 
 ## File Organization
 
-Root directory must stay clean. Follow these rules:
-
-| Category | Location | Examples |
-|---|---|---|
-| Project overview & entry points | Root (`/`) | `README.md`, `AGENTS.md`, `PROJECT_MAP.md`, `Makefile`, `manage.py`, `requirements.txt` |
-| Reference documentation | `docs/` | Architecture, domain models, deployment guides, integration specs |
-| Completed/historical docs | `archive/` | Bugfix reports, completed migration notes, one-off plans, handoff records |
-| Architecture decisions | `docs/adr/` | ADR records (`ADR-NNNN-*.md`) |
-| Agent/AI configs & templates | `ai/` | Change plan schemas, task brief templates, agent architecture docs |
-| Deployment configs | Root (`/`) | `Dockerfile`, `docker-compose*.yml`, `Caddyfile`, `deploy.sh`, `.env.example` |
-| Django project config | `config/` | `settings.py`, `urls.py`, `wsgi.py`, `asgi.py` |
-| Django apps | `apps/` | `accounts/`, `ai/`, `analytics/`, `core/`, `inventory/`, `waiting_list/`, `workorders/` |
-| Services (standalone processes) | `services/` | `agent_runtime/` |
-| Database files | `db/` | SQLite databases |
-| HTML templates | `templates/` | Per-app subdirectories |
-| Static source assets | `static/src/` | CSS, JS source files |
-| Collected static files | `staticfiles/` | `collectstatic` output (gitignored) |
-| Scripts & tooling | `scripts/` | PowerShell helpers, setup scripts |
-| Workflow snapshots | `workflow/` | Per-feature workflow dirs |
-| Drafts & WIP | `drafts/` | Unfinished plans, prototype HTML |
-| VOB3 (IIS deployment) | `VOB3/` | Gitignored — see `DEPLOY_PRIVATE.md` for setup |
-| Runtime logs | — | Never committed; gitignored (`*.log`, `server_log.txt`) |
-| Temp/session artifacts | `.tmp/`, `.playwright-mcp/` | Gitignored; auto-generated, never track |
+See [PROJECT_STRUCTURE.yaml](PROJECT_STRUCTURE.yaml) for the full annotated file tree.
 
 **Rules:**
-- Do not create markdown files in root unless they are `README.md`, `AGENTS.md`, or `PROJECT_MAP.md`.
+- Root directory must stay clean — only entry points and deployment configs.
+- Do not create markdown files in root unless they are `README.md` or `AGENTS.md`.
 - Bugfix reports, completed task docs, and one-off plans go to `archive/`.
 - Reference docs (architecture, models, deployment) go to `docs/`.
 - Logs are gitignored. Never commit `*.log` or `server_log.txt`.

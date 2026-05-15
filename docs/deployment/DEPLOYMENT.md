@@ -42,7 +42,7 @@ Production-развертывание поддерживает две конфи
 - пользователь с SSH-доступом
 - право запускать Docker-команды
 
-Если у пользователя нет доступа к Docker без `sudo`, можно использовать [setup-docker-rights.sh](/home/abc/.openclaw/workspace/projects/local-business-suite/setup-docker-rights.sh) на самом VPS.
+Если у пользователя нет доступа к Docker без `sudo`, можно использовать [setup-docker-rights.sh](scripts/setup-docker-rights.sh) на самом VPS.
 
 ## Локальная подготовка
 
@@ -85,7 +85,7 @@ CSRF_COOKIE_SECURE=False
 
 ## Основной сценарий деплоя
 
-Использовать только [deploy.sh](/home/abc/.openclaw/workspace/projects/local-business-suite/deploy.sh):
+Использовать только [deploy.sh](deploy.sh):
 
 ```bash
 ./deploy.sh
@@ -115,7 +115,7 @@ VPS_HOST=example.com VPS_USER=deploy VPS_PORT=22 PROJECT_DIR=/opt/local-business
 
 ## Как работает production-старт
 
-`web` запускается через [docker/entrypoint.prod.sh](/home/abc/.openclaw/workspace/projects/local-business-suite/docker/entrypoint.prod.sh), который перед запуском Gunicorn выполняет:
+`web` запускается через [docker/entrypoint.prod.sh](docker/entrypoint.prod.sh), который перед запуском Gunicorn выполняет:
 - `python manage.py migrate --noinput`
 - `python manage.py collectstatic --noinput`
 - `python manage.py seed_roles`
@@ -129,7 +129,7 @@ VPS_HOST=example.com VPS_USER=deploy VPS_PORT=22 PROJECT_DIR=/opt/local-business
 
 ## Caddy
 
-Текущий [Caddyfile](/home/abc/.openclaw/workspace/projects/local-business-suite/Caddyfile) обрабатывает публичный маршрут:
+Текущий [Caddyfile](Caddyfile) обрабатывает публичный маршрут:
 - `/` -> `web:8000`
 
 Статика обслуживается Django/WhiteNoise. Это проще и надежнее для текущего состава проекта.

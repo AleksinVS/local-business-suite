@@ -1,0 +1,12 @@
+{
+  ".": "Машинно-читаемые инструкции для AI-агентов",
+  "change_plans/": "Планы изменений (schema-driven)",
+  "change_plans/schema.json": "JSON-схема плана изменений",
+  "change_plans/template.json": "Шаблон плана изменений",
+  "task_briefs/": "Брифы задач для агентов",
+  "task_briefs/schema.json": "JSON-схема брифа задачи",
+  "task_briefs/template.json": "Шаблон брифа задачи",
+  "chat_agent/": "Документация чат-агента",
+  "chat_agent/ARCHITECTURE.md": "Архитектура чат-агента",
+  "chat_agent/HANDOFF.md": "Handoff-документ чат-агента"
+}

@@ -1,0 +1,201 @@
+# PROJECT STRUCTURE
+# AUTO-GENERATED - DO NOT EDIT
+
+ai: directory... # Машинно-читаемые инструкции для AI-агентов
+analytics_store: # Экспортированные аналитические датасеты и витрины
+  datasets.json: file # Аналитические датасеты
+apps: # Django-приложения: бизнес-логика, API и шаблоны
+  accounts: # Аутентификация, хелперы и сидирование ролей
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    ldap_backend.py: file # LDAP-бэкенд аутентификации
+    models.py: file # Расширенная модель пользователя (CustomUser)
+    signals.py: file # Сигналы Django (пост-сохранение пользователя)
+    tests.py: file # Тесты приложения
+    views.py: file # Представления аутентификации
+  ai: # Панель управления чат-агентом, шлюз инструментов и аудит AI
+    admin.py: file # Регистрация моделей в Django Admin
+    commands.py: file # Предопределённые slash-команды
+    forms.py: file # Формы ввода чата
+    models.py: file # Модели: ChatSession, ChatMessage, PendingAction, AgentActionLog, SlashCommand
+    runtime_client.py: file # Клиент для связи с agent runtime (HTTP)
+    services.py: file # Сервисы: генерация заголовков, история сессий, операции с нарядами
+    skills_service.py: file # Сервис каталога навыков AI
+    tests.py: file # Тесты AI-приложения
+    tool_definitions.py: file # Определения инструментов (source of truth)
+    tooling.py: file # Движок выполнения инструментов и confirmation flow
+    urls.py: file # URL-маршруты AI-чата
+    views.py: file # Представления: чат, стриминг, генерация заголовков, CRUD команд
+  analytics: # Операционные дашборды внутри Django
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    models.py: file # Модели аналитики
+    urls.py: file # URL-маршруты аналитики
+    views.py: file # Представления дашбордов
+  core: # Общие словари, дашборд, формы настроек и AI-утилиты
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    context_processors.py: file # Контекстные процессоры шаблонов
+    debug_views.py: file # Debug-представления (включаются в DEBUG=True)
+    forms.py: file # Формы настроек
+    health_views.py: file # Health-check endpoint (/health/)
+    json_utils.py: file # Утилиты валидации JSON-контрактов
+    middleware.py: file # Middleware (PATH_INFO fix для IIS, debug logging)
+    models.py: file # Общие модели (Department и др.)
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты приложения
+    views.py: file # Представления дашборда и настроек
+  inventory: # Каталог управляемых активов (медицинские устройства)
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    forms.py: file # Формы устройств
+    models.py: file # Модель MedicalDevice (с архивацией)
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты инвентаря
+    views.py: file # Представления CRUD устройств
+  waiting_list: # Лист ожидания клиентов
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    forms.py: file # Формы листа ожидания
+    models.py: file # Модель WaitingListEntry
+    policies.py: file # Политики доступа
+    services.py: file # Сервисы листа ожидания
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты
+    views.py: file # Представления листа ожидания
+  workorders: # Модуль заявок с workflow (наряды-заказы)
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    forms.py: file # Формы нарядов
+    models.py: file # Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority
+    policies.py: file # Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory
+    selectors.py: file # Запросы для получения видимых нарядов
+    services.py: file # Сервисы: создание, переходы статусов, подтверждение закрытия, оценка
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты нарядов
+    views.py: file # Представления: Kanban-доска, детали наряда, комментарии
+archive: # Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы
+  AGENT_RUNTIME_SETUP.md: file # Настройка agent runtime (устарело)
+  AI_FIRST_CODE_FIRST_REMEDIATION_PLAN.md: file # План remediation AI-first
+  AI_FIRST_CODE_FIRST_REVIEW.md: file # Ревью AI-first подхода
+  BUGFIX_400_BAD_REQUEST.md: file # Отчёт об исправлении 400 ошибок
+  BUGFIX_IIS_AUTHENTICATION.md: file # Отчёт об исправлении IIS аутентификации
+  IIS_PATH_INFO_FIX.md: file # Исправление PATH_INFO для IIS FastCGI
+  PROJECT_HANDOFF.md: file # Handoff-документ: история проекта и текущее состояние
+  SECURE_SECRETS.md: file # Гайд по безопасному хранению секретов (устарел → .env)
+config: # Конфигурация Django и JSON-контракты
+  ai: # Декларативный профиль runtime, каталог инструментов и типов задач для AI-агента
+    models.json: file # Конфигурация AI-моделей (base_url, api_key_env, model name)
+    registry.json: file # Реестр AI-инструментов (генерируется из tool_definitions.py)
+    task_types.json: file # Каталог типов задач (workorders, lookup, inventory, analytics)
+    tools.json: file # Определения инструментов (генерируется из кода)
+  integrations: # Реестр внешних интеграций
+    registry.json: file # Конфигурация подключений к внешним сервисам
+  schemas: # JSON-схемы для валидации контрактов
+    chat_agent_registry.schema.json: file # Схема для config/ai/registry.json
+    chat_agent_task_types.schema.json: file # Схема для config/ai/task_types.json
+    chat_agent_tools.schema.json: file # Схема для config/ai/tools.json
+    integration_registry.schema.json: file # Схема для config/integrations/registry.json
+    role_rules.schema.json: file # Схема для config/role_rules.json
+    workflow_rules.schema.json: file # Схема для config/workflow_rules.json
+  asgi.py: file # ASGI-точка входа
+  role_rules.json: file # Правила ролей пользователей (генерируется/редактируется вручную)
+  settings.py: file # Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)
+  urls.py: file # Корневые URL-маршруты (include всех приложений)
+  views.py: file # Корневые представления (redirect)
+  workflow_rules.json: file # Правила workflow нарядов (статусы, переходы)
+  wsgi.py: file # WSGI-точка входа
+docs: # Документация проекта
+  adr: # Architecture Decision Records
+    ADR-0001-local-first-monorepo.md: file # ADR: Local-first monorepo архитектура
+    ADR-0002-config-driven-policy-and-workflow.md: file # ADR: Config-driven политики и workflow
+  architecture: # Архитектурные документы проекта
+    ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
+    ARCHITECTURE.md: file # Общая архитектура (слои, правила)
+    blueprint.md: file # Blueprint — детальный план системы
+    DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
+    INTEGRATIONS.md: file # Интеграции с внешними системами
+    POLICY_MODEL.md: file # Модель политик доступа
+  deployment: # Гайды по деплою (Docker, IIS)
+    DEPLOYMENT.md: file # Основной гайд по деплою (Docker + VPS)
+    IIS_SSO.md: file # Настройка IIS с Windows Authentication SSO
+    WINDOWS_RUN.md: file # Запуск на Windows (разработка)
+  guides: # Руководства разработчика
+    CHANGE_PATTERNS.md: file # Паттерны внесения изменений
+    PROJECT_REVIEW.md: file # Чек-лист ревью проекта
+    PROJECT_STRUCTURE_SYSTEM.md: file # Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)
+  legacy: # Устаревшая документация (MVP)
+    MVP_Architecture.md: file # Архитектура MVP
+    MVP_Implementation_Plan.md: file # План реализации MVP
+drafts: directory... # Черновики и незавершённые планы, прототипы
+scripts: # Скрипты и инструменты разработки
+  init_project.ps1: file # Инициализация проекта (PowerShell)
+  run_agent_runtime.ps1: file # Запуск agent runtime (PowerShell)
+  run_windows.ps1: file # Запуск на Windows (PowerShell)
+  setup_agent_runtime_autostart.ps1: file # Настройка автозапуска agent runtime
+  setup-docker-rights.sh: file # Настройка Docker прав на VPS (Bash)
+  start_agent_runtime.bat: file # Запуск agent runtime (BAT)
+  start_agent_runtime.ps1: file # Запуск agent runtime (PowerShell)
+  verify_ui.py: file # Верификация UI (Python скрипт)
+services: # Автономные сервисы (вне Django)
+  agent_runtime: # Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач
+    app.py: file # FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)
+    config.py: file # Конфигурация runtime (из переменных окружения)
+    gateway_client.py: file # HTTP-клиент для связи с Django tool gateway
+    graph.py: file # LangGraph graph — логика агента (вызов LLM, инструментов)
+    mcp_server.py: file # MCP-сервер (Model Context Protocol bridge)
+    prompting.py: file # Системные промпты для агента
+    schemas.py: file # Pydantic-схемы данных (запросы, ответы)
+    task_types.py: file # Обработчики типов задач (workorders, lookup, inventory, analytics)
+    tools.py: file # Клиент для вызова инструментов Django (HTTP → gateway)
+static: # Исходные статические ресурсы (CSS, JS)
+  src: directory... # Исходный код статических ресурсов
+templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
+  ai: # Шаблоны чат-интерфейса AI
+    chat_detail.html: file # Основной шаблон чата (HTMX streaming, sidebar, commands)
+    hub.html: file # Панель управления AI (инструменты, типы задач, сессии)
+  analytics: # Шаблоны аналитических дашбордов
+    dashboard.html: file # Дашборд аналитики
+  core: # Шаблоны дашборда, настроек, ролей
+    dashboard.html: file # Главный дашборд
+    department_form.html: file # Форма подразделения
+    department_list.html: file # Список подразделений
+    role_rules_form.html: file # Форма редактирования ролей
+  inventory: # Шаблоны инвентаря (медицинские устройства)
+    device_form.html: file # Форма устройства
+    device_list.html: file # Список устройств
+  registration: # Шаблоны аутентификации
+    login.html: file # Форма входа
+  waiting_list: # Шаблоны листа ожидания
+    dashboard.html: file # Дашборд листа ожидания
+    entry_detail.html: file # Детали записи
+    entry_form.html: file # Форма записи
+  workorders: # Шаблоны нарядов-заказов (Kanban, детали, формы)
+    board.html: file # Kanban-доска (основной вид)
+    workorder_detail.html: file # Детали наряда
+    workorder_form.html: file # Форма создания/редактирования наряда
+  400.html: file # Страница ошибки 400
+  403.html: file # Страница ошибки 403 (Forbidden)
+  404.html: file # Страница ошибки 404
+  500.html: file # Страница ошибки 500
+  base.html: file # Базовый шаблон (navbar, sidebar, HTMX скрипты)
+workflow: directory... # Снимки рабочих процессов (per-feature workflow dirs)
+.dockerignore: file # Исключения из Docker build context
+.env.example: file # Шаблон переменных окружения
+.env.production: file # Production переменные (не коммитить)
+.gitignore: file # Исключения из Git
+AGENTS.md: file # Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)
+BACKLOG.md: file # Бэклог задач и запланированные доработки
+Caddyfile: file # Конфигурация Caddy reverse proxy
+CLAUDE.md: file # Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)
+DEPLOY_PRIVATE.md: file # Инструкции по приватному IIS-деплою (ссылка на VOB3 репозиторий)
+deploy.sh: file # Скрипт деплоя на VPS (rsync + docker compose)
+docker-compose.prod.yml: file # Production Docker Compose (web + agent-runtime + caddy)
+docker-compose.yml: file # Локальный Docker Compose (dev)
+Dockerfile: file # Docker-образ для web (Django + Gunicorn)
+Makefile: file # Команды сборки и проверки (venv, install, check, test, contracts, gen-struct)
+manage.py: file # Точка входа Django CLI
+pytest.ini: file # Конфигурация pytest
+requirements.lock: file # Lock-файл зависимостей (pip-compile)
+requirements.txt: file # Зависимости Python
+start_agent_runtime.bat: file # Скрипт запуска agent runtime на Windows

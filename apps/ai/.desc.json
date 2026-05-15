@@ -1,0 +1,15 @@
+{
+  ".": "Панель управления чат-агентом, шлюз инструментов и аудит AI",
+  "models.py": "Модели: ChatSession, ChatMessage, PendingAction, AgentActionLog, SlashCommand",
+  "views.py": "Представления: чат, стриминг, генерация заголовков, CRUD команд",
+  "tooling.py": "Движок выполнения инструментов и confirmation flow",
+  "tool_definitions.py": "Определения инструментов (source of truth)",
+  "services.py": "Сервисы: генерация заголовков, история сессий, операции с нарядами",
+  "commands.py": "Предопределённые slash-команды",
+  "runtime_client.py": "Клиент для связи с agent runtime (HTTP)",
+  "urls.py": "URL-маршруты AI-чата",
+  "admin.py": "Регистрация моделей в Django Admin",
+  "forms.py": "Формы ввода чата",
+  "skills_service.py": "Сервис каталога навыков AI",
+  "tests.py": "Тесты AI-приложения"
+}

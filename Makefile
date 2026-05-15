@@ -1,7 +1,7 @@
 PYTHON := ./.venv/bin/python
 PYTHON_INSTALL := $(PYTHON) -m pip install
 
-.PHONY: venv install check test test-all contracts change-plan ai-runtime
+.PHONY: venv install check test test-all contracts change-plan ai-runtime gen-struct
 
 venv:
 	python3 -m venv .venv
@@ -26,3 +26,6 @@ change-plan:
 
 ai-runtime:
 	uvicorn services.agent_runtime.app:app --host 0.0.0.0 --port 8090 --reload
+
+gen-struct:
+	node scripts/dev/generate-structure.js

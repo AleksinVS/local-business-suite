@@ -472,3 +472,82 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:board"), {"department": self.department.pk})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.workorder.title)
+
+
+class StepperContextTests(TestCase):
+    """Tests for _stepper_context and status_section template variables."""
+
+    def setUp(self):
+        self.department = Department.objects.create(name="Рентген")
+        self.device = MedicalDevice.objects.create(
+            name="Рентген-аппарат",
+            serial_number="SN-X01",
+            department=self.department,
+        )
+        self.customer = User.objects.create_user(username="cust_stepper", password="pass")
+        self.technician = User.objects.create_user(username="tech_stepper", password="pass")
+        self.manager = User.objects.create_user(username="mgr_stepper", password="pass")
+
+        tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+
+        self.technician.groups.add(tech_group)
+        self.manager.groups.add(manager_group)
+        self.customer.groups.add(customer_group)
+
+        self.board = Board.objects.create(title="Stepper Board", slug="stepper-board")
+        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
+        self.workorder = WorkOrder.objects.create(
+            title="Stepper test",
+            description="Testing stepper context.",
+            department=self.department,
+            author=self.customer,
+            board=self.board,
+            assignee=self.technician,
+            device=self.device,
+        )
+
+    def test_detail_view_includes_stepper_context(self):
+        self.client.force_login(self.technician)
+        response = self.client.get(
+            reverse("workorders:detail", args=[self.workorder.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("transition_choices_vals", response.context)
+        self.assertIn("status_choices", response.context)
+        self.assertIsInstance(response.context["transition_choices_vals"], set)
+
+    def test_transition_choices_vals_contains_only_allowed_transitions(self):
+        self.client.force_login(self.technician)
+        response = self.client.get(
+            reverse("workorders:detail", args=[self.workorder.pk]),
+        )
+        vals = response.context["transition_choices_vals"]
+        all_vals = {s for s, _ in WorkOrderStatus.choices}
+        self.assertTrue(vals.issubset(all_vals))
+        self.assertNotIn(WorkOrderStatus.NEW, vals)
+
+    def test_htmx_transition_includes_stepper_context(self):
+        self.client.force_login(self.technician)
+        response = self.client.post(
+            reverse("workorders:transition", args=[self.workorder.pk]),
+            {"status": WorkOrderStatus.ACCEPTED},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("transition_choices_vals", response.context)
+        self.assertIn("status_choices", response.context)
+
+    def test_htmx_confirm_closure_includes_stepper_context(self):
+        self.workorder.status = WorkOrderStatus.RESOLVED
+        self.workorder.save()
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:confirm_closure", args=[self.workorder.pk]),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("transition_choices_vals", response.context)
+        self.assertIn("status_choices", response.context)
+        self.assertEqual(response.context["workorder"].status, WorkOrderStatus.CLOSED)

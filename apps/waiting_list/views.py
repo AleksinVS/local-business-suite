@@ -141,7 +141,6 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["status_form"] = WaitingListStatusForm(instance=self.object)
         context["status_choices"] = WaitingListStatus.choices
-        context["transition_choices_vals"] = WaitingListStatus.values  # Simplified for now
         return context
 
 
@@ -221,7 +220,6 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                         "entry": entry,
                         "status_form": WaitingListStatusForm(instance=entry),
                         "status_choices": WaitingListStatus.choices,
-                        "transition_choices_vals": WaitingListStatus.values,
                     },
                 )
             messages.success(request, "Статус обновлен.")

@@ -54,6 +54,17 @@ def quick_transition_choices_for(user, workorder):
     ]
 
 
+def _stepper_context(user, workorder):
+    transitions = quick_transition_choices_for(user, workorder)
+    return {
+        "workorder": workorder,
+        "transition_choices": transitions,
+        "transition_choices_vals": {s for s, _ in transitions},
+        "status_choices": WorkOrderStatus.choices,
+        "can_confirm_closure": can_confirm_closure(user, workorder),
+    }
+
+
 def configured_columns(board=None):
     qs = KanbanColumnConfig.objects.order_by("position", "id")
     if board is not None:
@@ -327,15 +338,7 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         context["comment_form"] = WorkOrderCommentForm()
         context["attachment_form"] = WorkOrderAttachmentForm()
         context["rating_form"] = WorkOrderRatingForm(instance=self.object)
-        context["transition_choices"] = [
-            (status, label)
-            for status, label in WorkOrderStatus.choices
-            if can_transition(self.request.user, self.object, status)
-        ]
-        context["transition_choices_vals"] = [
-            s for s, l in context["transition_choices"]
-        ]
-        context["status_choices"] = WorkOrderStatus.choices
+        context.update(_stepper_context(self.request.user, self.object))
         context["can_edit"] = can_edit(self.request.user, self.object)
         context["can_confirm_closure"] = can_confirm_closure(
             self.request.user, self.object
@@ -433,11 +436,6 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
             workorder=workorder, user=request.user, to_status=target_status
         )
         workorder.refresh_from_db()
-        transition_choices = [
-            (status, label)
-            for status, label in WorkOrderStatus.choices
-            if can_transition(request.user, workorder, status)
-        ]
         if request.htmx:
             if request.htmx.target == "board-columns":
                 board_view = WorkOrderBoardView()
@@ -452,11 +450,7 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
             return render(
                 request,
                 "workorders/partials/status_section.html",
-                {
-                    "workorder": workorder,
-                    "transition_choices": transition_choices,
-                    "can_confirm_closure": can_confirm_closure(request.user, workorder),
-                },
+                _stepper_context(request.user, workorder),
             )
         messages.success(request, "Статус заявки обновлен.")
         return redirect("workorders:detail", pk=workorder.pk)
@@ -521,16 +515,7 @@ class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
             return HttpResponseForbidden("Подтверждение закрытия запрещено")
         confirm_closure(workorder=workorder, user=request.user)
         workorder.refresh_from_db()
-        transition_choices = [
-            (status, label)
-            for status, label in WorkOrderStatus.choices
-            if can_transition(request.user, workorder, status)
-        ]
-        context = {
-            "workorder": workorder,
-            "transition_choices": transition_choices,
-            "can_confirm_closure": can_confirm_closure(request.user, workorder),
-        }
+        context = _stepper_context(request.user, workorder)
         if request.htmx:
             return render(request, "workorders/partials/status_section.html", context)
         messages.success(request, "Закрытие заявки подтверждено.")

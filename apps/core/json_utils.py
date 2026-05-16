@@ -140,6 +140,28 @@ def load_json_file(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def atomic_write_json(path, payload):
+    """
+    Writes a JSON payload to a file atomically using a temporary file.
+    """
+    import os
+    import tempfile
+
+    data = pretty_json(payload)
+    path = Path(path)
+    
+    # Create temp file in the same directory to ensure os.replace works across devices
+    fd, temp_path = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".tmp")
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(data)
+        os.replace(temp_path, path)
+    except Exception:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
+
+
 def _ensure_non_empty_mapping(payload, label):
     if not isinstance(payload, dict) or not payload:
         raise ValidationError(f"{label} должна быть непустым JSON-объектом.")

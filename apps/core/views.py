@@ -98,7 +98,7 @@ class RoleRulesUpdateView(DepartmentManagementMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         import json
-        from .json_utils import pretty_json
+        from .json_utils import pretty_json, atomic_write_json
         
         # Load current rules to maintain fields we don't edit in simple UI
         current_rules = settings.LOCAL_BUSINESS_ROLE_RULES.copy()
@@ -120,7 +120,7 @@ class RoleRulesUpdateView(DepartmentManagementMixin, TemplateView):
                 rules["view_scope"] = view_scope
 
         # Save back to file
-        settings.LOCAL_BUSINESS_ROLE_RULES_FILE.write_text(pretty_json(current_rules) + "\n", encoding="utf-8")
+        atomic_write_json(settings.LOCAL_BUSINESS_ROLE_RULES_FILE, current_rules)
         settings.LOCAL_BUSINESS_ROLE_RULES = current_rules
         
         messages.success(request, "Права ролей успешно обновлены.")

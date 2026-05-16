@@ -1,9 +1,6 @@
 # PROJECT STRUCTURE
 # AUTO-GENERATED - DO NOT EDIT
 
-ai: directory... # Машинно-читаемые инструкции для AI-агентов
-analytics_store: # Экспортированные аналитические датасеты и витрины
-  datasets.json: file # Аналитические датасеты
 apps: # Django-приложения: бизнес-логика, API и шаблоны
   accounts: # Аутентификация, хелперы и сидирование ролей
     admin.py: file # Регистрация моделей в Django Admin
@@ -84,26 +81,10 @@ archive: # Завершённые документы: отчёты об ошиб
   PROJECT_HANDOFF.md: file # Handoff-документ: история проекта и текущее состояние
   SECURE_SECRETS.md: file # Гайд по безопасному хранению секретов (устарел → .env)
 config: # Конфигурация Django и JSON-контракты
-  ai: # Декларативный профиль runtime, каталог инструментов и типов задач для AI-агента
-    models.json: file # Конфигурация AI-моделей (base_url, api_key_env, model name)
-    registry.json: file # Реестр AI-инструментов (генерируется из tool_definitions.py)
-    task_types.json: file # Каталог типов задач (workorders, lookup, inventory, analytics)
-    tools.json: file # Определения инструментов (генерируется из кода)
-  integrations: # Реестр внешних интеграций
-    registry.json: file # Конфигурация подключений к внешним сервисам
-  schemas: # JSON-схемы для валидации контрактов
-    chat_agent_registry.schema.json: file # Схема для config/ai/registry.json
-    chat_agent_task_types.schema.json: file # Схема для config/ai/task_types.json
-    chat_agent_tools.schema.json: file # Схема для config/ai/tools.json
-    integration_registry.schema.json: file # Схема для config/integrations/registry.json
-    role_rules.schema.json: file # Схема для config/role_rules.json
-    workflow_rules.schema.json: file # Схема для config/workflow_rules.json
   asgi.py: file # ASGI-точка входа
-  role_rules.json: file # Правила ролей пользователей (генерируется/редактируется вручную)
   settings.py: file # Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)
   urls.py: file # Корневые URL-маршруты (include всех приложений)
   views.py: file # Корневые представления (redirect)
-  workflow_rules.json: file # Правила workflow нарядов (статусы, переходы)
   wsgi.py: file # WSGI-точка входа
 docs: # Документация проекта
   adr: # Architecture Decision Records
@@ -128,15 +109,7 @@ docs: # Документация проекта
     MVP_Architecture.md: file # Архитектура MVP
     MVP_Implementation_Plan.md: file # План реализации MVP
 drafts: directory... # Черновики и незавершённые планы, прототипы
-scripts: # Скрипты и инструменты разработки
-  init_project.ps1: file # Инициализация проекта (PowerShell)
-  run_agent_runtime.ps1: file # Запуск agent runtime (PowerShell)
-  run_windows.ps1: file # Запуск на Windows (PowerShell)
-  setup_agent_runtime_autostart.ps1: file # Настройка автозапуска agent runtime
-  setup-docker-rights.sh: file # Настройка Docker прав на VPS (Bash)
-  start_agent_runtime.bat: file # Запуск agent runtime (BAT)
-  start_agent_runtime.ps1: file # Запуск agent runtime (PowerShell)
-  verify_ui.py: file # Верификация UI (Python скрипт)
+scripts: directory... # Скрипты и инструменты разработки
 services: # Автономные сервисы (вне Django)
   agent_runtime: # Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач
     app.py: file # FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)
@@ -182,14 +155,12 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
 workflow: directory... # Снимки рабочих процессов (per-feature workflow dirs)
 .dockerignore: file # Исключения из Docker build context
 .env.example: file # Шаблон переменных окружения
-.env.production: file # Production переменные (не коммитить)
 .gitignore: file # Исключения из Git
 AGENTS.md: file # Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)
 BACKLOG.md: file # Бэклог задач и запланированные доработки
 Caddyfile: file # Конфигурация Caddy reverse proxy
 CLAUDE.md: file # Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)
 DEPLOY_PRIVATE.md: file # Инструкции по приватному IIS-деплою (ссылка на VOB3 репозиторий)
-deploy.sh: file # Скрипт деплоя на VPS (rsync + docker compose)
 docker-compose.prod.yml: file # Production Docker Compose (web + agent-runtime + caddy)
 docker-compose.yml: file # Локальный Docker Compose (dev)
 Dockerfile: file # Docker-образ для web (Django + Gunicorn)

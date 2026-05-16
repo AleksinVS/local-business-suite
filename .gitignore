@@ -1,4 +1,4 @@
-﻿.venv/
+.venv/
 __pycache__/
 *.pyc
 .env
@@ -8,9 +8,8 @@ db/*.sqlite3-wal
 media/
 staticfiles/
 *.log
-logs/*.log
+logs/
 server_log.txt
-.env.production
 caddy_data/
 web.config
 wfastcgi.ini
@@ -18,12 +17,6 @@ wfastcgi.ini
 *.crt
 *.key
 *.pem
-.playwright-mcp/
-.tmp/
+.local/
 .codex/
-
-# Logs directory (created during runtime)
-logs/
-
-# Private deployment repo (see DEPLOY_PRIVATE.md)
-VOB3/
+deployments/

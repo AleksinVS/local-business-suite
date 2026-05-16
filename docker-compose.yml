@@ -6,8 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./db:/app/db
-      - ./media:/app/media
+      - ./data:/app/data
   agent-runtime:
     build:
       context: .

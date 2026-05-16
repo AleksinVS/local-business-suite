@@ -122,7 +122,7 @@ LOGGING = {
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": BASE_DIR / "logs" / "app.log",
+            "filename": BASE_DIR / "data" / "logs" / "app.log",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",
@@ -151,7 +151,7 @@ LOGGING = {
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db" / "main_vault.sqlite3",
+        "NAME": BASE_DIR / "data" / "db" / "main_vault.sqlite3",
         "OPTIONS": {
             "timeout": 20,
             "init_command": (
@@ -162,6 +162,7 @@ DATABASES = {
         },
     }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -220,7 +221,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = BASE_DIR / "data" / "media"
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -234,63 +235,37 @@ WHITENOISE_USE_FINDERS = DEBUG
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-LOCAL_BUSINESS_ROLE_RULES_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_ROLE_RULES_FILE", BASE_DIR / "config" / "role_rules.json"
-    )
-)
-LOCAL_BUSINESS_WORKFLOW_RULES_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_WORKFLOW_RULES_FILE",
-        BASE_DIR / "config" / "workflow_rules.json",
-    )
-)
-LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE",
-        BASE_DIR / "config" / "integrations" / "registry.json",
-    )
-)
-LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE",
-        BASE_DIR / "analytics_store" / "datasets.json",
-    )
-)
-LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE",
-        BASE_DIR / "ai" / "task_briefs" / "template.json",
-    )
-)
-LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE",
-        BASE_DIR / "ai" / "change_plans" / "template.json",
-    )
-)
-LOCAL_BUSINESS_AI_REGISTRY_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_AI_REGISTRY_FILE", BASE_DIR / "config" / "ai" / "registry.json"
-    )
-)
-LOCAL_BUSINESS_AI_TOOLS_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_AI_TOOLS_FILE", BASE_DIR / "config" / "ai" / "tools.json"
-    )
-)
-LOCAL_BUSINESS_AI_TASK_TYPES_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_AI_TASK_TYPES_FILE",
-        BASE_DIR / "config" / "ai" / "task_types.json",
-    )
-)
-LOCAL_BUSINESS_AI_MODELS_FILE = Path(
-    os.environ.get(
-        "LOCAL_BUSINESS_AI_MODELS_FILE",
-        BASE_DIR / "config" / "ai" / "models.json",
-    )
-)
+# Contracts configuration
+# Default contracts are stored in the 'contracts/' directory (tracked by Git)
+# Runtime contracts are stored in 'data/contracts/' (not tracked by Git, editable via UI)
+RUNTIME_CONTRACTS_DIR = BASE_DIR / "data" / "contracts"
+DEFAULT_CONTRACTS_DIR = BASE_DIR / "contracts"
+
+os.makedirs(RUNTIME_CONTRACTS_DIR / "ai", exist_ok=True)
+os.makedirs(RUNTIME_CONTRACTS_DIR / "integrations", exist_ok=True)
+
+def get_contract_path(filename, env_var, sub_dir=None):
+    default_path = DEFAULT_CONTRACTS_DIR / (sub_dir + "/" if sub_dir else "") / filename
+    runtime_path = RUNTIME_CONTRACTS_DIR / (sub_dir + "/" if sub_dir else "") / filename
+    
+    # If runtime contract doesn't exist, copy from default (one-time setup)
+    if not runtime_path.exists() and default_path.exists():
+        import shutil
+        shutil.copy(default_path, runtime_path)
+        
+    return Path(os.environ.get(env_var, runtime_path))
+
+LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUSINESS_ROLE_RULES_FILE")
+LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
+LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", sub_dir="integrations")
+LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = get_contract_path("datasets.json", "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", sub_dir="analytics") # Note: analytics in data/analytics/
+LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = BASE_DIR / "workflow" / "ai_artifacts" / "task_brief_template.json"
+LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = BASE_DIR / "workflow" / "ai_artifacts" / "template.json"
+LOCAL_BUSINESS_AI_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_AI_REGISTRY_FILE", sub_dir="ai")
+LOCAL_BUSINESS_AI_TOOLS_FILE = get_contract_path("tools.json", "LOCAL_BUSINESS_AI_TOOLS_FILE", sub_dir="ai")
+LOCAL_BUSINESS_AI_TASK_TYPES_FILE = get_contract_path("task_types.json", "LOCAL_BUSINESS_AI_TASK_TYPES_FILE", sub_dir="ai")
+LOCAL_BUSINESS_AI_MODELS_FILE = get_contract_path("models.json", "LOCAL_BUSINESS_AI_MODELS_FILE", sub_dir="ai")
+
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
 )

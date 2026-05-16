@@ -484,7 +484,7 @@ def update_role_permissions_for_actor(*, actor, payload):
 
     from django.conf import settings
     import json
-    from apps.core.json_utils import pretty_json
+    from apps.core.json_utils import pretty_json, atomic_write_json
 
     role_name = payload.get("role_name")
     permissions_map = payload.get("permissions_map", {})
@@ -502,7 +502,7 @@ def update_role_permissions_for_actor(*, actor, payload):
             current_rules[role_name][key] = value
 
     # Save to file
-    settings.LOCAL_BUSINESS_ROLE_RULES_FILE.write_text(pretty_json(current_rules) + "\n", encoding="utf-8")
+    atomic_write_json(settings.LOCAL_BUSINESS_ROLE_RULES_FILE, current_rules)
     settings.LOCAL_BUSINESS_ROLE_RULES = current_rules
 
     return {

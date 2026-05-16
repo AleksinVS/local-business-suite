@@ -1,9 +1,0 @@
-{
-  ".": "JSON-схемы для валидации контрактов",
-  "chat_agent_tools.schema.json": "Схема для config/ai/tools.json",
-  "chat_agent_task_types.schema.json": "Схема для config/ai/task_types.json",
-  "chat_agent_registry.schema.json": "Схема для config/ai/registry.json",
-  "role_rules.schema.json": "Схема для config/role_rules.json",
-  "workflow_rules.schema.json": "Схема для config/workflow_rules.json",
-  "integration_registry.schema.json": "Схема для config/integrations/registry.json"
-}

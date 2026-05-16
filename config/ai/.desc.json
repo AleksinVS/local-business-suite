@@ -1,8 +1,0 @@
-{
-  ".": "Декларативный профиль runtime, каталог инструментов и типов задач для AI-агента",
-  "registry.json": "Реестр AI-инструментов (генерируется из tool_definitions.py)",
-  "tools.json": "Определения инструментов (генерируется из кода)",
-  "task_types.json": "Каталог типов задач (workorders, lookup, inventory, analytics)",
-  "models.json": "Конфигурация AI-моделей (base_url, api_key_env, model name)",
-  "skills/": "Каталог навыков AI-агента (Markdown-инструкции)"
-}

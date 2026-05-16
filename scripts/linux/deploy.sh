@@ -27,8 +27,8 @@ echo -e "${YELLOW}=== Deploying Корпоративный портал ВОБ �
 echo "VPS: ${VPS_USER}@${VPS_HOST}:${VPS_PORT}"
 echo "Project dir: ${PROJECT_DIR}"
 
-if [ ! -f ".env.production" ]; then
-  echo -e "${RED}Missing .env.production in repo root${NC}"
+if [ ! -f "deployments/test-host/.env" ]; then
+  echo -e "${RED}Missing deployments/test-host/.env for target host${NC}"
   exit 1
 fi
 
@@ -37,7 +37,7 @@ ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "echo SSH OK >/dev/null"
 echo -e "${GREEN}✓ SSH connection OK${NC}"
 
 echo -e "${YELLOW}Creating remote directories...${NC}"
-ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "mkdir -p '${PROJECT_DIR}'"
+ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "mkdir -p '${PROJECT_DIR}/deployments/test-host' && mkdir -p '${PROJECT_DIR}/data'"
 
 echo -e "${YELLOW}Syncing project files...${NC}"
 rsync -avz --delete --progress \
@@ -46,27 +46,23 @@ rsync -avz --delete --progress \
   --exclude='__pycache__' \
   --exclude='*.pyc' \
   --exclude='.git' \
-  --exclude='db' \
-  --exclude='media' \
-  --exclude='caddy_data' \
-  --exclude='logs' \
+  --exclude='data/' \
+  --exclude='caddy_data/' \
   --exclude='.env' \
-  --exclude='.env.production' \
+  --exclude='deployments/*/.env' \
   ./ "${VPS_USER}@${VPS_HOST}:${PROJECT_DIR}/"
 
-echo -e "${YELLOW}Uploading .env.production...${NC}"
-scp -i "${SSH_KEY}" -P "${VPS_PORT}" .env.production \
-  "${VPS_USER}@${VPS_HOST}:${PROJECT_DIR}/.env.production"
+echo -e "${YELLOW}Uploading host secrets...${NC}"
+scp -i "${SSH_KEY}" -P "${VPS_PORT}" deployments/test-host/.env \
+  "${VPS_USER}@${VPS_HOST}:${PROJECT_DIR}/deployments/test-host/.env"
 
 echo -e "${YELLOW}Rebuilding containers...${NC}"
 ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" <<EOF
 set -euo pipefail
 cd '${PROJECT_DIR}'
-cp .env.production .env
+# Ensure local .env exists for compose if needed (though prod uses env_file)
+cp deployments/test-host/.env .env
 docker network inspect '${SHARED_NETWORK}' >/dev/null 2>&1 || docker network create '${SHARED_NETWORK}' >/dev/null
-if command -v docker-compose >/dev/null 2>&1; then
-  sudo docker-compose -f docker-compose.prod.yml down --remove-orphans || true
-fi
 ${COMPOSE_CMD} -p '${PROD_PROJECT}' -f docker-compose.prod.yml down --remove-orphans
 ${COMPOSE_CMD} -p '${PROD_PROJECT}' -f docker-compose.prod.yml up -d --build
 sleep 10

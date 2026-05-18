@@ -1,0 +1,9 @@
+{
+  ".": "Версионируемые default-контракты; runtime-копии создаются в data/contracts/",
+  "ai/": "Контракты AI registry/tools/task types/models",
+  "analytics/": "Контракты аналитических datasets",
+  "integrations/": "Реестр внешних интеграций",
+  "schemas/": "JSON Schema для контрактов",
+  "role_rules.json": "Default правила ролей и capabilities",
+  "workflow_rules.json": "Default workflow статусы и переходы"
+}

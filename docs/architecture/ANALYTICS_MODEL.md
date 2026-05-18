@@ -1,6 +1,12 @@
 # Analytics Model
 
-Target stack:
+Current implementation:
+
+- `apps.analytics` is an operational dashboard over the Django OLTP database.
+- Dataset defaults are declared in `contracts/analytics/datasets.json`; runtime copies live in `data/contracts/analytics/`.
+- This layer is intended for lightweight operational summaries, not heavy BI/reporting workloads.
+
+Future target stack:
 
 - `Parquet` as exported analytical storage;
 - `DuckDB` as analytical query engine;
@@ -9,13 +15,13 @@ Target stack:
 Flow:
 
 1. Django writes OLTP data to SQLite.
-2. Export jobs create `raw` Parquet datasets in `analytics_store/raw/`.
-3. Curated transformations build marts in `analytics_store/marts/`.
+2. Export jobs create `raw` Parquet datasets in `data/analytics/raw/`.
+3. Curated transformations build marts in `data/analytics/marts/`.
 4. DuckDB reads Parquet datasets and serves analytical queries.
 5. Evidence renders analytical pages from curated SQL sources.
 
 Rules:
 
-- analytics do not read live OLTP tables for heavy reporting;
-- datasets are versioned in `analytics_store/datasets.json`;
+- heavy reporting must not read live OLTP tables;
+- datasets are versioned in `contracts/analytics/datasets.json` and copied to `data/contracts/analytics/`;
 - analytical changes should be reviewed like code changes.

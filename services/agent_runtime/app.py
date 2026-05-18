@@ -27,13 +27,13 @@ app.mount("/mcp", mcp_server.streamable_http_app())
 
 @app.get("/health")
 def health():
+    return {"status": "ok"}
+
+
+@app.get("/health/details")
+def health_details():
     settings = load_runtime_settings()
-    return {
-        "status": "ok",
-        "model": settings.model,
-        "gateway_url": settings.django_gateway_url,
-        "openai_key_configured": bool(os.environ.get("OPENAI_API_KEY")),
-    }
+    return {"status": "ok", "model": settings.model}
 
 
 @app.get("/models")

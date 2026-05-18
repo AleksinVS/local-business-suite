@@ -1,6 +1,7 @@
 import json
 import uuid
 import logging
+import hmac
 
 from django.conf import settings
 from django.contrib import messages
@@ -20,10 +21,46 @@ from .commands import get_predefined_commands, resolve_command, resolve_custom_c
 from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
-from .services import append_chat_message, generate_session_title, serialize_session_history
+from .services import (
+    append_chat_message,
+    generate_session_title,
+    normalize_session_external_id,
+    serialize_session_history,
+)
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
 logger = logging.getLogger(__name__)
+
+
+def gateway_token_is_valid(request):
+    expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN or ""
+    gateway_token = request.headers.get("X-AI-Gateway-Token", "")
+    return bool(expected_token) and hmac.compare_digest(gateway_token, expected_token)
+
+
+def reject_invalid_gateway_token(request):
+    if not gateway_token_is_valid(request):
+        return HttpResponseForbidden("AI gateway token is invalid.")
+    return None
+
+
+def validate_gateway_actor(actor_context, session_id=None):
+    if not session_id:
+        return None
+    session_external_id = normalize_session_external_id(session_id)
+    session = ChatSession.objects.filter(external_id=session_external_id).select_related("user").first()
+    if not session:
+        return None
+    actor_user_id = actor_context.get("user_id")
+    if str(actor_user_id) != str(session.user_id):
+        logger.warning(
+            "Denied AI gateway actor mismatch: session=%s session_user=%s actor_user=%s",
+            session.external_id,
+            session.user_id,
+            actor_user_id,
+        )
+        return JsonResponse({"error": "Actor does not match session owner."}, status=403)
+    return None
 
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
@@ -363,10 +400,9 @@ class AIToolExecuteView(View):
     http_method_names = ["post"]
 
     def dispatch(self, request, *args, **kwargs):
-        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
-        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
-        if not expected_token or gateway_token != expected_token:
-            return HttpResponseForbidden("AI gateway token is invalid.")
+        token_error = reject_invalid_gateway_token(request)
+        if token_error:
+            return token_error
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, tool_code):
@@ -378,6 +414,9 @@ class AIToolExecuteView(View):
         actor_context = body.get("actor", {})
         payload = body.get("payload", {})
         session_id = body.get("session_id")
+        actor_error = validate_gateway_actor(actor_context, session_id)
+        if actor_error:
+            return actor_error
         # Extract identity/correlation fields forwarded from the runtime
         conversation_id = body.get("conversation_id", "")
         request_id = body.get("request_id", str(uuid.uuid4()))
@@ -407,10 +446,9 @@ class AIToolConfirmView(View):
     http_method_names = ["post"]
 
     def dispatch(self, request, *args, **kwargs):
-        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
-        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
-        if not expected_token or gateway_token != expected_token:
-            return HttpResponseForbidden("AI gateway token is invalid.")
+        token_error = reject_invalid_gateway_token(request)
+        if token_error:
+            return token_error
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, token):
@@ -422,6 +460,9 @@ class AIToolConfirmView(View):
         confirmed = body.get("confirmed", False)
         actor_context = body.get("actor", {})
         session_id = body.get("session_id")
+        actor_error = validate_gateway_actor(actor_context, session_id)
+        if actor_error:
+            return actor_error
         conversation_id = body.get("conversation_id", "")
         request_id = body.get("request_id", str(uuid.uuid4()))
         origin_channel = body.get("origin_channel", "")
@@ -445,10 +486,9 @@ class AIToolConfirmView(View):
 @method_decorator(csrf_exempt, name="dispatch")
 class AISkillCatalogView(View):
     def get(self, request):
-        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
-        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
-        if not expected_token or gateway_token != expected_token:
-            return HttpResponseForbidden("AI gateway token is invalid.")
+        token_error = reject_invalid_gateway_token(request)
+        if token_error:
+            return token_error
 
         from .skills_service import discover_skills
         return JsonResponse({"skills": discover_skills()})
@@ -456,10 +496,9 @@ class AISkillCatalogView(View):
 @method_decorator(csrf_exempt, name="dispatch")
 class AISkillLoadView(View):
     def get(self, request, skill_id):
-        expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN
-        gateway_token = request.headers.get("X-AI-Gateway-Token", "")
-        if not expected_token or gateway_token != expected_token:
-            return HttpResponseForbidden("AI gateway token is invalid.")
+        token_error = reject_invalid_gateway_token(request)
+        if token_error:
+            return token_error
 
         from .skills_service import load_skill_content
         content = load_skill_content(skill_id)

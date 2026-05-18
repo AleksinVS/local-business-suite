@@ -8,9 +8,20 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY apps/ /app/apps/
+COPY config/ /app/config/
+COPY contracts/ /app/contracts/
+COPY docker/ /app/docker/
+COPY static/ /app/static/
+COPY templates/ /app/templates/
+COPY workflow/ai_artifacts/ /app/workflow/ai_artifacts/
+COPY manage.py /app/manage.py
+COPY pytest.ini /app/pytest.ini
 
-RUN mkdir -p /app/data/db /app/data/media /app/data/logs /app/data/contracts /app/staticfiles
-RUN chmod +x /app/docker/entrypoint.prod.sh
+RUN chmod +x /app/docker/entrypoint.prod.sh \
+    && useradd --uid 1000 --create-home --home-dir /home/app app \
+    && chown -R app:app /app
+
+USER app
 
 CMD ["/app/docker/entrypoint.prod.sh"]

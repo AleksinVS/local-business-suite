@@ -17,6 +17,8 @@ env/
 local_settings.py
 db.sqlite3
 db/
+data/
+staticfiles/
 
 # IDE
 .vscode/
@@ -32,6 +34,16 @@ Thumbs.db
 # Media
 /media/
 
+# Agent/local state
+.local/
+.codex/
+.claude/
+.gemini/
+.pytest_cache/
+deployments/
+VOB3/
+staticfiles/
+
 # Git
 .git/
 .gitignore
@@ -41,7 +53,6 @@ Thumbs.db
 docs/
 
 # Docker
-Dockerfile
 docker-compose*.yml
 .dockerignore
 Caddyfile

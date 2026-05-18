@@ -2,8 +2,10 @@ from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 
-from .ldap_backend import LDAPConfig, normalize_username
+from .ldap_backend import LDAPConfig, normalize_username, sync_user_groups
 
 
 class LDAPAuthConfigTests(TestCase):
@@ -43,3 +45,20 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(config.port, 389)
         self.assertEqual(config.transport, "plain")
         self.assertEqual(config.group_role_map, {"IT Support": "technician"})
+
+    def test_ad_group_sync_removes_only_ad_managed_missing_roles(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="ldap-user")
+        technician = Group.objects.create(name="technician")
+        local_group = Group.objects.create(name="local-only")
+        user.groups.add(technician, local_group)
+
+        sync_user_groups(
+            user,
+            member_of=[],
+            group_role_map={"IT Support": "technician", "Employees": "customer"},
+        )
+
+        group_names = set(user.groups.values_list("name", flat=True))
+        self.assertNotIn("technician", group_names)
+        self.assertIn("local-only", group_names)

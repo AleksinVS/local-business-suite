@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.core.models import Department
 from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
@@ -60,6 +61,22 @@ class AIViewsTests(TestCase):
                 }
             ),
             content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_tool_gateway_rejects_actor_mismatch_for_existing_session(self):
+        session = ChatSession.objects.create(user=self.customer)
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": self.manager.id, "channel": "internal"},
+                    "payload": {"status": WorkOrderStatus.NEW},
+                    "session_id": str(session.external_id),
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
         self.assertEqual(response.status_code, 403)
 
@@ -364,6 +381,55 @@ class AIViewsTests(TestCase):
         payload = response.json()
         self.assertFalse(payload["ok"])
         self.assertIn("already confirmed", payload["errors"][0])
+
+    def test_pending_action_expired_does_not_execute(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={
+                "department_id": self.department.id,
+                "subject": "Expired action",
+                "description": "Should not execute",
+            },
+            status=PendingAction.Status.PENDING,
+            expires_at=timezone.now() - timezone.timedelta(minutes=1),
+        )
+        response = self.client.post(
+            reverse("ai:tool_confirm", kwargs={"token": pending.token}),
+            data=json.dumps({"confirmed": True, "actor": {"user_id": self.customer.id}}),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("expired", payload["errors"][0])
+        self.assertFalse(WorkOrder.objects.filter(title="Expired action").exists())
+
+    def test_pending_action_rejects_actor_mismatch(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={
+                "department_id": self.department.id,
+                "subject": "Wrong actor",
+                "description": "Should not execute",
+            },
+            status=PendingAction.Status.PENDING,
+        )
+        response = self.client.post(
+            reverse("ai:tool_confirm", kwargs={"token": pending.token}),
+            data=json.dumps({"confirmed": True, "actor": {"user_id": self.manager.id}}),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("own", payload["errors"][0])
+        self.assertFalse(WorkOrder.objects.filter(title="Wrong actor").exists())
 
     def test_read_tool_does_not_require_confirmation(self):
         response = self.client.post(
@@ -977,4 +1043,3 @@ class IdentityModelValidationTests(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             validate_ai_identity_model_alignment(registry)
         self.assertIn("conversation_id", str(ctx.exception))
-

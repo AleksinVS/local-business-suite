@@ -7,10 +7,11 @@ class Command(BaseCommand):
     help = "Create initial role groups for Корпоративный портал ВОБ №3."
 
     def handle(self, *args, **options):
-        for role in settings.LOCAL_BUSINESS_ROLE_RULES:
+        roles = [role for role in settings.LOCAL_BUSINESS_ROLE_RULES if not role.startswith("$")]
+        for role in roles:
             Group.objects.get_or_create(name=role)
         self.stdout.write(
             self.style.SUCCESS(
-                f"Role groups ensured: {', '.join(settings.LOCAL_BUSINESS_ROLE_RULES)}"
+                f"Role groups ensured: {', '.join(roles)}"
             )
         )

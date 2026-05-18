@@ -12,8 +12,8 @@
     "mode": "self-hosted",
     "purpose": "Standard protocol for tool invocation"
   },
-  "tool_catalog": "config/ai/tools.json",
-  "task_type_catalog": "config/ai/task_types.json",
+  "tool_catalog": "contracts/ai/tools.json",
+  "task_type_catalog": "contracts/ai/task_types.json",
   "identity_model": {
     "propagate_user_identity": true,
     "minimum_fields": [

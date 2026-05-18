@@ -1,5 +1,6 @@
-import os
 import re
+from pathlib import Path
+
 from django.conf import settings
 
 
@@ -10,9 +11,9 @@ _SKILL_ID_RE = re.compile(r"^[a-z0-9_-]+$")
 def parse_skill_md(file_path):
     """Parses SKILL.md file and extracts YAML-like metadata and content."""
     content = ""
-    if os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+    file_path = Path(file_path)
+    if file_path.exists():
+        content = file_path.read_text(encoding="utf-8")
 
     metadata = {}
     # Simple regex to extract metadata between ---
@@ -28,22 +29,28 @@ def parse_skill_md(file_path):
     return {}, content
 
 
+def _skills_dir():
+    runtime_dir = settings.RUNTIME_CONTRACTS_DIR / "ai" / "skills"
+    if runtime_dir.exists():
+        return runtime_dir
+    return settings.DEFAULT_CONTRACTS_DIR / "ai" / "skills"
+
+
 def discover_skills():
-    """Scans config/ai/skills/ for available skills."""
-    skills_dir = os.path.join(settings.BASE_DIR, 'config', 'ai', 'skills')
+    """Scans AI contract skill directories for available skills."""
+    skills_dir = _skills_dir()
     catalog = []
 
-    if not os.path.exists(skills_dir):
+    if not skills_dir.exists():
         return catalog
 
-    for item in os.listdir(skills_dir):
-        item_path = os.path.join(skills_dir, item)
-        if os.path.isdir(item_path):
-            skill_md = os.path.join(item_path, 'SKILL.md')
-            if os.path.exists(skill_md):
+    for item_path in sorted(skills_dir.iterdir()):
+        if item_path.is_dir():
+            skill_md = item_path / "SKILL.md"
+            if skill_md.exists():
                 metadata, _ = parse_skill_md(skill_md)
                 if metadata:
-                    metadata['id'] = item  # folder name as id
+                    metadata["id"] = item_path.name
                     catalog.append(metadata)
     return catalog
 
@@ -52,8 +59,8 @@ def load_skill_content(skill_id):
     """Returns the full instructions for a specific skill."""
     if not _SKILL_ID_RE.match(skill_id):
         return None
-    skill_path = os.path.join(settings.BASE_DIR, 'config', 'ai', 'skills', skill_id, 'SKILL.md')
-    if os.path.exists(skill_path):
+    skill_path = _skills_dir() / skill_id / "SKILL.md"
+    if skill_path.exists():
         _, body = parse_skill_md(skill_path)
         return body
     return None

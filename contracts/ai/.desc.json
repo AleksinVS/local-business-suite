@@ -1,0 +1,7 @@
+{
+  ".": "Default AI-контракты, которые читает Django и agent runtime",
+  "registry.json": "AI registry и ссылки на каталоги",
+  "tools.json": "Каталог доступных AI tools",
+  "task_types.json": "Каталог bounded task types",
+  "models.json": "Каталог моделей для AI runtime"
+}

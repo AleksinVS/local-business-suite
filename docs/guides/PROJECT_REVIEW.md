@@ -50,7 +50,7 @@
 **`config/settings.py:30,43-44`** — если `DJANGO_DEBUG` не задана, DEBUG=True, а `ALLOWED_HOSTS = ["*"]`. Развёрнутое приложение без env-переменной открыто для Host-header атак и отдаёт детальные страницы ошибок.
 
 ### 4. Безопасность сессий/CSRF отключена
-**`config/settings.py:104-106`** — `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` хардкоднуты в `False`. Даже в продакшене куки передаются по голому HTTP.
+**Статус обновлен:** production сейчас работает в HTTP-only trusted LAN/VPN профиле. Настройки `DJANGO_SECURE_SSL_REDIRECT`, `DJANGO_SESSION_COOKIE_SECURE`, `DJANGO_CSRF_COOKIE_SECURE` остаются `False` только для этого профиля; `DJANGO_ENV=production` требует `DJANGO_DEBUG=0` и production secrets.
 
 ### 5. XSS через localStorage-избранное
 **`templates/base.html:141-147`** — `renderFavorites()` вставляет данные из `localStorage` через `innerHTML` без экранирования. `f.url`, `f.label`, `f.icon` подставляются как есть. Компрометация localStorage = выполнение произвольного JS.
@@ -124,7 +124,7 @@
 **`apps/accounts/models.py:33-37`** — `self.organizational_unit` удалён миграцией `0003`.
 
 ### 26. access-инструменты — мёртвый код в шлюзе
-`config/ai/tools.json` содержит 5 `access.*` инструментов, но `tool_definitions.py` их не определяет. Проверка в `tooling.py:148-150` их отклоняет. `sync_ai_tool_registry` перезатрёт их.
+AI-контракты теперь читаются из `data/contracts/ai/*.json` с fallback на `contracts/ai/*.json`; `sync_ai_tool_registry` пишет runtime tools contract из `apps/ai/tool_definitions.py`.
 
 ### 27. `skills_service.py:2` — `from pathlib import settings` — некорректный импорт
 Затеняется `from django.conf import settings`, но должен быть удалён.

@@ -6,7 +6,11 @@ from django.db.models import Count
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
-from apps.workorders.policies import can_manage_inventory
+from apps.workorders.policies import (
+    can_manage_departments,
+    can_manage_inventory,
+    can_manage_roles,
+)
 from .forms import DepartmentForm, RoleRulesForm
 from .models import Department
 from apps.inventory.models import MedicalDevice
@@ -36,7 +40,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
 class DepartmentManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        return can_manage_departments(self.request.user)
 
 
 class DepartmentListView(DepartmentManagementMixin, ListView):
@@ -74,8 +78,11 @@ class DepartmentUpdateView(DepartmentManagementMixin, UpdateView):
         return super().form_valid(form)
 
 
-class RoleRulesUpdateView(DepartmentManagementMixin, TemplateView):
+class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "core/role_rules_form.html"
+
+    def test_func(self):
+        return can_manage_roles(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -87,6 +94,9 @@ class RoleRulesUpdateView(DepartmentManagementMixin, TemplateView):
             ("manage_inventory", "Управление инвентарем"),
             ("manage_board_columns", "Управление досками"),
             ("manage_assignments", "Управление назначениями"),
+            ("view_analytics", "Просмотр аналитики"),
+            ("manage_departments", "Управление подразделениями"),
+            ("manage_roles", "Управление ролями"),
         ]
         context["view_scopes"] = [
             ("all", "Все заявки"),
@@ -111,6 +121,9 @@ class RoleRulesUpdateView(DepartmentManagementMixin, TemplateView):
                 ("manage_inventory", "Управление инвентарем"),
                 ("manage_board_columns", "Управление досками"),
                 ("manage_assignments", "Управление назначениями"),
+                ("view_analytics", "Просмотр аналитики"),
+                ("manage_departments", "Управление подразделениями"),
+                ("manage_roles", "Управление ролями"),
             ]:
                 rules[flag] = request.POST.get(f"role_{role_name}_{flag}") == "on"
             

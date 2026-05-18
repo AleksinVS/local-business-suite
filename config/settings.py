@@ -19,6 +19,14 @@ from apps.core.json_utils import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+for runtime_dir in (
+    DATA_DIR / "db",
+    DATA_DIR / "media",
+    DATA_DIR / "logs",
+    DATA_DIR / "contracts",
+):
+    runtime_dir.mkdir(parents=True, exist_ok=True)
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -28,6 +36,9 @@ load_dotenv(env_file)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+DJANGO_ENV = os.environ.get("DJANGO_ENV", "development").strip().lower()
+if DJANGO_ENV not in {"development", "production"}:
+    raise ImproperlyConfigured("DJANGO_ENV must be one of: development, production")
 APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Корпоративный портал ВОБ №3")
 ALLOWED_HOSTS = [
     host.strip()
@@ -122,7 +133,7 @@ LOGGING = {
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": BASE_DIR / "data" / "logs" / "app.log",
+            "filename": DATA_DIR / "logs" / "app.log",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",
@@ -151,14 +162,9 @@ LOGGING = {
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "data" / "db" / "main_vault.sqlite3",
+        "NAME": DATA_DIR / "db" / "main_vault.sqlite3",
         "OPTIONS": {
             "timeout": 20,
-            "init_command": (
-                "PRAGMA journal_mode=WAL;"
-                "PRAGMA synchronous=NORMAL;"
-                "PRAGMA busy_timeout=5000;"
-            ),
         },
     }
 }
@@ -221,7 +227,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "data" / "media"
+MEDIA_ROOT = DATA_DIR / "media"
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -238,22 +244,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Contracts configuration
 # Default contracts are stored in the 'contracts/' directory (tracked by Git)
 # Runtime contracts are stored in 'data/contracts/' (not tracked by Git, editable via UI)
-RUNTIME_CONTRACTS_DIR = BASE_DIR / "data" / "contracts"
+RUNTIME_CONTRACTS_DIR = DATA_DIR / "contracts"
 DEFAULT_CONTRACTS_DIR = BASE_DIR / "contracts"
 
 os.makedirs(RUNTIME_CONTRACTS_DIR / "ai", exist_ok=True)
 os.makedirs(RUNTIME_CONTRACTS_DIR / "integrations", exist_ok=True)
+os.makedirs(RUNTIME_CONTRACTS_DIR / "analytics", exist_ok=True)
 
 def get_contract_path(filename, env_var, sub_dir=None):
-    default_path = DEFAULT_CONTRACTS_DIR / (sub_dir + "/" if sub_dir else "") / filename
-    runtime_path = RUNTIME_CONTRACTS_DIR / (sub_dir + "/" if sub_dir else "") / filename
+    default_path = DEFAULT_CONTRACTS_DIR / (sub_dir or "") / filename
+    runtime_path = RUNTIME_CONTRACTS_DIR / (sub_dir or "") / filename
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
     
     # If runtime contract doesn't exist, copy from default (one-time setup)
     if not runtime_path.exists() and default_path.exists():
         import shutil
         shutil.copy(default_path, runtime_path)
         
-    return Path(os.environ.get(env_var, runtime_path))
+    override = os.environ.get(env_var, "").strip()
+    return Path(override) if override else runtime_path
 
 LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUSINESS_ROLE_RULES_FILE")
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
@@ -275,6 +284,21 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
 )
+LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS = int(
+    os.environ.get("LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS", "900")
+)
+
+if DJANGO_ENV == "production":
+    unsafe_secret_keys = {"", "dev-only-secret-key", "change-me"}
+    unsafe_gateway_tokens = {"", "dev-ai-gateway-token", "change-me"}
+    if DEBUG:
+        raise ImproperlyConfigured("DJANGO_DEBUG must be 0 when DJANGO_ENV=production")
+    if SECRET_KEY in unsafe_secret_keys:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set to a non-default value in production")
+    if LOCAL_BUSINESS_AI_GATEWAY_TOKEN in unsafe_gateway_tokens:
+        raise ImproperlyConfigured(
+            "LOCAL_BUSINESS_AI_GATEWAY_TOKEN must be set to a non-default value in production"
+        )
 
 try:
     LOCAL_BUSINESS_WORKFLOW_RULES = load_json_file(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)

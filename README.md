@@ -65,7 +65,7 @@ python manage.py runserver
 ## Документация
 
 - `AGENTS.md` — протокол для AI-агентов
-- `PROJECT_MAP.md` — карта проекта
+- `PROJECT_STRUCTURE.yaml` — автоматически генерируемая карта проекта
 - `docs/deployment/DEPLOYMENT.md` — инструкции по развертыванию
 - `docs/deployment/IIS_SSO.md` — настройка IIS и Active Directory
 - `docs/architecture/blueprint.md` — архитектура проекта

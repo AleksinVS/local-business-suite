@@ -2,6 +2,12 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+def default_pending_action_expires_at():
+    ttl_seconds = getattr(settings, "LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS", 900)
+    return timezone.now() + timezone.timedelta(seconds=ttl_seconds)
 
 
 class SlashCommand(models.Model):
@@ -105,6 +111,7 @@ class PendingAction(models.Model):
         PENDING = "pending", "Pending"
         CONFIRMED = "confirmed", "Confirmed"
         CANCELLED = "cancelled", "Cancelled"
+        EXPIRED = "expired", "Expired"
 
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     tool_code = models.CharField(max_length=120)
@@ -119,6 +126,7 @@ class PendingAction(models.Model):
     )
     payload = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField(default=default_pending_action_expires_at)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -128,6 +136,7 @@ class PendingAction(models.Model):
             models.Index(fields=["-created_at", "-id"]),
             models.Index(fields=["status"]),
             models.Index(fields=["tool_code"]),
+            models.Index(fields=["expires_at"], name="ai_pendinga_expires_77ce4c_idx"),
         ]
         verbose_name = "AI pending action"
         verbose_name_plural = "AI pending actions"

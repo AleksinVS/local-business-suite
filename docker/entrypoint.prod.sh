@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 
-mkdir -p /app/db /app/media /app/logs
+mkdir -p /app/data/db /app/data/media /app/data/logs /app/data/contracts /app/staticfiles
 
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py seed_roles
 
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --timeout 600 --workers 8 --worker-class gevent
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --timeout 600 --workers "${GUNICORN_WORKERS:-3}" --worker-class "${GUNICORN_WORKER_CLASS:-sync}"

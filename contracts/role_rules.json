@@ -13,7 +13,10 @@
     "transition_targets": ["cancelled"],
     "manage_inventory": false,
     "manage_board_columns": false,
-    "manage_assignments": false
+    "manage_assignments": false,
+    "view_analytics": false,
+    "manage_departments": false,
+    "manage_roles": false
   },
   "technician": {
     "display_name": "Техник (Медтехник)",
@@ -28,7 +31,10 @@
     "transition_targets": ["accepted", "in_progress", "on_hold", "resolved"],
     "manage_inventory": false,
     "manage_board_columns": false,
-    "manage_assignments": false
+    "manage_assignments": false,
+    "view_analytics": false,
+    "manage_departments": false,
+    "manage_roles": false
   },
   "manager": {
     "display_name": "Менеджер (Администратор)",
@@ -43,6 +49,9 @@
     "transition_targets": "*",
     "manage_inventory": true,
     "manage_board_columns": true,
-    "manage_assignments": true
+    "manage_assignments": true,
+    "view_analytics": true,
+    "manage_departments": true,
+    "manage_roles": true
   }
 }

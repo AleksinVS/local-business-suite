@@ -161,14 +161,18 @@
 │   └── ...
 ├── templates/
 ├── static/
-├── media/
-├── db/
-│   └── main_vault.sqlite3
-├── analytics_store/
-│   ├── raw/
-│   ├── marts/
-│   ├── duckdb/
-│   └── exports/
+├── contracts/
+│   ├── ai/
+│   ├── analytics/
+│   ├── integrations/
+│   └── schemas/
+├── data/
+│   ├── db/
+│   │   └── main_vault.sqlite3
+│   ├── media/
+│   ├── logs/
+│   ├── contracts/
+│   └── analytics/
 └── analytics_evidence/
     ├── pages/
     ├── sources/
@@ -182,16 +186,16 @@
   Изолированные доменные модули.
 
 - `config/`  
-  Общая конфигурация платформы и config-driven правила.
+  Общая конфигурация Django.
 
-- `db/`  
-  OLTP storage.
+- `contracts/`
+  Версионируемые default-контракты.
 
-- `media/`  
-  Вложения и пользовательские файлы.
+- `data/`
+  Runtime state: OLTP storage, media, logs, runtime-копии контрактов и будущие analytics exports.
 
-- `analytics_store/`  
-  Промежуточный аналитический слой, отделенный от OLTP.
+- `data/analytics/`
+  Будущий промежуточный аналитический слой, отделенный от OLTP.
 
 - `analytics_evidence/`  
   Отдельный analytics-as-code модуль для BI/UI аналитики.
@@ -483,11 +487,11 @@ OLTP SQLite
     |
     | export / snapshot / transform
     v
-analytics_store/raw/*.parquet
+data/analytics/raw/*.parquet
     |
     | normalize / enrich / aggregate
     v
-analytics_store/marts/*.parquet
+data/analytics/marts/*.parquet
     |
     | query engine
     v
@@ -557,7 +561,7 @@ Evidence лучше рассматривать как repository-based analytics
 analytics_evidence/
 ├── pages/
 ├── sources/
-│   └── analytics_store/
+│   └── data/analytics/
 │       ├── connection.yaml
 │       ├── analytics.duckdb
 │       └── *.sql

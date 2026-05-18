@@ -138,12 +138,25 @@
         const container = document.getElementById('header-favorites');
         if (!container) return;
         const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-        container.innerHTML = favorites.map(f => `
-          <a href="${f.url}" class="favorite-chip" title="${f.label}">
-            <span class="chip-icon">${f.icon}</span>
-            <span class="chip-label">${f.label}</span>
-          </a>
-        `).join('');
+        container.replaceChildren();
+        favorites.forEach(f => {
+          if (!f || typeof f.url !== 'string' || !f.url.startsWith('/')) return;
+          const link = document.createElement('a');
+          link.href = f.url;
+          link.className = 'favorite-chip';
+          link.title = String(f.label || '');
+
+          const icon = document.createElement('span');
+          icon.className = 'chip-icon';
+          icon.textContent = String(f.icon || '');
+
+          const label = document.createElement('span');
+          label.className = 'chip-label';
+          label.textContent = String(f.label || '');
+
+          link.append(icon, label);
+          container.appendChild(link);
+        });
       }
 
       function updateStars() {

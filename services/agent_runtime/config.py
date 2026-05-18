@@ -9,6 +9,19 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 load_dotenv(BASE_DIR / ".env")
 
+DEFAULT_CONTRACTS_DIR = BASE_DIR / "contracts"
+RUNTIME_CONTRACTS_DIR = BASE_DIR / "data" / "contracts"
+
+
+def _contract_path(filename: str, env_var: str, sub_dir: str = "ai") -> Path:
+    override = os.environ.get(env_var, "").strip()
+    if override:
+        return Path(override)
+    runtime_path = RUNTIME_CONTRACTS_DIR / sub_dir / filename
+    if runtime_path.exists():
+        return runtime_path
+    return DEFAULT_CONTRACTS_DIR / sub_dir / filename
+
 
 @dataclass(frozen=True)
 class ModelConfig:
@@ -54,24 +67,11 @@ def load_runtime_settings() -> RuntimeSettings:
         django_gateway_token=os.environ.get(
             "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
         ),
-        ai_tools_path=Path(
-            os.environ.get(
-                "LOCAL_BUSINESS_AI_TOOLS_FILE",
-                BASE_DIR / "config" / "ai" / "tools.json",
-            )
+        ai_tools_path=_contract_path("tools.json", "LOCAL_BUSINESS_AI_TOOLS_FILE"),
+        ai_task_types_path=_contract_path(
+            "task_types.json", "LOCAL_BUSINESS_AI_TASK_TYPES_FILE"
         ),
-        ai_task_types_path=Path(
-            os.environ.get(
-                "LOCAL_BUSINESS_AI_TASK_TYPES_FILE",
-                BASE_DIR / "config" / "ai" / "task_types.json",
-            )
-        ),
-        ai_models_path=Path(
-            os.environ.get(
-                "LOCAL_BUSINESS_AI_MODELS_FILE",
-                BASE_DIR / "config" / "ai" / "models.json",
-            )
-        ),
+        ai_models_path=_contract_path("models.json", "LOCAL_BUSINESS_AI_MODELS_FILE"),
         system_prompt_path=Path(
             os.environ.get(
                 "AI_AGENT_SYSTEM_PROMPT_FILE",

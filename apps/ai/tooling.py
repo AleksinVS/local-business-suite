@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.workorders.models import WorkOrder
 
@@ -195,6 +196,7 @@ def execute_tool(
             tool_code=tool_code,
             actor=actor,
             status=PendingAction.Status.PENDING,
+            expires_at__gt=timezone.now(),
         ).first()
         if pending:
             requires_confirmation = False  # replay confirmed pending action
@@ -395,6 +397,40 @@ def execute_pending_action(
                     "errors": [f"Pending action is already {pending.status}."],
                     "meta": {"pending_action_status": pending.status},
                 }
+
+            if pending.expires_at <= timezone.now():
+                pending.status = PendingAction.Status.EXPIRED
+                pending.save(update_fields=["status", "updated_at"])
+                return {
+                    "ok": False,
+                    "tool": pending.tool_code,
+                    "result": None,
+                    "errors": ["Pending action has expired."],
+                    "meta": {"pending_action_status": pending.status},
+                }
+
+            actor_user_id = actor_context.get("user_id")
+            if actor_user_id and str(actor_user_id) != str(pending.actor_id):
+                return {
+                    "ok": False,
+                    "tool": pending.tool_code,
+                    "result": None,
+                    "errors": ["Actor does not own this pending action."],
+                    "meta": {"pending_action_status": pending.status},
+                }
+
+            if session_external_id:
+                from .services import normalize_session_external_id
+
+                normalized_session_id = normalize_session_external_id(session_external_id)
+                if pending.session and pending.session.external_id != normalized_session_id:
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": ["Session does not own this pending action."],
+                        "meta": {"pending_action_status": pending.status},
+                    }
 
             trace_context = {
                 "conversation_id": conversation_id,

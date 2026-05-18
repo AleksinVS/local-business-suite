@@ -4,8 +4,8 @@ const path = require('path');
 const EXCLUDED = [
   '.git', 'node_modules', '__pycache__', '.venv', '.tmp',
   '.playwright-mcp', 'staticfiles', 'media', 'db', 'logs',
-  'VOB3', '.pytest_cache', '.claude', '.codex', '.gemini',
-  '.github', 'docker'
+  'data', 'deployments', 'VOB3', '.pytest_cache', '.claude', '.codex', '.gemini',
+  '.github'
 ];
 const MAX_DEPTH = 3;
 const OUTPUT_FILE = 'PROJECT_STRUCTURE.yaml';

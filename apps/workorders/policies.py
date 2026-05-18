@@ -48,6 +48,9 @@ def superuser_rules():
         "manage_inventory": True,
         "manage_board_columns": True,
         "manage_assignments": True,
+        "view_analytics": True,
+        "manage_departments": True,
+        "manage_roles": True,
     }
 
 
@@ -78,7 +81,7 @@ def allowed_view_scopes(user):
 
 
 def is_manager(user):
-    return has_role_capability(user, "manage_inventory")
+    return can_manage_departments(user)
 
 
 def is_customer(user):
@@ -99,6 +102,18 @@ def can_manage_board_columns(user):
 
 def can_manage_assignments(user):
     return has_role_capability(user, "manage_assignments")
+
+
+def can_view_analytics(user):
+    return has_role_capability(user, "view_analytics")
+
+
+def can_manage_departments(user):
+    return has_role_capability(user, "manage_departments")
+
+
+def can_manage_roles(user):
+    return has_role_capability(user, "manage_roles")
 
 
 def can_view(user, workorder: WorkOrder) -> bool:

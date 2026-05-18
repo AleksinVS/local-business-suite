@@ -117,6 +117,9 @@ class WorkOrderRoleMatrixTests(TestCase):
                 "manage_inventory": False,
                 "manage_board_columns": False,
                 "manage_assignments": False,
+                "view_analytics": False,
+                "manage_departments": False,
+                "manage_roles": False,
             }
         }
     )

@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     env_file:
       - deployments/test-host/.env
+    environment:
+      LOCAL_BUSINESS_AGENT_RUNTIME_URL: http://agent-runtime:8090
     volumes:
       - ./data:/app/data
     networks:
@@ -22,6 +24,8 @@ services:
     restart: unless-stopped
     env_file:
       - deployments/test-host/.env
+    environment:
+      DJANGO_AI_GATEWAY_URL: http://web:8000/ai/gateway
     networks:
       - internal
     depends_on:
@@ -38,7 +42,6 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy_data:/data

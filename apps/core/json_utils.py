@@ -27,6 +27,15 @@ REQUIRED_ROLE_KEYS = {
     "manage_inventory",
     "manage_board_columns",
     "manage_assignments",
+    "view_analytics",
+    "manage_departments",
+    "manage_roles",
+}
+
+BACKWARD_COMPAT_ROLE_DEFAULT_KEYS = {
+    "view_analytics",
+    "manage_departments",
+    "manage_roles",
 }
 
 REQUIRED_WORKFLOW_KEYS = {
@@ -183,6 +192,9 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             continue
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")
+        legacy_admin_value = bool(config.get("manage_inventory"))
+        for key in BACKWARD_COMPAT_ROLE_DEFAULT_KEYS:
+            config.setdefault(key, legacy_admin_value)
         missing = REQUIRED_ROLE_KEYS - set(config.keys())
         if missing:
             raise ValidationError(
@@ -474,7 +486,7 @@ def validate_ai_task_types_slot_coverage(task_types_payload):
 
 
 # Minimum identity fields the runtime request identity model must carry, per
-# the identity_model contract in config/ai/registry.json.
+# the identity_model contract in contracts/ai/registry.json.
 IDENTITY_MINIMUM_FIELDS = frozenset({
     "user_id",
     "roles",

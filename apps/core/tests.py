@@ -65,7 +65,7 @@ class DepartmentViewTests(TestCase):
 
     @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
     def test_manager_can_open_role_rules_editor(self):
-        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true}}', encoding="utf-8")
+        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")
         self.client.force_login(self.manager)
         response = self.client.get(reverse("core:role_rules"))
         self.assertEqual(response.status_code, 200)
@@ -88,6 +88,9 @@ class DepartmentViewTests(TestCase):
                     "manage_inventory": True,
                     "manage_board_columns": True,
                     "manage_assignments": True,
+                    "view_analytics": True,
+                    "manage_departments": True,
+                    "manage_roles": True,
                 }
             }
             config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
@@ -103,6 +106,9 @@ class DepartmentViewTests(TestCase):
                         "role_manager_manage_inventory": "",
                         "role_manager_manage_board_columns": "",
                         "role_manager_manage_assignments": "",
+                        "role_manager_view_analytics": "",
+                        "role_manager_manage_departments": "",
+                        "role_manager_manage_roles": "",
                         "role_manager_view_scope": "authored",
                     },
                 )
@@ -113,7 +119,33 @@ class DepartmentViewTests(TestCase):
                 self.assertFalse(saved["manager"]["manage_inventory"])
                 self.assertFalse(saved["manager"]["manage_board_columns"])
                 self.assertFalse(saved["manager"]["manage_assignments"])
+                self.assertFalse(saved["manager"]["view_analytics"])
+                self.assertFalse(saved["manager"]["manage_departments"])
+                self.assertFalse(saved["manager"]["manage_roles"])
                 self.assertEqual(saved["manager"]["view_scope"], "authored")
+
+
+class DiagnosticEndpointTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="diagnostic-staff",
+            password="pass",
+            is_staff=True,
+        )
+
+    def test_basic_health_is_minimal(self):
+        response = self.client.get(reverse("core:health_check"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_health_details_requires_staff(self):
+        response = self.client.get(reverse("core:health_details"))
+        self.assertEqual(response.status_code, 302)
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("core:health_details"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("services", response.json())
 
 
 class ArchitectureContractTests(TestCase):

@@ -5,10 +5,11 @@
 ## Получение файлов
 
 ```bash
-git clone https://github.com/AleksinVS/vob3-deployment.git VOB3
+mkdir -p deployments
+git clone https://github.com/AleksinVS/vob3-deployment.git deployments/vob3
 ```
 
-Клонируйте в корень проекта — директория `VOB3/` добавлена в `.gitignore` и не попадёт в коммиты основного репозитория.
+Клонируйте приватный репозиторий только в `deployments/<host>/`. Путь `VOB3/` в корне считается legacy/local mistake и оставлен в `.gitignore` только как защита от случайного коммита.
 
 ## Содержимое приватного репозитория
 
@@ -22,10 +23,10 @@ git clone https://github.com/AleksinVS/vob3-deployment.git VOB3
 ## Обновление
 
 ```bash
-cd VOB3 && git pull && cd ..
+cd deployments/vob3 && git pull && cd ../..
 ```
 
 ## Замечания
 
-- Не коммитьте файлы из `VOB3/` в основной репозиторий.
-- Секреты (`.env.production`, сертификаты) хранятся только на сервере и добавлены в `.gitignore`.
+- Не коммитьте файлы из `deployments/` в основной репозиторий.
+- Секреты (`.env`, production-переменные, сертификаты, host-specific compose/web.config) хранятся только в приватном deployment-репозитории или на сервере.

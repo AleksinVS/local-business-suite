@@ -28,11 +28,6 @@
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
   });
 
-  // Tailwind config
-  if (typeof tailwind !== 'undefined') {
-    tailwind.config = { corePlugins: { preflight: false } };
-  }
-
   // Marked config
   marked.setOptions({ breaks: true, gfm: true });
 
@@ -78,6 +73,83 @@
     var chatDeleteByIdSuffix = config.chatDeleteByIdSuffix;
     var chatIndexUrl = config.chatIndexUrl;
     var csrfToken = config.csrfToken;
+    var predefinedCommands = JSON.parse(document.getElementById('predefined-commands-data')?.textContent || '[]');
+    var customCommands = JSON.parse(document.getElementById('custom-commands-data')?.textContent || '[]');
+
+    function commandName(command) {
+      return String(command.name || command.shortcut || '').replace(/^\/+/, '');
+    }
+
+    function commandDescription(command) {
+      return String(command.description || command.template || '');
+    }
+
+    function allCommands() {
+      return predefinedCommands.concat(customCommands).filter(function(command) {
+        return commandName(command);
+      });
+    }
+
+    function appendCommandItem(container, command) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'w-full flex gap-3 px-3 py-2 rounded-lg text-left hover:bg-blue-50 transition-colors';
+      item.addEventListener('click', function() {
+        window.insertCommand(commandName(command));
+        var menu = document.getElementById('command-menu-dropdown');
+        var autocomplete = document.getElementById('command-autocomplete');
+        if (menu) menu.classList.add('hidden');
+        if (autocomplete) autocomplete.classList.add('hidden');
+      });
+
+      var name = document.createElement('span');
+      name.className = 'font-mono text-blue-600 font-semibold text-sm whitespace-nowrap';
+      name.textContent = '/' + commandName(command);
+
+      var description = document.createElement('span');
+      description.className = 'text-sm text-gray-600 truncate';
+      description.textContent = commandDescription(command);
+
+      item.append(name, description);
+      container.appendChild(item);
+    }
+
+    function renderCommandList(container, query) {
+      if (!container) return;
+      container.replaceChildren();
+      var normalized = String(query || '').replace(/^\/+/, '').toLowerCase();
+      var matches = allCommands().filter(function(command) {
+        return commandName(command).toLowerCase().includes(normalized);
+      });
+      if (!matches.length) {
+        var empty = document.createElement('div');
+        empty.className = 'px-3 py-2 text-sm text-gray-400';
+        empty.textContent = 'Команды не найдены';
+        container.appendChild(empty);
+        return;
+      }
+      matches.forEach(function(command) { appendCommandItem(container, command); });
+    }
+
+    var commandMenuBtn = document.getElementById('command-menu-btn');
+    var commandMenu = document.getElementById('command-menu-dropdown');
+    var commandMenuList = document.getElementById('command-menu-list');
+    var commandSearchInput = document.getElementById('command-search-input');
+    var autocomplete = document.getElementById('command-autocomplete');
+    var autocompleteList = document.getElementById('autocomplete-list');
+
+    if (commandMenuBtn && commandMenu) {
+      commandMenuBtn.addEventListener('click', function() {
+        commandMenu.classList.toggle('hidden');
+        renderCommandList(commandMenuList, commandSearchInput ? commandSearchInput.value : '');
+        if (commandSearchInput) commandSearchInput.focus();
+      });
+    }
+    if (commandSearchInput) {
+      commandSearchInput.addEventListener('input', function() {
+        renderCommandList(commandMenuList, commandSearchInput.value);
+      });
+    }
 
     // Model selector
     var modelSelect = document.getElementById('ai-model-select');
@@ -127,6 +199,12 @@
       this.style.height = 'auto';
       this.style.height = (this.scrollHeight) + 'px';
       if (this.value === '') this.style.height = '44px';
+      if (autocomplete && autocompleteList && this.value.startsWith('/')) {
+        autocomplete.classList.remove('hidden');
+        renderCommandList(autocompleteList, this.value);
+      } else if (autocomplete) {
+        autocomplete.classList.add('hidden');
+      }
     });
 
     // Enter to submit
@@ -425,11 +503,14 @@
                   if (data.content) {
                     accumulatedContent += data.content;
                     if (window._activeChatStream) window._activeChatStream.accumulatedContent = accumulatedContent;
-                    assistantContentDiv.innerHTML = accumulatedContent.replace(/\n/g, '<br>');
+                    assistantContentDiv.textContent = accumulatedContent;
                     messageList.scrollTop = messageList.scrollHeight;
                   }
                   if (data.error) {
-                    assistantContentDiv.innerHTML += '<div class="mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm">Ошибка: ' + escapeHtml(data.error) + '</div>';
+                    var errorDiv = document.createElement('div');
+                    errorDiv.className = 'mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm';
+                    errorDiv.textContent = 'Ошибка: ' + data.error;
+                    assistantContentDiv.appendChild(errorDiv);
                     controller.abort();
                     resetInput();
                   }
@@ -465,6 +546,84 @@
   });
 
   // Global functions for template onclick handlers
+  window.insertCommand = function(command) {
+    var input = document.getElementById('ai-prompt-input');
+    if (!input) return;
+    var normalized = String(command || '').replace(/^\/+/, '');
+    input.value = '/' + normalized + ' ';
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  window.startEditTitle = function() {
+    var display = document.getElementById('chat-title-display');
+    var editRow = document.getElementById('chat-title-edit-row');
+    var input = document.getElementById('chat-title-input');
+    if (!display || !editRow || !input) return;
+    display.classList.add('hidden');
+    editRow.classList.remove('hidden');
+    editRow.classList.add('flex');
+    input.focus();
+    input.select();
+  };
+
+  function updateTitleUI(title) {
+    var titleText = document.getElementById('chat-title-text');
+    var titleInput = document.getElementById('chat-title-input');
+    if (titleText) titleText.textContent = title || 'Новый чат';
+    if (titleInput) titleInput.value = title || 'Новый чат';
+  }
+
+  window.saveEditTitle = function() {
+    var input = document.getElementById('chat-title-input');
+    if (!input) return;
+    var newTitle = input.value.trim();
+    if (!newTitle) {
+      input.classList.add('border-red-400');
+      setTimeout(function() { input.classList.remove('border-red-400'); }, 1500);
+      return;
+    }
+    fetch(window.__chatConfig.titleUpdateUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': window.__chatConfig.csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ title: newTitle }),
+    }).then(function(response) { return response.json(); }).then(function(data) {
+      if (data.status === 'ok') {
+        updateTitleUI(data.title);
+        window.cancelEditTitle();
+      } else {
+        alert('Ошибка: ' + (data.error || 'Не удалось переименовать'));
+      }
+    }).catch(function() { alert('Ошибка соединения.'); });
+  };
+
+  window.cancelEditTitle = function() {
+    var display = document.getElementById('chat-title-display');
+    var editRow = document.getElementById('chat-title-edit-row');
+    if (!display || !editRow) return;
+    editRow.classList.add('hidden');
+    editRow.classList.remove('flex');
+    display.classList.remove('hidden');
+  };
+
+  var titleInput = document.getElementById('chat-title-input');
+  if (titleInput) {
+    titleInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.saveEditTitle();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        window.cancelEditTitle();
+      }
+    });
+  }
+
   window.deleteCurrentChat = function() {
     if (!confirm('Удалить этот чат? Это действие нельзя отменить.')) return;
     fetch(window.__chatConfig.chatDeleteUrl, {

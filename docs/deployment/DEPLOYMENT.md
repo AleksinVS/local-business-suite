@@ -12,9 +12,10 @@ Production-развертывание поддерживает две конфи
 - `caddy` — reverse proxy
 
 База данных и пользовательские файлы хранятся на хосте:
-- `db/`
-- `media/`
-- `logs/`
+- `data/db/`
+- `data/media/`
+- `data/logs/`
+- `data/contracts/`
 
 Статические файлы не монтируются в отдельный volume. Они собираются внутри image во время старта `web`.
 
@@ -53,6 +54,7 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
 
 2. Создать локальный `.env.production` по образцу `.env.example` и указать:
+- `DJANGO_ENV=production`
 - `DJANGO_DEBUG=0`
 - `DJANGO_SECRET_KEY=<production-secret>`
 - `DJANGO_ALLOWED_HOSTS=<ip-or-domain>`
@@ -63,11 +65,13 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `OPENAI_API_KEY=<provider-key>`
 - `OPENAI_BASE_URL=<openai-compatible-base-url>`
 - `AI_AGENT_MODEL_NAME=<provider-model-name>`
-- при необходимости `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`
+- `LOCAL_BUSINESS_AI_GATEWAY_TOKEN=<production-token>`
+- для текущего HTTP-only профиля: `DJANGO_SECURE_SSL_REDIRECT=False`, `DJANGO_SESSION_COOKIE_SECURE=False`, `DJANGO_CSRF_COOKIE_SECURE=False`
 
 Минимальный пример:
 
 ```env
+DJANGO_ENV=production
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=replace-me
 DJANGO_ALLOWED_HOSTS=188.120.246.243
@@ -75,13 +79,24 @@ DJANGO_INTERNAL_ALLOWED_HOSTS=web
 LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal
 LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90
+LOCAL_BUSINESS_AI_GATEWAY_TOKEN=replace-me
 OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1
 AI_AGENT_MODEL_NAME=gpt-4.1-mini
-SECURE_SSL_REDIRECT=False
-SESSION_COOKIE_SECURE=False
-CSRF_COOKIE_SECURE=False
+DJANGO_SECURE_SSL_REDIRECT=False
+DJANGO_SESSION_COOKIE_SECURE=False
+DJANGO_CSRF_COOKIE_SECURE=False
 ```
+
+## HTTP-only trusted network profile
+
+На текущем этапе production работает без HTTPS. Это допустимо только как профиль доверенной сети:
+
+- приложение не публикуется напрямую в интернет;
+- доступ открыт только из LAN/VPN или через firewall allowlist;
+- `agent-runtime` и Django AI gateway не публикуются наружу;
+- `/health/` возвращает только минимальный статус, подробная диагностика доступна только staff-пользователям;
+- `DJANGO_DEBUG=0`, production `DJANGO_SECRET_KEY` и `LOCAL_BUSINESS_AI_GATEWAY_TOKEN` обязательны.
 
 ## Основной сценарий деплоя
 

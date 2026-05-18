@@ -4,14 +4,14 @@ from django.views.generic import TemplateView
 
 from apps.core.models import Department
 from apps.workorders.models import WorkOrder, WorkOrderStatus
-from apps.workorders.policies import can_manage_inventory
+from apps.workorders.policies import can_view_analytics
 
 
 class AnalyticsDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "analytics/dashboard.html"
 
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        return can_view_analytics(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

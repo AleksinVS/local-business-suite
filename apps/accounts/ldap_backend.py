@@ -4,8 +4,9 @@ import os
 import ssl
 from dataclasses import dataclass
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import BaseBackend, RemoteUserBackend
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,8 @@ class LDAPBackend(BaseBackend):
             with ldap_connection(config, user=user_dn, password=password):
                 pass
 
-            user, _created = User.objects.get_or_create(
+            UserModel = get_user_model()
+            user, _created = UserModel.objects.get_or_create(
                 username=username, defaults={"is_active": True}
             )
             sync_user_from_ad(user, attributes, config.group_role_map)
@@ -91,9 +93,10 @@ class LDAPBackend(BaseBackend):
             return None
 
     def get_user(self, user_id):
+        UserModel = get_user_model()
         try:
-            return User.objects.get(pk=user_id)
-        except User.DoesNotExist:
+            return UserModel.objects.get(pk=user_id)
+        except UserModel.DoesNotExist:
             return None
 
 
@@ -214,8 +217,8 @@ def sync_user_from_ad(user, attributes, group_role_map):
             user.email = f"{sam_account_name}{email_domain}"
 
     # Sync organizational structure (OU and Department)
-    # VOB3 specific code - moved to VOB3 submodule
-    # Uncomment and use VOB3 specific LDAP backend for AD OU synchronization
+    # Host-specific OU synchronization belongs in a deployment silo.
+    # Uncomment and use a private LDAP backend for AD OU synchronization.
     # member_of = attributes.get("memberOf", [])
     # if member_of:
     #     from apps.core.models import OrganizationalUnit
@@ -292,18 +295,20 @@ def sync_user_groups(user, member_of, group_role_map):
     if not group_role_map:
         return
 
+    ad_managed_roles = set(group_role_map.values())
     desired_roles = {
         role
         for ad_group in member_of
         for role in _roles_for_ad_group(ad_group, group_role_map)
     }
-    if not desired_roles:
-        return
 
     groups = [
         Group.objects.get_or_create(name=role)[0] for role in sorted(desired_roles)
     ]
-    user.groups.add(*groups)
+    current_ad_groups = Group.objects.filter(name__in=ad_managed_roles)
+    user.groups.remove(*[group for group in current_ad_groups if group.name not in desired_roles])
+    if groups:
+        user.groups.add(*groups)
 
 
 def _roles_for_ad_group(ad_group, group_role_map):

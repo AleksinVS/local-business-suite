@@ -7,7 +7,7 @@ from apps.ai.tool_definitions import get_registry_payload
 
 
 class Command(BaseCommand):
-    help = "Generate config/ai/tools.json from canonical Python tool definitions."
+    help = "Generate runtime AI tools contract from canonical Python tool definitions."
 
     def handle(self, *args, **options):
         payload = get_registry_payload()

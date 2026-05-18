@@ -25,9 +25,28 @@
         },
         "manage_inventory": { "type": "boolean" },
         "manage_board_columns": { "type": "boolean" },
-        "manage_assignments": { "type": "boolean" }
+        "manage_assignments": { "type": "boolean" },
+        "view_analytics": { "type": "boolean" },
+        "manage_departments": { "type": "boolean" },
+        "manage_roles": { "type": "boolean" }
       },
-      "required": ["view_scope", "create_workorder"]
+      "required": [
+        "view_scope",
+        "create_workorder",
+        "edit_scope",
+        "comment_scope",
+        "upload_attachment_scope",
+        "confirm_closure_scope",
+        "rate_scope",
+        "transition_scope",
+        "transition_targets",
+        "manage_inventory",
+        "manage_board_columns",
+        "manage_assignments",
+        "view_analytics",
+        "manage_departments",
+        "manage_roles"
+      ]
     }
   }
 }

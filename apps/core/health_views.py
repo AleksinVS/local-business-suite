@@ -4,10 +4,24 @@ from django.http import JsonResponse
 from django.db import connection
 from django.conf import settings
 import httpx
+from django.contrib.admin.views.decorators import staff_member_required
 
 logger = logging.getLogger(__name__)
 
+
 def health_check(request):
+    """Minimal health check safe for unauthenticated probes."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception as exc:
+        logger.error("Health check failed: database is unreachable: %s", exc)
+        return JsonResponse({"status": "error"}, status=503)
+    return JsonResponse({"status": "ok"})
+
+
+@staff_member_required
+def health_details(request):
     """
     Comprehensive health check for the entire suite.
     Checks: DB, AI Runtime, LDAP (if enabled).

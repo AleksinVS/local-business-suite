@@ -9,6 +9,7 @@ media/
 staticfiles/
 *.log
 logs/
+data/
 server_log.txt
 caddy_data/
 web.config
@@ -20,3 +21,4 @@ wfastcgi.ini
 .local/
 .codex/
 deployments/
+VOB3/

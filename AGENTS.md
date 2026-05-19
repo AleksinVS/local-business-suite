@@ -33,6 +33,13 @@
 ### 5. Принцип DRY (Don't Repeat Yourself)
 Избегайте дублирования логики. Если функционал (например, валидация JSON или форматирование имен) используется в двух и более приложениях, он должен быть вынесен в `apps.core`.
 
+### 6. Фиксация архитектурных решений (ADR)
+Любое существенное архитектурное решение должно быть зафиксировано в Architecture Decision Record (ADR) в `docs/adr/`.
+- **Когда нужен ADR:** выбор нового хранилища или внешней библиотеки, изменение границ сервисов/приложений, новый интеграционный паттерн, изменение security/privacy модели, изменение контрактов данных, ввод нового runtime-сервиса или фонового контура.
+- **Формат ADR:** контекст, решение, рассмотренные альтернативы, последствия, статус (`Proposed`, `Accepted`, `Superseded`).
+- **Связь с планами:** roadmap/implementation plan может описывать шаги работ, но не заменяет ADR. Если план содержит архитектурное решение, перед реализацией нужно создать или обновить соответствующий ADR.
+- **Структура:** при добавлении ADR обновить `docs/adr/.desc.json` и запустить `make gen-struct`.
+
 ## Dual-Use Context
 
 This project is both a **production system** and a **learning platform** for the owner. Topics of study: Python, backend engineering, DevSecOps. When discussing or implementing solutions related to these areas, the agent must:
@@ -44,6 +51,7 @@ This project is both a **production system** and a **learning platform** for the
 ## Sources Of Truth
 
 - **Карта проекта:** `PROJECT_STRUCTURE.yaml` (генерируется автоматически, содержит описания всех важных узлов).
+- **Архитектурные решения:** `docs/adr/`.
 - **Инструменты AI:** `apps/ai/tool_definitions.py`.
 - **Контракты:** `contracts/` (дефолты) и `data/contracts/` (рантайм).
 - **Валидация:** `python manage.py validate_architecture_contracts`.

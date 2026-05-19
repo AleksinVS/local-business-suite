@@ -32,3 +32,4 @@ For a deep dive into specific areas, please refer to the following documents:
 Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0001: Local-first monorepo architecture](../adr/ADR-0001-local-first-monorepo.md)
 - [ADR-0002: Config-driven policy and workflow](../adr/ADR-0002-config-driven-policy-and-workflow.md)
+- [ADR-0003: AI memory service architecture](../adr/ADR-0003-ai-memory-service.md)

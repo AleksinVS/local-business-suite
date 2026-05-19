@@ -105,12 +105,14 @@ docs: # Документация проекта
   adr: # Architecture Decision Records
     ADR-0001-local-first-monorepo.md: file # ADR: Local-first monorepo архитектура
     ADR-0002-config-driven-policy-and-workflow.md: file # ADR: Config-driven политики и workflow
+    ADR-0003-ai-memory-service.md: file # ADR: Архитектура сервиса памяти СоСНА
   architecture: # Архитектурные документы проекта
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
     blueprint.md: file # Blueprint — детальный план системы
     DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
     INTEGRATIONS.md: file # Интеграции с внешними системами
+    MEMORY_SERVICE_IMPLEMENTATION_PLAN.md: file # План реализации сервиса памяти СоСНА
     POLICY_MODEL.md: file # Модель политик доступа
   deployment: # Гайды по деплою (Docker, IIS)
     DEPLOYMENT.md: file # Основной гайд по деплою (Docker + VPS)

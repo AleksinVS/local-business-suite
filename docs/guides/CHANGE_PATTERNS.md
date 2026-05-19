@@ -26,6 +26,9 @@
 
 ## Start a new implementation task
 
-1. Create a task brief from `workflow/ai_artifacts/task_brief_template.json`.
-2. Generate a change plan with `python manage.py generate_change_plan`.
-3. Implement only after the plan is explicit.
+1. Check `docs/planning/backlog.md` and the relevant active plan in `docs/planning/active/`.
+2. For a small task, make the backlog entry explicit enough to include goal, scope, acceptance checks, and verification commands.
+3. For a larger or risky task, create or update an active plan in `docs/planning/active/`.
+4. If the task changes architecture, security/privacy, contracts, storage, runtime services, or integration patterns, create or update an ADR before implementation.
+5. Create a workflow block in `workflow/active/<block-id>/` only for multi-step, multi-agent, high-risk, or task-packet-driven work.
+6. `python manage.py generate_change_plan` is optional and belongs to the agent workflow/orchestration path, not to every normal development task.

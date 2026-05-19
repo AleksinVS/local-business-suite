@@ -125,6 +125,11 @@ docs: # Документация проекта
   legacy: # Устаревшая документация (MVP)
     MVP_Architecture.md: file # Архитектура MVP
     MVP_Implementation_Plan.md: file # План реализации MVP
+  planning: # Планирование работ: backlog, активные планы и архив планов
+    active: directory... # Активные человекочитаемые планы крупных направлений
+    archive: directory... # Закрытые или остановленные планы
+    backlog.md: file # Актуальный backlog без архивного раздела
+    README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
 scripts: directory... # Скрипты и инструменты разработки
 services: # Автономные сервисы (вне Django)
@@ -169,12 +174,16 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   404.html: file # Страница ошибки 404
   500.html: file # Страница ошибки 500
   base.html: file # Базовый шаблон (navbar, sidebar, HTMX скрипты)
-workflow: directory... # Снимки рабочих процессов (per-feature workflow dirs)
+workflow: # Исполнительные workflow-пакеты для сложных работ
+  active: directory... # Активные workflow-блоки
+  ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
+  archive: directory... # Архив принятых workflow-блоков
+  templates: directory... # Шаблоны workflow-артефактов
 .dockerignore: file # Исключения из Docker build context
 .env.example: file # Шаблон переменных окружения
 .gitignore: file # Исключения из Git
 AGENTS.md: file # Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)
-BACKLOG.md: file # Бэклог задач и запланированные доработки
+BACKLOG.md: file # Корневой указатель на актуальный backlog в docs/planning/backlog.md
 Caddyfile: file # Конфигурация Caddy reverse proxy
 CLAUDE.md: file # Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)
 DEPLOY_PRIVATE.md: file # Инструкции по приватному IIS-деплою через deployments/<host>/

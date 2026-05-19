@@ -9,6 +9,7 @@
 - Точки входа (`manage.py`).
 - Файлы оркестрации и зависимостей (`Dockerfile`, `docker-compose.yml`, `Makefile`, `requirements.*`).
 - Главные документы (`README.md`, `AGENTS.md`, `CLAUDE.md`, `PROJECT_STRUCTURE.yaml`).
+- Корневой `BACKLOG.md` только как короткий указатель на актуальный backlog в `docs/planning/backlog.md`.
 - Базовые шаблоны окружения (`.env.example`).
 **Строгий запрет:** Любые временные файлы агентов, кэши тестирования (pytest, playwright), промежуточные логи или локальные скрипты должны генерироваться строго внутри скрытой директории `.local/`.
 
@@ -40,6 +41,83 @@
 - **Связь с планами:** roadmap/implementation plan может описывать шаги работ, но не заменяет ADR. Если план содержит архитектурное решение, перед реализацией нужно создать или обновить соответствующий ADR.
 - **Структура:** при добавлении ADR обновить `docs/adr/.desc.json` и запустить `make gen-struct`.
 
+### 7. Система планирования и постановки задач (Planning & Workflow)
+Планирование разделено на несколько уровней. Агент обязан писать артефакты в правильное место и не смешивать backlog, планы, workflow-пакеты и временные файлы.
+
+#### Где искать актуальное
+- **Backlog:** `docs/planning/backlog.md` — единственный актуальный список активных и будущих задач. Корневой `BACKLOG.md` является только ссылкой.
+- **Активные планы:** `docs/planning/active/` — человекочитаемые планы крупных направлений, которые сейчас прорабатываются или реализуются.
+- **Архив планов:** `docs/planning/archive/` — закрытые или остановленные планы. В backlog архивный блок не добавляется.
+- **Архитектурные решения:** `docs/adr/` — решения, которые объясняют "почему"; планы и backlog не заменяют ADR.
+- **Исполнительные workflow-пакеты:** `workflow/active/` и `workflow/archive/` — технический след исполнения сложных работ.
+- **Временные агентные файлы:** `.local/` — черновики, промежуточные логи, временные скрипты, результаты локальных экспериментов.
+
+#### Что писать в backlog
+`docs/planning/backlog.md` содержит только рабочую очередь:
+- `Active` — задачи и направления, которые уже выполняются;
+- `Next` — ближайшие кандидаты на работу;
+- `Later` — отложенные идеи;
+- `Blocked` — задачи, которые ждут внешнего решения или зависимости.
+
+Не хранить в backlog завершенные задачи, историю исполнения, executor reports, acceptance reports или длинные проектные планы. После завершения задача удаляется из backlog, а итоговые материалы остаются в `docs/planning/archive/` и/или `workflow/archive/`.
+
+#### Когда создавать план в `docs/planning/active/`
+Создавайте отдельный план, если работа:
+- длится больше одной небольшой правки;
+- затрагивает несколько модулей;
+- имеет риски для security/privacy, contracts, deployment или данных;
+- требует предварительного обсуждения подхода;
+- распадается на несколько задач.
+
+Для мелких исправлений достаточно записи в backlog, понятного commit/PR и стандартных проверок.
+
+#### Когда нужен workflow-блок
+`workflow/` — это не общий список задач, а журнал исполняемых пакетов для сложных работ. Новый workflow-блок нужен только если работа:
+- multi-step или multi-agent;
+- требует явного read/write scope;
+- требует task packets для исполнителей;
+- имеет повышенный риск (`security`, `contracts`, `deployment`, миграции данных);
+- должна оставить воспроизводимый след: brief, план, task packets, executor reports, acceptance reports.
+
+Новые workflow-блоки создаются в `workflow/active/<block-id>/`. После приемки блок переносится в `workflow/archive/<YYYY>/<block-id>/`. Старые блоки, лежащие прямо в `workflow/<block-id>/`, считаются legacy-историей; новые блоки в корне `workflow/` не создавать.
+
+#### Минимальное содержимое workflow-блока
+Для сложной работы используйте такую структуру:
+
+```text
+workflow/active/<block-id>/
+  BLOCK_BRIEF.md
+  ARCHITECT_PLAN.json
+  task-packets/
+    <task-id>.json
+  EXECUTOR_REPORT.<task-id>.md
+  TASK_ACCEPTANCE.<task-id>.md
+  RETROSPECTIVE.md
+```
+
+Допускается упрощать структуру, если блок маленький, но цель, границы, проверки и результат приемки должны быть понятны из файлов блока.
+
+#### Definition of Ready
+Задача готова к реализации, если известны:
+- цель и пользовательская/бизнес-ценность;
+- затрагиваемые модули и предполагаемый write scope;
+- non-goals, если есть риск расползания задачи;
+- acceptance checks;
+- команды проверки;
+- необходимость ADR.
+
+#### Definition of Done
+Задача считается завершенной, если:
+- код и документация обновлены в нужных местах;
+- проверки выполнены или явно указано, почему их нельзя выполнить;
+- при изменении структуры обновлены `.desc.json` и `PROJECT_STRUCTURE.yaml`;
+- runtime-данные и временные артефакты не попали в корень проекта;
+- backlog очищен от завершенной задачи;
+- для workflow-блока есть отчет исполнения и приемка.
+
+#### `generate_change_plan`
+`python manage.py generate_change_plan` — опциональный инструмент для параллельного agent workflow и субагентной оркестрации. Он не является обязательным входом в обычную разработку. Если используется, его результаты должны попадать в соответствующий workflow-блок или `.local/`, а не в корень проекта.
+
 ## Dual-Use Context
 
 This project is both a **production system** and a **learning platform** for the owner. Topics of study: Python, backend engineering, DevSecOps. When discussing or implementing solutions related to these areas, the agent must:
@@ -51,6 +129,8 @@ This project is both a **production system** and a **learning platform** for the
 ## Sources Of Truth
 
 - **Карта проекта:** `PROJECT_STRUCTURE.yaml` (генерируется автоматически, содержит описания всех важных узлов).
+- **Планирование:** `docs/planning/backlog.md`, `docs/planning/active/`, `docs/planning/archive/`.
+- **Workflow-пакеты:** `workflow/active/`, `workflow/archive/`.
 - **Архитектурные решения:** `docs/adr/`.
 - **Инструменты AI:** `apps/ai/tool_definitions.py`.
 - **Контракты:** `contracts/` (дефолты) и `data/contracts/` (рантайм).

@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "name": "memory_routing",
+  "description": "Default sensitivity routing for memory ingestion, retrieval, and LLM context assembly.",
+  "sensitivity_levels": [
+    "public",
+    "internal",
+    "confidential",
+    "pii_redacted",
+    "pii_original",
+    "secret"
+  ],
+  "default_route": "internal",
+  "routes": {
+    "public": {
+      "default_llm": "local",
+      "cloud_allowed": true,
+      "requires_redaction": false,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [
+        "question",
+        "retrieved_chunk",
+        "citation",
+        "metadata",
+        "graph_fact"
+      ],
+      "denial_reason": null
+    },
+    "internal": {
+      "default_llm": "local",
+      "cloud_allowed": true,
+      "requires_redaction": true,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [
+        "question",
+        "retrieved_chunk",
+        "citation",
+        "metadata",
+        "graph_fact"
+      ],
+      "denial_reason": null
+    },
+    "confidential": {
+      "default_llm": "local",
+      "cloud_allowed": false,
+      "requires_redaction": true,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [
+        "question",
+        "retrieved_chunk",
+        "citation",
+        "metadata",
+        "graph_fact"
+      ],
+      "denial_reason": "Confidential memory context is restricted to local processing."
+    },
+    "pii_redacted": {
+      "default_llm": "local",
+      "cloud_allowed": false,
+      "requires_redaction": true,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [
+        "question",
+        "retrieved_chunk",
+        "citation",
+        "metadata",
+        "graph_fact"
+      ],
+      "denial_reason": "Redacted PII memory context is restricted to local processing."
+    },
+    "pii_original": {
+      "default_llm": "local",
+      "cloud_allowed": false,
+      "requires_redaction": true,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [
+        "metadata"
+      ],
+      "denial_reason": "Original PII must not be assembled into LLM prompts."
+    },
+    "secret": {
+      "default_llm": "deny",
+      "cloud_allowed": false,
+      "requires_redaction": true,
+      "allow_original_pii": false,
+      "allowed_context_kinds": [],
+      "denial_reason": "Secrets are not valid memory context."
+    }
+  },
+  "cloud_gate": {
+    "mode": "explicit_allow",
+    "max_sensitivity": "internal",
+    "requires_redaction": true,
+    "forbidden_sensitivities": [
+      "confidential",
+      "pii_redacted",
+      "pii_original",
+      "secret"
+    ]
+  }
+}

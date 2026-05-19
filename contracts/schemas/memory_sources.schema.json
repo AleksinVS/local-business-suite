@@ -1,0 +1,118 @@
+{
+  "title": "Memory Sources",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": [
+      "code",
+      "title",
+      "description",
+      "source_kind",
+      "domain",
+      "owner",
+      "enabled",
+      "sync_mode",
+      "schedule",
+      "source_ref",
+      "scope_rule",
+      "sensitivity",
+      "pii_policy",
+      "versioning_mode",
+      "retention_policy",
+      "extractor_profile",
+      "chunking_profile",
+      "index_profiles",
+      "ignore_patterns"
+    ],
+    "properties": {
+      "code": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "title": { "type": "string" },
+      "description": { "type": "string" },
+      "source_kind": {
+        "type": "string",
+        "enum": [
+          "django_model",
+          "contract_file",
+          "documentation",
+          "integration_snapshot",
+          "synthetic_fixture"
+        ]
+      },
+      "domain": { "type": "string" },
+      "owner": { "type": "string" },
+      "enabled": { "type": "boolean" },
+      "sync_mode": {
+        "type": "string",
+        "enum": ["manual", "scheduled", "incremental"]
+      },
+      "schedule": {
+        "type": ["string", "null"]
+      },
+      "source_ref": { "type": "string" },
+      "scope_rule": {
+        "type": "string",
+        "enum": [
+          "public_knowledge",
+          "authenticated_user",
+          "role_scoped",
+          "workorder_visibility",
+          "inventory_visibility",
+          "contract_admin"
+        ]
+      },
+      "sensitivity": {
+        "type": "string",
+        "enum": [
+          "public",
+          "internal",
+          "confidential",
+          "pii_redacted",
+          "pii_original",
+          "secret"
+        ]
+      },
+      "pii_policy": {
+        "type": "string",
+        "enum": [
+          "no_pii_expected",
+          "reject_pii",
+          "deidentify_before_index",
+          "allow_redacted_only"
+        ]
+      },
+      "versioning_mode": {
+        "type": "string",
+        "enum": [
+          "snapshot_only",
+          "hard_active_soft_raw",
+          "append_only"
+        ]
+      },
+      "retention_policy": {
+        "type": "string",
+        "enum": [
+          "default_public",
+          "default_internal",
+          "short_lived_eval"
+        ]
+      },
+      "extractor_profile": { "type": "string" },
+      "chunking_profile": { "type": "string" },
+      "index_profiles": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "ignore_patterns": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "additionalProperties": false
+  }
+}

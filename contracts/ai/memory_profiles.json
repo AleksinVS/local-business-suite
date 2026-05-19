@@ -1,0 +1,129 @@
+{
+  "version": "1.0",
+  "name": "memory_profiles",
+  "description": "Default synthetic profiles for chunking, extraction, indexing, and retrieval ranking.",
+  "chunking_profiles": {
+    "short_business_event_v1": {
+      "strategy": "field_aware",
+      "max_tokens": 500,
+      "overlap_tokens": 60,
+      "preserve_fields": [
+        "number",
+        "status",
+        "department",
+        "updated_at"
+      ]
+    },
+    "long_policy_doc_v1": {
+      "strategy": "heading_aware",
+      "max_tokens": 900,
+      "overlap_tokens": 120,
+      "preserve_fields": [
+        "title",
+        "section",
+        "path"
+      ]
+    },
+    "structured_contract_v1": {
+      "strategy": "json_pointer",
+      "max_tokens": 700,
+      "overlap_tokens": 80,
+      "preserve_fields": [
+        "name",
+        "version",
+        "path",
+        "json_pointer"
+      ]
+    }
+  },
+  "extractor_profiles": {
+    "project_docs_v1": {
+      "mode": "text",
+      "graph_extraction": true,
+      "entity_types": [
+        "architecture_decision",
+        "component",
+        "contract",
+        "policy"
+      ],
+      "requires_local_llm": true
+    },
+    "contract_json_v1": {
+      "mode": "structured_json",
+      "graph_extraction": true,
+      "entity_types": [
+        "contract",
+        "schema",
+        "field",
+        "enum"
+      ],
+      "requires_local_llm": false
+    },
+    "workorder_event_v1": {
+      "mode": "business_event",
+      "graph_extraction": true,
+      "entity_types": [
+        "work_order",
+        "department",
+        "device",
+        "status"
+      ],
+      "requires_local_llm": true
+    },
+    "inventory_device_v1": {
+      "mode": "business_object",
+      "graph_extraction": true,
+      "entity_types": [
+        "device",
+        "department",
+        "manufacturer",
+        "device_type"
+      ],
+      "requires_local_llm": true
+    }
+  },
+  "embedding_profiles": {
+    "local_multilingual_v1": {
+      "provider": "local",
+      "model": "BAAI/bge-m3",
+      "dimensions": 1024,
+      "normalization": true
+    },
+    "local_multilingual_baseline_v1": {
+      "provider": "local",
+      "model": "intfloat/multilingual-e5-large",
+      "dimensions": 1024,
+      "normalization": true
+    }
+  },
+  "index_profiles": {
+    "vector_default": {
+      "index_kind": "vector",
+      "backend": "lancedb",
+      "embedding_profile": "local_multilingual_v1",
+      "store_safe_text_only": true
+    },
+    "fulltext_default": {
+      "index_kind": "fulltext",
+      "backend": "sqlite_fts",
+      "embedding_profile": null,
+      "store_safe_text_only": true
+    },
+    "graph_default": {
+      "index_kind": "graph",
+      "backend": "kuzu",
+      "embedding_profile": null,
+      "store_safe_text_only": true
+    }
+  },
+  "ranking_profiles": {
+    "default_hybrid_v1": {
+      "fusion": "rrf",
+      "vector_weight": 0.45,
+      "fulltext_weight": 0.3,
+      "graph_weight": 0.25,
+      "reranker": "none",
+      "max_results": 12
+    }
+  }
+}

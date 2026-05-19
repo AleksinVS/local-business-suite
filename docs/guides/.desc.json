@@ -1,6 +1,7 @@
 {
   ".": "Руководства разработчика",
   "CHANGE_PATTERNS.md": "Паттерны внесения изменений",
+  "MEMORY_USER_GUIDE.md": "Руководство пользователя и администратора по системе памяти",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",
   "PROJECT_STRUCTURE_SYSTEM.md": "Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)"
 }

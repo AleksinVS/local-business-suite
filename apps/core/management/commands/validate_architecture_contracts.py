@@ -15,6 +15,9 @@ from apps.core.json_utils import (
     validate_change_plan_payload,
     validate_dataset_registry_payload,
     validate_integration_registry_payload,
+    validate_memory_profiles_payload,
+    validate_memory_routing_payload,
+    validate_memory_sources_payload,
     validate_role_rules_payload,
     validate_task_brief_payload,
     validate_workflow_rules_payload,
@@ -46,6 +49,15 @@ class Command(BaseCommand):
         validate_ai_task_types_tool_alignment(task_types_payload, tools_payload)
         validate_ai_write_confirmation_alignment(task_types_payload, tools_payload)
         validate_ai_task_types_slot_coverage(task_types_payload)
+        memory_profiles_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
+        validate_memory_profiles_payload(memory_profiles_payload)
+        memory_routing_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
+        validate_memory_routing_payload(memory_routing_payload)
+        validate_memory_sources_payload(
+            load_json_file(settings.LOCAL_BUSINESS_MEMORY_SOURCES_FILE),
+            profiles_payload=memory_profiles_payload,
+            routing_payload=memory_routing_payload,
+        )
         # Validate STATUS_ALIASES keys align with workflow_rules statuses.
         workflow_statuses = set(workflow_payload.get("statuses", []))
         alias_keys = set(STATUS_ALIASES.keys())

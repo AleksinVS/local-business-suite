@@ -1,0 +1,19 @@
+{
+  ".": "Workflow-блок реализации сервиса памяти СоСНА",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и проверок блока памяти",
+  "ARCHITECT_PLAN.json": "Машиночитаемый архитектурный план task slices",
+  "EXECUTOR_REPORT.task-memory-contracts.md": "Отчет исполнения task-memory-contracts",
+  "TASK_ACCEPTANCE.task-memory-contracts.md": "Приемка task-memory-contracts",
+  "EXECUTOR_REPORT.task-memory-backend-spikes.md": "Отчет исполнения task-memory-backend-spikes",
+  "TASK_ACCEPTANCE.task-memory-backend-spikes.md": "Приемка task-memory-backend-spikes",
+  "EXECUTOR_REPORT.task-memory-app-scaffold.md": "Отчет исполнения task-memory-app-scaffold",
+  "TASK_ACCEPTANCE.task-memory-app-scaffold.md": "Приемка task-memory-app-scaffold",
+  "EXECUTOR_REPORT.task-memory-privacy-pipeline.md": "Отчет исполнения task-memory-privacy-pipeline",
+  "TASK_ACCEPTANCE.task-memory-privacy-pipeline.md": "Приемка task-memory-privacy-pipeline",
+  "EXECUTOR_REPORT.task-memory-indexing.md": "Отчет исполнения task-memory-indexing",
+  "TASK_ACCEPTANCE.task-memory-indexing.md": "Приемка task-memory-indexing",
+  "EXECUTOR_REPORT.task-memory-retrieval-tool.md": "Отчет исполнения task-memory-retrieval-tool",
+  "TASK_ACCEPTANCE.task-memory-retrieval-tool.md": "Приемка task-memory-retrieval-tool",
+  "EXECUTOR_REPORT.task-memory-jobs-eval-admin.md": "Отчет исполнения task-memory-jobs-eval-admin",
+  "TASK_ACCEPTANCE.task-memory-jobs-eval-admin.md": "Приемка task-memory-jobs-eval-admin"
+}

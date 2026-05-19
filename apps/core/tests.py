@@ -4,10 +4,16 @@ from pathlib import Path
 
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from apps.core.json_utils import (
+    validate_memory_profiles_payload,
+    validate_memory_routing_payload,
+    validate_memory_sources_payload,
+)
 from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
 
@@ -151,6 +157,103 @@ class DiagnosticEndpointTests(TestCase):
 class ArchitectureContractTests(TestCase):
     def test_validate_architecture_contracts_command_passes(self):
         call_command("validate_architecture_contracts")
+
+    def test_memory_sources_reject_missing_required_fields(self):
+        with self.assertRaisesMessage(ValidationError, "source_kind"):
+            validate_memory_sources_payload(
+                [
+                    {
+                        "code": "workorders_public_timeline",
+                        "domain": "workorders",
+                        "owner": "operations",
+                        "enabled": True,
+                        "sync_mode": "incremental",
+                        "scope_rule": "workorder_visibility",
+                        "sensitivity": "internal",
+                        "pii_policy": "deidentify_before_index",
+                        "versioning_mode": "hard_active_soft_raw",
+                        "extractor_profile": "workorder_v1",
+                        "chunking_profile": "short_business_event_v1",
+                        "index_profiles": ["vector_default"],
+                    }
+                ]
+            )
+
+    def test_memory_profiles_reject_missing_required_payload(self):
+        with self.assertRaisesMessage(ValidationError, "ranking_profiles"):
+            validate_memory_profiles_payload(
+                {
+                    "chunking_profiles": {
+                        "short_business_event_v1": {
+                            "max_tokens": 500,
+                            "overlap_tokens": 60,
+                            "preserve_fields": ["number"],
+                        }
+                    },
+                    "embedding_profiles": {
+                        "local_multilingual_v1": {
+                            "provider": "local",
+                            "model": "BAAI/bge-m3",
+                            "dimensions": 1024,
+                            "normalization": True,
+                        }
+                    },
+                }
+            )
+
+    def test_memory_routing_rejects_missing_route_for_sensitivity(self):
+        with self.assertRaisesMessage(ValidationError, "confidential"):
+            validate_memory_routing_payload(
+                {
+                    "version": "1.0",
+                    "name": "memory_routing",
+                    "description": "Test routing payload",
+                    "sensitivity_levels": ["public", "confidential"],
+                    "default_route": "public",
+                    "routes": {
+                        "public": {
+                            "default_llm": "local",
+                            "cloud_allowed": True,
+                            "requires_redaction": False,
+                            "allow_original_pii": False,
+                            "allowed_context_kinds": ["question"],
+                            "denial_reason": None,
+                        }
+                    },
+                    "cloud_gate": {
+                        "mode": "explicit_allow",
+                        "max_sensitivity": "public",
+                        "requires_redaction": True,
+                        "forbidden_sensitivities": ["confidential"],
+                    },
+                }
+            )
+
+    def test_validate_architecture_contracts_reads_memory_contract_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            profiles_path = tmp_path / "memory_profiles.json"
+            routing_path = tmp_path / "memory_routing.json"
+            sources_path = tmp_path / "memory_sources.json"
+            default_contracts = Path(__file__).resolve().parents[2] / "contracts" / "ai"
+            profiles_payload = json.loads((default_contracts / "memory_profiles.json").read_text(encoding="utf-8"))
+            routing_payload = json.loads((default_contracts / "memory_routing.json").read_text(encoding="utf-8"))
+            sources_payload = json.loads((default_contracts / "memory_sources.json").read_text(encoding="utf-8"))
+            routing_payload["routes"]["secret"]["default_llm"] = "local"
+            profiles_path.write_text(json.dumps(profiles_payload), encoding="utf-8")
+            routing_path.write_text(
+                json.dumps(routing_payload),
+                encoding="utf-8",
+            )
+            sources_path.write_text(json.dumps(sources_payload), encoding="utf-8")
+
+            with override_settings(
+                LOCAL_BUSINESS_MEMORY_PROFILES_FILE=profiles_path,
+                LOCAL_BUSINESS_MEMORY_ROUTING_FILE=routing_path,
+                LOCAL_BUSINESS_MEMORY_SOURCES_FILE=sources_path,
+            ):
+                with self.assertRaisesMessage(ValidationError, "secret"):
+                    call_command("validate_architecture_contracts")
 
     def test_generate_change_plan_command_uses_task_brief(self):
         with tempfile.TemporaryDirectory() as tmpdir:

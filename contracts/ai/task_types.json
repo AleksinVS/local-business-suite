@@ -319,7 +319,28 @@
       "example_requests": [
         "Покажи статистику по исполнителям"
       ]
+    },
+    {
+      "id": "memory.search",
+      "title": "Search memory",
+      "mode": "read",
+      "description": "Search indexed memory context with citations.",
+      "allowed_tools": [
+        "memory.search"
+      ],
+      "required_slots": [
+        "query"
+      ],
+      "optional_slots": [
+        "limit",
+        "sensitivity"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Найди в памяти сведения о правилах обработки заявок",
+        "Поищи в базе знаний инструкции по медизделиям"
+      ]
     }
   ]
 }
-

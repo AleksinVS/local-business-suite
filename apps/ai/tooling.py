@@ -116,6 +116,16 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         return {"device": archive_device_for_actor(actor=actor, payload=payload)}
     elif tool_code == "analytics.summary":
         return get_analytics_summary_for_actor(actor=actor, payload=payload)
+    elif tool_code == "memory.search":
+        from apps.memory.retrieval import memory_search
+
+        return memory_search(
+            actor=actor,
+            query=payload.get("query"),
+            sensitivity=payload.get("sensitivity"),
+            limit=payload.get("limit", 5),
+            request_id=actor_context.get("request_id", ""),
+        )
     elif tool_code == "access.update_role_permissions":
         from .services import update_role_permissions_for_actor
         return update_role_permissions_for_actor(actor=actor, payload=payload)
@@ -243,7 +253,7 @@ def execute_tool(
             tool_code=tool_code,
             actor=actor,
             session=session,
-            actor_context=actor_context,
+            actor_context={**actor_context, **trace_context},
             payload=payload,
             user_message=user_message,
         )
@@ -459,7 +469,7 @@ def execute_pending_action(
                         tool_code=pending.tool_code,
                         actor=pending.actor,
                         session=pending.session,
-                        actor_context=actor_context,
+                        actor_context={**actor_context, **trace_context},
                         payload=pending.payload,
                         user_message=None,
                     )

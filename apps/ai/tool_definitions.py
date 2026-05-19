@@ -256,6 +256,47 @@ TOOLS = [
         "required_role_scope": "visible",
     },
     {
+        "id": "memory.search",
+        "title": "Search memory",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Search indexed memory sources and return bounded results with citations and routing metadata.",
+        "inputs": [
+            "query",
+            "limit",
+            "sensitivity",
+        ],
+        "input_schemas": {
+            "query": {
+                "description": "Natural-language search query",
+                "type": "string",
+            },
+            "limit": {
+                "description": "Maximum number of memory items to return",
+                "type": "integer",
+            },
+            "sensitivity": {
+                "description": "Maximum sensitivity level allowed for retrieved memory context",
+                "enum": [
+                    "public",
+                    "internal",
+                    "confidential",
+                    "pii_redacted",
+                    "pii_original",
+                    "secret",
+                ],
+            },
+        },
+        "outputs": [
+            "items",
+            "citations",
+            "meta",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
         "id": "access.update_role_permissions",
         "title": "Update role permissions",
         "domain": "access",

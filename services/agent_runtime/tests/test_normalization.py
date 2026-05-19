@@ -133,7 +133,7 @@ class TestStatusAliasesAlignment(unittest.TestCase):
         from pathlib import Path
         from services.agent_runtime.task_types import STATUS_ALIASES
 
-        config_path = Path(__file__).resolve().parents[3] / "config" / "workflow_rules.json"
+        config_path = Path(__file__).resolve().parents[3] / "contracts" / "workflow_rules.json"
         workflow = json.loads(config_path.read_text(encoding="utf-8"))
         workflow_statuses = set(workflow["statuses"])
         alias_keys = set(STATUS_ALIASES.keys())
@@ -173,6 +173,52 @@ class TestPromptAliasSection(unittest.TestCase):
         from services.agent_runtime.prompting import _build_alias_section
         section = _build_alias_section()
         self.assertIn("внутренние ключи", section)
+
+
+class TestPromptMemorySection(unittest.TestCase):
+    """Verify the system prompt includes memory service guidance."""
+
+    def test_build_memory_section_contains_tool_and_safety_rules(self):
+        from services.agent_runtime.prompting import _build_memory_section
+
+        section = _build_memory_section()
+
+        self.assertIn("memory.search", section)
+        self.assertIn("safe corpus", section)
+        self.assertIn("citations", section)
+        self.assertIn("не является отдельным сетевым сервисом", section)
+
+    def test_build_system_prompt_includes_memory_section(self):
+        from services.agent_runtime.prompting import build_system_prompt
+
+        prompt = build_system_prompt()
+
+        self.assertIn("Система памяти", prompt)
+        self.assertIn("memory.search", prompt)
+        self.assertIn("MEMORY_DEPLOYMENT.md", prompt)
+
+
+class TestRuntimeMemoryTool(unittest.TestCase):
+    """Verify the LangGraph runtime exposes memory.search to the model."""
+
+    def test_build_tools_includes_memory_search(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def execute_tool(self, **kwargs):
+                return {"ok": True, "kwargs": kwargs}
+
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=FakeGatewayClient(),
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+
+        self.assertIn("memory.search", {tool.name for tool in tools})
 
 
 if __name__ == "__main__":

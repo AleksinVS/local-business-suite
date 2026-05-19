@@ -1,0 +1,64 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-privacy-pipeline",
+  "task_id": "task-memory-privacy-pipeline",
+  "goal": "Implement the safe-text and DLP layer for memory ingestion.",
+  "risk_class": "R2",
+  "read_files": [
+    "apps/memory/models.py",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_files": [
+    "apps/memory/deidentification.py",
+    "apps/memory/security.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "requirements.txt",
+    "requirements.lock"
+  ],
+  "forbidden_moves": [
+    "Do not send PII to any LLM in tests or implementation.",
+    "Do not commit real patient examples.",
+    "Do not store pseudonymization secrets in contracts or code."
+  ],
+  "required_docs": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py test apps.memory.tests",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ],
+  "mandatory_tests": [
+    "Synthetic Russian PII redaction tests",
+    "Stable pseudonym tests",
+    "Secret blocking tests",
+    "Blocked snapshot reason tests"
+  ],
+  "deliverables": [
+    "De-identification module",
+    "Credential/DLP scanner",
+    "Leakage regression tests",
+    "EXECUTOR_REPORT.task-memory-privacy-pipeline.md"
+  ],
+  "escalation_path": [
+    "Presidio model support for Russian is insufficient for acceptance criteria",
+    "A secret manager decision is needed before safe pseudonymization can proceed",
+    "Any test fixture would contain real PII"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Use synthetic examples only.",
+    "Document any dependency additions.",
+    "Fail closed when de-identification confidence is insufficient."
+  ]
+}

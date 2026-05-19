@@ -13,6 +13,9 @@ from apps.core.json_utils import (
     validate_change_plan_payload,
     validate_dataset_registry_payload,
     validate_integration_registry_payload,
+    validate_memory_profiles_payload,
+    validate_memory_routing_payload,
+    validate_memory_sources_payload,
     validate_role_rules_payload,
     validate_task_brief_payload,
     validate_workflow_rules_payload,
@@ -67,6 +70,7 @@ INSTALLED_APPS = [
     "apps.workorders",
     "apps.analytics",
     "apps.ai",
+    "apps.memory",
     "apps.waiting_list",
 ]
 
@@ -274,6 +278,9 @@ LOCAL_BUSINESS_AI_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSI
 LOCAL_BUSINESS_AI_TOOLS_FILE = get_contract_path("tools.json", "LOCAL_BUSINESS_AI_TOOLS_FILE", sub_dir="ai")
 LOCAL_BUSINESS_AI_TASK_TYPES_FILE = get_contract_path("task_types.json", "LOCAL_BUSINESS_AI_TASK_TYPES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_AI_MODELS_FILE = get_contract_path("models.json", "LOCAL_BUSINESS_AI_MODELS_FILE", sub_dir="ai")
+LOCAL_BUSINESS_MEMORY_SOURCES_FILE = get_contract_path("memory_sources.json", "LOCAL_BUSINESS_MEMORY_SOURCES_FILE", sub_dir="ai")
+LOCAL_BUSINESS_MEMORY_PROFILES_FILE = get_contract_path("memory_profiles.json", "LOCAL_BUSINESS_MEMORY_PROFILES_FILE", sub_dir="ai")
+LOCAL_BUSINESS_MEMORY_ROUTING_FILE = get_contract_path("memory_routing.json", "LOCAL_BUSINESS_MEMORY_ROUTING_FILE", sub_dir="ai")
 
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
@@ -340,6 +347,19 @@ try:
     validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
 
     LOCAL_BUSINESS_AI_MODELS = load_json_file(LOCAL_BUSINESS_AI_MODELS_FILE)
+
+    LOCAL_BUSINESS_MEMORY_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
+    validate_memory_profiles_payload(LOCAL_BUSINESS_MEMORY_PROFILES)
+
+    LOCAL_BUSINESS_MEMORY_ROUTING = load_json_file(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
+    validate_memory_routing_payload(LOCAL_BUSINESS_MEMORY_ROUTING)
+
+    LOCAL_BUSINESS_MEMORY_SOURCES = load_json_file(LOCAL_BUSINESS_MEMORY_SOURCES_FILE)
+    validate_memory_sources_payload(
+        LOCAL_BUSINESS_MEMORY_SOURCES,
+        profiles_payload=LOCAL_BUSINESS_MEMORY_PROFILES,
+        routing_payload=LOCAL_BUSINESS_MEMORY_ROUTING,
+    )
 except (OSError, json.JSONDecodeError, ValidationError) as exc:
     raise ImproperlyConfigured(
         f"Invalid Корпоративный портал ВОБ №3 configuration: {exc}"

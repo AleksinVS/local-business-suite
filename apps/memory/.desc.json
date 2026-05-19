@@ -1,0 +1,21 @@
+{
+  ".": "Метаданные AI memory service: sources, snapshots, chunks, graph facts, jobs, audit and eval cases",
+  "models.py": "Модели metadata/authority слоя памяти без индексных backend-зависимостей",
+  "admin.py": "Регистрация моделей памяти в Django Admin",
+  "apps.py": "Конфигурация Django-приложения memory",
+  "deidentification.py": "Детерминированная деидентификация и редактирование PII перед индексированием",
+  "graph_backends.py": "Backend-neutral graph interfaces, Django graph backend and lazy Kuzu placeholder",
+  "ingestion.py": "Индексация safe text в chunks, safe corpus, manifests, vector/full-text backend и graph facts",
+  "policies.py": "Политики доступа к chunks/facts по server-side scope tokens",
+  "retrieval.py": "Оркестрация memory.search с server-side policy checks, citations и audit",
+  "routing.py": "Server-side routing decisions for memory retrieval by sensitivity level",
+  "security.py": "DLP-guard для блокировки credential material перед попаданием в memory pipeline",
+  "selectors.py": "QuerySet-селекторы источников, snapshots, chunks, graph facts и jobs",
+  "services.py": "Сервисы синхронизации sources, lifecycle jobs и audit записи",
+  "vector_backends.py": "Backend-neutral vector/full-text interface and embedded SQLite FTS implementation",
+  "management/": "Management commands для memory source sync, smoke reindex и synthetic eval",
+  "management/commands/memory_sync_source.py": "Синхронизация MemorySource из runtime/default memory source contracts",
+  "management/commands/memory_reindex.py": "Backend-neutral smoke reindex job без Celery и без raw PII indexing",
+  "management/commands/memory_eval.py": "Synthetic smoke/security eval для PII, secrets, forbidden scopes и denied routes",
+  "migrations/": "Миграции приложения памяти"
+}

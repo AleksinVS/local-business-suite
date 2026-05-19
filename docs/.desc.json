@@ -2,8 +2,8 @@
   ".": "Документация проекта",
   "adr/": "Architecture Decision Records (ADR-0001, ADR-0002)",
   "architecture/": "Архитектурные документы",
-  "deployment/": "Гайды по деплою (Docker, IIS)",
-  "guides/": "Руководства разработчика",
+  "deployment/": "Гайды по деплою (Docker, IIS, memory service)",
+  "guides/": "Руководства разработчика и пользователя",
   "planning/": "Планирование работ: backlog, активные планы и архив планов",
   "legacy/": "Устаревшая документация (MVP)"
 }

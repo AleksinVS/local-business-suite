@@ -132,6 +132,28 @@ def build_tools(
         )
         return result
 
+    @tool("memory.search")
+    def search_memory(query: str, limit: int = 5, sensitivity: str = "internal") -> dict:
+        """
+        Search the safe memory corpus for cited context available to the current user.
+
+        Use this for questions about the memory service, indexed knowledge,
+        remembered context, source citations, previous safe context, or facts
+        linked to work orders/devices. The tool returns only safe chunks/facts
+        with citations; it does not expose raw snapshots.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="memory.search",
+            actor=actor,
+            payload={"query": query, "limit": limit, "sensitivity": sensitivity},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("access.update_role_permissions")
     def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
         """Updates permissions for a specific role. Requires administrator privileges."""
@@ -237,6 +259,7 @@ def build_tools(
         comment_workorder,
         list_departments,
         list_devices,
+        search_memory,
         update_role_permissions,
         get_role_rules,
         list_users,

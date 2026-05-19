@@ -1,0 +1,107 @@
+[
+  {
+    "code": "project_architecture_docs",
+    "title": "Project architecture documents",
+    "description": "Versioned architecture and ADR documents that are safe to index as internal project knowledge.",
+    "source_kind": "documentation",
+    "domain": "project",
+    "owner": "engineering",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "docs/architecture",
+    "scope_rule": "authenticated_user",
+    "sensitivity": "internal",
+    "pii_policy": "no_pii_expected",
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "extractor_profile": "project_docs_v1",
+    "chunking_profile": "long_policy_doc_v1",
+    "index_profiles": [
+      "vector_default",
+      "fulltext_default",
+      "graph_default"
+    ],
+    "ignore_patterns": [
+      "**/.local/**",
+      "**/deployments/**"
+    ]
+  },
+  {
+    "code": "ai_contract_defaults",
+    "title": "AI contract defaults",
+    "description": "Git-managed AI contracts and schemas without runtime state, secrets, or patient data.",
+    "source_kind": "contract_file",
+    "domain": "ai",
+    "owner": "engineering",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "contracts/ai",
+    "scope_rule": "contract_admin",
+    "sensitivity": "internal",
+    "pii_policy": "reject_pii",
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "extractor_profile": "contract_json_v1",
+    "chunking_profile": "structured_contract_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "graph_default"
+    ],
+    "ignore_patterns": [
+      "**/*.tmp",
+      "**/.DS_Store"
+    ]
+  },
+  {
+    "code": "synthetic_workorder_timeline",
+    "title": "Synthetic work order timeline",
+    "description": "Synthetic non-patient maintenance events for retrieval and RBAC evaluation fixtures.",
+    "source_kind": "synthetic_fixture",
+    "domain": "workorders",
+    "owner": "operations",
+    "enabled": false,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "synthetic:workorders.timeline",
+    "scope_rule": "workorder_visibility",
+    "sensitivity": "internal",
+    "pii_policy": "deidentify_before_index",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "short_lived_eval",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "vector_default",
+      "fulltext_default",
+      "graph_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "synthetic_inventory_reference",
+    "title": "Synthetic inventory reference",
+    "description": "Synthetic medical device reference records for safe local indexing tests.",
+    "source_kind": "synthetic_fixture",
+    "domain": "inventory",
+    "owner": "operations",
+    "enabled": false,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "synthetic:inventory.devices",
+    "scope_rule": "inventory_visibility",
+    "sensitivity": "internal",
+    "pii_policy": "no_pii_expected",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "short_lived_eval",
+    "extractor_profile": "inventory_device_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "vector_default",
+      "fulltext_default",
+      "graph_default"
+    ],
+    "ignore_patterns": []
+  }
+]

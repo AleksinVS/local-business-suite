@@ -33,6 +33,24 @@ def _build_alias_section() -> str:
     return "\n".join(lines)
 
 
+def _build_memory_section() -> str:
+    return "\n".join(
+        [
+            "",
+            "## Система памяти (Memory Service):",
+            "- Память доступна через read-only инструмент `memory.search`.",
+            "- Используй `memory.search`, когда пользователь просит найти сведения в памяти, безопасном корпусе знаний, прошлых контекстах, индексах, citations или спрашивает, что известно по объекту/заявке/оборудованию.",
+            "- Память хранится и проверяется на стороне Django: источники, snapshots, chunks, graph facts, index jobs, access audit и eval cases.",
+            "- Индексы строятся только по safe corpus после privacy pipeline; raw snapshots, raw paths, секреты и original PII нельзя раскрывать пользователю.",
+            "- Успешный ответ из памяти должен опираться на citations: source_code, source_object_id, chunk_id или fact_id, snapshot_hash, text_hash, sensitivity.",
+            "- Если `memory.search` вернул пустые items, объясни, что подходящий контекст не найден или недоступен по scope пользователя; не выдумывай содержимое памяти.",
+            "- Если пользователь спрашивает, как проверить память, предложи: `python manage.py validate_architecture_contracts`, `python manage.py memory_eval --dry-run`, проверку Django Admin и `MemoryAccessAudit`.",
+            "- Если пользователь спрашивает про развертывание памяти, ссылайся на `docs/deployment/MEMORY_DEPLOYMENT.md`; для пользовательских сценариев — на `docs/guides/MEMORY_USER_GUIDE.md`.",
+            "- Текущая архитектура: memory service не является отдельным сетевым сервисом; это Django app `apps.memory` плюс tool gateway `memory.search`. Agent runtime и другие сервисы должны обращаться к памяти через Django gateway/API, а не напрямую к индексам.",
+        ]
+    )
+
+
 def build_system_prompt(skills_catalog: list = None, active_skill_content: str = "") -> str:
     settings = load_runtime_settings()
 
@@ -49,10 +67,11 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
         active_skill_text = f"\n## ТЕКУЩИЙ АКТИВНЫЙ НАВЫК:\n{active_skill_content}\n"
 
     alias_section = _build_alias_section()
+    memory_section = _build_memory_section()
 
     if settings.system_prompt_path:
         base_prompt = settings.system_prompt_path.read_text(encoding="utf-8")
-        return f"{base_prompt}\n{alias_section}\n{catalog_text}{active_skill_text}"
+        return f"{base_prompt}\n{alias_section}\n{memory_section}\n{catalog_text}{active_skill_text}"
 
     tools_payload = load_json(settings.ai_tools_path)
     task_types_payload = load_json(settings.ai_task_types_path)
@@ -80,5 +99,6 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
             "Доступные инструменты:",
             *tool_lines,
             alias_section,
+            memory_section,
         ]
     )

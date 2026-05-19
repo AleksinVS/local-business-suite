@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import uuid
 from unittest.mock import patch
 
@@ -662,6 +664,60 @@ class IdentityContextPropagationTests(TestCase):
         self.assertFalse(report["requires_confirmation"])
         self.assertTrue(report["all_slots_fulfilled"])  # no required slots
 
+    def test_memory_search_tool_returns_citations_and_task_type_report(self):
+        from apps.memory.models import MemoryAccessAudit, MemorySource, MemorySnapshot
+        from apps.memory.services import index_ready_snapshot_text
+        from apps.memory.vector_backends import SQLiteFTSMemoryBackend
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            source = MemorySource.objects.create(
+                code="ai_memory_search_source",
+                title="AI memory search source",
+                source_kind="test",
+                domain="memory",
+                sensitivity="internal",
+                pii_policy="deidentify_before_index",
+            )
+            snapshot = MemorySnapshot.objects.create(
+                source=source,
+                source_object_id="ai-safe-doc-1",
+                content_hash="hash-ai-memory-1",
+                schema_version="memory-source-v1",
+                status=MemorySnapshot.Status.READY,
+                extracted_at=timezone.now(),
+                raw_path="data/memory/raw_vault/ai-safe-doc-1.json",
+                pii_policy_applied="deidentify_before_index",
+                scope_tokens=[f"user:{self.manager.id}"],
+                sensitivity="internal",
+            )
+            vector_backend = SQLiteFTSMemoryBackend(Path(tmpdir) / "memory" / "indexes" / "sqlite_fts" / "ai.sqlite3")
+            index_ready_snapshot_text(
+                snapshot=snapshot,
+                safe_text="safe memory context for oxygen device maintenance",
+                vector_backend=vector_backend,
+                chunk_size=200,
+                chunk_overlap=0,
+            )
+
+            with patch("apps.memory.retrieval.get_default_backend", return_value=vector_backend):
+                result = execute_tool(
+                    tool_code="memory.search",
+                    actor_context={"user_id": self.manager.id},
+                    payload={"query": "oxygen maintenance", "limit": 3, "sensitivity": "internal"},
+                    request_id="req-ai-memory-search",
+                )
+
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["tool"], "memory.search")
+            self.assertEqual(len(result["result"]["items"]), 1)
+            self.assertEqual(len(result["result"]["citations"]), 1)
+            self.assertEqual(result["result"]["items"][0]["citation_ids"], [result["result"]["citations"][0]["id"]])
+            self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.search")
+            self.assertEqual(
+                MemoryAccessAudit.objects.filter(request_id="req-ai-memory-search", policy_decision="allowed").count(),
+                1,
+            )
+
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
 class ChatViewTraceContextTests(TestCase):
@@ -982,6 +1038,7 @@ class TaskTypeContractTests(TestCase):
                 {"id": "inventory.devices.update"},
                 {"id": "inventory.devices.archive"},
                 {"id": "analytics.summary"},
+                {"id": "memory.search"},
             ]
         }
         errors = validate_bounded_tools_exist_in_catalog(catalog)

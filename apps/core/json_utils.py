@@ -140,6 +140,189 @@ REQUIRED_AI_TASK_TYPE_KEYS = {
     "example_requests",
 }
 
+REQUIRED_MEMORY_SOURCE_KEYS = {
+    "code",
+    "title",
+    "description",
+    "source_kind",
+    "domain",
+    "owner",
+    "enabled",
+    "sync_mode",
+    "schedule",
+    "source_ref",
+    "scope_rule",
+    "sensitivity",
+    "pii_policy",
+    "versioning_mode",
+    "retention_policy",
+    "extractor_profile",
+    "chunking_profile",
+    "index_profiles",
+    "ignore_patterns",
+}
+
+REQUIRED_MEMORY_PROFILES_ROOT_KEYS = {
+    "chunking_profiles",
+    "extractor_profiles",
+    "embedding_profiles",
+    "index_profiles",
+    "ranking_profiles",
+}
+
+REQUIRED_MEMORY_CHUNKING_PROFILE_KEYS = {
+    "max_tokens",
+    "overlap_tokens",
+    "preserve_fields",
+}
+
+REQUIRED_MEMORY_EMBEDDING_PROFILE_KEYS = {
+    "provider",
+    "model",
+    "dimensions",
+    "normalization",
+}
+
+REQUIRED_MEMORY_EXTRACTOR_PROFILE_KEYS = {
+    "mode",
+    "graph_extraction",
+    "entity_types",
+    "requires_local_llm",
+}
+
+REQUIRED_MEMORY_INDEX_PROFILE_KEYS = {
+    "index_kind",
+    "backend",
+    "embedding_profile",
+    "store_safe_text_only",
+}
+
+REQUIRED_MEMORY_RANKING_PROFILE_KEYS = {
+    "vector_weight",
+    "fulltext_weight",
+    "graph_weight",
+    "fusion",
+    "reranker",
+    "max_results",
+}
+
+REQUIRED_MEMORY_ROUTING_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "sensitivity_levels",
+    "default_route",
+    "routes",
+    "cloud_gate",
+}
+
+REQUIRED_MEMORY_ROUTE_KEYS = {
+    "default_llm",
+    "cloud_allowed",
+    "requires_redaction",
+}
+
+MEMORY_ROUTE_LLM_VALUES = {
+    "local",
+    "cloud",
+    "deny",
+}
+
+MEMORY_SOURCE_KIND_VALUES = {
+    "django_model",
+    "contract_file",
+    "documentation",
+    "integration_snapshot",
+    "synthetic_fixture",
+}
+
+MEMORY_SYNC_MODE_VALUES = {
+    "manual",
+    "scheduled",
+    "incremental",
+}
+
+MEMORY_SCOPE_RULE_VALUES = {
+    "public_knowledge",
+    "authenticated_user",
+    "role_scoped",
+    "workorder_visibility",
+    "inventory_visibility",
+    "contract_admin",
+}
+
+MEMORY_SENSITIVITY_VALUES = {
+    "public",
+    "internal",
+    "confidential",
+    "pii_redacted",
+    "pii_original",
+    "secret",
+}
+
+MEMORY_PII_POLICY_VALUES = {
+    "no_pii_expected",
+    "reject_pii",
+    "deidentify_before_index",
+    "allow_redacted_only",
+}
+
+MEMORY_VERSIONING_MODE_VALUES = {
+    "snapshot_only",
+    "hard_active_soft_raw",
+    "append_only",
+}
+
+MEMORY_RETENTION_POLICY_VALUES = {
+    "default_public",
+    "default_internal",
+    "short_lived_eval",
+}
+
+MEMORY_CHUNKING_STRATEGY_VALUES = {
+    "field_aware",
+    "heading_aware",
+    "json_pointer",
+}
+
+MEMORY_EXTRACTOR_MODE_VALUES = {
+    "text",
+    "structured_json",
+    "business_event",
+    "business_object",
+}
+
+MEMORY_INDEX_KIND_VALUES = {
+    "vector",
+    "fulltext",
+    "graph",
+}
+
+MEMORY_INDEX_BACKEND_VALUES = {
+    "lancedb",
+    "qdrant",
+    "sqlite_fts",
+    "kuzu",
+}
+
+MEMORY_RANKING_FUSION_VALUES = {
+    "rrf",
+    "weighted_sum",
+}
+
+MEMORY_RERANKER_VALUES = {
+    "none",
+    "local_optional",
+}
+
+MEMORY_CONTEXT_KIND_VALUES = {
+    "question",
+    "retrieved_chunk",
+    "citation",
+    "metadata",
+    "graph_fact",
+}
+
 
 def pretty_json(payload):
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
@@ -388,6 +571,316 @@ def validate_ai_task_types_payload(payload):
         for key in ("allowed_tools", "example_requests"):
             if not isinstance(item.get(key), list):
                 raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")
+
+
+def validate_memory_sources_payload(payload, profiles_payload=None, routing_payload=None):
+    if not isinstance(payload, list):
+        raise ValidationError("Memory sources должен быть JSON-массивом.")
+    if not payload:
+        raise ValidationError("Memory sources должен содержать хотя бы один источник.")
+    codes = set()
+    chunking_profiles = set()
+    extractor_profiles = set()
+    index_profiles = set()
+    if profiles_payload:
+        chunking_profiles = set(profiles_payload.get("chunking_profiles", {}).keys())
+        extractor_profiles = set(profiles_payload.get("extractor_profiles", {}).keys())
+        index_profiles = set(profiles_payload.get("index_profiles", {}).keys())
+    sensitivity_levels = set()
+    if routing_payload:
+        sensitivity_levels = set(routing_payload.get("sensitivity_levels", []))
+
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            raise ValidationError(f"Memory source #{index} должен быть JSON-объектом.")
+        missing = REQUIRED_MEMORY_SOURCE_KEYS - set(item.keys())
+        source_code = item.get("code", index)
+        if missing:
+            raise ValidationError(
+                f"Memory source '{source_code}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing))}."
+            )
+        code = item["code"]
+        if not isinstance(code, str) or not code:
+            raise ValidationError(f"Memory source #{index} содержит пустой code.")
+        if code in codes:
+            raise ValidationError(f"Memory source '{code}' объявлен повторно.")
+        codes.add(code)
+        for key in (
+            "title",
+            "description",
+            "domain",
+            "owner",
+            "extractor_profile",
+            "chunking_profile",
+        ):
+            if not isinstance(item.get(key), str) or not item.get(key):
+                raise ValidationError(f"Поле '{key}' у memory source '{code}' должно быть непустой строкой.")
+        source_ref = item.get("source_ref")
+        if not isinstance(source_ref, str) or not source_ref:
+            raise ValidationError(f"Поле 'source_ref' у memory source '{code}' должно быть непустой строкой.")
+        if not isinstance(item.get("enabled"), bool):
+            raise ValidationError(f"Поле 'enabled' у memory source '{code}' должно быть boolean.")
+        schedule = item.get("schedule")
+        if schedule is not None and not isinstance(schedule, str):
+            raise ValidationError(f"Поле 'schedule' у memory source '{code}' должно быть строкой или null.")
+        enum_checks = (
+            ("source_kind", MEMORY_SOURCE_KIND_VALUES),
+            ("sync_mode", MEMORY_SYNC_MODE_VALUES),
+            ("scope_rule", MEMORY_SCOPE_RULE_VALUES),
+            ("sensitivity", MEMORY_SENSITIVITY_VALUES),
+            ("pii_policy", MEMORY_PII_POLICY_VALUES),
+            ("versioning_mode", MEMORY_VERSIONING_MODE_VALUES),
+            ("retention_policy", MEMORY_RETENTION_POLICY_VALUES),
+        )
+        for key, allowed_values in enum_checks:
+            if item.get(key) not in allowed_values:
+                raise ValidationError(f"Memory source '{code}' содержит недопустимое значение поля '{key}'.")
+        _ensure_list_of_strings(item.get("index_profiles"), f"Поле index_profiles у memory source '{code}'")
+        if len(item["index_profiles"]) != len(set(item["index_profiles"])):
+            raise ValidationError(f"Поле index_profiles у memory source '{code}' содержит дубликаты.")
+        ignore_patterns = item.get("ignore_patterns", [])
+        if not isinstance(ignore_patterns, list) or not all(isinstance(pattern, str) for pattern in ignore_patterns):
+            raise ValidationError(f"Поле 'ignore_patterns' у memory source '{code}' должно быть списком строк.")
+        if chunking_profiles and item["chunking_profile"] not in chunking_profiles:
+            raise ValidationError(
+                f"Memory source '{code}' ссылается на неизвестный chunking_profile "
+                f"'{item['chunking_profile']}'."
+            )
+        if extractor_profiles and item["extractor_profile"] not in extractor_profiles:
+            raise ValidationError(
+                f"Memory source '{code}' ссылается на неизвестный extractor_profile "
+                f"'{item['extractor_profile']}'."
+            )
+        if index_profiles:
+            unknown_index_profiles = set(item["index_profiles"]) - index_profiles
+            if unknown_index_profiles:
+                raise ValidationError(
+                    f"Memory source '{code}' ссылается на неизвестные index_profiles: "
+                    + ", ".join(sorted(unknown_index_profiles))
+                    + "."
+                )
+        if sensitivity_levels and item["sensitivity"] not in sensitivity_levels:
+            raise ValidationError(
+                f"Memory source '{code}' ссылается на неизвестный sensitivity "
+                f"'{item['sensitivity']}'."
+            )
+
+
+def validate_memory_profiles_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory profiles")
+    missing = REQUIRED_MEMORY_PROFILES_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory profiles не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for root_key in REQUIRED_MEMORY_PROFILES_ROOT_KEYS:
+        if not isinstance(payload.get(root_key), dict) or not payload.get(root_key):
+            raise ValidationError(f"Поле '{root_key}' в memory profiles должно быть непустым JSON-объектом.")
+
+    for profile_id, profile in payload["chunking_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Chunking profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_CHUNKING_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Chunking profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        for key in ("max_tokens", "overlap_tokens"):
+            if type(profile.get(key)) is not int or profile[key] < 0:
+                raise ValidationError(f"Поле '{key}' у chunking profile '{profile_id}' должно быть неотрицательным числом.")
+        if profile["max_tokens"] <= 0:
+            raise ValidationError(f"Поле 'max_tokens' у chunking profile '{profile_id}' должно быть больше 0.")
+        if profile["overlap_tokens"] >= profile["max_tokens"]:
+            raise ValidationError(
+                f"Поле 'overlap_tokens' у chunking profile '{profile_id}' должно быть меньше max_tokens."
+            )
+        if profile.get("strategy") not in MEMORY_CHUNKING_STRATEGY_VALUES:
+            raise ValidationError(f"Chunking profile '{profile_id}' содержит недопустимую strategy.")
+        _ensure_list_of_strings(profile.get("preserve_fields"), f"Поле preserve_fields у chunking profile '{profile_id}'")
+
+    for profile_id, profile in payload["extractor_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Extractor profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_EXTRACTOR_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Extractor profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        if profile.get("mode") not in MEMORY_EXTRACTOR_MODE_VALUES:
+            raise ValidationError(f"Extractor profile '{profile_id}' содержит недопустимый mode.")
+        if not isinstance(profile.get("graph_extraction"), bool):
+            raise ValidationError(f"Поле 'graph_extraction' у extractor profile '{profile_id}' должно быть boolean.")
+        _ensure_list_of_strings(profile.get("entity_types"), f"Поле entity_types у extractor profile '{profile_id}'")
+        if not isinstance(profile.get("requires_local_llm"), bool):
+            raise ValidationError(f"Поле 'requires_local_llm' у extractor profile '{profile_id}' должно быть boolean.")
+
+    for profile_id, profile in payload["embedding_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Embedding profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_EMBEDDING_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Embedding profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        for key in ("provider", "model"):
+            if not isinstance(profile.get(key), str) or not profile.get(key):
+                raise ValidationError(f"Поле '{key}' у embedding profile '{profile_id}' должно быть непустой строкой.")
+        if type(profile.get("dimensions")) is not int or profile["dimensions"] <= 0:
+            raise ValidationError(f"Поле 'dimensions' у embedding profile '{profile_id}' должно быть положительным числом.")
+        if not isinstance(profile.get("normalization"), bool):
+            raise ValidationError(f"Поле 'normalization' у embedding profile '{profile_id}' должно быть boolean.")
+        if profile.get("provider") != "local":
+            raise ValidationError(f"Embedding profile '{profile_id}' содержит недопустимый provider.")
+
+    embedding_profile_ids = set(payload["embedding_profiles"].keys())
+    for profile_id, profile in payload["index_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Index profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_INDEX_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Index profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        if profile.get("index_kind") not in MEMORY_INDEX_KIND_VALUES:
+            raise ValidationError(f"Index profile '{profile_id}' содержит недопустимый index_kind.")
+        if profile.get("backend") not in MEMORY_INDEX_BACKEND_VALUES:
+            raise ValidationError(f"Index profile '{profile_id}' содержит недопустимый backend.")
+        embedding_profile = profile.get("embedding_profile")
+        if embedding_profile is not None and embedding_profile not in embedding_profile_ids:
+            raise ValidationError(
+                f"Index profile '{profile_id}' ссылается на неизвестный embedding_profile '{embedding_profile}'."
+            )
+        if profile["index_kind"] == "vector" and not embedding_profile:
+            raise ValidationError(f"Vector index profile '{profile_id}' должен ссылаться на embedding_profile.")
+        if profile["index_kind"] != "vector" and embedding_profile is not None:
+            raise ValidationError(f"Non-vector index profile '{profile_id}' не должен ссылаться на embedding_profile.")
+        if not isinstance(profile.get("store_safe_text_only"), bool):
+            raise ValidationError(f"Поле 'store_safe_text_only' у index profile '{profile_id}' должно быть boolean.")
+
+    for profile_id, profile in payload["ranking_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Ranking profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_RANKING_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Ranking profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        for key in ("vector_weight", "fulltext_weight", "graph_weight"):
+            if type(profile.get(key)) not in (int, float) or profile[key] < 0 or profile[key] > 1:
+                raise ValidationError(
+                    f"Поле '{key}' у ranking profile '{profile_id}' должно быть числом от 0 до 1."
+                )
+        if profile.get("fusion") not in MEMORY_RANKING_FUSION_VALUES:
+            raise ValidationError(f"Ranking profile '{profile_id}' содержит недопустимый fusion.")
+        if profile.get("reranker") not in MEMORY_RERANKER_VALUES:
+            raise ValidationError(f"Ranking profile '{profile_id}' содержит недопустимый reranker.")
+        if type(profile.get("max_results")) is not int or profile["max_results"] <= 0:
+            raise ValidationError(f"Поле 'max_results' у ranking profile '{profile_id}' должно быть положительным числом.")
+
+
+def validate_memory_routing_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory routing")
+    missing = REQUIRED_MEMORY_ROUTING_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory routing не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    sensitivity_levels = payload.get("sensitivity_levels")
+    _ensure_list_of_strings(sensitivity_levels, "Поле sensitivity_levels")
+    if len(sensitivity_levels) != len(set(sensitivity_levels)):
+        raise ValidationError("Поле sensitivity_levels в memory routing содержит дубликаты.")
+    invalid_sensitivity_levels = set(sensitivity_levels) - MEMORY_SENSITIVITY_VALUES
+    if invalid_sensitivity_levels:
+        raise ValidationError(
+            "Memory routing содержит неизвестные sensitivity levels: "
+            + ", ".join(sorted(invalid_sensitivity_levels))
+            + "."
+        )
+    if payload.get("default_route") not in sensitivity_levels:
+        raise ValidationError("Поле default_route в memory routing должно ссылаться на sensitivity_levels.")
+    routes = payload.get("routes")
+    if not isinstance(routes, dict) or not routes:
+        raise ValidationError("Поле routes в memory routing должно быть непустым JSON-объектом.")
+    missing_routes = set(sensitivity_levels) - set(routes.keys())
+    if missing_routes:
+        raise ValidationError(
+            "В memory routing отсутствуют routes для sensitivity levels: "
+            + ", ".join(sorted(missing_routes))
+            + "."
+        )
+    extra_routes = set(routes.keys()) - set(sensitivity_levels)
+    if extra_routes:
+        raise ValidationError(
+            "В memory routing объявлены routes для неизвестных sensitivity levels: "
+            + ", ".join(sorted(extra_routes))
+            + "."
+        )
+    for level, route in routes.items():
+        if not isinstance(route, dict):
+            raise ValidationError(f"Route '{level}' в memory routing должен быть JSON-объектом.")
+        missing_route_keys = REQUIRED_MEMORY_ROUTE_KEYS - set(route.keys())
+        if missing_route_keys:
+            raise ValidationError(
+                f"Route '{level}' в memory routing не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_route_keys))}."
+            )
+        if route.get("default_llm") not in MEMORY_ROUTE_LLM_VALUES:
+            raise ValidationError(f"Route '{level}' содержит недопустимый default_llm.")
+        for key in ("cloud_allowed", "requires_redaction"):
+            if not isinstance(route.get(key), bool):
+                raise ValidationError(f"Поле '{key}' у route '{level}' должно быть boolean.")
+        if not isinstance(route.get("allow_original_pii"), bool):
+            raise ValidationError(f"Поле 'allow_original_pii' у route '{level}' должно быть boolean.")
+        context_kinds = route.get("allowed_context_kinds")
+        if not isinstance(context_kinds, list) or not all(kind in MEMORY_CONTEXT_KIND_VALUES for kind in context_kinds):
+            raise ValidationError(f"Поле 'allowed_context_kinds' у route '{level}' содержит недопустимые значения.")
+        if len(context_kinds) != len(set(context_kinds)):
+            raise ValidationError(f"Поле 'allowed_context_kinds' у route '{level}' содержит дубликаты.")
+        denial_reason = route.get("denial_reason")
+        if denial_reason is not None and not isinstance(denial_reason, str):
+            raise ValidationError(f"Поле 'denial_reason' у route '{level}' должно быть строкой или null.")
+        if level in {"pii_original", "secret"} and route.get("cloud_allowed"):
+            raise ValidationError(f"Route '{level}' не должен разрешать cloud_allowed.")
+        if level == "pii_original" and route.get("allow_original_pii"):
+            raise ValidationError("Route 'pii_original' не должен разрешать allow_original_pii.")
+        if level == "secret" and route.get("default_llm") != "deny":
+            raise ValidationError("Route 'secret' должен иметь default_llm='deny'.")
+        if level == "secret" and context_kinds:
+            raise ValidationError("Route 'secret' не должен разрешать allowed_context_kinds.")
+
+    cloud_gate = payload.get("cloud_gate")
+    if not isinstance(cloud_gate, dict):
+        raise ValidationError("Поле cloud_gate в memory routing должно быть JSON-объектом.")
+    if cloud_gate.get("mode") != "explicit_allow":
+        raise ValidationError("Поле cloud_gate.mode должно быть explicit_allow.")
+    if cloud_gate.get("max_sensitivity") not in {"public", "internal"}:
+        raise ValidationError("Поле cloud_gate.max_sensitivity должно быть public или internal.")
+    if not isinstance(cloud_gate.get("requires_redaction"), bool):
+        raise ValidationError("Поле cloud_gate.requires_redaction должно быть boolean.")
+    forbidden = cloud_gate.get("forbidden_sensitivities")
+    if not isinstance(forbidden, list) or not forbidden:
+        raise ValidationError("Поле cloud_gate.forbidden_sensitivities должно быть непустым списком.")
+    forbidden_set = set(forbidden)
+    if len(forbidden) != len(forbidden_set):
+        raise ValidationError("Поле cloud_gate.forbidden_sensitivities содержит дубликаты.")
+    if forbidden_set - set(sensitivity_levels):
+        raise ValidationError("Поле cloud_gate.forbidden_sensitivities ссылается на неизвестные sensitivity levels.")
+    unsafe_cloud_allowed = {
+        level for level, route in routes.items()
+        if level in forbidden_set and route.get("cloud_allowed")
+    }
+    if unsafe_cloud_allowed:
+        raise ValidationError(
+            "Cloud gate запрещает sensitivity levels, но routes разрешают cloud_allowed: "
+            + ", ".join(sorted(unsafe_cloud_allowed))
+            + "."
+        )
 
 
 def validate_ai_tools_drift(json_payload, canonical_tools):

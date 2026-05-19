@@ -180,6 +180,7 @@ BOUNDED_TASK_TYPE_IDS = frozenset({
     "analytics.summary.status",
     "analytics.summary.departments",
     "analytics.summary.assignees",
+    "memory.search",
 })
 
 _TASK_TYPE_CATALOG: dict[str, TaskTypeContract] = {
@@ -395,6 +396,21 @@ _TASK_TYPE_CATALOG: dict[str, TaskTypeContract] = {
         requires_confirmation=False,
         output_mode=OutputMode.RESULT,
         example_requests=("Покажи статистику по исполнителям",),
+    ),
+    "memory.search": TaskTypeContract(
+        id="memory.search",
+        title="Search memory",
+        mode=TaskMode.READ,
+        description="Search indexed memory context with citations.",
+        allowed_tools=("memory.search",),
+        required_slots=("query",),
+        optional_slots=("limit", "sensitivity"),
+        requires_confirmation=False,
+        output_mode=OutputMode.RESULT,
+        example_requests=(
+            "Найди в памяти сведения о правилах обработки заявок",
+            "Поищи в базе знаний инструкции по медизделиям",
+        ),
     ),
 }
 

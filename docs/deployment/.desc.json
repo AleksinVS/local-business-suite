@@ -2,5 +2,6 @@
   ".": "Гайды по деплою (Docker, IIS)",
   "DEPLOYMENT.md": "Основной гайд по деплою (Docker + VPS)",
   "IIS_SSO.md": "Настройка IIS с Windows Authentication SSO",
+  "MEMORY_DEPLOYMENT.md": "Развертывание, runtime contracts и smoke-проверки системы памяти",
   "WINDOWS_RUN.md": "Запуск на Windows (разработка)"
 }

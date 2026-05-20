@@ -1,0 +1,29 @@
+<aside class="settings-help-panel" role="dialog" aria-label="Справка по настройке">
+  <div class="settings-help-head">
+    <div>
+      <p class="eyebrow">{{ descriptor.setting_id }}</p>
+      <h2>{{ descriptor.title }}</h2>
+    </div>
+    <button type="button" class="icon-button" onclick="document.getElementById('settings-help-host').replaceChildren()">×</button>
+  </div>
+  <div class="settings-help-body">
+    <p>{{ initial_help }}</p>
+    <div id="settings-help-answer"></div>
+    <form
+      hx-post="{% url 'settings_center:help_ask' descriptor.setting_id %}"
+      hx-target="#settings-help-answer"
+      hx-swap="innerHTML">
+      {% csrf_token %}
+      {{ form.question }}
+      <button type="submit" class="button">Спросить</button>
+    </form>
+  </div>
+</aside>
+<style>
+  .settings-help-panel { position: fixed; right: 24px; bottom: 24px; width: min(460px, calc(100vw - 48px)); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22); z-index: 900; }
+  .settings-help-head { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border); }
+  .settings-help-head h2 { margin: 0; font-size: 1rem; }
+  .settings-help-body { padding: 1rem; display: grid; gap: 0.75rem; }
+  .settings-help-body form { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; }
+  .settings-help-body input { min-width: 0; }
+</style>

@@ -7,6 +7,7 @@
   "services.py": "Сервисы: генерация заголовков, история сессий, операции с нарядами",
   "commands.py": "Предопределённые slash-команды",
   "runtime_client.py": "Клиент для связи с agent runtime (HTTP)",
+  "settings_descriptors.py": "Доменные descriptors Settings Center для AI runtime contracts",
   "urls.py": "URL-маршруты AI-чата",
   "admin.py": "Регистрация моделей в Django Admin",
   "forms.py": "Формы ввода чата",

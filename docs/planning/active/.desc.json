@@ -2,5 +2,6 @@
   ".": "Активные планы крупных направлений",
   "README.md": "Правила для активных planning-файлов",
   "memory-external-systems-connector.md": "Активный план сбора знаний из внешних информационных систем",
-  "memory-system-completion.md": "Активный план завершения системы памяти"
+  "memory-system-completion.md": "Активный план завершения системы памяти",
+  "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстная справка"
 }

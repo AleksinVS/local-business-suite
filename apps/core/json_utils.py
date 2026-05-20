@@ -383,6 +383,14 @@ MEMORY_RAW_MODE_VALUES = {
 MEMORY_ACL_MODE_VALUES = {
     "scope_rule",
     "inherit_source_acl_future",
+    "inherit_source_acl",
+    "inherit_source_acl_with_fallback",
+}
+
+MEMORY_ACL_UNRESOLVED_POLICY_VALUES = {
+    "block",
+    "admin_only",
+    "fallback_scope_rule",
 }
 
 MEMORY_PARTIAL_INDEXING_VALUES = {
@@ -864,6 +872,19 @@ def validate_memory_ingestion_profiles_payload(payload):
             raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый raw_mode.")
         if profile.get("acl_mode") not in MEMORY_ACL_MODE_VALUES:
             raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый acl_mode.")
+        acl_policy = profile.get("acl_policy", {})
+        if acl_policy:
+            if not isinstance(acl_policy, dict):
+                raise ValidationError(f"Поле acl_policy у ingestion profile '{profile_id}' должно быть JSON-объектом.")
+            unresolved_policy = acl_policy.get("unresolved_policy", "block")
+            if unresolved_policy not in MEMORY_ACL_UNRESOLVED_POLICY_VALUES:
+                raise ValidationError(
+                    f"Ingestion profile '{profile_id}' содержит недопустимый acl_policy.unresolved_policy."
+                )
+            if not isinstance(acl_policy.get("fail_closed", True), bool):
+                raise ValidationError(
+                    f"Поле acl_policy.fail_closed у ingestion profile '{profile_id}' должно быть boolean."
+                )
         if profile.get("partial_indexing") not in MEMORY_PARTIAL_INDEXING_VALUES:
             raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый partial_indexing.")
         issue_policy = profile.get("issue_policy")

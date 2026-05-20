@@ -204,6 +204,7 @@ class _ConnectionContext:
 def sync_user_from_ad(user, attributes, group_role_map):
     from django.conf import settings
     from apps.core.models import Department
+    from apps.accounts.services import upsert_ad_identity_from_attributes
 
     # Sync email
     email = attributes.get("mail")
@@ -250,6 +251,11 @@ def sync_user_from_ad(user, attributes, group_role_map):
         user.first_name = display_name
 
     user.save()
+    upsert_ad_identity_from_attributes(
+        user=user,
+        attributes=attributes,
+        domain=getattr(settings, "AD_LDAP_DOMAIN", ""),
+    )
     sync_user_groups(user, attributes.get("memberOf", []), group_role_map)
 
 

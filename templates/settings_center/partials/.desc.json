@@ -1,0 +1,5 @@
+{
+  ".": "HTMX partials for Settings Center contextual help",
+  "help_panel.html": "Плавающее окно справки и миничата по конкретному setting_id",
+  "help_answer.html": "Частичный ответ миничата"
+}

@@ -10,6 +10,8 @@
   "chat_memory.py": "Queued memory.remember, personal/org chat knowledge storage, reflection candidates and safe indexing",
   "external_connectors.py": "External API connector landing zone, standalone SQLite queue backend and memory handoff",
   "policies.py": "Политики доступа к chunks/facts по server-side scope tokens",
+  "acl.py": "ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens",
+  "settings_descriptors.py": "Доменные descriptors Settings Center для memory contracts, ACL и ingestion settings",
   "retrieval.py": "Оркестрация memory.search с server-side policy checks, citations и audit",
   "routing.py": "Server-side routing decisions for memory retrieval by sensitivity level",
   "security.py": "DLP-guard для блокировки credential material перед попаданием в memory pipeline",

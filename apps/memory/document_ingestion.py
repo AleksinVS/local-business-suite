@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from .acl import acl_blocks_ingestion, resolve_file_acl, scope_tokens_for_source_object
 from .graph_backends import DjangoGraphMemoryBackend
 from .models import (
     MemoryGraphEntity,
@@ -37,6 +38,8 @@ class IngestionProfile:
     max_file_size_bytes: int
     raw_mode: str
     acl_mode: str
+    unresolved_acl_policy: str
+    acl_fail_closed: bool
     partial_indexing_enabled: bool
     follow_symlinks: bool
     stable_after_seconds: int
@@ -365,6 +368,16 @@ def get_source_ingestion_profile(source: MemorySource):
         max_file_size_bytes=int(limit_profile["max_file_size_mb"]) * 1024 * 1024,
         raw_mode=profile["raw_mode"],
         acl_mode=profile["acl_mode"],
+        unresolved_acl_policy=profile.get("acl_policy", {}).get(
+            "unresolved_policy",
+            getattr(settings, "MEMORY_ACL_UNRESOLVED_POLICY", "block"),
+        ),
+        acl_fail_closed=bool(
+            profile.get("acl_policy", {}).get(
+                "fail_closed",
+                getattr(settings, "MEMORY_ACL_FAIL_CLOSED", True),
+            )
+        ),
         partial_indexing_enabled=profile["partial_indexing"] == "enabled",
         follow_symlinks=bool(adapter.get("follow_symlinks", False)),
         stable_after_seconds=int(adapter.get("stable_after_seconds", 5)),
@@ -395,6 +408,14 @@ def build_source_object_payload(*, source, root, file_path, object_id, relative_
     content_hash = sha256_file(file_path)
     mime_type, _ = mimetypes.guess_type(str(file_path))
     extension = file_path.suffix.lower()
+    acl_resolution = None
+    if profile.acl_mode in {"inherit_source_acl", "inherit_source_acl_with_fallback"}:
+        acl_resolution = resolve_file_acl(
+            source=source,
+            root=root,
+            file_path=file_path,
+            relative_path=relative_path,
+        )
     return {
         "object_uri": str(file_path),
         "relative_path": relative_path,
@@ -411,7 +432,12 @@ def build_source_object_payload(*, source, root, file_path, object_id, relative_
         "ingestion_status": MemorySourceObject.IngestionStatus.PENDING,
         "last_error": "",
         "partial_reason": "",
-        "metadata": {"raw_mode": profile.raw_mode, "acl_mode": profile.acl_mode},
+        "acl_fingerprint": acl_resolution.fingerprint if acl_resolution else "",
+        "metadata": {
+            "raw_mode": profile.raw_mode,
+            "acl_mode": profile.acl_mode,
+            **({"acl": acl_resolution.as_metadata()} if acl_resolution else {}),
+        },
     }
 
 
@@ -435,6 +461,20 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
             "message": f"Unsupported extension: {extension or '<none>'}",
             "metric": "skipped",
             "status": MemorySourceObject.IngestionStatus.SKIPPED,
+        }
+    blocked_by_acl, acl_reason, acl_metadata = acl_blocks_ingestion(
+        source_object=source_object,
+        profile=profile,
+    )
+    if blocked_by_acl:
+        return {
+            **base,
+            "issue_kind": MemoryIngestionIssue.IssueKind.ACL_UNRESOLVED,
+            "severity": MemoryIngestionIssue.Severity.BLOCKER,
+            "message": acl_reason,
+            "metric": "skipped",
+            "status": MemorySourceObject.IngestionStatus.SKIPPED,
+            "metadata": {**base["metadata"], "acl": acl_metadata},
         }
     if source_object.size_bytes > profile.max_file_size_bytes:
         if profile.partial_indexing_enabled and extension in TEXT_EXTENSIONS:
@@ -491,6 +531,10 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
 @transaction.atomic
 def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: str, partial_reason=""):
     source = source_object.source
+    profile = get_source_ingestion_profile(source)
+    scope_tokens = scope_tokens_for_source_object(source_object=source_object, profile=profile)
+    if not scope_tokens:
+        raise ValueError("No resolved memory scope tokens for source object.")
     MemorySnapshot.objects.filter(source=source, source_object_id=source_object.object_id, is_active=True).update(
         is_active=False,
         valid_to=timezone.now(),
@@ -506,13 +550,14 @@ def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: s
         extracted_at=timezone.now(),
         raw_path=source_object.object_uri,
         pii_policy_applied=source.pii_policy or "deidentify_before_index",
-        scope_tokens=[source.scope_rule or "authenticated_user"],
+        scope_tokens=scope_tokens,
         sensitivity=source.sensitivity,
         metadata={
             "relative_path": source_object.relative_path,
             "partial": bool(partial_reason),
             "partial_reason": partial_reason,
             "raw_mode": "reference_only",
+            "acl": (source_object.metadata or {}).get("acl", {}),
         },
     )
     privacy_result = apply_snapshot_privacy_pipeline(

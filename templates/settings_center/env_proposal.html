@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}.env proposal{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Proposal workflow</p>
+      <h1>.env proposal</h1>
+    </div>
+  </div>
+  <form method="post" class="settings-small-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="table-actions">
+      <button type="submit" class="button">Создать proposal</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

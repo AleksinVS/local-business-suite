@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}.env status{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Deployment bootstrap</p>
+      <h1>.env status</h1>
+      <p class="description">Значения показываются как эффективный статус. Production по умолчанию создает proposal, а не меняет .env напрямую.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+      <a class="button" href="{% url 'settings_center:env_propose' %}">Создать proposal</a>
+    </div>
+  </div>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Ключ</th>
+          <th>Раздел</th>
+          <th>Effective value</th>
+          <th>Режим</th>
+          <th>Restart</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.descriptor.metadata.env_key }}</td>
+            <td>{{ row.descriptor.section }}</td>
+            <td>{{ row.effective_value|default:"" }}</td>
+            <td>{{ row.apply_mode }}</td>
+            <td>{% if row.descriptor.requires_restart %}да{% else %}нет{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

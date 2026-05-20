@@ -70,7 +70,13 @@
       "ocr_profile": "rus_eng_optional_v1",
       "limit_profile": "corporate_docs_default_v1",
       "raw_mode": "reference_only",
-      "acl_mode": "scope_rule",
+      "acl_mode": "inherit_source_acl",
+      "acl_policy": {
+        "unresolved_policy": "block",
+        "fail_closed": true,
+        "group_nesting_depth": 5,
+        "cache_ttl_seconds": 3600
+      },
       "partial_indexing": "enabled",
       "issue_policy": {
         "create_issue_kinds": [
@@ -95,7 +101,13 @@
       "ocr_profile": "rus_eng_optional_v1",
       "limit_profile": "corporate_docs_default_v1",
       "raw_mode": "reference_only",
-      "acl_mode": "scope_rule",
+      "acl_mode": "inherit_source_acl",
+      "acl_policy": {
+        "unresolved_policy": "block",
+        "fail_closed": true,
+        "group_nesting_depth": 5,
+        "cache_ttl_seconds": 3600
+      },
       "partial_indexing": "enabled",
       "issue_policy": {
         "create_issue_kinds": [

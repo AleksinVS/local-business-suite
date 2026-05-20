@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from django.conf import settings
 from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -57,6 +59,22 @@ from .services import (
 )
 
 User = get_user_model()
+
+
+def _memory_ingestion_profiles_with_acl(*, acl_mode, unresolved_policy):
+    payload = json.loads(json.dumps(settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES))
+    profile_id = "corporate_docs_acl_test_v1"
+    payload["profiles"][profile_id] = {
+        **payload["profiles"]["corporate_docs_windows_v1"],
+        "acl_mode": acl_mode,
+        "acl_policy": {
+            "unresolved_policy": unresolved_policy,
+            "fail_closed": True,
+            "group_nesting_depth": 5,
+            "cache_ttl_seconds": 3600,
+        },
+    }
+    return payload
 
 
 MEMORY_INGESTION_BOOTSTRAP_MODELS = {
@@ -376,6 +394,7 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
         from .document_ingestion import discover_source_objects, ingest_source_objects
 
         with TemporaryDirectory() as tmpdir:
+            Group.objects.get_or_create(name="docs-readers")
             data_dir = Path(tmpdir) / "data"
             root = Path(tmpdir) / "memory_docs"
             root.mkdir()
@@ -389,6 +408,11 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
                     "source_ref": str(root),
                     "ignore_patterns": [],
                     "ingestion_profile": "corporate_docs_windows_v1",
+                    "default_acl": {
+                        "allow": [
+                            {"kind": "group", "name": "docs-readers"},
+                        ]
+                    },
                 },
             )
 
@@ -429,6 +453,83 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
             issue = MemoryIngestionIssue.objects.get(source=source)
             self.assertEqual(issue.issue_kind, MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT)
             self.assertEqual(issue.status, MemoryIngestionIssue.Status.OPEN)
+
+    def test_inherited_acl_maps_group_to_scope_tokens(self):
+        from .document_ingestion import discover_source_objects, ingest_source_objects
+
+        Group.objects.create(name="docs-readers")
+        profiles = _memory_ingestion_profiles_with_acl(
+            acl_mode="inherit_source_acl",
+            unresolved_policy="block",
+        )
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "procedure.txt").write_text("Procedure calibration device_alpha -> procedure_beta", encoding="utf-8")
+            source = self.create_source(
+                code="local_docs_acl_allowed",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_acl_test_v1",
+                    "default_acl": {
+                        "allow": [
+                            {"kind": "group", "name": "docs-readers"},
+                        ]
+                    },
+                },
+            )
+
+            with self.settings(DATA_DIR=data_dir, LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES=profiles):
+                discover_source_objects(source=source, dry_run=False)
+                metrics = ingest_source_objects(source=source, dry_run=False)
+
+            self.assertEqual(metrics["ingested"], 1)
+            snapshot = MemorySnapshot.objects.get(source=source, status=MemorySnapshot.Status.READY)
+            self.assertEqual(snapshot.scope_tokens, ["role:docs-readers"])
+            self.assertEqual(MemoryChunk.objects.get(snapshot=snapshot).scope_tokens, ["role:docs-readers"])
+
+    def test_inherited_acl_unknown_principal_fails_closed(self):
+        from .document_ingestion import discover_source_objects, ingest_source_objects
+
+        profiles = _memory_ingestion_profiles_with_acl(
+            acl_mode="inherit_source_acl",
+            unresolved_policy="block",
+        )
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "procedure.txt").write_text("Procedure calibration device_alpha -> procedure_beta", encoding="utf-8")
+            source = self.create_source(
+                code="local_docs_acl_blocked",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_acl_test_v1",
+                    "default_acl": {
+                        "allow": [
+                            {"kind": "group", "name": "unknown-ad-group"},
+                        ]
+                    },
+                },
+            )
+
+            with self.settings(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES=profiles):
+                discover_source_objects(source=source, dry_run=False)
+                metrics = ingest_source_objects(source=source, dry_run=False)
+
+            self.assertEqual(metrics["issues"], 1)
+            self.assertEqual(MemorySnapshot.objects.filter(source=source).count(), 0)
+            issue = MemoryIngestionIssue.objects.get(source=source)
+            self.assertEqual(issue.issue_kind, MemoryIngestionIssue.IssueKind.ACL_UNRESOLVED)
+            self.assertEqual(issue.severity, MemoryIngestionIssue.Severity.BLOCKER)
 
 
 class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}AD link{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Active Directory</p>
+      <h1>AD identity link: {{ portal_user.username }}</h1>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:user_list' %}">К пользователям</a>
+    </div>
+  </div>
+  <form method="post" class="settings-small-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="table-actions">
+      <button type="submit" class="button">Сохранить link</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

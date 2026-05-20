@@ -130,6 +130,8 @@ def build_chunk_payloads(
 
 
 def upsert_chunks(*, snapshot: MemorySnapshot, chunk_payloads):
+    if not snapshot.scope_tokens:
+        raise ValueError("READY memory snapshot must have scope tokens before indexing.")
     chunks = []
     for payload in chunk_payloads:
         _write_text_file(Path(payload.text_path), payload.text)

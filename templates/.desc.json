@@ -11,5 +11,6 @@
   "workorders/": "Шаблоны нарядов-заказов (Kanban, детали, формы)",
   "analytics/": "Шаблоны аналитических дашбордов",
   "registration/": "Шаблоны аутентификации (login)",
-  "waiting_list/": "Шаблоны листа ожидания (с partials)"
+  "waiting_list/": "Шаблоны листа ожидания (с partials)",
+  "settings_center/": "Шаблоны Settings Center: dashboard, contracts, users, env proposals и contextual help"
 }

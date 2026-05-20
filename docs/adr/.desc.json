@@ -5,5 +5,6 @@
   "ADR-0003-ai-memory-service.md": "ADR: Архитектура сервиса памяти СоСНА",
   "ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md": "ADR: Ingestion-коннектор памяти и bootstrapping схемы графа",
   "ADR-0005-chat-derived-memory-and-secret-handles.md": "ADR: Память из AI-чата, reflection jobs и secret handles",
-  "ADR-0006-external-system-knowledge-connectors.md": "ADR: Коннекторы сбора знаний из внешних информационных систем"
+  "ADR-0006-external-system-knowledge-connectors.md": "ADR: Коннекторы сбора знаний из внешних информационных систем",
+  "ADR-0007-settings-center-and-contextual-help.md": "ADR: Settings Center, контекстная справка и управляемые runtime-настройки"
 }

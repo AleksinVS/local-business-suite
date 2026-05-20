@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.ai",
     "apps.memory",
+    "apps.settings_center",
     "apps.waiting_list",
 ]
 
@@ -318,6 +319,44 @@ GUNICORN_GRACEFUL_TIMEOUT = int(os.environ.get("GUNICORN_GRACEFUL_TIMEOUT", "30"
 LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS = int(
     os.environ.get("LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS", "900")
 )
+LOCAL_BUSINESS_SECRET_VAULT_BASE_URL = os.environ.get("LOCAL_BUSINESS_SECRET_VAULT_BASE_URL", "")
+SETTINGS_CENTER_ENABLED = os.environ.get("SETTINGS_CENTER_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+SETTINGS_CENTER_ENV_APPLY_MODE = os.environ.get("SETTINGS_CENTER_ENV_APPLY_MODE", "proposal").strip().lower()
+if SETTINGS_CENTER_ENV_APPLY_MODE not in {"read_only", "proposal", "local_file"}:
+    raise ImproperlyConfigured(
+        "SETTINGS_CENTER_ENV_APPLY_MODE must be one of: read_only, proposal, local_file"
+    )
+SETTINGS_CENTER_ENV_FILE = BASE_DIR / os.environ.get("SETTINGS_CENTER_ENV_FILE", ".env")
+SETTINGS_CENTER_ENV_PROPOSAL_DIR = Path(
+    os.environ.get(
+        "SETTINGS_CENTER_ENV_PROPOSAL_DIR",
+        DATA_DIR / "settings_center" / "env_proposals",
+    )
+)
+SETTINGS_CENTER_HELP_AI_ENABLED = os.environ.get(
+    "SETTINGS_CENTER_HELP_AI_ENABLED", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+SETTINGS_CENTER_HELP_MODEL_PROFILE = os.environ.get(
+    "SETTINGS_CENTER_HELP_MODEL_PROFILE", "local_admin_help_v1"
+)
+SETTINGS_CENTER_HELP_MAX_CONTEXT_CHARS = int(
+    os.environ.get("SETTINGS_CENTER_HELP_MAX_CONTEXT_CHARS", "6000")
+)
+SETTINGS_CENTER_AUDIT_RETENTION_DAYS = int(
+    os.environ.get("SETTINGS_CENTER_AUDIT_RETENTION_DAYS", "365")
+)
+ACCOUNTS_AD_LINK_ENABLED = os.environ.get("ACCOUNTS_AD_LINK_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+ACCOUNTS_AD_LINK_MODE = os.environ.get("ACCOUNTS_AD_LINK_MODE", "manual").strip().lower()
+ACCOUNTS_AD_GROUP_ROLE_SYNC = os.environ.get("ACCOUNTS_AD_GROUP_ROLE_SYNC", "false").strip().lower() in {"1", "true", "yes", "on"}
+MEMORY_ACL_INHERITANCE_ENABLED = os.environ.get("MEMORY_ACL_INHERITANCE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEMORY_ACL_FAIL_CLOSED = os.environ.get("MEMORY_ACL_FAIL_CLOSED", "true").strip().lower() in {"1", "true", "yes", "on"}
+MEMORY_ACL_UNRESOLVED_POLICY = os.environ.get("MEMORY_ACL_UNRESOLVED_POLICY", "block").strip().lower()
+if MEMORY_ACL_UNRESOLVED_POLICY not in {"block", "admin_only", "fallback_scope_rule"}:
+    raise ImproperlyConfigured(
+        "MEMORY_ACL_UNRESOLVED_POLICY must be one of: block, admin_only, fallback_scope_rule"
+    )
+MEMORY_ACL_GROUP_NESTING_DEPTH = int(os.environ.get("MEMORY_ACL_GROUP_NESTING_DEPTH", "5"))
+MEMORY_ACL_CACHE_TTL_SECONDS = int(os.environ.get("MEMORY_ACL_CACHE_TTL_SECONDS", "3600"))
 
 if DJANGO_ENV == "production":
     unsafe_secret_keys = {"", "dev-only-secret-key", "change-me"}

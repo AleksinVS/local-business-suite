@@ -4,6 +4,7 @@
   "views.py": "Представления дашборда и настроек",
   "forms.py": "Формы настроек",
   "context_processors.py": "Контекстные процессоры шаблонов",
+  "settings_descriptors.py": "Доменные descriptors Settings Center для core contracts и .env status",
   "debug_views.py": "Debug-представления (включаются в DEBUG=True)",
   "health_views.py": "Health-check endpoint (/health/)",
   "json_utils.py": "Утилиты валидации JSON-контрактов",

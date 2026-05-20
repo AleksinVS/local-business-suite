@@ -2,5 +2,6 @@
   ".": "Активные workflow-блоки",
   "README.md": "Правила для активных workflow-блоков",
   "memory-external-systems-connector": "Workflow: сбор знаний из внешних информационных систем",
-  "memory-chat-reflection-secret-handles": "Workflow: chat-derived memory, reflection и secret handles"
+  "memory-chat-reflection-secret-handles": "Workflow: chat-derived memory, reflection и secret handles",
+  "settings-center-gui": "Workflow: Settings Center, GUI настроек и контекстная справка"
 }

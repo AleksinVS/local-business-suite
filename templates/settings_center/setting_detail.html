@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ descriptor.title }}{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">{{ descriptor.domain }} / {{ descriptor.section }}</p>
+      <h1>{{ descriptor.title }}</h1>
+      <p class="description">{{ descriptor.description }}</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+      <button
+        type="button"
+        class="button-link"
+        title="{{ descriptor.description }}"
+        hx-get="{% url 'settings_center:help_panel' descriptor.setting_id %}"
+        hx-target="#settings-help-host"
+        hx-swap="innerHTML">Справка</button>
+    </div>
+  </div>
+
+  {% if is_contract %}
+    <form method="post" class="settings-form">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <label for="{{ form.payload.id_for_label }}">JSON payload</label>
+      {{ form.payload }}
+      <label class="checkbox-row">{{ form.confirm }} Подтверждаю применение изменения</label>
+      <div class="table-actions">
+        <button class="button-link" name="action" value="preview" type="submit">Проверить diff</button>
+        {% if can_edit %}
+          <button class="button" name="action" value="apply" type="submit">Применить</button>
+        {% endif %}
+      </div>
+    </form>
+  {% else %}
+    <p class="description">Эта настройка управляется доменным workflow или отображается только как статус.</p>
+  {% endif %}
+</section>
+
+{% if preview %}
+  <section class="panel">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Validation</p>
+        <h2>Diff preview</h2>
+      </div>
+    </div>
+    <pre class="json-preview">{{ preview.masked_diff }}</pre>
+  </section>
+{% endif %}
+
+<div id="settings-help-host"></div>
+
+<style>
+  .settings-form textarea { width: 100%; min-height: 460px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9rem; }
+  .checkbox-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
+  .json-preview { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow: auto; }
+</style>
+{% endblock %}

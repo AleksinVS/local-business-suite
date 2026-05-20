@@ -1,0 +1,70 @@
+from apps.settings_center.descriptors import SettingDescriptor
+
+
+def get_settings_descriptors():
+    return [
+        SettingDescriptor(
+            setting_id="ai.contract.registry",
+            domain="ai",
+            section="Registry",
+            title="AI registry contract",
+            description="Runtime AI registry contract for orchestrator identity, task catalog and tool catalog references.",
+            help_topic_id="settings.ai.contract.registry",
+            storage_kind="runtime_contract",
+            value_type="json",
+            widget="json_editor",
+            write_policy="editable",
+            metadata={
+                "settings_path": "LOCAL_BUSINESS_AI_REGISTRY_FILE",
+                "settings_payload_attr": "LOCAL_BUSINESS_AI_REGISTRY",
+                "validator": "validate_ai_registry_payload",
+            },
+        ),
+        SettingDescriptor(
+            setting_id="ai.contract.tools",
+            domain="ai",
+            section="Tools",
+            title="AI tools contract",
+            description="Runtime tool catalog contract. Tool drift validation is still performed by validate_architecture_contracts.",
+            help_topic_id="settings.ai.contract.tools",
+            storage_kind="runtime_contract",
+            value_type="json",
+            widget="json_editor",
+            write_policy="editable",
+            metadata={
+                "settings_path": "LOCAL_BUSINESS_AI_TOOLS_FILE",
+                "settings_payload_attr": "LOCAL_BUSINESS_AI_TOOLS",
+                "validator": "validate_ai_tools_payload",
+            },
+        ),
+        SettingDescriptor(
+            setting_id="ai.contract.task_types",
+            domain="ai",
+            section="Tasks",
+            title="AI task types contract",
+            description="Runtime task type catalog used to govern tool availability and confirmation policy.",
+            help_topic_id="settings.ai.contract.task_types",
+            storage_kind="runtime_contract",
+            value_type="json",
+            widget="json_editor",
+            write_policy="editable",
+            metadata={
+                "settings_path": "LOCAL_BUSINESS_AI_TASK_TYPES_FILE",
+                "settings_payload_attr": "LOCAL_BUSINESS_AI_TASK_TYPES",
+                "validator": "validate_ai_task_types_payload",
+            },
+        ),
+        SettingDescriptor(
+            setting_id="ai.contract.models",
+            domain="ai",
+            section="Models",
+            title="AI model profiles",
+            description="Model profile contract is visible here; detailed model routing validation will be added with provider backends.",
+            help_topic_id="settings.ai.contract.models",
+            storage_kind="runtime_contract",
+            value_type="json",
+            widget="json_editor",
+            write_policy="read_only",
+            metadata={"settings_path": "LOCAL_BUSINESS_AI_MODELS_FILE"},
+        ),
+    ]

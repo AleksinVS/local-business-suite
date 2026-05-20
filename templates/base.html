@@ -50,6 +50,13 @@
               <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'AI Hub', '⚙️', '{% url 'ai:hub' %}')">☆</button>
             </a>
           {% endif %}
+          {% if show_settings_center_nav %}
+            <a href="{% url 'settings_center:dashboard' %}" data-tooltip="Settings Center">
+              <span class="nav-icon">⚙️</span>
+              <span class="nav-text">Настройки</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
+            </a>
+          {% endif %}
           {% if show_admin_nav %}
             <a href="{% url 'admin:index' %}" data-tooltip="Django admin">
               <span class="nav-icon">🛠️</span>

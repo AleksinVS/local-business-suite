@@ -1,0 +1,37 @@
+{
+  "task_id": "02-runtime-contract-settings",
+  "title": "Runtime contract settings",
+  "goal": "Implement safe runtime contract editing for memory, AI and core contract-backed settings.",
+  "read_scope": [
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "config/settings.py",
+    "contracts/",
+    "apps/memory/services.py",
+    "docs/architecture/SETTINGS_CENTER_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/settings_center/",
+    "apps/memory/settings_descriptors.py",
+    "apps/ai/settings_descriptors.py",
+    "apps/core/settings_descriptors.py",
+    "templates/settings_center/",
+    "apps/settings_center/tests.py",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "acceptance": [
+    "Runtime contract descriptors can read current values from data/contracts/.",
+    "Candidate changes are validated with existing full-payload validators before write.",
+    "Cross-contract validation is available for memory sources/profiles/routing/ingestion profiles.",
+    "Apply writes JSON atomically using temp file and os.replace semantics.",
+    "UI shows masked diff and requires confirmation before write.",
+    "Audit records actor, setting_id, before/after hashes and validation result.",
+    "Settings backed by default contracts in contracts/ are read-only in production GUI."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.settings_center.tests apps.memory.tests apps.ai.tests"
+  ]
+}

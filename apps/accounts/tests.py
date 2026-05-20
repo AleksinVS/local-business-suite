@@ -6,6 +6,8 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 
 from .ldap_backend import LDAPConfig, normalize_username, sync_user_groups
+from .models import ExternalIdentity
+from .services import scope_tokens_for_principal, upsert_ad_identity_from_attributes
 
 
 class LDAPAuthConfigTests(TestCase):
@@ -62,3 +64,22 @@ class LDAPAuthConfigTests(TestCase):
         group_names = set(user.groups.values_list("name", flat=True))
         self.assertNotIn("technician", group_names)
         self.assertIn("local-only", group_names)
+
+    def test_ad_identity_link_stores_allowlisted_attributes_and_maps_scope_token(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="ad-linked-user")
+
+        identity = upsert_ad_identity_from_attributes(
+            user=user,
+            domain="EXAMPLE",
+            attributes={
+                "objectSid": "S-1-5-21-linked",
+                "sAMAccountName": "ad-linked-user",
+                "userPrincipalName": "ad-linked-user@example.test",
+                "unicodePwd": "must-not-store",
+            },
+        )
+
+        self.assertEqual(identity.sync_status, ExternalIdentity.SyncStatus.VERIFIED)
+        self.assertNotIn("unicodePwd", identity.attributes)
+        self.assertEqual(scope_tokens_for_principal(sid="S-1-5-21-linked"), {f"user:{user.id}"})

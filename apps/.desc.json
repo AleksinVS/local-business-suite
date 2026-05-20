@@ -7,5 +7,6 @@
   "workorders/": "Модуль заявок с workflow (наряды-заказы)",
   "analytics/": "Операционные дашборды внутри Django",
   "memory/": "Метаданные сервиса AI-памяти: sources, snapshots, chunks, facts, jobs, audit",
+  "settings_center/": "Reusable GUI и service layer для управляемых настроек, audit, users, env proposals и contextual help",
   "waiting_list/": "Лист ожидания клиентов"
 }

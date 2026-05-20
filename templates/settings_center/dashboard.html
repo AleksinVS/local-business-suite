@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Settings Center{% endblock %}
+
+{% block content %}
+<section class="panel settings-center">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Управляемая конфигурация</p>
+      <h1>Settings Center</h1>
+      <p class="description">Единый контур настроек, runtime-контрактов, пользователей, .env proposals и справки.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:user_list' %}">Пользователи</a>
+      <a class="button-link" href="{% url 'settings_center:env_status' %}">.env status</a>
+    </div>
+  </div>
+
+  <div class="settings-domain-grid">
+    {% for domain, item in domains.items %}
+      <section class="settings-domain">
+        <h2>{{ domain }}</h2>
+        {% for section, descriptors in item.sections.items %}
+          <div class="settings-section">
+            <h3>{{ section }}</h3>
+            <ul class="settings-list">
+              {% for descriptor in descriptors %}
+                <li>
+                  <div>
+                    <a href="{% url 'settings_center:setting_detail' descriptor.setting_id %}">{{ descriptor.title }}</a>
+                    <span class="muted">{{ descriptor.storage_kind }} / {{ descriptor.write_policy }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="icon-button"
+                    title="{{ descriptor.description }}"
+                    hx-get="{% url 'settings_center:help_panel' descriptor.setting_id %}"
+                    hx-target="#settings-help-host"
+                    hx-swap="innerHTML">?</button>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Audit</p>
+      <h2>Последние изменения</h2>
+    </div>
+  </div>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Настройка</th>
+          <th>Действие</th>
+          <th>Статус</th>
+          <th>Автор</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for change in recent_changes %}
+          <tr>
+            <td>{{ change.created_at }}</td>
+            <td>{{ change.setting_id }}</td>
+            <td>{{ change.action }}</td>
+            <td>{{ change.status }}</td>
+            <td>{{ change.actor|default:"system" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">Изменений пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div id="settings-help-host"></div>
+
+<style>
+  .settings-domain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .settings-domain { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .settings-domain h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+  .settings-section h3 { margin: 0.75rem 0 0.4rem; font-size: 0.9rem; color: var(--text-muted); }
+  .settings-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+  .settings-list li { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+  .settings-list a { color: var(--primary); font-weight: 600; }
+  .muted { color: var(--text-muted); font-size: 0.85rem; display: block; }
+  .icon-button { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+</style>
+{% endblock %}

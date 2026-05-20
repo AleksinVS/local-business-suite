@@ -4,6 +4,7 @@
   "MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md": "Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний",
   "MEMORY_INGESTION_OPERATIONS.md": "Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти",
   "MEMORY_USER_GUIDE.md": "Руководство пользователя и администратора по системе памяти",
+  "SETTINGS_CENTER_OPERATIONS.md": "Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",
   "PROJECT_STRUCTURE_SYSTEM.md": "Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)"
 }

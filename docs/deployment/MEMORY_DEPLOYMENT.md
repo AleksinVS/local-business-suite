@@ -13,7 +13,7 @@
 - схемы `contracts/schemas/memory_*.schema.json`;
 - AI tool `memory.search`;
 - management commands `memory_sync_source`, `memory_reindex`, `memory_eval`;
-- external connector commands `memory_external_enqueue`, `memory_external_worker`, `memory_external_queue_status`.
+- external connector commands `memory_external_enqueue`, `memory_external_worker`, `memory_external_queue_status`, `memory_external_cleanup`.
 
 Runtime data:
 
@@ -140,10 +140,12 @@ MVP commands:
 python manage.py memory_external_enqueue --source-code <source> --envelope-file <path> --dry-run
 python manage.py memory_external_enqueue --source-code <source> --envelope-file <path>
 python manage.py memory_external_queue_status
+python manage.py memory_external_queue_status --details --limit 20
 python manage.py memory_external_worker --limit 10
+python manage.py memory_external_cleanup --source-code <source> --dry-run
 ```
 
-`short_lived_raw_quarantine` may store raw API responses only when source config explicitly enables it. Source-system permissions are mapped manually into portal `scope_tokens` during each source implementation.
+`short_lived_raw_quarantine` may store raw API responses only when source config explicitly enables it and the raw response passes the DLP/secret gate. If credential material is detected, the raw payload is skipped and an issue is written to the landing zone. Source-system permissions are mapped manually into portal `scope_tokens` during each source implementation.
 
 ## Первичная настройка памяти
 

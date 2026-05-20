@@ -13,6 +13,7 @@
 - document ingestion и graph schema bootstrapping приняты в `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - архитектурное решение по внешним ИС находится в `docs/adr/ADR-0006-external-system-knowledge-connectors.md`;
 - проектный план находится в `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md`;
+- legacy gap review текущего vertical slice находится в `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`;
 - бизнес-опросники находятся в `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md`;
 - active planning находится в `docs/planning/active/memory-external-systems-connector.md`;
 - workflow package находится в `workflow/active/memory-external-systems-connector/`.
@@ -24,6 +25,7 @@
 - реализовать normalized landing zone с manifest/envelopes;
 - сделать handoff в существующий memory ingestion;
 - добавить retention, issue visibility, admin/tests и operations docs.
+- закрыть legacy gaps перед подключением чувствительного production source: raw quarantine hardening, retention cleanup, manifest completeness, tombstones, worker dispatch для fetch/normalize stages, content hash verification.
 
 Критерии готовности к старту реализации:
 - выбран pilot source и владелец данных;

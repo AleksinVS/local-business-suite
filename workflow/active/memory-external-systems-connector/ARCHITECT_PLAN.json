@@ -1,10 +1,11 @@
 {
   "block_id": "memory-external-systems-connector",
-  "status": "mvp_implemented",
+  "status": "legacy_gap_remediation_implemented",
   "created_at": "2026-05-20",
   "architecture_sources": [
     "docs/adr/ADR-0006-external-system-knowledge-connectors.md",
     "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md",
     "docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md",
     "docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md",
     "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
@@ -14,13 +15,16 @@
     "01-intake-and-contracts",
     "02-queue-and-state",
     "03-landing-zone-and-handoff",
-    "04-reference-connector-and-tests"
+    "04-reference-connector-and-tests",
+    "05-legacy-gap-remediation"
   ],
   "global_constraints": [
     "Do not bypass memory privacy gates, safe corpus or audit.",
     "Do not store connector credentials in contracts or repository files.",
     "Queueing through a backend separate from the primary Django database is required from the first implementation stage.",
     "Raw API responses are retained only in explicitly enabled short-lived quarantine.",
+    "Raw quarantine encryption is deferred to a later hardening stage.",
+    "This remediation slice must prevent unsafe raw writes, but does not implement encryption at rest.",
     "External permissions are mapped to portal scope_tokens manually during each source implementation.",
     "All connector jobs must be idempotent and replay-safe.",
     "Runtime landing zone artifacts belong under data/memory/external_api/."

@@ -11,5 +11,6 @@
   "MEMORY_COMPLETION_GAP_ANALYSIS.md": "Gap analysis текущей реализации системы памяти",
   "MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md": "План памяти из AI-чата, reflection и secret handles",
   "MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md": "План сбора знаний из внешних информационных систем",
+  "MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md": "Legacy gap review реализации external information system connector MVP",
   "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки"
 }

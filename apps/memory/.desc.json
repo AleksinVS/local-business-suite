@@ -32,5 +32,6 @@
   "management/commands/memory_external_enqueue.py": "Enqueue normalized external API envelopes into the external connector queue",
   "management/commands/memory_external_worker.py": "Worker для обработки external connector queue и handoff в memory ingestion",
   "management/commands/memory_external_queue_status.py": "Статус standalone external connector queue backend",
+  "management/commands/memory_external_cleanup.py": "Retention cleanup для expired external connector landing-zone artifacts",
   "migrations/": "Миграции приложения памяти"
 }

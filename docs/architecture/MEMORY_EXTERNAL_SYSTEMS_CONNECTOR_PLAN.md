@@ -1,6 +1,8 @@
 # План: сбор знаний из внешних информационных систем
 
-Статус: архитектурный план; MVP standalone queue, landing zone, enqueue/worker/status commands and handoff implemented 2026-05-20.
+Статус: архитектурный план; MVP vertical slice for standalone queue, landing zone, enqueue/worker/status commands and handoff implemented 2026-05-20.
+
+Legacy gap review: `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`.
 
 Дата: 2026-05-20.
 
@@ -146,7 +148,12 @@ data/memory/external_api/<source_code>/<run_id>/
   manifest.json
   objects/
     <object_type>/<external_id>.json
+  raw_quarantine/
+    <object_type>/<external_id>.json
   issues.jsonl
+
+data/memory/external_api/<source_code>/tombstones/
+  <collection>/<object_type>.jsonl
 ```
 
 This directory is runtime data. It is not committed.
@@ -167,7 +174,7 @@ Allowed modes:
 
 - `metadata_only` - store only cursor/hash/metadata, no object payload;
 - `normalized_only` - store normalized safe-intended envelope, default MVP;
-- `short_lived_raw_quarantine` - store encrypted raw response for bounded debug window;
+- `short_lived_raw_quarantine` - store raw response for bounded debug window after DLP/secret gate; encryption at rest is deferred to a later hardening stage;
 - `immutable_raw_vault` - future explicit mode for regulated reproducibility, not MVP default.
 
 ## Normalized Envelope
@@ -347,23 +354,27 @@ Memory handoff checks:
 
 ## Proposed Implementation Tasks
 
-MVP implemented:
+MVP vertical slice implemented:
 
 1. Source contract/schema extensions for `external_api_snapshot`.
 2. Standalone SQLite connector queue under `data/memory/queues/`.
-3. Filesystem landing zone writer with manifest/envelope files.
-4. Optional `short_lived_raw_quarantine` raw response storage.
-5. Generic enqueue/worker/status management commands.
+3. Filesystem landing zone writer with audit/replay manifest and normalized envelope files.
+4. Optional `short_lived_raw_quarantine` raw response storage behind DLP/secret gate.
+5. Generic enqueue/worker/status/cleanup management commands.
 6. Handoff adapter from normalized envelope to `MemorySnapshot`, safe corpus and chunks.
-7. Tests for idempotency, secret blocking, delete/tombstone deactivation and commands.
+7. Canonical `content_hash` verification before queue/handoff.
+8. Durable tombstone registry with stale upsert protection.
+9. Tests for idempotency, secret blocking, raw quarantine DLP skip, cleanup, tombstones and commands.
 
 Remaining implementation tasks:
 
 1. Add source-specific pilot adapter after the first external system is selected.
 2. Add queue monitoring UI/admin if needed.
-3. Add cleanup command for retention enforcement.
-4. Add webhook/reconciliation support if pilot freshness requires it.
-5. Add production queue backend if SQLite is not sufficient after pilot load tests.
+3. Add webhook/reconciliation support if pilot freshness requires it.
+4. Add production queue backend if SQLite is not sufficient after pilot load tests.
+5. Add raw quarantine encryption at rest during the later security-hardening stage.
+
+Legacy gaps are tracked in `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`. The current slice is suitable for synthetic/non-sensitive envelope handoff tests and pilot preparation. Sensitive raw quarantine still requires the deferred encryption hardening and source-specific security review.
 
 ## MVP Commands
 
@@ -371,6 +382,8 @@ Remaining implementation tasks:
 python manage.py memory_external_enqueue --source-code <source> --envelope-file <path>
 python manage.py memory_external_worker --limit 10
 python manage.py memory_external_queue_status
+python manage.py memory_external_queue_status --details --limit 20
+python manage.py memory_external_cleanup --source-code <source> --dry-run
 ```
 
 Dry-run examples:

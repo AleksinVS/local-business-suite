@@ -1,7 +1,8 @@
 {
   ".": "Активные планы крупных направлений",
   "README.md": "Правила для активных planning-файлов",
+  "memory-external-connector-legacy-gap-remediation.md": "Активный план устранения legacy gaps external connector MVP",
   "memory-external-systems-connector.md": "Активный план сбора знаний из внешних информационных систем",
   "memory-system-completion.md": "Активный план завершения системы памяти",
-  "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстная справка"
+  "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки"
 }

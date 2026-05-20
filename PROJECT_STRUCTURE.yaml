@@ -167,6 +167,7 @@ docs: # Документация проекта
     INTEGRATIONS.md: file # Интеграции с внешними системами
     MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md: file # План памяти из AI-чата, reflection и secret handles
     MEMORY_COMPLETION_GAP_ANALYSIS.md: file # Gap analysis текущей реализации системы памяти
+    MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md: file # Legacy gap review реализации external information system connector MVP
     MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md: file # План сбора знаний из внешних информационных систем
     MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md: file # План ingestion-коннектора и bootstrapping схемы графа памяти
     MEMORY_SERVICE_IMPLEMENTATION_PLAN.md: file # План реализации сервиса памяти СоСНА
@@ -191,6 +192,7 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
+      memory-external-connector-legacy-gap-remediation.md: file # Активный план устранения legacy gaps external connector MVP
       memory-external-systems-connector.md: file # Активный план сбора знаний из внешних информационных систем
       memory-system-completion.md: file # Активный план завершения системы памяти
       README.md: file # Правила для активных planning-файлов
@@ -267,8 +269,11 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets
       BLOCK_BRIEF.md: file # Краткое описание цели, scope и acceptance
+      EXECUTOR_REPORT.05-legacy-gap-remediation.md: file # Отчет исполнения legacy gap remediation для external connector MVP
       EXECUTOR_REPORT.memory-external-systems-connector.md: file # Отчет реализации MVP external connector queue/landing zone
+      LEGACY_GAP_REMEDIATION_PLAN.md: file # Исполнительный план устранения legacy gaps external connector MVP
       RETROSPECTIVE.md: file # Ретроспектива MVP external connector implementation
+      TASK_ACCEPTANCE.05-legacy-gap-remediation.md: file # Приемка task packet 05 legacy gap remediation
       TASK_ACCEPTANCE.memory-external-systems-connector.md: file # Приемка MVP external connector queue/landing zone
     settings-center-gui: # Workflow: Settings Center, GUI настроек и контекстная справка
       task-packets: file

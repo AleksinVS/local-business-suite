@@ -3,7 +3,12 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.memory.external_connectors import enqueue_external_envelope, render_external_envelope_text, validate_external_envelope
+from apps.memory.external_connectors import (
+    enqueue_external_envelope,
+    render_external_envelope_text,
+    scan_external_raw_response_for_secrets,
+    validate_external_envelope,
+)
 from apps.memory.models import MemorySource
 from apps.memory.security import scan_for_secrets
 
@@ -41,6 +46,10 @@ class Command(BaseCommand):
             validate_external_envelope(envelope)
             if scan_for_secrets(render_external_envelope_text(envelope)).blocked:
                 raise CommandError("Normalized external envelope contains credential material.")
+            if raw_response is not None and scan_external_raw_response_for_secrets(raw_response).blocked:
+                self.stdout.write(
+                    "External connector enqueue dry-run: raw response would be skipped by DLP/secret gate."
+                )
             self.stdout.write(
                 "External connector enqueue dry-run: "
                 f"source={source.code}, envelope={envelope_path}, raw_response={'yes' if raw_response else 'no'}"

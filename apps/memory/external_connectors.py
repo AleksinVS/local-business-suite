@@ -10,6 +10,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from apps.core.json_utils import atomic_write_json
@@ -20,6 +21,8 @@ from .security import scan_for_secrets
 
 
 ENVELOPE_SCHEMA_VERSION = "external-memory-envelope-v1"
+MANIFEST_SCHEMA_VERSION = "external-memory-manifest-v1"
+CONNECTOR_VERSION = "external-api-mvp-v1"
 
 
 class ExternalJobKind:
@@ -198,6 +201,27 @@ class SQLiteExternalConnectorQueueBackend:
             ).fetchall()
         return {row["status"]: row["count"] for row in rows}
 
+    def list_recent(self, *, statuses: list[str] | None = None, limit: int = 20) -> list[ExternalQueueJob]:
+        limit = max(1, min(int(limit), 200))
+        params: list[str | int] = []
+        where = ""
+        if statuses:
+            placeholders = ", ".join("?" for _ in statuses)
+            where = f"WHERE status IN ({placeholders})"
+            params.extend(statuses)
+        params.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM external_connector_jobs
+                {where}
+                ORDER BY updated_at DESC, created_at DESC, job_id ASC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [_job_from_row(row) for row in rows]
+
     def get(self, job_id: str) -> ExternalQueueJob | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM external_connector_jobs WHERE job_id = ?", (job_id,)).fetchone()
@@ -246,6 +270,15 @@ class SQLiteExternalConnectorQueueBackend:
                 ON external_connector_jobs(source_code, status, created_at)
                 """
             )
+
+
+@dataclass(frozen=True)
+class ExternalCleanupEntry:
+    path: str
+    artifact_kind: str
+    retention_days: int
+    expired_at: str
+    removed: bool
 
 
 def get_external_queue_backend():
@@ -305,7 +338,7 @@ def build_external_envelope(
         "sensitivity": sensitivity,
         "retention_class": retention_class,
         "provenance": {
-            "connector_version": "external-api-mvp-v1",
+            "connector_version": CONNECTOR_VERSION,
             "sync_run_id": run_id or _run_id(),
             "fetched_at": timezone.now().isoformat(),
         },
@@ -335,6 +368,7 @@ def enqueue_external_envelope(
 
 def write_external_landing_artifacts(*, source: MemorySource, envelope: dict, raw_response: dict | None = None) -> Path:
     validate_external_envelope(envelope)
+    assert_external_upsert_not_stale(source=source, envelope=envelope)
     rendered = render_external_envelope_text(envelope)
     secret_scan = scan_for_secrets(rendered)
     if secret_scan.blocked:
@@ -347,34 +381,87 @@ def write_external_landing_artifacts(*, source: MemorySource, envelope: dict, ra
     object_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(object_path, envelope)
 
+    issues = []
+    raw_path = None
+    raw_mode = _external_connector_config(source).get("raw_mode", "normalized_only")
+    if raw_response is not None and raw_mode == "short_lived_raw_quarantine":
+        raw_scan = scan_external_raw_response_for_secrets(raw_response)
+        if raw_scan.blocked:
+            issues.append(
+                {
+                    "issue_kind": "raw_quarantine_secret_detected",
+                    "severity": "error",
+                    "created_at": timezone.now().isoformat(),
+                    "external_id": envelope["external_id"],
+                    "object_type": envelope["object_type"],
+                    "dlp": raw_scan.as_dict(),
+                    "action": "raw_response_not_written",
+                }
+            )
+        else:
+            raw_path = base_dir / "raw_quarantine" / _safe_name(envelope["object_type"]) / f"{_safe_name(envelope['external_id'])}.json"
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(
+                raw_path,
+                {
+                    "source_code": source.code,
+                    "run_id": run_id,
+                    "external_id": envelope["external_id"],
+                    "retention_class": "short_lived_raw_quarantine",
+                    "created_at": timezone.now().isoformat(),
+                    "raw_response": raw_response,
+                },
+            )
+
+    issues_path = base_dir / "issues.jsonl"
+    if issues:
+        issues_path.parent.mkdir(parents=True, exist_ok=True)
+        with issues_path.open("a", encoding="utf-8") as issue_file:
+            for issue in issues:
+                issue_file.write(json.dumps(issue, ensure_ascii=False, sort_keys=True) + "\n")
+
     manifest_path = base_dir / "manifest.json"
-    manifest = {
-        "schema_version": "external-memory-manifest-v1",
-        "source_code": source.code,
-        "run_id": run_id,
-        "created_at": timezone.now().isoformat(),
-        "queue_backend": getattr(settings, "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND", "sqlite"),
-        "retention": _external_connector_config(source).get("retention", {}),
-        "objects": [{"path": str(object_path), "content_hash": envelope["content_hash"]}],
+    manifest = _load_existing_manifest(manifest_path)
+    now_iso = timezone.now().isoformat()
+    manifest.update(
+        {
+            "schema_version": MANIFEST_SCHEMA_VERSION,
+            "connector_version": (envelope.get("provenance") or {}).get("connector_version") or CONNECTOR_VERSION,
+            "source_code": source.code,
+            "run_id": run_id,
+            "started_at": manifest.get("started_at") or now_iso,
+            "finished_at": now_iso,
+            "created_at": manifest.get("created_at") or now_iso,
+            "queue_backend": getattr(settings, "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND", "sqlite"),
+            "retention": _external_connector_config(source).get("retention", {}),
+            "retention_class": envelope.get("retention_class", "external_default"),
+            "cursor_state": (envelope.get("provenance") or {}).get("cursor_state") or manifest.get("cursor_state") or {},
+            "issues_path": str(issues_path) if issues_path.exists() else manifest.get("issues_path", ""),
+        }
+    )
+    objects = {
+        item.get("path"): item
+        for item in manifest.get("objects", [])
+        if isinstance(item, dict) and item.get("path")
     }
+    object_entry = {
+        "path": str(object_path),
+        "content_hash": envelope["content_hash"],
+        "operation": envelope["operation"],
+        "collection": envelope["collection"],
+        "object_type": envelope["object_type"],
+        "external_id": envelope["external_id"],
+        "source_updated_at": envelope.get("source_updated_at", ""),
+    }
+    if raw_path:
+        object_entry["raw_path"] = str(raw_path)
+    objects[str(object_path)] = object_entry
+    manifest["objects"] = list(objects.values())
+    manifest["object_count"] = len(manifest["objects"])
+    manifest["error_count"] = int(manifest.get("error_count") or 0) + len(issues)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(manifest_path, manifest)
 
-    raw_mode = _external_connector_config(source).get("raw_mode", "normalized_only")
-    if raw_response is not None and raw_mode == "short_lived_raw_quarantine":
-        raw_path = base_dir / "raw_quarantine" / _safe_name(envelope["object_type"]) / f"{_safe_name(envelope['external_id'])}.json"
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(
-            raw_path,
-            {
-                "source_code": source.code,
-                "run_id": run_id,
-                "external_id": envelope["external_id"],
-                "retention_class": "short_lived_raw_quarantine",
-                "created_at": timezone.now().isoformat(),
-                "raw_response": raw_response,
-            },
-        )
     return object_path
 
 
@@ -405,6 +492,7 @@ def process_external_connector_job(job: ExternalQueueJob) -> dict:
 def handoff_external_envelope_to_memory(*, envelope: dict, envelope_path: Path | None = None) -> dict:
     validate_external_envelope(envelope)
     source = MemorySource.objects.get(code=envelope["source_code"])
+    assert_external_upsert_not_stale(source=source, envelope=envelope)
     source_object_id = _source_object_id(envelope)
     if envelope["operation"] == "delete":
         updated = MemorySnapshot.objects.filter(source=source, source_object_id=source_object_id, is_active=True).update(
@@ -412,6 +500,7 @@ def handoff_external_envelope_to_memory(*, envelope: dict, envelope_path: Path |
             valid_to=timezone.now(),
             updated_at=timezone.now(),
         )
+        append_external_tombstone(source=source, envelope=envelope)
         return {"operation": "delete", "source_object_id": source_object_id, "deactivated_snapshots": updated}
 
     safe_text = render_external_envelope_text(envelope)
@@ -486,6 +575,144 @@ def validate_external_envelope(envelope: dict):
         raise ValidationError("External envelope payload must be a JSON object.")
     if not isinstance(envelope.get("scope_tokens"), list) or not envelope["scope_tokens"]:
         raise ValidationError("External envelope scope_tokens must be a non-empty list.")
+    expected_hash = expected_external_content_hash(envelope)
+    if envelope["content_hash"] != expected_hash:
+        raise ValidationError("External envelope content_hash does not match canonical payload.")
+
+
+def expected_external_content_hash(envelope: dict) -> str:
+    return _sha256_json(
+        {
+            "operation": envelope.get("operation"),
+            "source_code": envelope.get("source_code"),
+            "collection": envelope.get("collection"),
+            "object_type": envelope.get("object_type"),
+            "external_id": envelope.get("external_id"),
+            "title": envelope.get("title", ""),
+            "payload": envelope.get("payload") or {},
+            "source_updated_at": envelope.get("source_updated_at", ""),
+        }
+    )
+
+
+def scan_external_raw_response_for_secrets(raw_response: dict):
+    return scan_for_secrets(_render_json_for_secret_scan(raw_response or {}))
+
+
+def append_external_tombstone(*, source: MemorySource, envelope: dict) -> Path:
+    tombstone_path = _external_tombstone_path(source=source, envelope=envelope)
+    tombstone_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "source_code": source.code,
+        "collection": envelope["collection"],
+        "object_type": envelope["object_type"],
+        "external_id": envelope["external_id"],
+        "source_object_id": _source_object_id(envelope),
+        "source_updated_at": envelope.get("source_updated_at", ""),
+        "content_hash": envelope["content_hash"],
+        "deleted_at": timezone.now().isoformat(),
+        "provenance": envelope.get("provenance", {}),
+    }
+    with tombstone_path.open("a", encoding="utf-8") as tombstone_file:
+        tombstone_file.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    return tombstone_path
+
+
+def assert_external_upsert_not_stale(*, source: MemorySource, envelope: dict) -> None:
+    if envelope.get("operation") != "upsert":
+        return
+    tombstone = latest_external_tombstone(source=source, envelope=envelope)
+    if not tombstone:
+        return
+    upsert_updated_at = _parse_optional_datetime(envelope.get("source_updated_at", ""))
+    deleted_source_updated_at = _parse_optional_datetime(tombstone.get("source_updated_at", ""))
+    if upsert_updated_at is None or deleted_source_updated_at is None:
+        raise ValidationError("External upsert is older than, or not comparable with, a durable tombstone.")
+    if upsert_updated_at <= deleted_source_updated_at:
+        raise ValidationError("External upsert is older than, or not comparable with, a durable tombstone.")
+
+
+def latest_external_tombstone(*, source: MemorySource, envelope: dict) -> dict | None:
+    tombstone_path = _external_tombstone_path(source=source, envelope=envelope)
+    if not tombstone_path.exists():
+        return None
+    latest = None
+    for line in tombstone_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("external_id") == envelope.get("external_id"):
+            latest = record
+    return latest
+
+
+def clean_external_connector_artifacts(
+    *,
+    source_code: str | None = None,
+    dry_run: bool = True,
+    now=None,
+) -> list[ExternalCleanupEntry]:
+    now = now or timezone.now()
+    sources = MemorySource.objects.filter(config__has_key="external_connector")
+    if source_code:
+        sources = sources.filter(code=source_code)
+    entries: list[ExternalCleanupEntry] = []
+    for source in sources:
+        retention = _external_connector_config(source).get("retention", {}) or {}
+        source_dir = Path(settings.DATA_DIR) / "memory" / "external_api" / source.code
+        entries.extend(
+            _cleanup_glob(
+                base_dir=source_dir,
+                pattern="*/raw_quarantine/**/*.json",
+                artifact_kind="raw_quarantine",
+                retention_days=int(retention.get("raw_quarantine_days", 14)),
+                dry_run=dry_run,
+                now=now,
+            )
+        )
+        entries.extend(
+            _cleanup_glob(
+                base_dir=source_dir,
+                pattern="*/objects/**/*.json",
+                artifact_kind="normalized_envelope",
+                retention_days=int(retention.get("normalized_envelope_days", 90)),
+                dry_run=dry_run,
+                now=now,
+            )
+        )
+        entries.extend(
+            _cleanup_glob(
+                base_dir=source_dir,
+                pattern="*/manifest.json",
+                artifact_kind="manifest",
+                retention_days=int(retention.get("manifest_days", 365)),
+                dry_run=dry_run,
+                now=now,
+            )
+        )
+        entries.extend(
+            _cleanup_glob(
+                base_dir=source_dir,
+                pattern="*/issues.jsonl",
+                artifact_kind="issues",
+                retention_days=int(retention.get("manifest_days", 365)),
+                dry_run=dry_run,
+                now=now,
+            )
+        )
+        entries.extend(
+            _cleanup_glob(
+                base_dir=source_dir,
+                pattern="tombstones/**/*.jsonl",
+                artifact_kind="tombstone",
+                retention_days=int(retention.get("tombstone_days", 1095)),
+                dry_run=dry_run,
+                now=now,
+            )
+        )
+        if not dry_run:
+            _remove_empty_dirs(source_dir)
+    return entries
 
 
 def render_external_envelope_text(envelope: dict) -> str:
@@ -553,3 +780,92 @@ def _source_object_id(envelope: dict) -> str:
 
 def _external_connector_config(source: MemorySource) -> dict:
     return (source.config or {}).get("external_connector", {}) or {}
+
+
+def _render_json_for_secret_scan(value, *, prefix: str = "") -> str:
+    if isinstance(value, dict):
+        lines = []
+        for key in sorted(value):
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            lines.append(_render_json_for_secret_scan(value[key], prefix=child_prefix))
+        return "\n".join(line for line in lines if line)
+    if isinstance(value, list):
+        return "\n".join(_render_json_for_secret_scan(item, prefix=prefix) for item in value)
+    return f"{prefix}: {value}"
+
+
+def _load_existing_manifest(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _external_tombstone_path(*, source: MemorySource, envelope: dict) -> Path:
+    return (
+        Path(settings.DATA_DIR)
+        / "memory"
+        / "external_api"
+        / source.code
+        / "tombstones"
+        / _safe_name(envelope["collection"])
+        / f"{_safe_name(envelope['object_type'])}.jsonl"
+    )
+
+
+def _parse_optional_datetime(value: str):
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _cleanup_glob(
+    *,
+    base_dir: Path,
+    pattern: str,
+    artifact_kind: str,
+    retention_days: int,
+    dry_run: bool,
+    now,
+) -> list[ExternalCleanupEntry]:
+    if retention_days < 0 or not base_dir.exists():
+        return []
+    cutoff = now - timezone.timedelta(days=retention_days)
+    entries: list[ExternalCleanupEntry] = []
+    for path in base_dir.glob(pattern):
+        if not path.is_file():
+            continue
+        modified_at = timezone.datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.get_current_timezone())
+        if modified_at > cutoff:
+            continue
+        removed = False
+        if not dry_run:
+            path.unlink(missing_ok=True)
+            removed = True
+        entries.append(
+            ExternalCleanupEntry(
+                path=str(path),
+                artifact_kind=artifact_kind,
+                retention_days=retention_days,
+                expired_at=cutoff.isoformat(),
+                removed=removed,
+            )
+        )
+    return entries
+
+
+def _remove_empty_dirs(base_dir: Path) -> None:
+    if not base_dir.exists():
+        return
+    for path in sorted((item for item in base_dir.rglob("*") if item.is_dir()), key=lambda item: len(item.parts), reverse=True):
+        try:
+            path.rmdir()
+        except OSError:
+            continue

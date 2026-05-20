@@ -17,7 +17,33 @@
 
 ## Next
 
-- Нет ближайших кандидатов, зафиксированных в planning backlog.
+### Ingestion-коннектор и bootstrapping схемы графа памяти
+
+Реализовать следующий блок системы памяти: ingestion корпоративных документов из локальной/UNC-папки Windows Server и управляемый bootstrapping единой схемы графа.
+
+Контекст:
+- архитектурное решение принято в `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
+- финальный план находится в `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`;
+- первый deployment target: Windows Server в домене AD;
+- первый источник документов: отдельная read-only папка "документы для памяти";
+- графовая схема должна фиксироваться в будущем контракте `contracts/ai/memory_graph_schema.json`.
+
+Предварительный scope:
+- discovery state (`MemorySourceObject`) и issue queue;
+- local/UNC storage adapter без mapped drives;
+- parser/OCR cascade для PDF, DOC, DOCX, XLS, XLSX, сканов и изображений;
+- partial indexing с default file limit 100 MB;
+- bootstrap package с pseudonymization и human approval перед cloud-init;
+- schema proposals по подразделениям с review профильных экспертов и финальным принятием владельцем графа;
+- автоматическое создание concrete graph entities/facts по утвержденной схеме, без обязательной review-очереди для каждого instance;
+- выборочный review UI для schema proposals, ingestion issues, partial/skipped/encrypted documents и спорных extraction cases.
+
+Критерии готовности к старту:
+- создан workflow-блок и task packets;
+- решено, добавляем ли отдельный `memory_ingestion_profiles.json` или расширяем `memory_sources.json`;
+- определен первый read-only source folder и учетная запись сервиса для доступа;
+- определены первые competency questions для выбранного подразделения;
+- согласован минимальный scope review UI.
 
 ## Later
 

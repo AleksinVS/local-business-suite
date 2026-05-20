@@ -6,5 +6,6 @@
   "INTEGRATIONS.md": "Интеграции с внешними системами",
   "POLICY_MODEL.md": "Модель политик доступа",
   "ANALYTICS_MODEL.md": "Модель аналитики (экспорт данных)",
-  "MEMORY_SERVICE_IMPLEMENTATION_PLAN.md": "План реализации сервиса памяти СоСНА"
+  "MEMORY_SERVICE_IMPLEMENTATION_PLAN.md": "План реализации сервиса памяти СоСНА",
+  "MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md": "План ingestion-коннектора и bootstrapping схемы графа памяти"
 }

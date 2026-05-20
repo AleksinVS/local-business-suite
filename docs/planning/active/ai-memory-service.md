@@ -11,7 +11,9 @@
 Источники истины:
 
 - архитектурное решение: `docs/adr/ADR-0003-ai-memory-service.md`;
+- архитектурное решение по ingestion/bootstrapping: `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - подробная архитектура и roadmap: `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md`;
+- финальный план ingestion/bootstrapping: `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`;
 - исполняемый workflow-блок: `workflow/active/block-ai-memory-service-2026-05-19/`;
 - рабочая очередь: `docs/planning/backlog.md`.
 
@@ -46,6 +48,8 @@
 
 - миграция проекта на PostgreSQL;
 - полноценный отдельный `services/memory_runtime`;
+- полноценный ingestion-коннектор корпоративных документов;
+- bootstrapping схемы графа по подразделениям;
 - подключение боевых Битрикс24/МИС/телефонии;
 - визуализация графа;
 - раскрытие или reverse lookup пациентских PII в AI runtime;
@@ -192,4 +196,3 @@
 - `workflow/active/block-ai-memory-service-2026-05-19/task-packets/task-memory-contracts.json`
 
 Цель первого task packet: добавить memory contracts и validators без подключения индексов и без изменения agent runtime.
-

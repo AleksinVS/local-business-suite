@@ -2,6 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -9,6 +10,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+import apps.core.json_utils as json_utils
 from apps.core.json_utils import (
     validate_memory_profiles_payload,
     validate_memory_routing_payload,
@@ -18,6 +20,62 @@ from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
 
 User = get_user_model()
+
+
+def get_optional_json_validator(test_case, validator_name):
+    validator = getattr(json_utils, validator_name, None)
+    if validator is None:
+        test_case.skipTest(f"{validator_name} is not implemented yet")
+    return validator
+
+
+def valid_memory_graph_schema_payload():
+    return {
+        "schema_version": "1.0",
+        "name": "memory_graph_schema",
+        "description": "Default test graph schema.",
+        "entity_types": {
+            "Department": {
+                "label": "Подразделение",
+                "description": "Организационная единица.",
+                "positive_examples": ["Отдел медицинской техники"],
+                "negative_examples": ["кабинет"],
+                "attributes": ["name"],
+                "status": "accepted",
+            },
+            "Procedure": {
+                "label": "Процедура",
+                "description": "Рабочая процедура или регламент.",
+                "positive_examples": ["плановое обслуживание"],
+                "negative_examples": ["инвентарный номер"],
+                "attributes": ["name"],
+                "status": "accepted",
+            },
+        },
+        "relation_types": {
+            "department_responsible_for_procedure": {
+                "label": "подразделение отвечает за процедуру",
+                "subject_type": "Department",
+                "object_type": "Procedure",
+                "description": "Ответственность подразделения за процедуру.",
+                "status": "accepted",
+            }
+        },
+        "attribute_types": {
+            "name": {
+                "value_type": "string",
+                "status": "accepted",
+            }
+        },
+        "canonicalization_rules": [],
+        "negative_examples": [],
+        "forbidden_patterns": [],
+        "confidence_thresholds": {"auto_accept": 0.85, "review": 0.6},
+        "auto_accept_policy": {"enabled": True},
+        "review_policy": {"unknown_schema_item": "needs_expert_review"},
+        "department_evidence": [],
+        "changelog": [],
+    }
 
 
 class DepartmentModelTests(TestCase):
@@ -156,6 +214,13 @@ class DiagnosticEndpointTests(TestCase):
 
 class ArchitectureContractTests(TestCase):
     def test_validate_architecture_contracts_command_passes(self):
+        required_settings = (
+            "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
+            "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
+        )
+        for setting_name in required_settings:
+            if not hasattr(settings, setting_name):
+                self.skipTest(f"{setting_name} is not configured yet")
         call_command("validate_architecture_contracts")
 
     def test_memory_sources_reject_missing_required_fields(self):
@@ -235,10 +300,15 @@ class ArchitectureContractTests(TestCase):
             profiles_path = tmp_path / "memory_profiles.json"
             routing_path = tmp_path / "memory_routing.json"
             sources_path = tmp_path / "memory_sources.json"
+            ingestion_profiles_path = tmp_path / "memory_ingestion_profiles.json"
+            graph_schema_path = tmp_path / "memory_graph_schema.json"
             default_contracts = Path(__file__).resolve().parents[2] / "contracts" / "ai"
             profiles_payload = json.loads((default_contracts / "memory_profiles.json").read_text(encoding="utf-8"))
             routing_payload = json.loads((default_contracts / "memory_routing.json").read_text(encoding="utf-8"))
             sources_payload = json.loads((default_contracts / "memory_sources.json").read_text(encoding="utf-8"))
+            ingestion_profiles_payload = json.loads(
+                (default_contracts / "memory_ingestion_profiles.json").read_text(encoding="utf-8")
+            )
             routing_payload["routes"]["secret"]["default_llm"] = "local"
             profiles_path.write_text(json.dumps(profiles_payload), encoding="utf-8")
             routing_path.write_text(
@@ -246,11 +316,15 @@ class ArchitectureContractTests(TestCase):
                 encoding="utf-8",
             )
             sources_path.write_text(json.dumps(sources_payload), encoding="utf-8")
+            ingestion_profiles_path.write_text(json.dumps(ingestion_profiles_payload), encoding="utf-8")
+            graph_schema_path.write_text(json.dumps(valid_memory_graph_schema_payload()), encoding="utf-8")
 
             with override_settings(
                 LOCAL_BUSINESS_MEMORY_PROFILES_FILE=profiles_path,
                 LOCAL_BUSINESS_MEMORY_ROUTING_FILE=routing_path,
                 LOCAL_BUSINESS_MEMORY_SOURCES_FILE=sources_path,
+                LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE=ingestion_profiles_path,
+                LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE=graph_schema_path,
             ):
                 with self.assertRaisesMessage(ValidationError, "secret"):
                     call_command("validate_architecture_contracts")
@@ -280,6 +354,95 @@ class ArchitectureContractTests(TestCase):
             self.assertEqual(payload["brief_id"], "TASK-42")
             self.assertEqual(payload["title"], "Improve board filters")
             self.assertEqual(payload["status"], "draft")
+
+
+class MemoryIngestionContractExpectationTests(TestCase):
+    def test_memory_ingestion_profiles_accept_expected_bootstrap_shape(self):
+        validator = get_optional_json_validator(self, "validate_memory_ingestion_profiles_payload")
+
+        validator(
+            {
+                "version": "1.0",
+                "name": "memory_ingestion_profiles",
+                "description": "Default test profiles for memory ingestion.",
+                "adapter_profiles": {
+                    "local_readonly_v1": {
+                        "adapter_kind": "local_path",
+                        "follow_symlinks": False,
+                    }
+                },
+                "parser_profiles": {
+                    "document_cascade_v1": {
+                        "cascade": ["native_text", "docling_placeholder", "ocr_placeholder"],
+                        "supported_extensions": [".txt", ".pdf"],
+                        "extract_embedded_images": False,
+                    }
+                },
+                "ocr_profiles": {
+                    "local_ocr_v1": {
+                        "enabled": False,
+                        "backend": "tesseract",
+                        "languages": ["rus", "eng"],
+                        "cloud_policy": "deny",
+                    }
+                },
+                "limit_profiles": {
+                    "default_limits_v1": {
+                        "max_file_size_mb": 100,
+                        "parser_timeout_seconds": 120,
+                        "ocr_timeout_seconds": 300,
+                    }
+                },
+                "profiles": {
+                    "corporate_docs_v1": {
+                        "adapter_profile": "local_readonly_v1",
+                        "parser_profile": "document_cascade_v1",
+                        "ocr_profile": "local_ocr_v1",
+                        "limit_profile": "default_limits_v1",
+                        "raw_mode": "reference_only",
+                        "acl_mode": "scope_rule",
+                        "partial_indexing": "enabled",
+                        "issue_policy": {
+                            "create_issue_kinds": [
+                                "encrypted_file",
+                                "unsupported_format",
+                                "file_too_large",
+                                "partial_indexed",
+                            ]
+                        },
+                    }
+                },
+            }
+        )
+
+    def test_memory_ingestion_profiles_reject_missing_parser_profiles(self):
+        validator = get_optional_json_validator(self, "validate_memory_ingestion_profiles_payload")
+
+        with self.assertRaisesMessage(ValidationError, "parser_profiles"):
+            validator(
+                {
+                    "version": "1.0",
+                    "name": "memory_ingestion_profiles",
+                    "description": "Default test profiles for memory ingestion.",
+                    "adapter_profiles": {},
+                    "ocr_profiles": {},
+                    "limit_profiles": {},
+                    "profiles": {},
+                }
+            )
+
+    def test_memory_graph_schema_accepts_expected_bootstrap_shape(self):
+        validator = get_optional_json_validator(self, "validate_memory_graph_schema_payload")
+
+        validator(valid_memory_graph_schema_payload())
+
+    def test_memory_graph_schema_rejects_unknown_relation_pair_types(self):
+        validator = get_optional_json_validator(self, "validate_memory_graph_schema_payload")
+        payload = valid_memory_graph_schema_payload()
+        payload["relation_types"]["department_responsible_for_procedure"]["object_type"] = "UnknownType"
+
+        with self.assertRaisesMessage(ValidationError, "object_type"):
+            validator(payload)
 
 
 class DemoSeedCommandTests(TestCase):

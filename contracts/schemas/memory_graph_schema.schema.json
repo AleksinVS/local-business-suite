@@ -1,0 +1,37 @@
+{
+  "title": "Memory Graph Schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "description",
+    "entity_types",
+    "relation_types",
+    "attribute_types",
+    "canonicalization_rules",
+    "negative_examples",
+    "forbidden_patterns",
+    "confidence_thresholds",
+    "auto_accept_policy",
+    "review_policy",
+    "department_evidence",
+    "changelog"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "entity_types": { "type": "object" },
+    "relation_types": { "type": "object" },
+    "attribute_types": { "type": "object" },
+    "canonicalization_rules": { "type": "array" },
+    "negative_examples": { "type": "array" },
+    "forbidden_patterns": { "type": "array" },
+    "confidence_thresholds": { "type": "object" },
+    "auto_accept_policy": { "type": "object" },
+    "review_policy": { "type": "object" },
+    "department_evidence": { "type": "array" },
+    "changelog": { "type": "array" }
+  },
+  "additionalProperties": false
+}

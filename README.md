@@ -48,12 +48,16 @@
 - хранит safe corpus, manifests и локальные индексы в `data/memory/`;
 - поддерживает полнотекстовый MVP backend на SQLite FTS;
 - хранит графовые факты через backend-neutral интерфейс;
+- обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
+- ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
+- поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа;
 - возвращает AI-чату только безопасные результаты с `citations`;
 - пишет каждый разрешенный или запрещенный поиск в `MemoryAccessAudit`.
 
 Основные файлы:
 
 - `docs/guides/MEMORY_USER_GUIDE.md` — как пользоваться памятью через AI-чат и что проверять в ответах.
+- `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — как внедрять ingestion на Windows/UNC, вести issue/review queue и bootstrapping схемы графа.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — как развернуть, настроить и проверить память.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации и архитектурные пояснения.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — финальный план ingestion-коннектора и bootstrapping схемы графа.
@@ -62,15 +66,25 @@
 - `contracts/ai/memory_sources.json` — источники памяти.
 - `contracts/ai/memory_profiles.json` — профили chunking, extraction, indexing и ranking.
 - `contracts/ai/memory_routing.json` — правила маршрутизации по sensitivity.
+- `contracts/ai/memory_ingestion_profiles.json` — профили local/UNC adapters, parser/OCR cascade, limits и raw/ACL policies.
+- `contracts/ai/memory_graph_schema.json` — единая схема графа памяти.
 
 Ограничения текущей версии:
 
 - production scheduler/Celery пока не подключен;
 - embeddings-интерфейс заложен, но в MVP используется локальный full-text backend;
 - Kuzu backend подготовлен как lazy placeholder;
-- ingestion-коннектор корпоративных документов и bootstrapping схемы графа спроектированы, но еще не реализованы;
+- ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.log`), а Office/PDF/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
 - внешний API памяти вынесен в backlog и пока не реализуется;
 - облачная маршрутизация для чувствительных случаев не включена.
+
+Ограничения ingestion/bootstrapping MVP:
+
+- первый источник документов — dedicated read-only folder на Windows Server или UNC path;
+- mapped drives для сервисов не используются;
+- raw mode по умолчанию `reference_only`, без копирования всех документов в `data/memory/raw_vault/`;
+- default file limit 100 MB, большие/сложные документы допускают partial indexing с issue flag;
+- ACL inheritance, production cloud OCR/LLM и mandatory review каждого graph instance не входят в MVP.
 
 ## Быстрый старт
 
@@ -118,6 +132,10 @@ python manage.py test
 
 ```bash
 python manage.py memory_sync_source --dry-run
+python manage.py memory_discover_source --source-code <code> --dry-run
+python manage.py memory_ingest_source --source-code <code> --dry-run
+python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
+python manage.py memory_graph_extract --source-code <code> --dry-run
 python manage.py memory_reindex --dry-run
 python manage.py memory_eval --dry-run
 ```
@@ -169,6 +187,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
 - `docs/guides/MEMORY_USER_GUIDE.md` — руководство по системе памяти.
+- `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.
 - `docs/deployment/DEPLOYMENT.md` — production deployment.
 - `docs/deployment/IIS_SSO.md` — IIS и Active Directory.

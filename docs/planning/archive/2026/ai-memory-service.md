@@ -1,6 +1,6 @@
 # Активный план: сервис памяти СоСНА
 
-Статус: Active.
+Статус: Completed / archived.
 
 Дата создания: 2026-05-19.
 
@@ -14,6 +14,7 @@
 - архитектурное решение по ingestion/bootstrapping: `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - подробная архитектура и roadmap: `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md`;
 - финальный план ingestion/bootstrapping: `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`;
+- операторский guide ingestion/bootstrapping: `docs/guides/MEMORY_INGESTION_OPERATIONS.md`;
 - исполняемый workflow-блок: `workflow/active/block-ai-memory-service-2026-05-19/`;
 - рабочая очередь: `docs/planning/backlog.md`.
 
@@ -54,6 +55,8 @@
 - визуализация графа;
 - раскрытие или reverse lookup пациентских PII в AI runtime;
 - cloud escalation для sensitive context.
+
+Для следующего блока ingestion/bootstrapping MVP-ограничения зафиксированы отдельно: Windows local/UNC source, dedicated read-only corpus folder, raw mode `reference_only`, partial indexing с issue queue, selective schema/extraction review и отсутствие mandatory review для каждого graph instance.
 
 ## Implementation Tracks
 
@@ -189,10 +192,11 @@
 - workflow-блок перенесен в `workflow/archive/2026/`;
 - этот plan перенесен в `docs/planning/archive/2026/` или обновлен как следующий активный этап.
 
-## Текущий следующий шаг
+## Итоговый статус
 
-Начать с task packet:
+Базовый memory service и MVP ingestion + graph schema bootstrapping реализованы:
 
-- `workflow/active/block-ai-memory-service-2026-05-19/task-packets/task-memory-contracts.json`
-
-Цель первого task packet: добавить memory contracts и validators без подключения индексов и без изменения agent runtime.
+- `apps.memory` содержит metadata, privacy pipeline, retrieval, audit, eval, discovery/ingestion state и review queues;
+- контракты памяти включают `memory_sources.json`, `memory_profiles.json`, `memory_routing.json`, `memory_ingestion_profiles.json`, `memory_graph_schema.json`;
+- доступны команды `memory_sync_source`, `memory_discover_source`, `memory_ingest_source`, `memory_prepare_bootstrap_package`, `memory_graph_schema_discover`, `memory_graph_extract`, `memory_reindex`, `memory_eval`;
+- следующий backlog focus — production parser/OCR backend для PDF/Office/scans и real-document eval.

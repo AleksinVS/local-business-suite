@@ -16,6 +16,8 @@ from apps.core.json_utils import (
     validate_dataset_registry_payload,
     validate_integration_registry_payload,
     validate_memory_profiles_payload,
+    validate_memory_graph_schema_payload,
+    validate_memory_ingestion_profiles_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
     validate_role_rules_payload,
@@ -53,10 +55,14 @@ class Command(BaseCommand):
         validate_memory_profiles_payload(memory_profiles_payload)
         memory_routing_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
         validate_memory_routing_payload(memory_routing_payload)
+        memory_ingestion_profiles_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
+        validate_memory_ingestion_profiles_payload(memory_ingestion_profiles_payload)
+        validate_memory_graph_schema_payload(load_json_file(settings.LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE))
         validate_memory_sources_payload(
             load_json_file(settings.LOCAL_BUSINESS_MEMORY_SOURCES_FILE),
             profiles_payload=memory_profiles_payload,
             routing_payload=memory_routing_payload,
+            ingestion_profiles_payload=memory_ingestion_profiles_payload,
         )
         # Validate STATUS_ALIASES keys align with workflow_rules statuses.
         workflow_statuses = set(workflow_payload.get("statuses", []))

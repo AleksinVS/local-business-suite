@@ -39,6 +39,8 @@
           "contract_file",
           "documentation",
           "integration_snapshot",
+          "local_path",
+          "unc_path",
           "synthetic_fixture"
         ]
       },
@@ -111,6 +113,9 @@
       "ignore_patterns": {
         "type": "array",
         "items": { "type": "string" }
+      },
+      "ingestion_profile": {
+        "type": "string"
       }
     },
     "additionalProperties": false

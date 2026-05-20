@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0.0",
+  "name": "memory_graph_schema",
+  "description": "Initial organization-wide graph schema contract for the AI memory service.",
+  "entity_types": {
+    "Department": {
+      "label": "Подразделение",
+      "description": "Организационная единица, участвующая в процессах учреждения.",
+      "scope_note": "Используется для отделений, отделов и служб.",
+      "positive_examples": [
+        "Отдел медицинской техники",
+        "Приемное отделение"
+      ],
+      "negative_examples": [
+        "кабинет",
+        "здание"
+      ],
+      "attributes": [
+        "name",
+        "short_name"
+      ],
+      "status": "accepted"
+    },
+    "Document": {
+      "label": "Документ",
+      "description": "Внутренний документ, регламент, инструкция, приказ или иной управляемый артефакт.",
+      "scope_note": "Номера документов допускаются в bootstrap после policy review.",
+      "positive_examples": [
+        "Инструкция по техническому обслуживанию",
+        "Приказ"
+      ],
+      "negative_examples": [
+        "устная договоренность"
+      ],
+      "attributes": [
+        "title",
+        "document_number"
+      ],
+      "status": "accepted"
+    },
+    "Procedure": {
+      "label": "Процедура",
+      "description": "Повторяемое действие, рабочий процесс или регламентированная операция.",
+      "scope_note": "Используется для процессов эксплуатации, ремонта, согласования и контроля.",
+      "positive_examples": [
+        "калибровка оборудования",
+        "первичная регистрация заявки"
+      ],
+      "negative_examples": [
+        "одноразовый комментарий"
+      ],
+      "attributes": [
+        "name"
+      ],
+      "status": "accepted"
+    }
+  },
+  "relation_types": {
+    "document_describes_procedure": {
+      "label": "документ описывает процедуру",
+      "subject_type": "Document",
+      "object_type": "Procedure",
+      "description": "Документ содержит правила, описание или порядок выполнения процедуры.",
+      "status": "accepted"
+    },
+    "department_responsible_for_procedure": {
+      "label": "подразделение отвечает за процедуру",
+      "subject_type": "Department",
+      "object_type": "Procedure",
+      "description": "Подразделение отвечает за выполнение или контроль процедуры.",
+      "status": "accepted"
+    }
+  },
+  "attribute_types": {
+    "name": {
+      "label": "Название",
+      "value_type": "string"
+    },
+    "short_name": {
+      "label": "Краткое название",
+      "value_type": "string"
+    },
+    "title": {
+      "label": "Заголовок",
+      "value_type": "string"
+    },
+    "document_number": {
+      "label": "Номер документа",
+      "value_type": "string"
+    }
+  },
+  "canonicalization_rules": [],
+  "negative_examples": [],
+  "forbidden_patterns": [],
+  "confidence_thresholds": {
+    "auto_accept_entity": 0.85,
+    "auto_accept_fact": 0.85,
+    "review_below": 0.85
+  },
+  "auto_accept_policy": {
+    "enabled": true,
+    "requires_accepted_type": true,
+    "requires_safe_chunk_evidence": true
+  },
+  "review_policy": {
+    "unknown_type": "review",
+    "unknown_relation": "review",
+    "low_confidence": "review",
+    "canonicalization_conflict": "review",
+    "dlp_warning": "review"
+  },
+  "department_evidence": [],
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-05-20",
+      "description": "Initial seed schema for moderated bootstrapping."
+    }
+  ]
+}

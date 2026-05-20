@@ -6,5 +6,7 @@
   "models.json": "Каталог моделей для AI runtime",
   "memory_sources.json": "Дефолтный каталог источников сервиса памяти СоСНА",
   "memory_profiles.json": "Дефолтные профили chunking, extraction, indexing и ranking для памяти",
-  "memory_routing.json": "Дефолтные правила sensitivity routing для памяти"
+  "memory_routing.json": "Дефолтные правила sensitivity routing для памяти",
+  "memory_ingestion_profiles.json": "Дефолтные профили ingestion-коннектора памяти: adapters, parsers, OCR, limits и policies",
+  "memory_graph_schema.json": "Дефолтная единая схема графа памяти для bootstrapping и extraction"
 }

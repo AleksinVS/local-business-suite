@@ -1,6 +1,6 @@
 # План: ingestion-коннектор и bootstrapping схемы графа памяти
 
-Статус: финальный архитектурный план перед реализацией.
+Статус: финальный архитектурный план; MVP discovery/ingestion/schema bootstrapping реализован 2026-05-20.
 
 Дата: 2026-05-20.
 
@@ -11,6 +11,8 @@
 Этот документ фиксирует общую схему реализации ingestion-коннектора для корпоративных документов и процесса первоначального/рабочего сбора типов графа знаний.
 
 План дополняет базовую архитектуру СоСНА из `docs/adr/ADR-0003-ai-memory-service.md` и `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md`. Он не заменяет ADR: решения зафиксированы в ADR-0004, а здесь описаны компоненты, порядок работ, проверки и границы реализации.
+
+Текущий implementation status: в `apps.memory` добавлены `MemorySourceObject`, `MemoryIngestionRun`, `MemoryIngestionIssue`, `MemoryGraphSchemaProposal`, `MemoryGraphEntity`, `MemoryGraphExtractionRun`, `MemoryGraphReviewItem`, команды `memory_discover_source`, `memory_ingest_source`, `memory_prepare_bootstrap_package`, `memory_graph_schema_discover`, `memory_graph_extract`, контракты `memory_ingestion_profiles.json` и `memory_graph_schema.json`. Production parser/OCR backend для PDF/Office/scans остается отдельным следующим этапом.
 
 ## Принятые решения
 

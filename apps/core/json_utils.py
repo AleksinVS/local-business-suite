@@ -162,6 +162,45 @@ REQUIRED_MEMORY_SOURCE_KEYS = {
     "ignore_patterns",
 }
 
+REQUIRED_MEMORY_INGESTION_PROFILES_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "adapter_profiles",
+    "parser_profiles",
+    "ocr_profiles",
+    "limit_profiles",
+    "profiles",
+}
+
+REQUIRED_MEMORY_INGESTION_PROFILE_KEYS = {
+    "adapter_profile",
+    "parser_profile",
+    "ocr_profile",
+    "limit_profile",
+    "raw_mode",
+    "acl_mode",
+    "partial_indexing",
+    "issue_policy",
+}
+
+REQUIRED_MEMORY_GRAPH_SCHEMA_ROOT_KEYS = {
+    "schema_version",
+    "name",
+    "description",
+    "entity_types",
+    "relation_types",
+    "attribute_types",
+    "canonicalization_rules",
+    "negative_examples",
+    "forbidden_patterns",
+    "confidence_thresholds",
+    "auto_accept_policy",
+    "review_policy",
+    "department_evidence",
+    "changelog",
+}
+
 REQUIRED_MEMORY_PROFILES_ROOT_KEYS = {
     "chunking_profiles",
     "extractor_profiles",
@@ -233,6 +272,8 @@ MEMORY_SOURCE_KIND_VALUES = {
     "contract_file",
     "documentation",
     "integration_snapshot",
+    "local_path",
+    "unc_path",
     "synthetic_fixture",
 }
 
@@ -321,6 +362,42 @@ MEMORY_CONTEXT_KIND_VALUES = {
     "citation",
     "metadata",
     "graph_fact",
+}
+
+MEMORY_ADAPTER_KIND_VALUES = {
+    "local_path",
+    "unc_path",
+}
+
+MEMORY_RAW_MODE_VALUES = {
+    "reference_only",
+    "quarantine_copy",
+    "immutable_raw_vault",
+}
+
+MEMORY_ACL_MODE_VALUES = {
+    "scope_rule",
+    "inherit_source_acl_future",
+}
+
+MEMORY_PARTIAL_INDEXING_VALUES = {
+    "enabled",
+    "disabled",
+}
+
+MEMORY_INGESTION_ISSUE_KIND_VALUES = {
+    "encrypted_file",
+    "unsupported_format",
+    "file_too_large",
+    "partial_indexed",
+    "parser_timeout",
+    "ocr_timeout",
+    "pii_blocked",
+    "secret_blocked",
+    "acl_unresolved",
+    "schema_unknown_type",
+    "schema_unknown_relation",
+    "canonicalization_conflict",
 }
 
 
@@ -573,7 +650,7 @@ def validate_ai_task_types_payload(payload):
                 raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")
 
 
-def validate_memory_sources_payload(payload, profiles_payload=None, routing_payload=None):
+def validate_memory_sources_payload(payload, profiles_payload=None, routing_payload=None, ingestion_profiles_payload=None):
     if not isinstance(payload, list):
         raise ValidationError("Memory sources должен быть JSON-массивом.")
     if not payload:
@@ -589,6 +666,9 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
     sensitivity_levels = set()
     if routing_payload:
         sensitivity_levels = set(routing_payload.get("sensitivity_levels", []))
+    ingestion_profile_ids = set()
+    if ingestion_profiles_payload:
+        ingestion_profile_ids = set(ingestion_profiles_payload.get("profiles", {}).keys())
 
     for index, item in enumerate(payload, start=1):
         if not isinstance(item, dict):
@@ -642,6 +722,15 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
         ignore_patterns = item.get("ignore_patterns", [])
         if not isinstance(ignore_patterns, list) or not all(isinstance(pattern, str) for pattern in ignore_patterns):
             raise ValidationError(f"Поле 'ignore_patterns' у memory source '{code}' должно быть списком строк.")
+        ingestion_profile = item.get("ingestion_profile")
+        if ingestion_profile is not None:
+            if not isinstance(ingestion_profile, str) or not ingestion_profile:
+                raise ValidationError(f"Поле 'ingestion_profile' у memory source '{code}' должно быть непустой строкой.")
+            if ingestion_profile_ids and ingestion_profile not in ingestion_profile_ids:
+                raise ValidationError(
+                    f"Memory source '{code}' ссылается на неизвестный ingestion_profile "
+                    f"'{ingestion_profile}'."
+                )
         if chunking_profiles and item["chunking_profile"] not in chunking_profiles:
             raise ValidationError(
                 f"Memory source '{code}' ссылается на неизвестный chunking_profile "
@@ -665,6 +754,160 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
                 f"Memory source '{code}' ссылается на неизвестный sensitivity "
                 f"'{item['sensitivity']}'."
             )
+
+
+def validate_memory_ingestion_profiles_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory ingestion profiles")
+    missing = REQUIRED_MEMORY_INGESTION_PROFILES_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory ingestion profiles не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+
+    for root_key in ("adapter_profiles", "parser_profiles", "ocr_profiles", "limit_profiles", "profiles"):
+        if not isinstance(payload.get(root_key), dict) or not payload.get(root_key):
+            raise ValidationError(f"Поле '{root_key}' в memory ingestion profiles должно быть непустым JSON-объектом.")
+
+    for profile_id, profile in payload["adapter_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Adapter profile '{profile_id}' должен быть JSON-объектом.")
+        if profile.get("adapter_kind") not in MEMORY_ADAPTER_KIND_VALUES:
+            raise ValidationError(f"Adapter profile '{profile_id}' содержит недопустимый adapter_kind.")
+        if not isinstance(profile.get("follow_symlinks", False), bool):
+            raise ValidationError(f"Поле follow_symlinks у adapter profile '{profile_id}' должно быть boolean.")
+
+    for profile_id, profile in payload["parser_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Parser profile '{profile_id}' должен быть JSON-объектом.")
+        cascade = profile.get("cascade")
+        _ensure_list_of_strings(cascade, f"Поле cascade у parser profile '{profile_id}'")
+        if not cascade:
+            raise ValidationError(f"Поле cascade у parser profile '{profile_id}' должно быть непустым списком.")
+        supported_extensions = profile.get("supported_extensions")
+        _ensure_list_of_strings(supported_extensions, f"Поле supported_extensions у parser profile '{profile_id}'")
+        if not isinstance(profile.get("extract_embedded_images", False), bool):
+            raise ValidationError(
+                f"Поле extract_embedded_images у parser profile '{profile_id}' должно быть boolean."
+            )
+
+    for profile_id, profile in payload["ocr_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"OCR profile '{profile_id}' должен быть JSON-объектом.")
+        if not isinstance(profile.get("enabled"), bool):
+            raise ValidationError(f"Поле enabled у OCR profile '{profile_id}' должно быть boolean.")
+        _ensure_list_of_strings(profile.get("languages"), f"Поле languages у OCR profile '{profile_id}'")
+        backend = profile.get("backend")
+        if not isinstance(backend, str) or not backend:
+            raise ValidationError(f"Поле backend у OCR profile '{profile_id}' должно быть непустой строкой.")
+        cloud_policy = profile.get("cloud_policy", "deny")
+        if cloud_policy not in {"deny", "prepared_package_only"}:
+            raise ValidationError(f"OCR profile '{profile_id}' содержит недопустимый cloud_policy.")
+
+    for profile_id, profile in payload["limit_profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Limit profile '{profile_id}' должен быть JSON-объектом.")
+        max_file_size_mb = profile.get("max_file_size_mb")
+        if type(max_file_size_mb) is not int or max_file_size_mb <= 0:
+            raise ValidationError(f"Поле max_file_size_mb у limit profile '{profile_id}' должно быть положительным числом.")
+        for key in ("parser_timeout_seconds", "ocr_timeout_seconds"):
+            value = profile.get(key)
+            if type(value) is not int or value <= 0:
+                raise ValidationError(f"Поле {key} у limit profile '{profile_id}' должно быть положительным числом.")
+
+    adapter_ids = set(payload["adapter_profiles"].keys())
+    parser_ids = set(payload["parser_profiles"].keys())
+    ocr_ids = set(payload["ocr_profiles"].keys())
+    limit_ids = set(payload["limit_profiles"].keys())
+    for profile_id, profile in payload["profiles"].items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"Ingestion profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_INGESTION_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"Ingestion profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        if profile.get("adapter_profile") not in adapter_ids:
+            raise ValidationError(f"Ingestion profile '{profile_id}' ссылается на неизвестный adapter_profile.")
+        if profile.get("parser_profile") not in parser_ids:
+            raise ValidationError(f"Ingestion profile '{profile_id}' ссылается на неизвестный parser_profile.")
+        if profile.get("ocr_profile") not in ocr_ids:
+            raise ValidationError(f"Ingestion profile '{profile_id}' ссылается на неизвестный ocr_profile.")
+        if profile.get("limit_profile") not in limit_ids:
+            raise ValidationError(f"Ingestion profile '{profile_id}' ссылается на неизвестный limit_profile.")
+        if profile.get("raw_mode") not in MEMORY_RAW_MODE_VALUES:
+            raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый raw_mode.")
+        if profile.get("acl_mode") not in MEMORY_ACL_MODE_VALUES:
+            raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый acl_mode.")
+        if profile.get("partial_indexing") not in MEMORY_PARTIAL_INDEXING_VALUES:
+            raise ValidationError(f"Ingestion profile '{profile_id}' содержит недопустимый partial_indexing.")
+        issue_policy = profile.get("issue_policy")
+        if not isinstance(issue_policy, dict):
+            raise ValidationError(f"Поле issue_policy у ingestion profile '{profile_id}' должно быть JSON-объектом.")
+        create_issue_kinds = issue_policy.get("create_issue_kinds")
+        _ensure_list_of_strings(create_issue_kinds, f"Поле create_issue_kinds у ingestion profile '{profile_id}'")
+        unknown_issue_kinds = set(create_issue_kinds) - MEMORY_INGESTION_ISSUE_KIND_VALUES
+        if unknown_issue_kinds:
+            raise ValidationError(
+                f"Ingestion profile '{profile_id}' содержит неизвестные issue kinds: "
+                + ", ".join(sorted(unknown_issue_kinds))
+                + "."
+            )
+
+
+def validate_memory_graph_schema_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory graph schema")
+    missing = REQUIRED_MEMORY_GRAPH_SCHEMA_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory graph schema не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for key in ("schema_version", "name", "description"):
+        if not isinstance(payload.get(key), str) or not payload.get(key):
+            raise ValidationError(f"Поле '{key}' в memory graph schema должно быть непустой строкой.")
+
+    entity_types = payload.get("entity_types")
+    relation_types = payload.get("relation_types")
+    attribute_types = payload.get("attribute_types")
+    if not isinstance(entity_types, dict) or not entity_types:
+        raise ValidationError("Поле entity_types в memory graph schema должно быть непустым JSON-объектом.")
+    if not isinstance(relation_types, dict):
+        raise ValidationError("Поле relation_types в memory graph schema должно быть JSON-объектом.")
+    if not isinstance(attribute_types, dict):
+        raise ValidationError("Поле attribute_types в memory graph schema должно быть JSON-объектом.")
+
+    entity_codes = set(entity_types.keys())
+    for code, item in entity_types.items():
+        if not isinstance(item, dict):
+            raise ValidationError(f"Entity type '{code}' должен быть JSON-объектом.")
+        for key in ("label", "description", "status"):
+            if not isinstance(item.get(key), str) or not item.get(key):
+                raise ValidationError(f"Поле '{key}' у entity type '{code}' должно быть непустой строкой.")
+        if item["status"] not in {"proposed", "accepted", "rejected", "deprecated"}:
+            raise ValidationError(f"Entity type '{code}' содержит недопустимый status.")
+        _ensure_list_of_strings(item.get("positive_examples", []), f"Поле positive_examples у entity type '{code}'")
+        _ensure_list_of_strings(item.get("negative_examples", []), f"Поле negative_examples у entity type '{code}'")
+        _ensure_list_of_strings(item.get("attributes", []), f"Поле attributes у entity type '{code}'")
+
+    for code, item in relation_types.items():
+        if not isinstance(item, dict):
+            raise ValidationError(f"Relation type '{code}' должен быть JSON-объектом.")
+        for key in ("label", "description", "subject_type", "object_type", "status"):
+            if not isinstance(item.get(key), str) or not item.get(key):
+                raise ValidationError(f"Поле '{key}' у relation type '{code}' должно быть непустой строкой.")
+        if item["subject_type"] not in entity_codes:
+            raise ValidationError(f"Relation type '{code}' ссылается на неизвестный subject_type.")
+        if item["object_type"] not in entity_codes:
+            raise ValidationError(f"Relation type '{code}' ссылается на неизвестный object_type.")
+        if item["status"] not in {"proposed", "accepted", "rejected", "deprecated"}:
+            raise ValidationError(f"Relation type '{code}' содержит недопустимый status.")
+
+    for key in ("canonicalization_rules", "negative_examples", "forbidden_patterns", "department_evidence", "changelog"):
+        if not isinstance(payload.get(key), list):
+            raise ValidationError(f"Поле {key} в memory graph schema должно быть списком.")
+    for key in ("confidence_thresholds", "auto_accept_policy", "review_policy"):
+        if not isinstance(payload.get(key), dict):
+            raise ValidationError(f"Поле {key} в memory graph schema должно быть JSON-объектом.")
 
 
 def validate_memory_profiles_payload(payload):

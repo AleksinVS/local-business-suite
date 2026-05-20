@@ -2,5 +2,7 @@
   ".": "JSON Schema для машинно-читаемых контрактов проекта",
   "memory_sources.schema.json": "Schema для каталога источников сервиса памяти",
   "memory_profiles.schema.json": "Schema для профилей chunking, extraction, indexing и ranking памяти",
-  "memory_routing.schema.json": "Schema для правил sensitivity routing памяти"
+  "memory_routing.schema.json": "Schema для правил sensitivity routing памяти",
+  "memory_ingestion_profiles.schema.json": "Schema для профилей ingestion-коннектора памяти",
+  "memory_graph_schema.schema.json": "Schema для единой схемы графа памяти"
 }

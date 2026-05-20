@@ -54,6 +54,19 @@
 
 В admin намеренно не выводятся raw/safe/text path как обычные searchable поля. Показывается состояние артефактов: present/missing.
 
+## Ingestion корпоративных документов
+
+Следующий блок памяти добавляет ingestion документов из локальной папки Windows Server или UNC path. Операционные правила описаны в `docs/guides/MEMORY_INGESTION_OPERATIONS.md`.
+
+Коротко для пользователей и операторов:
+
+- первый источник — отдельная read-only папка "документы для памяти", а не весь общий файловый ресурс;
+- Windows services должны использовать UNC paths вида `\\SERVER\Share\Folder`, не mapped drives;
+- raw-документы по умолчанию не копируются в `data/memory/`, хранится ссылка, hash и metadata;
+- password-protected, encrypted, partial, suspicious и unsupported документы попадают в issue/review queue;
+- graph schema proposals проверяются профильными экспертами и владельцем графа;
+- routine graph entities/facts после принятия схемы создаются автоматически, review нужен только для исключений.
+
 ## Операторские команды
 
 Синхронизировать источники памяти из contracts:
@@ -86,6 +99,9 @@ Eval report пишется только в `data/memory/eval/`.
 - SQLite FTS используется как локальный MVP full-text backend;
 - Kuzu backend пока lazy placeholder;
 - `memory.search` выполняет простую выдачу: vector/full-text candidates, затем graph candidates;
+- ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, bootstrap package и graph schema proposals;
+- PDF/Office/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
+- ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
 - облачная маршрутизация для чувствительных случаев не включена.
 
 ## Как проверить пользователю

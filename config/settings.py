@@ -14,6 +14,8 @@ from apps.core.json_utils import (
     validate_dataset_registry_payload,
     validate_integration_registry_payload,
     validate_memory_profiles_payload,
+    validate_memory_graph_schema_payload,
+    validate_memory_ingestion_profiles_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
     validate_role_rules_payload,
@@ -281,6 +283,16 @@ LOCAL_BUSINESS_AI_MODELS_FILE = get_contract_path("models.json", "LOCAL_BUSINESS
 LOCAL_BUSINESS_MEMORY_SOURCES_FILE = get_contract_path("memory_sources.json", "LOCAL_BUSINESS_MEMORY_SOURCES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_PROFILES_FILE = get_contract_path("memory_profiles.json", "LOCAL_BUSINESS_MEMORY_PROFILES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_ROUTING_FILE = get_contract_path("memory_routing.json", "LOCAL_BUSINESS_MEMORY_ROUTING_FILE", sub_dir="ai")
+LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE = get_contract_path(
+    "memory_ingestion_profiles.json",
+    "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
+    sub_dir="ai",
+)
+LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE = get_contract_path(
+    "memory_graph_schema.json",
+    "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
+    sub_dir="ai",
+)
 
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"
@@ -354,11 +366,18 @@ try:
     LOCAL_BUSINESS_MEMORY_ROUTING = load_json_file(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
     validate_memory_routing_payload(LOCAL_BUSINESS_MEMORY_ROUTING)
 
+    LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
+    validate_memory_ingestion_profiles_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES)
+
+    LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA = load_json_file(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE)
+    validate_memory_graph_schema_payload(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA)
+
     LOCAL_BUSINESS_MEMORY_SOURCES = load_json_file(LOCAL_BUSINESS_MEMORY_SOURCES_FILE)
     validate_memory_sources_payload(
         LOCAL_BUSINESS_MEMORY_SOURCES,
         profiles_payload=LOCAL_BUSINESS_MEMORY_PROFILES,
         routing_payload=LOCAL_BUSINESS_MEMORY_ROUTING,
+        ingestion_profiles_payload=LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES,
     )
 except (OSError, json.JSONDecodeError, ValidationError) as exc:
     raise ImproperlyConfigured(

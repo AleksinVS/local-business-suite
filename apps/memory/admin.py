@@ -6,10 +6,17 @@ from .models import (
     MemoryAccessAudit,
     MemoryChunk,
     MemoryEvalCase,
+    MemoryGraphEntity,
+    MemoryGraphExtractionRun,
     MemoryGraphFact,
+    MemoryGraphReviewItem,
+    MemoryGraphSchemaProposal,
+    MemoryIngestionIssue,
+    MemoryIngestionRun,
     MemoryIndexJob,
     MemorySnapshot,
     MemorySource,
+    MemorySourceObject,
 )
 
 
@@ -184,6 +191,119 @@ class MemoryGraphFactAdmin(admin.ModelAdmin):
     @admin.display(ordering="snapshot__source__code", description="Source")
     def source_code(self, obj):
         return obj.snapshot.source.code
+
+
+@admin.register(MemorySourceObject)
+class MemorySourceObjectAdmin(admin.ModelAdmin):
+    list_display = (
+        "source",
+        "relative_path",
+        "discovery_status",
+        "ingestion_status",
+        "size_bytes",
+        "short_content_hash",
+        "last_seen_at",
+        "last_ingested_at",
+    )
+    list_filter = ("discovery_status", "ingestion_status", "source__domain", "extension", "last_seen_at")
+    search_fields = ("source__code", "object_id", "relative_path", "file_name", "content_hash")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("source")
+
+    @admin.display(ordering="content_hash", description="Content hash")
+    def short_content_hash(self, obj):
+        return (obj.content_hash or "")[:12]
+
+
+@admin.register(MemoryIngestionRun)
+class MemoryIngestionRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "source", "status", "dry_run", "started_at", "finished_at", "issue_count", "created_at")
+    list_filter = ("status", "dry_run", "source__domain", "created_at", "started_at")
+    search_fields = ("source__code", "error_message")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source", "created_by")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("source", "created_by").annotate(_issue_count=Count("issues"))
+
+    @admin.display(ordering="_issue_count", description="Issues")
+    def issue_count(self, obj):
+        return obj._issue_count
+
+
+@admin.register(MemoryIngestionIssue)
+class MemoryIngestionIssueAdmin(admin.ModelAdmin):
+    list_display = ("issue_kind", "status", "severity", "source", "source_object_display", "message_short", "created_at")
+    list_filter = ("issue_kind", "status", "severity", "source__domain", "created_at")
+    search_fields = ("source__code", "source_object__relative_path", "message")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source", "source_object", "run")
+    actions = ("acknowledge_selected", "resolve_selected", "ignore_selected")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("source", "source_object", "run")
+
+    @admin.display(description="Object")
+    def source_object_display(self, obj):
+        return obj.source_object.relative_path if obj.source_object_id else ""
+
+    @admin.display(description="Message")
+    def message_short(self, obj):
+        return obj.message[:120]
+
+    @admin.action(description="Acknowledge selected issues")
+    def acknowledge_selected(self, request, queryset):
+        updated = queryset.update(status=MemoryIngestionIssue.Status.ACKNOWLEDGED, updated_at=timezone.now())
+        self.message_user(request, f"Acknowledged {updated} memory ingestion issue(s).")
+
+    @admin.action(description="Resolve selected issues")
+    def resolve_selected(self, request, queryset):
+        now = timezone.now()
+        updated = queryset.update(status=MemoryIngestionIssue.Status.RESOLVED, resolved_at=now, updated_at=now)
+        self.message_user(request, f"Resolved {updated} memory ingestion issue(s).")
+
+    @admin.action(description="Ignore selected issues")
+    def ignore_selected(self, request, queryset):
+        updated = queryset.update(status=MemoryIngestionIssue.Status.IGNORED, updated_at=timezone.now())
+        self.message_user(request, f"Ignored {updated} memory ingestion issue(s).")
+
+
+@admin.register(MemoryGraphEntity)
+class MemoryGraphEntityAdmin(admin.ModelAdmin):
+    list_display = ("entity_id", "entity_type", "canonical_name", "is_active", "sensitivity", "updated_at")
+    list_filter = ("entity_type", "is_active", "sensitivity")
+    search_fields = ("entity_id", "entity_type", "canonical_name")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(MemoryGraphExtractionRun)
+class MemoryGraphExtractionRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "source", "snapshot", "status", "started_at", "finished_at", "created_at")
+    list_filter = ("status", "source__domain", "created_at")
+    search_fields = ("source__code", "snapshot__source_object_id", "error_message")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source", "snapshot")
+
+
+@admin.register(MemoryGraphSchemaProposal)
+class MemoryGraphSchemaProposalAdmin(admin.ModelAdmin):
+    list_display = ("proposal_kind", "status", "department", "confidence", "reviewed_by", "reviewed_at", "created_at")
+    list_filter = ("proposal_kind", "status", "department", "created_at", "reviewed_at")
+    search_fields = ("department", "rationale")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("reviewed_by",)
+
+
+@admin.register(MemoryGraphReviewItem)
+class MemoryGraphReviewItemAdmin(admin.ModelAdmin):
+    list_display = ("item_kind", "status", "source", "snapshot", "reviewed_by", "reviewed_at", "created_at")
+    list_filter = ("item_kind", "status", "source__domain", "created_at")
+    search_fields = ("source__code", "snapshot__source_object_id", "decision")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source", "snapshot", "reviewed_by")
 
 
 @admin.register(MemoryIndexJob)

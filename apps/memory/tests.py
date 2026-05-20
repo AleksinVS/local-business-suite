@@ -4,6 +4,8 @@ from tempfile import TemporaryDirectory
 from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.apps import apps
+from django.core.management import CommandError, call_command, get_commands
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -21,10 +23,17 @@ from .models import (
     MemoryAccessAudit,
     MemoryChunk,
     MemoryEvalCase,
+    MemoryGraphEntity,
+    MemoryGraphExtractionRun,
     MemoryGraphFact,
+    MemoryGraphReviewItem,
+    MemoryGraphSchemaProposal,
+    MemoryIngestionIssue,
+    MemoryIngestionRun,
     MemoryIndexJob,
     MemorySnapshot,
     MemorySource,
+    MemorySourceObject,
 )
 from .policies import can_access_chunk, can_access_graph_fact, can_manage_memory, user_scope_tokens
 from .services import (
@@ -40,6 +49,94 @@ from .services import (
 )
 
 User = get_user_model()
+
+
+MEMORY_INGESTION_BOOTSTRAP_MODELS = {
+    "MemorySourceObject": {
+        "source",
+        "object_id",
+        "object_uri",
+        "relative_path",
+        "file_name",
+        "extension",
+        "mime_type",
+        "size_bytes",
+        "mtime",
+        "content_hash",
+        "etag_or_inode",
+        "last_seen_at",
+        "last_stable_at",
+        "discovery_status",
+        "ingestion_status",
+        "last_ingested_at",
+        "failure_count",
+        "last_error",
+        "partial_reason",
+        "acl_fingerprint",
+        "metadata",
+    },
+    "MemoryIngestionRun": {
+        "source",
+        "status",
+        "started_at",
+        "finished_at",
+        "dry_run",
+        "metrics",
+        "error_message",
+    },
+    "MemoryIngestionIssue": {
+        "source",
+        "source_object",
+        "run",
+        "issue_kind",
+        "status",
+        "severity",
+        "message",
+        "metadata",
+    },
+    "MemoryGraphSchemaProposal": {
+        "proposal_kind",
+        "status",
+        "payload",
+        "evidence",
+        "confidence",
+        "reviewed_by",
+    },
+    "MemoryGraphEntity": {
+        "entity_id",
+        "entity_type",
+        "canonical_name",
+        "aliases",
+        "attributes",
+        "scope_tokens",
+        "sensitivity",
+        "is_active",
+    },
+    "MemoryGraphExtractionRun": {
+        "source",
+        "snapshot",
+        "status",
+        "started_at",
+        "finished_at",
+        "metrics",
+        "error_message",
+    },
+    "MemoryGraphReviewItem": {
+        "item_kind",
+        "status",
+        "payload",
+        "evidence",
+        "decision",
+        "reviewed_by",
+    },
+}
+
+
+def get_optional_memory_model(model_name):
+    try:
+        return apps.get_model("memory", model_name)
+    except LookupError:
+        return None
 
 
 class MemoryModelFactoryMixin:
@@ -125,6 +222,13 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryIndexJob: MemoryIndexJobAdmin,
             MemoryAccessAudit: MemoryAccessAuditAdmin,
             MemoryEvalCase: MemoryEvalCaseAdmin,
+            MemorySourceObject: django_admin.site._registry[MemorySourceObject].__class__,
+            MemoryIngestionRun: django_admin.site._registry[MemoryIngestionRun].__class__,
+            MemoryIngestionIssue: django_admin.site._registry[MemoryIngestionIssue].__class__,
+            MemoryGraphEntity: django_admin.site._registry[MemoryGraphEntity].__class__,
+            MemoryGraphExtractionRun: django_admin.site._registry[MemoryGraphExtractionRun].__class__,
+            MemoryGraphSchemaProposal: django_admin.site._registry[MemoryGraphSchemaProposal].__class__,
+            MemoryGraphReviewItem: django_admin.site._registry[MemoryGraphReviewItem].__class__,
         }
 
         for model, admin_class in expected_admin_classes.items():
@@ -142,10 +246,167 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryIndexJob,
             MemoryAccessAudit,
             MemoryEvalCase,
+            MemorySourceObject,
+            MemoryIngestionRun,
+            MemoryIngestionIssue,
+            MemoryGraphEntity,
+            MemoryGraphExtractionRun,
+            MemoryGraphSchemaProposal,
+            MemoryGraphReviewItem,
         ):
             with self.subTest(model=model.__name__):
                 model_admin = django_admin.site._registry[model]
                 self.assertTrue(path_fields.isdisjoint(model_admin.search_fields))
+
+
+class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase):
+    def test_bootstrap_models_expose_expected_fields_when_available(self):
+        available_models = []
+
+        for model_name, expected_fields in MEMORY_INGESTION_BOOTSTRAP_MODELS.items():
+            model = get_optional_memory_model(model_name)
+            if model is None:
+                continue
+            available_models.append(model_name)
+            with self.subTest(model=model_name):
+                field_names = {field.name for field in model._meta.get_fields()}
+                self.assertTrue(
+                    expected_fields.issubset(field_names),
+                    f"{model_name} is missing fields: {sorted(expected_fields - field_names)}",
+                )
+
+        if not available_models:
+            self.skipTest("memory ingestion/bootstrap models are not implemented yet")
+
+    def test_bootstrap_models_are_registered_in_admin_when_available(self):
+        available_models = []
+
+        for model_name in MEMORY_INGESTION_BOOTSTRAP_MODELS:
+            model = get_optional_memory_model(model_name)
+            if model is None:
+                continue
+            available_models.append(model_name)
+            with self.subTest(model=model_name):
+                self.assertIn(model, django_admin.site._registry)
+                self.assertEqual(
+                    django_admin.site._registry[model].__class__.__name__,
+                    f"{model_name}Admin",
+                )
+
+        if not available_models:
+            self.skipTest("memory ingestion/bootstrap admin registrations are not implemented yet")
+
+    def test_discovery_and_ingestion_commands_accept_dry_run_when_available(self):
+        command_cases = (
+            ("memory_discover_source", ["--source-code", "bootstrap_test_source", "--dry-run"]),
+            ("memory_ingest_source", ["--source-code", "bootstrap_test_source", "--dry-run"]),
+            ("memory_graph_extract", ["--source-code", "bootstrap_test_source", "--dry-run"]),
+        )
+        available_commands = get_commands()
+        checked_commands = []
+
+        self.create_source(code="bootstrap_test_source", source_kind="documentation", index_profiles=["graph_default"])
+
+        for command_name, args in command_cases:
+            if command_name not in available_commands:
+                continue
+            checked_commands.append(command_name)
+            with self.subTest(command=command_name):
+                try:
+                    call_command(command_name, *args, verbosity=0)
+                except CommandError as exc:
+                    self.fail(f"{command_name} --dry-run should not fail for a known source: {exc}")
+
+        if not checked_commands:
+            self.skipTest("memory discovery/ingestion commands are not implemented yet")
+
+
+class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
+    def test_discover_source_objects_creates_durable_file_state(self):
+        from .document_ingestion import discover_source_objects
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "procedure.txt").write_text("Procedure calibration device_alpha -> procedure_beta", encoding="utf-8")
+            source = self.create_source(
+                code="local_docs_discovery",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_windows_v1",
+                },
+            )
+
+            metrics = discover_source_objects(source=source, dry_run=False)
+
+            self.assertEqual(metrics["seen"], 1)
+            source_object = MemorySourceObject.objects.get(source=source)
+            self.assertEqual(source_object.relative_path, "procedure.txt")
+            self.assertEqual(source_object.extension, ".txt")
+            self.assertEqual(source_object.ingestion_status, MemorySourceObject.IngestionStatus.PENDING)
+            self.assertTrue(source_object.content_hash)
+
+    def test_ingest_source_objects_writes_safe_snapshot_chunks_and_graph_fact(self):
+        from .document_ingestion import discover_source_objects, ingest_source_objects
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "procedure.txt").write_text("Procedure calibration device_alpha -> procedure_beta", encoding="utf-8")
+            source = self.create_source(
+                code="local_docs_ingestion",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_windows_v1",
+                },
+            )
+
+            with self.settings(DATA_DIR=data_dir):
+                discover_source_objects(source=source, dry_run=False)
+                metrics = ingest_source_objects(source=source, dry_run=False)
+
+            source_object = MemorySourceObject.objects.get(source=source)
+            self.assertEqual(metrics["ingested"], 1)
+            self.assertEqual(source_object.ingestion_status, MemorySourceObject.IngestionStatus.INGESTED)
+            self.assertEqual(MemorySnapshot.objects.filter(source=source, status=MemorySnapshot.Status.READY).count(), 1)
+            self.assertEqual(MemoryChunk.objects.filter(source_code=source.code, is_active=True).count(), 1)
+            self.assertEqual(MemoryGraphFact.objects.filter(snapshot__source=source, is_active=True).count(), 1)
+
+    def test_ingest_source_objects_creates_issue_for_unsupported_binary(self):
+        from .document_ingestion import discover_source_objects, ingest_source_objects
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "archive.bin").write_bytes(b"\x00\x01unsupported")
+            source = self.create_source(
+                code="local_docs_issue",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_windows_v1",
+                },
+            )
+
+            discover_source_objects(source=source, dry_run=False)
+            metrics = ingest_source_objects(source=source, dry_run=False)
+
+            self.assertEqual(metrics["issues"], 1)
+            issue = MemoryIngestionIssue.objects.get(source=source)
+            self.assertEqual(issue.issue_kind, MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT)
+            self.assertEqual(issue.status, MemoryIngestionIssue.Status.OPEN)
 
 
 class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):

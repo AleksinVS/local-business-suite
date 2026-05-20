@@ -1,0 +1,25 @@
+{
+  "title": "Memory Ingestion Profiles",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "adapter_profiles",
+    "parser_profiles",
+    "ocr_profiles",
+    "limit_profiles",
+    "profiles"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "adapter_profiles": { "type": "object" },
+    "parser_profiles": { "type": "object" },
+    "ocr_profiles": { "type": "object" },
+    "limit_profiles": { "type": "object" },
+    "profiles": { "type": "object" }
+  },
+  "additionalProperties": false
+}

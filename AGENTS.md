@@ -148,6 +148,30 @@ This project is both a **production system** and a **learning platform** for the
 - **Контракты:** `contracts/` (дефолты) и `data/contracts/` (рантайм).
 - **Валидация:** `python manage.py validate_architecture_contracts`.
 
+## AI Memory Ingestion & Graph Bootstrapping
+
+При задачах по ingestion корпоративных документов и bootstrapping схемы графа сначала сверять:
+
+- `docs/adr/ADR-0003-ai-memory-service.md`;
+- `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
+- `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`;
+- `docs/guides/MEMORY_INGESTION_OPERATIONS.md`;
+- `docs/deployment/MEMORY_DEPLOYMENT.md`.
+
+Операционные ограничения MVP:
+
+- первый deployment target — Windows Server в домене AD;
+- источники документов — dedicated read-only local folder или UNC path вида `\\SERVER\Share\Folder`;
+- mapped drives для services запрещены;
+- service account/gMSA credentials и host-specific UNC paths не коммитятся;
+- raw mode по умолчанию `reference_only`;
+- default max file size 100 MB, partial indexing обязан создавать issue/review visibility;
+- graph schema bootstrapping модерируется профильными экспертами и владельцем графа;
+- routine GraphEntity/GraphFact instances после принятия схемы не требуют обязательного review каждого instance;
+- cloud OCR/LLM разрешены только для подготовленного non-sensitive или pseudonymized test package.
+
+Агентам запрещено в рамках документационных или planning-задач по ingestion менять `apps/` или `contracts/` без явно заданного write scope. Временные parser logs, corpus manifests, export packages и локальные эксперименты писать только в `.local/`, а runtime eval reports — в `data/memory/eval/`.
+
 ## Bootstrap & Verification
 
 ```bash
@@ -156,6 +180,19 @@ make install
 make check
 make test
 make contracts
+```
+
+Дополнительные проверки памяти:
+
+```bash
+python manage.py memory_sync_source --dry-run
+python manage.py memory_discover_source --source-code <code> --dry-run
+python manage.py memory_ingest_source --source-code <code> --dry-run
+python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
+python manage.py memory_graph_extract --source-code <code> --dry-run
+python manage.py memory_reindex --dry-run
+python manage.py memory_eval --dry-run
+python manage.py validate_architecture_contracts
 ```
 
 При любом изменении структуры (добавлении папок/важных файлов) необходимо обновить соответствующие `.desc.json` и запустить `make gen-struct`.

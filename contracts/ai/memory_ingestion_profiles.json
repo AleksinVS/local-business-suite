@@ -1,0 +1,113 @@
+{
+  "version": "1.0",
+  "name": "memory_ingestion_profiles",
+  "description": "Default adapter, parser, OCR, limit and policy profiles for corporate document ingestion.",
+  "adapter_profiles": {
+    "local_path_v1": {
+      "adapter_kind": "local_path",
+      "follow_symlinks": false,
+      "stable_after_seconds": 5
+    },
+    "unc_path_v1": {
+      "adapter_kind": "unc_path",
+      "follow_symlinks": false,
+      "stable_after_seconds": 5
+    }
+  },
+  "parser_profiles": {
+    "office_document_cascade_v1": {
+      "cascade": [
+        "native_text",
+        "docling_placeholder",
+        "tika_or_libreoffice_placeholder",
+        "ocr_placeholder"
+      ],
+      "supported_extensions": [
+        ".txt",
+        ".md",
+        ".csv",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tif",
+        ".tiff"
+      ],
+      "extract_embedded_images": false
+    }
+  },
+  "ocr_profiles": {
+    "rus_eng_optional_v1": {
+      "enabled": false,
+      "backend": "manual_or_external_placeholder",
+      "languages": [
+        "rus",
+        "eng"
+      ],
+      "cloud_policy": "prepared_package_only"
+    }
+  },
+  "limit_profiles": {
+    "corporate_docs_default_v1": {
+      "max_file_size_mb": 100,
+      "parser_timeout_seconds": 120,
+      "ocr_timeout_seconds": 300
+    }
+  },
+  "profiles": {
+    "corporate_docs_windows_v1": {
+      "adapter_profile": "local_path_v1",
+      "parser_profile": "office_document_cascade_v1",
+      "ocr_profile": "rus_eng_optional_v1",
+      "limit_profile": "corporate_docs_default_v1",
+      "raw_mode": "reference_only",
+      "acl_mode": "scope_rule",
+      "partial_indexing": "enabled",
+      "issue_policy": {
+        "create_issue_kinds": [
+          "encrypted_file",
+          "unsupported_format",
+          "file_too_large",
+          "partial_indexed",
+          "parser_timeout",
+          "ocr_timeout",
+          "pii_blocked",
+          "secret_blocked",
+          "acl_unresolved",
+          "schema_unknown_type",
+          "schema_unknown_relation",
+          "canonicalization_conflict"
+        ]
+      }
+    },
+    "corporate_docs_unc_windows_v1": {
+      "adapter_profile": "unc_path_v1",
+      "parser_profile": "office_document_cascade_v1",
+      "ocr_profile": "rus_eng_optional_v1",
+      "limit_profile": "corporate_docs_default_v1",
+      "raw_mode": "reference_only",
+      "acl_mode": "scope_rule",
+      "partial_indexing": "enabled",
+      "issue_policy": {
+        "create_issue_kinds": [
+          "encrypted_file",
+          "unsupported_format",
+          "file_too_large",
+          "partial_indexed",
+          "parser_timeout",
+          "ocr_timeout",
+          "pii_blocked",
+          "secret_blocked",
+          "acl_unresolved",
+          "schema_unknown_type",
+          "schema_unknown_relation",
+          "canonicalization_conflict"
+        ]
+      }
+    }
+  }
+}

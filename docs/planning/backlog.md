@@ -4,46 +4,35 @@
 
 ## Active
 
-### Долговременная память AI-блока
-
-Добавить агенту долговременную память с пользовательским и организационным контурами доступа.
-
-Контекст:
-- архитектурное решение принято в `docs/adr/ADR-0003-ai-memory-service.md`;
-- детальный проектный план находится в `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md`;
-- активный planning-файл: `docs/planning/active/ai-memory-service.md`;
-- исполнительный workflow-блок: `workflow/active/block-ai-memory-service-2026-05-19/`;
-- текущий первый task packet: `workflow/active/block-ai-memory-service-2026-05-19/task-packets/task-memory-contracts.json`.
+- Нет активных задач.
 
 ## Next
 
-### Ingestion-коннектор и bootstrapping схемы графа памяти
+### Production parser/OCR backend для ingestion памяти
 
-Реализовать следующий блок системы памяти: ingestion корпоративных документов из локальной/UNC-папки Windows Server и управляемый bootstrapping единой схемы графа.
+Подключить production-grade parser/OCR cascade к уже реализованному ingestion MVP.
 
 Контекст:
 - архитектурное решение принято в `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - финальный план находится в `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`;
-- первый deployment target: Windows Server в домене AD;
-- первый источник документов: отдельная read-only папка "документы для памяти";
-- графовая схема должна фиксироваться в будущем контракте `contracts/ai/memory_graph_schema.json`.
+- операторские правила находятся в `docs/guides/MEMORY_INGESTION_OPERATIONS.md`;
+- ingestion MVP уже имеет discovery state, issue queue, local/UNC path adapter, graph schema contract и команды;
+- текущий parser baseline индексирует text-like файлы, а PDF/Office/images отправляет в issue queue до подключения реального parser/OCR backend.
 
 Предварительный scope:
-- discovery state (`MemorySourceObject`) и issue queue;
-- local/UNC storage adapter без mapped drives;
-- parser/OCR cascade для PDF, DOC, DOCX, XLS, XLSX, сканов и изображений;
-- partial indexing с default file limit 100 MB;
-- bootstrap package с pseudonymization и human approval перед cloud-init;
-- schema proposals по подразделениям с review профильных экспертов и финальным принятием владельцем графа;
-- автоматическое создание concrete graph entities/facts по утвержденной схеме, без обязательной review-очереди для каждого instance;
-- выборочный review UI для schema proposals, ingestion issues, partial/skipped/encrypted documents и спорных extraction cases.
+- подключить и протестировать Docling/equivalent для PDF/DOCX/XLSX;
+- подключить Tika/LibreOffice fallback для DOC/XLS;
+- подключить OCR backend `rus+eng` для scans/images;
+- формализовать GLM-OCR cloud test profile для подготовленной non-sensitive выборки;
+- расширить parser quality eval на реальных тестовых документах;
+- уточнить Excel limits после тестовой эксплуатации.
 
 Критерии готовности к старту:
-- создан workflow-блок и task packets;
-- решено, добавляем ли отдельный `memory_ingestion_profiles.json` или расширяем `memory_sources.json`;
+- создан workflow-блок и task packets для parser/OCR интеграции;
 - определен первый read-only source folder и учетная запись сервиса для доступа;
-- определены первые competency questions для выбранного подразделения;
-- согласован минимальный scope review UI.
+- подтвержден UNC/local path deployment model без mapped drives;
+- подготовлена безопасная тестовая выборка PDF/Office/scans;
+- согласовано, какие документы можно отправлять в cloud GLM-OCR на тестах.
 
 ## Later
 

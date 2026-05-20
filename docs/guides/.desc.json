@@ -1,6 +1,7 @@
 {
   ".": "Руководства разработчика",
   "CHANGE_PATTERNS.md": "Паттерны внесения изменений",
+  "MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md": "Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний",
   "MEMORY_INGESTION_OPERATIONS.md": "Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти",
   "MEMORY_USER_GUIDE.md": "Руководство пользователя и администратора по системе памяти",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",

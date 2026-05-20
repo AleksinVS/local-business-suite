@@ -1,0 +1,28 @@
+{
+  "task_id": "03-landing-zone-and-handoff",
+  "title": "Normalized landing zone and memory handoff",
+  "goal": "Write normalized envelopes/manifests under runtime data and hand them off to existing memory ingestion.",
+  "read_scope": [
+    "apps/memory/ingestion.py",
+    "apps/memory/services.py",
+    "apps/memory/security.py",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/memory/",
+    "apps/memory/tests.py",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "acceptance": [
+    "Landing zone writes manifest and normalized object envelopes atomically.",
+    "Raw API responses are not retained unless explicit quarantine mode is enabled.",
+    "Secret-like values are blocked or converted to handles before memory indexing.",
+    "Successful handoff creates memory snapshots/chunks with external provenance and citations.",
+    "Deletes/tombstones deactivate active memory snapshots when policy requires it."
+  ],
+  "verification": [
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

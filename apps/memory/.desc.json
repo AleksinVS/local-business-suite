@@ -8,6 +8,7 @@
   "ingestion.py": "Индексация safe text в chunks, safe corpus, manifests, vector/full-text backend и graph facts",
   "document_ingestion.py": "Discovery/ingestion корпоративных документов из local/UNC источников, issue queue и graph schema bootstrapping helpers",
   "chat_memory.py": "Queued memory.remember, personal/org chat knowledge storage, reflection candidates and safe indexing",
+  "external_connectors.py": "External API connector landing zone, standalone SQLite queue backend and memory handoff",
   "policies.py": "Политики доступа к chunks/facts по server-side scope tokens",
   "retrieval.py": "Оркестрация memory.search с server-side policy checks, citations и audit",
   "routing.py": "Server-side routing decisions for memory retrieval by sensitivity level",
@@ -26,5 +27,8 @@
   "management/commands/memory_graph_schema_discover.py": "Создание модерируемых schema proposals из bootstrap package",
   "management/commands/memory_graph_extract.py": "Автоматическое извлечение graph entities/review exceptions по утвержденной схеме",
   "management/commands/memory_reflect_chats.py": "Sleep-time reflection для queued chat memory requests и candidates",
+  "management/commands/memory_external_enqueue.py": "Enqueue normalized external API envelopes into the external connector queue",
+  "management/commands/memory_external_worker.py": "Worker для обработки external connector queue и handoff в memory ingestion",
+  "management/commands/memory_external_queue_status.py": "Статус standalone external connector queue backend",
   "migrations/": "Миграции приложения памяти"
 }

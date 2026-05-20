@@ -1,0 +1,29 @@
+{
+  "task_id": "02-queue-and-state",
+  "title": "Durable connector queue and sync state",
+  "goal": "Add a standalone queue backend and sync state for external connector runs, jobs, object state and dead-letter issues.",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/admin.py",
+    "apps/memory/services.py",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/admin.py",
+    "apps/memory/migrations/",
+    "apps/memory/services.py",
+    "apps/memory/tests.py"
+  ],
+  "acceptance": [
+    "Queue jobs support attempts, next_attempt_at, locked_until, idempotency_key and dead-letter status.",
+    "Queue state is stored outside the primary Django database.",
+    "Sync runs record cursor state, counts and error summaries.",
+    "Object state supports content hash, external version and tombstone/deletion tracking.",
+    "Workers can lease jobs without long transactions around external API calls."
+  ],
+  "verification": [
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

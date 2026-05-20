@@ -39,6 +39,7 @@
           "contract_file",
           "documentation",
           "integration_snapshot",
+          "external_api_snapshot",
           "local_path",
           "unc_path",
           "synthetic_fixture"
@@ -63,7 +64,8 @@
           "role_scoped",
           "workorder_visibility",
           "inventory_visibility",
-          "contract_admin"
+          "contract_admin",
+          "manual_scope_mapping"
         ]
       },
       "sensitivity": {
@@ -99,7 +101,9 @@
         "enum": [
           "default_public",
           "default_internal",
-          "short_lived_eval"
+          "short_lived_eval",
+          "external_default",
+          "short_lived_raw_quarantine"
         ]
       },
       "extractor_profile": { "type": "string" },
@@ -116,6 +120,40 @@
       },
       "ingestion_profile": {
         "type": "string"
+      },
+      "external_connector": {
+        "type": "object",
+        "required": [
+          "queue_backend",
+          "raw_mode",
+          "scope_mapping",
+          "retention"
+        ],
+        "properties": {
+          "queue_backend": {
+            "type": "string",
+            "enum": ["sqlite"]
+          },
+          "raw_mode": {
+            "type": "string",
+            "enum": ["metadata_only", "normalized_only", "short_lived_raw_quarantine"]
+          },
+          "scope_mapping": {
+            "type": "string",
+            "enum": ["manual"]
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "raw_quarantine_days": { "type": "integer", "minimum": 1 },
+              "normalized_envelope_days": { "type": "integer", "minimum": 1 },
+              "manifest_days": { "type": "integer", "minimum": 1 },
+              "tombstone_days": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     },
     "additionalProperties": false

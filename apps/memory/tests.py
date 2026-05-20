@@ -842,6 +842,207 @@ class MemoryChatKnowledgeTests(TestCase):
             self.assertEqual(item.status, MemoryKnowledgeItem.Status.DELETED)
 
 
+class MemoryExternalConnectorTests(TestCase):
+    def create_external_source(self):
+        return MemorySource.objects.create(
+            code="external_api_landing_zone_test",
+            title="External API landing zone test",
+            source_kind="external_api_snapshot",
+            domain="external_systems",
+            owner="knowledge_owner",
+            sync_mode="scheduled",
+            scope_rule="manual_scope_mapping",
+            sensitivity="internal",
+            pii_policy="deidentify_before_index",
+            extractor_profile="external_api_object_v1",
+            chunking_profile="external_api_object_v1",
+            index_profiles=["fulltext_default", "graph_default"],
+            config={
+                "external_connector": {
+                    "queue_backend": "sqlite",
+                    "raw_mode": "short_lived_raw_quarantine",
+                    "scope_mapping": "manual",
+                    "retention": {
+                        "raw_quarantine_days": 14,
+                        "normalized_envelope_days": 90,
+                        "manifest_days": 365,
+                        "tombstone_days": 1095,
+                    },
+                }
+            },
+        )
+
+    def test_external_envelope_queue_handoff_indexes_memory(self):
+        from .external_connectors import (
+            build_external_envelope,
+            enqueue_external_envelope,
+            get_external_queue_backend,
+            process_external_connector_jobs,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            with self.settings(
+                DATA_DIR=data_dir,
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND="sqlite",
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=data_dir / "queues" / "external.sqlite3",
+            ):
+                source = self.create_external_source()
+                envelope = build_external_envelope(
+                    source_code=source.code,
+                    collection="tickets",
+                    object_type="ticket",
+                    external_id="T-100",
+                    title="Плановая проверка насоса",
+                    payload={"status": "open", "department": "ОИТ", "summary": "Насос alpha требует проверки."},
+                    run_id="run-001",
+                    scope_tokens=["org:default"],
+                )
+
+                job = enqueue_external_envelope(
+                    source=source,
+                    envelope=envelope,
+                    raw_response={"id": "T-100", "status": "open"},
+                    request_id="req-external-1",
+                )
+                duplicate_job = enqueue_external_envelope(source=source, envelope=envelope, request_id="req-external-1")
+
+                self.assertEqual(job.job_id, duplicate_job.job_id)
+                self.assertEqual(get_external_queue_backend().stats(), {"pending": 1})
+                self.assertTrue(
+                    (
+                        data_dir
+                        / "memory"
+                        / "external_api"
+                        / source.code
+                        / "run-001"
+                        / "raw_quarantine"
+                        / "ticket"
+                        / "T-100.json"
+                    ).exists()
+                )
+
+                results = process_external_connector_jobs(limit=5)
+
+                self.assertEqual(results[0]["status"], "succeeded")
+                self.assertEqual(MemorySnapshot.objects.filter(source=source, is_active=True).count(), 1)
+                self.assertTrue(MemoryChunk.objects.filter(source_code=source.code, is_active=True).exists())
+                snapshot = MemorySnapshot.objects.get(source=source)
+                self.assertEqual(snapshot.scope_tokens, ["org:default"])
+                self.assertEqual(snapshot.metadata["external"]["external_id"], "T-100")
+                self.assertEqual(get_external_queue_backend().stats(), {"succeeded": 1})
+
+    def test_external_envelope_blocks_secret_before_queue(self):
+        from django.core.exceptions import ValidationError
+
+        from .external_connectors import build_external_envelope, enqueue_external_envelope
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            with self.settings(
+                DATA_DIR=data_dir,
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND="sqlite",
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=data_dir / "queues" / "external.sqlite3",
+            ):
+                source = self.create_external_source()
+                envelope = build_external_envelope(
+                    source_code=source.code,
+                    collection="tickets",
+                    object_type="ticket",
+                    external_id="T-101",
+                    title="Unsafe record",
+                    payload={"note": "password=not-a-real-secret-value"},
+                    run_id="run-secret",
+                )
+
+                with self.assertRaises(ValidationError):
+                    enqueue_external_envelope(source=source, envelope=envelope)
+
+                self.assertEqual(MemorySnapshot.objects.count(), 0)
+
+    def test_external_delete_envelope_deactivates_snapshot(self):
+        from .external_connectors import (
+            build_external_envelope,
+            enqueue_external_envelope,
+            process_external_connector_jobs,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            with self.settings(
+                DATA_DIR=data_dir,
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND="sqlite",
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=data_dir / "queues" / "external.sqlite3",
+            ):
+                source = self.create_external_source()
+                upsert = build_external_envelope(
+                    source_code=source.code,
+                    collection="tickets",
+                    object_type="ticket",
+                    external_id="T-102",
+                    title="Temporary record",
+                    payload={"summary": "temporary"},
+                    run_id="run-delete",
+                )
+                enqueue_external_envelope(source=source, envelope=upsert)
+                process_external_connector_jobs(limit=5)
+                self.assertEqual(MemorySnapshot.objects.filter(source=source, is_active=True).count(), 1)
+
+                delete = build_external_envelope(
+                    source_code=source.code,
+                    collection="tickets",
+                    object_type="ticket",
+                    external_id="T-102",
+                    title="Temporary record",
+                    payload={},
+                    operation="delete",
+                    run_id="run-delete",
+                )
+                enqueue_external_envelope(source=source, envelope=delete)
+                process_external_connector_jobs(limit=5)
+
+                self.assertEqual(MemorySnapshot.objects.filter(source=source, is_active=True).count(), 0)
+
+    def test_external_connector_management_commands_smoke(self):
+        from apps.core.json_utils import atomic_write_json
+
+        from .external_connectors import build_external_envelope
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            with self.settings(
+                DATA_DIR=data_dir,
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND="sqlite",
+                LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=data_dir / "queues" / "external.sqlite3",
+            ):
+                source = self.create_external_source()
+                envelope = build_external_envelope(
+                    source_code=source.code,
+                    collection="tickets",
+                    object_type="ticket",
+                    external_id="T-103",
+                    title="Command smoke",
+                    payload={"summary": "command smoke object"},
+                    run_id="run-command",
+                )
+                envelope_path = data_dir / "input" / "envelope.json"
+                envelope_path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_write_json(envelope_path, envelope)
+
+                call_command(
+                    "memory_external_enqueue",
+                    "--source-code",
+                    source.code,
+                    "--envelope-file",
+                    str(envelope_path),
+                    verbosity=0,
+                )
+                call_command("memory_external_queue_status", verbosity=0)
+                call_command("memory_external_worker", "--limit", "5", verbosity=0)
+
+                self.assertEqual(MemorySnapshot.objects.filter(source=source, is_active=True).count(), 1)
+
+
 class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
     def test_index_snapshot_text_is_idempotent_and_searchable_with_scope_filters(self):
         from .graph_backends import DjangoGraphMemoryBackend

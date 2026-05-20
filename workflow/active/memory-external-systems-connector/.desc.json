@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: сбор знаний из внешних информационных систем",
+  "BLOCK_BRIEF.md": "Краткое описание цели, scope и acceptance",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets",
+  "EXECUTOR_REPORT.memory-external-systems-connector.md": "Отчет реализации MVP external connector queue/landing zone",
+  "TASK_ACCEPTANCE.memory-external-systems-connector.md": "Приемка MVP external connector queue/landing zone",
+  "RETROSPECTIVE.md": "Ретроспектива MVP external connector implementation",
+  "task-packets": "Task packets для реализации внешних API-коннекторов памяти"
+}

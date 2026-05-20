@@ -293,6 +293,16 @@ LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE = get_contract_path(
     "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
     sub_dir="ai",
 )
+LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND = os.environ.get(
+    "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND",
+    "sqlite",
+)
+LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH = Path(
+    os.environ.get(
+        "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH",
+        DATA_DIR / "memory" / "queues" / "external_connectors.sqlite3",
+    )
+)
 
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"

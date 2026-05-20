@@ -12,7 +12,8 @@
 - контракты `contracts/ai/memory_sources.json`, `memory_profiles.json`, `memory_routing.json`, `memory_ingestion_profiles.json`, `memory_graph_schema.json`;
 - схемы `contracts/schemas/memory_*.schema.json`;
 - AI tool `memory.search`;
-- management commands `memory_sync_source`, `memory_reindex`, `memory_eval`.
+- management commands `memory_sync_source`, `memory_reindex`, `memory_eval`;
+- external connector commands `memory_external_enqueue`, `memory_external_worker`, `memory_external_queue_status`.
 
 Runtime data:
 
@@ -20,6 +21,8 @@ Runtime data:
 - `data/memory/safe_corpus/` — safe text после privacy pipeline;
 - `data/memory/indexes/` — generated indexes;
 - `data/memory/manifests/` — manifests;
+- `data/memory/external_api/` — normalized landing zone for external information system connectors;
+- `data/memory/queues/` — standalone external connector queue backend;
 - `data/memory/eval/` — eval reports.
 
 Эти runtime data не коммитятся.
@@ -112,6 +115,35 @@ Get-ChildItem "\\SERVER\Share\Folder" -File | Select-Object -First 5
 ```
 
 Если процесс работает как Windows service, проверку нужно выполнять в контексте той же service identity.
+
+## External System Connector MVP
+
+External information system connectors use normalized runtime envelopes and a standalone queue backend.
+
+Runtime paths:
+
+```text
+data/memory/external_api/
+data/memory/queues/external_connectors.sqlite3
+```
+
+Environment overrides:
+
+```bash
+LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=sqlite
+LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=/path/to/data/memory/queues/external_connectors.sqlite3
+```
+
+MVP commands:
+
+```bash
+python manage.py memory_external_enqueue --source-code <source> --envelope-file <path> --dry-run
+python manage.py memory_external_enqueue --source-code <source> --envelope-file <path>
+python manage.py memory_external_queue_status
+python manage.py memory_external_worker --limit 10
+```
+
+`short_lived_raw_quarantine` may store raw API responses only when source config explicitly enables it. Source-system permissions are mapped manually into portal `scope_tokens` during each source implementation.
 
 ## Первичная настройка памяти
 

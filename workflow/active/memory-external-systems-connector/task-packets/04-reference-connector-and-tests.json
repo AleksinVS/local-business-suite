@@ -1,0 +1,28 @@
+{
+  "task_id": "04-reference-connector-and-tests",
+  "title": "Reference connector, tests and operations",
+  "goal": "Add a reference/mock connector and the operational checks needed before a real pilot source.",
+  "read_scope": [
+    "apps/memory/",
+    "docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/memory/",
+    "apps/memory/tests.py",
+    "docs/guides/",
+    "docs/deployment/",
+    "README.md"
+  ],
+  "acceptance": [
+    "A mock or reference connector exercises full sync, incremental sync, retries and dead-letter behavior.",
+    "Tests cover idempotency, rate-limit retry, malformed payloads, secret redaction and handoff.",
+    "Operations guide explains dry-run, run, retry, cleanup and monitoring commands.",
+    "Deployment docs describe credential handling and runtime data location."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests"
+  ]
+}

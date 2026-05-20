@@ -1,0 +1,7 @@
+{
+  ".": "Task packets для внешних API-коннекторов памяти",
+  "01-intake-and-contracts.json": "Опросники, source contracts и validation",
+  "02-queue-and-state.json": "Durable queue, sync state и issue/dead-letter",
+  "03-landing-zone-and-handoff.json": "Normalized landing zone и handoff в memory ingestion",
+  "04-reference-connector-and-tests.json": "Reference connector, tests, eval и operations docs"
+}

@@ -1,0 +1,29 @@
+{
+  "task_id": "01-intake-and-contracts",
+  "title": "Intake questionnaires and connector contracts",
+  "goal": "Turn the approved external connector architecture into source contracts and validation rules.",
+  "read_scope": [
+    "docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "apps/core/json_utils.py"
+  ],
+  "write_scope": [
+    "contracts/ai/",
+    "contracts/schemas/",
+    "apps/core/json_utils.py",
+    "apps/memory/tests.py",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "acceptance": [
+    "External source contract can describe API adapter, schedule, queue profile, retention and access scope.",
+    "Contract validation catches missing owner, schedule, retention and sensitivity fields.",
+    "Questionnaire answers map clearly to contract fields."
+  ],
+  "verification": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests"
+  ]
+}

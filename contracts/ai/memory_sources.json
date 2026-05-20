@@ -103,5 +103,41 @@
       "graph_default"
     ],
     "ignore_patterns": []
+  },
+  {
+    "code": "external_api_landing_zone",
+    "title": "External API landing zone",
+    "description": "Disabled default source template for external information system connectors with queued normalized envelopes.",
+    "source_kind": "external_api_snapshot",
+    "domain": "external_systems",
+    "owner": "knowledge_owner",
+    "enabled": false,
+    "sync_mode": "scheduled",
+    "schedule": "manual_until_pilot_selected",
+    "source_ref": "data/memory/external_api",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "deidentify_before_index",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "external_default",
+    "extractor_profile": "external_api_object_v1",
+    "chunking_profile": "external_api_object_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "graph_default"
+    ],
+    "ignore_patterns": [],
+    "ingestion_profile": "external_api_snapshot_v1",
+    "external_connector": {
+      "queue_backend": "sqlite",
+      "raw_mode": "short_lived_raw_quarantine",
+      "scope_mapping": "manual",
+      "retention": {
+        "raw_quarantine_days": 14,
+        "normalized_envelope_days": 90,
+        "manifest_days": 365,
+        "tombstone_days": 1095
+      }
+    }
   }
 ]

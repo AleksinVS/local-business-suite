@@ -272,6 +272,7 @@ MEMORY_SOURCE_KIND_VALUES = {
     "contract_file",
     "documentation",
     "integration_snapshot",
+    "external_api_snapshot",
     "local_path",
     "unc_path",
     "synthetic_fixture",
@@ -290,6 +291,7 @@ MEMORY_SCOPE_RULE_VALUES = {
     "workorder_visibility",
     "inventory_visibility",
     "contract_admin",
+    "manual_scope_mapping",
 }
 
 MEMORY_SENSITIVITY_VALUES = {
@@ -318,6 +320,8 @@ MEMORY_RETENTION_POLICY_VALUES = {
     "default_public",
     "default_internal",
     "short_lived_eval",
+    "external_default",
+    "short_lived_raw_quarantine",
 }
 
 MEMORY_CHUNKING_STRATEGY_VALUES = {
@@ -367,6 +371,7 @@ MEMORY_CONTEXT_KIND_VALUES = {
 MEMORY_ADAPTER_KIND_VALUES = {
     "local_path",
     "unc_path",
+    "external_api_snapshot",
 }
 
 MEMORY_RAW_MODE_VALUES = {
@@ -395,6 +400,9 @@ MEMORY_INGESTION_ISSUE_KIND_VALUES = {
     "pii_blocked",
     "secret_blocked",
     "acl_unresolved",
+    "api_unavailable",
+    "rate_limited",
+    "malformed_payload",
     "schema_unknown_type",
     "schema_unknown_relation",
     "canonicalization_conflict",
@@ -731,6 +739,23 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
                     f"Memory source '{code}' ссылается на неизвестный ingestion_profile "
                     f"'{ingestion_profile}'."
                 )
+        external_connector = item.get("external_connector")
+        if external_connector is not None:
+            if not isinstance(external_connector, dict):
+                raise ValidationError(f"Поле 'external_connector' у memory source '{code}' должно быть JSON-объектом.")
+            if item.get("source_kind") != "external_api_snapshot":
+                raise ValidationError(
+                    f"Поле 'external_connector' допустимо только для source_kind external_api_snapshot у memory source '{code}'."
+                )
+            queue_backend = external_connector.get("queue_backend")
+            if queue_backend != "sqlite":
+                raise ValidationError(f"Memory source '{code}' должен использовать queue_backend 'sqlite' в MVP.")
+            raw_mode = external_connector.get("raw_mode")
+            if raw_mode not in {"normalized_only", "metadata_only", "short_lived_raw_quarantine"}:
+                raise ValidationError(f"Memory source '{code}' содержит недопустимый external_connector.raw_mode.")
+            scope_mapping = external_connector.get("scope_mapping")
+            if scope_mapping != "manual":
+                raise ValidationError(f"Memory source '{code}' должен использовать external_connector.scope_mapping 'manual'.")
         if chunking_profiles and item["chunking_profile"] not in chunking_profiles:
             raise ValidationError(
                 f"Memory source '{code}' ссылается на неизвестный chunking_profile "

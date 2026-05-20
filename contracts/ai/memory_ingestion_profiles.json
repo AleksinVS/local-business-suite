@@ -12,6 +12,11 @@
       "adapter_kind": "unc_path",
       "follow_symlinks": false,
       "stable_after_seconds": 5
+    },
+    "external_api_snapshot_v1": {
+      "adapter_kind": "external_api_snapshot",
+      "follow_symlinks": false,
+      "stable_after_seconds": 0
     }
   },
   "parser_profiles": {
@@ -103,6 +108,27 @@
           "pii_blocked",
           "secret_blocked",
           "acl_unresolved",
+          "schema_unknown_type",
+          "schema_unknown_relation",
+          "canonicalization_conflict"
+        ]
+      }
+    },
+    "external_api_snapshot_v1": {
+      "adapter_profile": "external_api_snapshot_v1",
+      "parser_profile": "office_document_cascade_v1",
+      "ocr_profile": "rus_eng_optional_v1",
+      "limit_profile": "corporate_docs_default_v1",
+      "raw_mode": "quarantine_copy",
+      "acl_mode": "scope_rule",
+      "partial_indexing": "enabled",
+      "issue_policy": {
+        "create_issue_kinds": [
+          "api_unavailable",
+          "rate_limited",
+          "malformed_payload",
+          "pii_blocked",
+          "secret_blocked",
           "schema_unknown_type",
           "schema_unknown_relation",
           "canonicalization_conflict"

@@ -51,6 +51,7 @@
 - обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
 - поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа;
+- поддерживает MVP подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
 - возвращает AI-чату только безопасные результаты с `citations`;
 - пишет каждый разрешенный или запрещенный поиск в `MemoryAccessAudit`.
 
@@ -58,11 +59,14 @@
 
 - `docs/guides/MEMORY_USER_GUIDE.md` — как пользоваться памятью через AI-чат и что проверять в ответах.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — как внедрять ingestion на Windows/UNC, вести issue/review queue и bootstrapping схемы графа.
+- `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — бизнес-опросники для подключения внешних ИС и первичного описания сущностей графа знаний.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — как развернуть, настроить и проверить память.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации и архитектурные пояснения.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — финальный план ingestion-коннектора и bootstrapping схемы графа.
+- `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план сбора знаний из внешних информационных систем.
 - `docs/adr/ADR-0003-ai-memory-service.md` — архитектурное решение по памяти.
 - `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md` — архитектурное решение по ingestion и bootstrapping.
+- `docs/adr/ADR-0006-external-system-knowledge-connectors.md` — архитектурное решение по коннекторам внешних ИС.
 - `contracts/ai/memory_sources.json` — источники памяти.
 - `contracts/ai/memory_profiles.json` — профили chunking, extraction, indexing и ranking.
 - `contracts/ai/memory_routing.json` — правила маршрутизации по sensitivity.
@@ -73,6 +77,7 @@
 
 - production scheduler/Celery пока не подключен;
 - embeddings-интерфейс заложен, но в MVP используется локальный full-text backend;
+- external connector MVP имеет generic envelope/queue/worker, но source-specific pilot adapter выбирается и реализуется отдельно;
 - Kuzu backend подготовлен как lazy placeholder;
 - ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.log`), а Office/PDF/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
 - внешний API памяти вынесен в backlog и пока не реализуется;
@@ -186,8 +191,10 @@ Runtime-данные не коммитятся:
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
+- `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план queued API-коннекторов и landing zone для внешних ИС.
 - `docs/guides/MEMORY_USER_GUIDE.md` — руководство по системе памяти.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
+- `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — опросники для владельцев данных и профильных экспертов.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.
 - `docs/deployment/DEPLOYMENT.md` — production deployment.
 - `docs/deployment/IIS_SSO.md` — IIS и Active Directory.

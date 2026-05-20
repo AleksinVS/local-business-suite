@@ -34,6 +34,19 @@
         "path",
         "json_pointer"
       ]
+    },
+    "external_api_object_v1": {
+      "strategy": "field_aware",
+      "max_tokens": 700,
+      "overlap_tokens": 80,
+      "preserve_fields": [
+        "source_code",
+        "collection",
+        "object_type",
+        "external_id",
+        "title",
+        "source_updated_at"
+      ]
     }
   },
   "extractor_profiles": {
@@ -78,6 +91,18 @@
         "department",
         "manufacturer",
         "device_type"
+      ],
+      "requires_local_llm": true
+    },
+    "external_api_object_v1": {
+      "mode": "business_object",
+      "graph_extraction": true,
+      "entity_types": [
+        "external_record",
+        "department",
+        "person",
+        "asset",
+        "document"
       ],
       "requires_local_llm": true
     }

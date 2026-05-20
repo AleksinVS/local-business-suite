@@ -417,7 +417,7 @@
       .then(function(data) {
         removeTypingIndicator();
         if (data.status === 'ok') {
-          startSSE(prompt, data.message_id);
+          startSSE(prompt, data.message_id, userMsgId);
         } else {
           alert('Ошибка загрузки: ' + escapeHtml(data.error));
           resetInput();
@@ -442,7 +442,7 @@
       promptInput.focus();
     }
 
-    function startSSE(promptText, messageId) {
+    function startSSE(promptText, messageId, pendingUserMsgId) {
       var assistantMsgId = 'assistant-msg-' + Date.now();
       var assistantMsgHtml = '<div class="flex justify-start" id="' + assistantMsgId + '">'
         + '<div class="flex flex-col items-start gap-1 max-w-[85%] md:max-w-[70%]">'
@@ -463,6 +463,8 @@
 
       var accumulatedContent = "";
       var controller = new AbortController();
+      var sseBuffer = "";
+      var streamFinished = false;
 
       window._activeChatStream = {
         abort: function() { controller.abort(); },
@@ -486,14 +488,22 @@
         signal: controller.signal,
       })
         .then(function(response) {
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+          }
+          if (!response.body) {
+            throw new Error('Потоковый ответ недоступен.');
+          }
           var reader = response.body.getReader();
           var decoder = new TextDecoder();
 
           function read() {
+            if (streamFinished) return;
             reader.read().then(function(result) {
               if (result.done) { finishStream(); return; }
-              var text = decoder.decode(result.value, { stream: true });
-              var lines = text.split('\n');
+              sseBuffer += decoder.decode(result.value, { stream: true });
+              var lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop() || "";
               lines.forEach(function(line) {
                 if (!line.startsWith('data: ')) return;
                 var dataStr = line.slice(6);
@@ -507,12 +517,7 @@
                     messageList.scrollTop = messageList.scrollHeight;
                   }
                   if (data.error) {
-                    var errorDiv = document.createElement('div');
-                    errorDiv.className = 'mt-2 p-2 bg-red-50 text-red-600 rounded border border-red-200 text-sm';
-                    errorDiv.textContent = 'Ошибка: ' + data.error;
-                    assistantContentDiv.appendChild(errorDiv);
-                    controller.abort();
-                    resetInput();
+                    finishWithError(data.message || data.error || 'AI-сервис вернул ошибку.', data);
                   }
                 } catch (err) {
                   // Ignore non-JSON lines
@@ -521,22 +526,36 @@
               read();
             }).catch(function(err) {
               if (err.name !== 'AbortError') console.error('Stream read error:', err);
-              finishStream();
+              if (err.name === 'AbortError') return;
+              finishWithError('Соединение с AI-сервисом было прервано.', {});
             });
           }
           read();
         }).catch(function(err) {
           if (err.name !== 'AbortError') console.error('Fetch error:', err);
-          finishStream();
+          if (err.name === 'AbortError') return;
+          finishWithError('Не удалось получить ответ от AI-сервиса. Причина: ошибка соединения с сервером чата.', {});
         });
 
-      function finishStream() {
+      function finishWithError(message, payload) {
+        var details = payload && payload.request_id ? '<div class="mt-1 text-xs text-red-500">ID: ' + escapeHtml(payload.request_id) + '</div>' : '';
+        accumulatedContent = "";
+        assistantContentDiv.innerHTML = '<div class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">'
+          + escapeHtml(message) + details + '</div>';
+        try { controller.abort(); } catch (err) {}
+        finishStream({ hasError: true });
+      }
+
+      function finishStream(options) {
+        if (streamFinished) return;
+        streamFinished = true;
+        options = options || {};
         window._activeChatStream = null;
-        if (accumulatedContent) {
+        if (accumulatedContent && !options.hasError) {
           assistantContentDiv.innerHTML = renderAssistantContent(accumulatedContent);
         }
         // Remove pending opacity from user message
-        var pendingBubble = document.querySelector('#' + userMsgId + ' .msg-pending');
+        var pendingBubble = document.querySelector('#' + pendingUserMsgId + ' .msg-pending');
         if (pendingBubble) pendingBubble.classList.remove('opacity-70', 'msg-pending');
         resetInput();
         var timeEl = document.querySelector('#' + assistantMsgId + ' .text-gray-500');

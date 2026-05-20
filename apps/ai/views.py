@@ -2,6 +2,7 @@ import json
 import uuid
 import logging
 import hmac
+import hashlib
 
 from django.conf import settings
 from django.contrib import messages
@@ -30,6 +31,120 @@ from .services import (
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
 logger = logging.getLogger(__name__)
+
+CHAT_RUNTIME_ERROR_MESSAGE = (
+    "Не удалось получить ответ от AI-сервиса. Причина: {reason}. "
+    "Технический идентификатор: {request_id}."
+)
+
+
+def classify_chat_runtime_error(exc):
+    exc_name = exc.__class__.__name__
+    cause = getattr(exc, "__cause__", None)
+    cause_name = cause.__class__.__name__ if cause else ""
+    combined = f"{exc_name} {cause_name} {exc}".lower()
+
+    if "timeout" in combined or "timed out" in combined:
+        return "agent_runtime_timeout", "превышено время ожидания"
+    if "connect" in combined or "connection" in combined or "network" in combined:
+        return "agent_runtime_unavailable", "AI-сервис недоступен"
+    if "status" in combined or "http" in combined:
+        return "agent_runtime_http_error", "AI-сервис вернул ошибку"
+    if isinstance(exc, AgentRuntimeError):
+        return "agent_runtime_error", "AI-сервис вернул ошибку"
+    return "chat_stream_error", "внутренняя ошибка обработки чата"
+
+
+def build_chat_error_payload(*, exc, request_id, conversation_id, technical_trace_id=None):
+    error_code, reason = classify_chat_runtime_error(exc)
+    message = CHAT_RUNTIME_ERROR_MESSAGE.format(reason=reason, request_id=request_id)
+    payload = {
+        "error": True,
+        "error_code": error_code,
+        "message": message,
+        "request_id": request_id,
+        "conversation_id": conversation_id,
+    }
+    if technical_trace_id:
+        payload["technical_trace_id"] = technical_trace_id
+    return payload
+
+
+def record_chat_runtime_error(
+    *,
+    session,
+    actor,
+    user_message,
+    exc,
+    conversation_id,
+    request_id,
+    origin_channel,
+    model_id,
+    runtime_method,
+    partial_content="",
+):
+    prompt = user_message.content if user_message else ""
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else ""
+    error_code, reason = classify_chat_runtime_error(exc)
+    action = AgentActionLog.objects.create(
+        session=session,
+        message=user_message,
+        actor=actor,
+        tool_code=f"agent_runtime.{runtime_method}",
+        action_kind=AgentActionLog.ActionKind.READ,
+        status=AgentActionLog.Status.FAILED,
+        request_payload={
+            "conversation_id": conversation_id,
+            "request_id": request_id,
+            "origin_channel": origin_channel,
+            "model_id": model_id,
+            "session_external_id": str(session.external_id),
+            "prompt_sha256": prompt_hash,
+            "prompt_length": len(prompt),
+        },
+        response_payload={
+            "error_code": error_code,
+            "reason": reason,
+            "error_type": exc.__class__.__name__,
+            "partial_content_length": len(partial_content),
+            "has_partial_content": bool(partial_content),
+        },
+        error_message=str(exc)[:4000],
+    )
+    payload = build_chat_error_payload(
+        exc=exc,
+        request_id=request_id,
+        conversation_id=conversation_id,
+        technical_trace_id=action.id,
+    )
+    append_chat_message(
+        session=session,
+        role=ChatMessage.Role.ASSISTANT,
+        content=payload["message"],
+        metadata={
+            "error": True,
+            "error_code": error_code,
+            "conversation_id": conversation_id,
+            "request_id": request_id,
+            "technical_trace_id": action.id,
+            "runtime_method": runtime_method,
+            "streamed": runtime_method == "chat_stream",
+            "partial": bool(partial_content),
+        },
+    )
+    request_ids = list(session.metadata.get("request_ids", []))
+    if request_id not in request_ids:
+        request_ids.append(request_id)
+    session.metadata = {
+        **session.metadata,
+        "conversation_id": conversation_id,
+        "request_ids": request_ids,
+        "last_error_request_id": request_id,
+        "last_error_action_id": action.id,
+        "last_error_code": error_code,
+    }
+    session.save(update_fields=["metadata", "updated_at"])
+    return payload
 
 
 def gateway_token_is_valid(request):
@@ -217,13 +332,24 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 model_id=model_id,
             )
         except AgentRuntimeError as exc:
-            append_chat_message(
+            payload = record_chat_runtime_error(
                 session=session,
-                role=ChatMessage.Role.SYSTEM,
-                content=f"Ошибка agent runtime: {exc}",
-                metadata={"conversation_id": conversation_id, "request_id": request_id},
+                actor=request.user,
+                user_message=user_msg,
+                exc=exc,
+                conversation_id=conversation_id,
+                request_id=request_id,
+                origin_channel=session.channel,
+                model_id=model_id,
+                runtime_method="chat",
             )
-            messages.error(request, "AI runtime недоступен или вернул ошибку.")
+            logger.warning(
+                "AI chat runtime error: request_id=%s action_id=%s",
+                request_id,
+                payload.get("technical_trace_id"),
+                exc_info=True,
+            )
+            messages.error(request, payload["message"])
             return redirect("ai:chat_detail", external_id=session.external_id)
 
         tool_trace = response.get("tool_trace", [])
@@ -277,7 +403,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
             prompt = user_msg.content
         elif prompt:
             # Fallback for older clients that don't use the two-step upload process
-            append_chat_message(
+            user_msg = append_chat_message(
                 session=session,
                 role=ChatMessage.Role.USER,
                 content=prompt,
@@ -314,11 +440,31 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                                 data_json = json.loads(data_str)
                                 if "content" in data_json:
                                     full_content.append(data_json["content"])
-                            except:
+                            except (json.JSONDecodeError, TypeError):
                                 pass
-            except Exception as e:
-                logger.error(f"Stream error: {e}", exc_info=True)
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            except Exception as exc:
+                partial_content = "".join(full_content)
+                payload = record_chat_runtime_error(
+                    session=session,
+                    actor=request.user,
+                    user_message=user_msg,
+                    exc=exc,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                    origin_channel=session.channel,
+                    model_id=model_id,
+                    runtime_method="chat_stream",
+                    partial_content=partial_content,
+                )
+                logger.warning(
+                    "AI chat stream failed: request_id=%s action_id=%s",
+                    request_id,
+                    payload.get("technical_trace_id"),
+                    exc_info=True,
+                )
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
 
             if full_content:
                 append_chat_message(

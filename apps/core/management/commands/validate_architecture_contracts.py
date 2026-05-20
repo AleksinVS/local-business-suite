@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 
 from apps.ai.tool_definitions import TOOLS
@@ -31,6 +32,12 @@ class Command(BaseCommand):
     help = "Validate AI-first / Code-first JSON contracts used by the project."
 
     def handle(self, *args, **options):
+        min_stream_timeout = int(settings.LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT) + 30
+        if getattr(settings, "GUNICORN_TIMEOUT", 600) < min_stream_timeout:
+            raise ValidationError(
+                "GUNICORN_TIMEOUT must be at least LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT + 30 seconds "
+                "to avoid killing AI chat streaming requests before memory/tool calls finish."
+            )
         workflow_payload = load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
         validate_workflow_rules_payload(workflow_payload)
         role_payload = load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE)
@@ -75,7 +82,6 @@ class Command(BaseCommand):
                 msg_parts.append(f"missing from STATUS_ALIASES: {sorted(missing_in_aliases)}")
             if extra_in_aliases:
                 msg_parts.append(f"extra in STATUS_ALIASES: {sorted(extra_in_aliases)}")
-            from django.core.exceptions import ValidationError
             raise ValidationError(
                 f"STATUS_ALIASES keys do not match workflow_rules.json statuses: {'; '.join(msg_parts)}."
             )

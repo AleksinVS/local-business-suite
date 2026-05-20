@@ -62,6 +62,8 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal`
 - `LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090`
 - `LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90`
+- `GUNICORN_TIMEOUT=600`
+- `GUNICORN_GRACEFUL_TIMEOUT=30`
 - `OPENAI_API_KEY=<provider-key>`
 - `OPENAI_BASE_URL=<openai-compatible-base-url>`
 - `AI_AGENT_MODEL_NAME=<provider-model-name>`
@@ -79,6 +81,8 @@ DJANGO_INTERNAL_ALLOWED_HOSTS=web
 LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal
 LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90
+GUNICORN_TIMEOUT=600
+GUNICORN_GRACEFUL_TIMEOUT=30
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN=replace-me
 OPENAI_API_KEY=replace-me
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -87,6 +91,57 @@ DJANGO_SECURE_SSL_REDIRECT=False
 DJANGO_SESSION_COOKIE_SECURE=False
 DJANGO_CSRF_COOKIE_SECURE=False
 ```
+
+## AI streaming timeouts
+
+AI chat requests that use tools, especially `memory.search`, can take noticeably longer than a simple greeting because the runtime may perform:
+
+```text
+LLM call -> Django gateway tool call -> memory.search -> LLM call
+```
+
+Production `web` must therefore run Gunicorn with a timeout greater than `LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT`. The required rule is:
+
+```text
+GUNICORN_TIMEOUT >= LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT + 30
+```
+
+Default production values are:
+
+```env
+LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90
+GUNICORN_TIMEOUT=600
+GUNICORN_GRACEFUL_TIMEOUT=30
+```
+
+`python manage.py validate_architecture_contracts` checks this relation. If `GUNICORN_TIMEOUT` is too low, deployment must be stopped before users see hanging AI chat streams.
+
+## AI chat error handling
+
+AI chat must fail visibly and audibly in production: the UI should never leave the assistant bubble in a permanent `печатает...` state.
+
+When Django cannot get a response from `agent-runtime`, the chat surface:
+
+- shows a safe Russian message with the failure reason category and `request_id`;
+- stores the same user-facing message in `ChatMessage` with `metadata.error=true`;
+- stores technical diagnostics in `AgentActionLog` with `tool_code=agent_runtime.chat` or `agent_runtime.chat_stream`;
+- stores prompt hash and prompt length, not raw prompt text, in the technical action payload;
+- updates `ChatSession.metadata.last_error_request_id`, `last_error_action_id`, and `last_error_code`.
+
+Operational check after a reported chat failure:
+
+```bash
+python manage.py shell
+```
+
+```python
+from apps.ai.models import AgentActionLog
+
+action = AgentActionLog.objects.filter(status="failed", tool_code__startswith="agent_runtime.").first()
+print(action.id, action.request_payload.get("request_id"), action.error_message)
+```
+
+The `request_id` shown to the user should match `AgentActionLog.request_payload["request_id"]`. Raw runtime exception text should be visible only in `AgentActionLog.error_message` and server logs, not in the user-facing chat bubble.
 
 ## HTTP-only trusted network profile
 

@@ -223,6 +223,11 @@ class ArchitectureContractTests(TestCase):
                 self.skipTest(f"{setting_name} is not configured yet")
         call_command("validate_architecture_contracts")
 
+    @override_settings(LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90, GUNICORN_TIMEOUT=30)
+    def test_validate_architecture_contracts_rejects_short_gunicorn_timeout(self):
+        with self.assertRaisesMessage(ValidationError, "GUNICORN_TIMEOUT"):
+            call_command("validate_architecture_contracts")
+
     def test_memory_sources_reject_missing_required_fields(self):
         with self.assertRaisesMessage(ValidationError, "source_kind"):
             validate_memory_sources_payload(

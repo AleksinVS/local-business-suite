@@ -303,6 +303,8 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
 )
+GUNICORN_TIMEOUT = int(os.environ.get("GUNICORN_TIMEOUT", "600"))
+GUNICORN_GRACEFUL_TIMEOUT = int(os.environ.get("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS = int(
     os.environ.get("LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS", "900")
 )
@@ -317,6 +319,13 @@ if DJANGO_ENV == "production":
     if LOCAL_BUSINESS_AI_GATEWAY_TOKEN in unsafe_gateway_tokens:
         raise ImproperlyConfigured(
             "LOCAL_BUSINESS_AI_GATEWAY_TOKEN must be set to a non-default value in production"
+        )
+    min_stream_timeout = int(LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT) + 30
+    if GUNICORN_TIMEOUT < min_stream_timeout:
+        raise ImproperlyConfigured(
+            "GUNICORN_TIMEOUT must be at least LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT + 30 seconds "
+            f"for AI streaming requests. Current GUNICORN_TIMEOUT={GUNICORN_TIMEOUT}, "
+            f"required>={min_stream_timeout}."
         )
 
 try:

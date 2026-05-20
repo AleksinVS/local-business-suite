@@ -17,6 +17,7 @@ from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
 User = get_user_model()
 
 from .models import AgentActionLog, ChatMessage, ChatSession, PendingAction
+from .runtime_client import AgentRuntimeError
 from .services import normalize_session_external_id
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 
@@ -196,6 +197,61 @@ class AIViewsTests(TestCase):
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).count(), 1)
         self.assertTrue(ChatMessage.objects.filter(session=session, content__icontains="Найдено 1").exists())
+
+    @patch("apps.ai.views.AgentRuntimeClient.chat")
+    def test_chat_send_runtime_error_is_user_safe_and_audited(self, chat_mock):
+        chat_mock.side_effect = AgentRuntimeError("runtime exploded")
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Проверка ошибки")
+
+        response = self.client.post(
+            reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
+            {"prompt": "Проверь память"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        action = AgentActionLog.objects.get(tool_code="agent_runtime.chat")
+        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
+        self.assertIn("runtime exploded", action.error_message)
+        self.assertEqual(action.request_payload["prompt_length"], len("Проверь память"))
+        self.assertNotIn("Проверь память", json.dumps(action.request_payload, ensure_ascii=False))
+        error_message = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
+        self.assertTrue(error_message.metadata["error"])
+        self.assertEqual(error_message.metadata["technical_trace_id"], action.id)
+        self.assertIn("Технический идентификатор", error_message.content)
+        self.assertNotIn("runtime exploded", error_message.content)
+
+    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
+    def test_chat_stream_runtime_error_is_returned_saved_and_audited(self, stream_mock):
+        stream_mock.side_effect = AgentRuntimeError("runtime stream exploded")
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Проверка stream")
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content="Найди в памяти концентратор",
+        )
+
+        response = self.client.post(
+            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"msg_id": user_message.id}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        body = b"".join(response.streaming_content).decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Не удалось получить ответ от AI-сервиса", body)
+        self.assertIn("request_id", body)
+        self.assertNotIn("runtime stream exploded", body)
+        action = AgentActionLog.objects.get(tool_code="agent_runtime.chat_stream")
+        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
+        self.assertIn("runtime stream exploded", action.error_message)
+        assistant_message = ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).get()
+        self.assertTrue(assistant_message.metadata["error"])
+        self.assertEqual(assistant_message.metadata["technical_trace_id"], action.id)
+        session.refresh_from_db()
+        self.assertEqual(session.metadata["last_error_action_id"], action.id)
 
     def test_workorder_get_with_invalid_id_returns_error_envelope(self):
         response = self.client.post(

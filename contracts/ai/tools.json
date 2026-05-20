@@ -316,6 +316,89 @@
       "required_role_scope": "visible"
     },
     {
+      "id": "memory.remember",
+      "title": "Remember chat knowledge",
+      "domain": "memory",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Queue an ingestion request to remember selected AI chat messages as personal or organization memory.",
+      "inputs": [
+        "session_id",
+        "message_ids",
+        "target_scope",
+        "user_note",
+        "importance"
+      ],
+      "input_schemas": {
+        "target_scope": {
+          "description": "Memory target scope. Defaults to personal.",
+          "enum": [
+            "personal",
+            "organization"
+          ]
+        },
+        "message_ids": {
+          "description": "ChatMessage ids to use as provenance.",
+          "type": "array"
+        },
+        "user_note": {
+          "description": "Optional user note describing what should be remembered.",
+          "type": "string"
+        },
+        "importance": {
+          "description": "Optional importance hint, e.g. high or organization_candidate.",
+          "type": "string"
+        }
+      },
+      "outputs": [
+        "request_id",
+        "status",
+        "target_scope",
+        "queued_at",
+        "job_id",
+        "message"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "memory.update_personal",
+      "title": "Update personal memory",
+      "domain": "memory",
+      "mode": "write",
+      "execution_mode": "service_layer",
+      "description": "Edit or delete one personal memory item owned by the actor.",
+      "inputs": [
+        "memory_id",
+        "operation",
+        "new_text"
+      ],
+      "input_schemas": {
+        "operation": {
+          "description": "Personal memory operation.",
+          "enum": [
+            "edit",
+            "delete"
+          ]
+        },
+        "memory_id": {
+          "description": "Stable memory item id.",
+          "type": "string"
+        },
+        "new_text": {
+          "description": "Replacement memory text for edit operations.",
+          "type": "string"
+        }
+      },
+      "outputs": [
+        "memory_id",
+        "event_id",
+        "status"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "visible"
+    },
+    {
       "id": "access.update_role_permissions",
       "title": "Update role permissions",
       "domain": "access",

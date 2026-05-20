@@ -42,6 +42,7 @@ class DLPResult:
 
 
 class CredentialGuard:
+    _SECRET_HANDLE_RE = re.compile(r"<SECRET_HANDLE:[^>\s]+>")
     _PRIVATE_KEY_RE = re.compile(
         r"-----BEGIN\s+(?:[A-Z0-9 ]+\s+)?PRIVATE\s+KEY-----.*?-----END\s+(?:[A-Z0-9 ]+\s+)?PRIVATE\s+KEY-----",
         re.IGNORECASE | re.DOTALL,
@@ -50,7 +51,8 @@ class CredentialGuard:
         r"""(?ix)
         (?P<key>
             password|passwd|pwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|
-            auth[_-]?token|bearer[_-]?token|client[_-]?secret|private[_-]?key
+            auth[_-]?token|bearer[_-]?token|client[_-]?secret|private[_-]?key|
+            пароль|пароля|секрет|токен|ключ|api\s*[-_ ]?\s*ключ|секретный\s+ключ
         )
         \s*(?:=|:|=>)\s*
         (?P<quote>["']?)
@@ -83,7 +85,8 @@ class CredentialGuard:
     )
 
     def scan_text(self, text: str) -> DLPResult:
-        findings = tuple(_dedupe_secret_findings(self._iter_findings(text or "")))
+        safe_text = self._SECRET_HANDLE_RE.sub(lambda match: "X" * (match.end() - match.start()), text or "")
+        findings = tuple(_dedupe_secret_findings(self._iter_findings(safe_text)))
         blocked = bool(findings)
         reason = "credential_material_detected" if blocked else ""
         return DLPResult(blocked=blocked, reason=reason, findings=findings)

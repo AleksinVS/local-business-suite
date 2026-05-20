@@ -1,0 +1,8 @@
+{
+  ".": "Workflow-блок для chat-derived memory, reflection и secret handles",
+  "BLOCK_BRIEF.md": "Brief workflow-блока",
+  "ARCHITECT_PLAN.json": "Архитектурный план исполнения",
+  "EXECUTOR_REPORT.memory-chat-reflection-secret-handles.md": "Отчет реализации MVP",
+  "TASK_ACCEPTANCE.memory-chat-reflection-secret-handles.md": "Приемка MVP реализации",
+  "RETROSPECTIVE.md": "Краткая ретроспектива workflow-блока"
+}

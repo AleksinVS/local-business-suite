@@ -124,6 +124,7 @@ python manage.py memory_ingest_source --help
 python manage.py memory_prepare_bootstrap_package --help
 python manage.py memory_graph_schema_discover --help
 python manage.py memory_graph_extract --help
+python manage.py memory_reflect_chats --help
 python manage.py memory_reindex --help
 python manage.py memory_eval --help
 ```
@@ -161,6 +162,12 @@ Memory eval checks: passed=4, failed=0
 python manage.py memory_discover_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_graph_extract --source-code <code> --dry-run
+```
+
+Для памяти из AI-чата проверить queued/reflection контур:
+
+```bash
+python manage.py memory_reflect_chats --dry-run
 ```
 
 После проверки доступа, issue queue и ожидаемого количества файлов можно запускать без `--dry-run`:

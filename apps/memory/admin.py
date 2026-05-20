@@ -14,9 +14,16 @@ from .models import (
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemoryIndexJob,
+    MemoryKnowledgeCandidate,
+    MemoryKnowledgeEvent,
+    MemoryKnowledgeItem,
+    MemoryReflectionRun,
     MemorySnapshot,
     MemorySource,
     MemorySourceObject,
+    MemoryWriteRequest,
+    SecretAccessAudit,
+    SecretHandle,
 )
 
 
@@ -304,6 +311,75 @@ class MemoryGraphReviewItemAdmin(admin.ModelAdmin):
     search_fields = ("source__code", "snapshot__source_object_id", "decision")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("source", "snapshot", "reviewed_by")
+
+
+@admin.register(MemoryWriteRequest)
+class MemoryWriteRequestAdmin(admin.ModelAdmin):
+    list_display = ("request_id", "actor", "target_scope", "status", "processed_at", "created_at")
+    list_filter = ("target_scope", "status", "created_at", "processed_at")
+    search_fields = ("request_id", "actor__username", "error_message")
+    readonly_fields = ("request_id", "created_at", "updated_at", "processed_at")
+    autocomplete_fields = ("actor", "session")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("actor", "session")
+
+
+@admin.register(MemoryKnowledgeItem)
+class MemoryKnowledgeItemAdmin(admin.ModelAdmin):
+    list_display = ("memory_id", "scope", "owner_user", "kind", "status", "sensitivity", "updated_at")
+    list_filter = ("scope", "kind", "status", "sensitivity", "created_at", "updated_at")
+    search_fields = ("memory_id", "text_hash", "owner_user__username")
+    readonly_fields = ("memory_id", "text_hash", "created_at", "updated_at")
+    autocomplete_fields = ("owner_user", "source_session", "created_by", "supersedes")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("owner_user", "created_by", "source_session")
+
+
+@admin.register(MemoryKnowledgeEvent)
+class MemoryKnowledgeEventAdmin(admin.ModelAdmin):
+    list_display = ("event_id", "event_type", "knowledge_item", "actor", "created_at")
+    list_filter = ("event_type", "created_at")
+    search_fields = ("event_id", "knowledge_item__memory_id", "actor__username")
+    readonly_fields = ("event_id", "created_at")
+    autocomplete_fields = ("knowledge_item", "actor")
+
+
+@admin.register(MemoryKnowledgeCandidate)
+class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
+    list_display = ("id", "status", "source_item", "created_by", "reviewer", "reviewed_at", "created_at")
+    list_filter = ("status", "created_at", "reviewed_at")
+    search_fields = ("source_item__memory_id", "created_by__username", "reviewer__username", "decision")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("source_item", "created_by", "reviewer")
+
+
+@admin.register(MemoryReflectionRun)
+class MemoryReflectionRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "status", "dry_run", "window_start", "window_end", "started_at", "finished_at")
+    list_filter = ("status", "dry_run", "created_at", "started_at")
+    search_fields = ("error_message",)
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("created_by",)
+
+
+@admin.register(SecretHandle)
+class SecretHandleAdmin(admin.ModelAdmin):
+    list_display = ("handle", "provider", "label", "owner_user", "scope", "status", "created_at")
+    list_filter = ("provider", "status", "scope", "created_at")
+    search_fields = ("handle", "label", "owner_user__username")
+    readonly_fields = ("created_at", "updated_at")
+    autocomplete_fields = ("owner_user", "created_by")
+
+
+@admin.register(SecretAccessAudit)
+class SecretAccessAuditAdmin(admin.ModelAdmin):
+    list_display = ("secret_handle", "actor", "action", "decision", "request_id", "created_at")
+    list_filter = ("action", "decision", "created_at")
+    search_fields = ("secret_handle__handle", "actor__username", "request_id")
+    readonly_fields = ("created_at",)
+    autocomplete_fields = ("actor", "secret_handle")
 
 
 @admin.register(MemoryIndexJob)

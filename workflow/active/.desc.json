@@ -1,4 +1,5 @@
 {
   ".": "Активные workflow-блоки",
-  "README.md": "Правила для активных workflow-блоков"
+  "README.md": "Правила для активных workflow-блоков",
+  "memory-chat-reflection-secret-handles": "Workflow: chat-derived memory, reflection и secret handles"
 }

@@ -126,6 +126,19 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
             limit=payload.get("limit", 5),
             request_id=actor_context.get("request_id", ""),
         )
+    elif tool_code == "memory.remember":
+        from apps.memory.services import queue_memory_remember_for_actor
+
+        return queue_memory_remember_for_actor(
+            actor=actor,
+            session=session,
+            payload=payload,
+            request_id=actor_context.get("request_id", ""),
+        )
+    elif tool_code == "memory.update_personal":
+        from apps.memory.services import update_personal_memory_for_actor
+
+        return update_personal_memory_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.update_role_permissions":
         from .services import update_role_permissions_for_actor
         return update_role_permissions_for_actor(actor=actor, payload=payload)
@@ -212,7 +225,7 @@ def execute_tool(
             requires_confirmation = False  # replay confirmed pending action
 
     # Augment request_payload with trace context for audit trail
-    audit_request_payload = {**trace_context, **payload}
+    audit_request_payload = _build_audit_request_payload(tool_code=tool_code, payload=payload, trace_context=trace_context)
 
     if requires_confirmation and not confirmed_token:
         pending = PendingAction.objects.create(
@@ -448,7 +461,11 @@ def execute_pending_action(
                 "origin_channel": origin_channel,
                 "actor_version": actor_version,
             }
-            audit_request_payload = {**trace_context, **pending.payload}
+            audit_request_payload = _build_audit_request_payload(
+                tool_code=pending.tool_code,
+                payload=pending.payload,
+                trace_context=trace_context,
+            )
 
             if confirmed:
                 registry = tool_registry()
@@ -619,3 +636,31 @@ def execute_pending_action(
             "errors": [f"Unexpected error processing pending action: {str(exc)}"],
             "meta": {},
         }
+
+
+def _build_audit_request_payload(*, tool_code, payload, trace_context):
+    safe_payload = dict(payload or {})
+    if tool_code in {"memory.remember", "memory.update_personal"}:
+        for key in ("user_note", "new_text"):
+            if key in safe_payload:
+                safe_payload[key] = _redact_secret_like_text(str(safe_payload.get(key) or ""))
+    return {**trace_context, **safe_payload}
+
+
+def _redact_secret_like_text(text: str) -> str:
+    try:
+        from apps.memory.security import scan_for_secrets
+
+        findings = scan_for_secrets(text).findings
+    except Exception:
+        return text
+    if not findings:
+        return text
+    output = []
+    cursor = 0
+    for finding in sorted(findings, key=lambda item: item.start):
+        output.append(text[cursor:finding.start])
+        output.append("<SECRET_REDACTED>")
+        cursor = finding.end
+    output.append(text[cursor:])
+    return "".join(output)

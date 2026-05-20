@@ -774,6 +774,65 @@ class IdentityContextPropagationTests(TestCase):
                 1,
             )
 
+    def test_memory_remember_tool_queues_request_without_secret_value_in_audit(self):
+        from apps.memory.models import MemoryIndexJob, MemoryWriteRequest
+
+        session = ChatSession.objects.create(user=self.manager)
+        message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content="Запомни: тестовый контур alpha.",
+        )
+
+        result = execute_tool(
+            tool_code="memory.remember",
+            actor_context={"user_id": self.manager.id},
+            session_external_id=session.external_id,
+            payload={
+                "message_ids": [message.id],
+                "target_scope": "personal",
+                "user_note": "Пароль: not-a-real-secret-value",
+            },
+            request_id="req-ai-memory-remember",
+        )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["tool"], "memory.remember")
+        self.assertEqual(result["result"]["status"], MemoryWriteRequest.Status.QUEUED)
+        self.assertEqual(MemoryWriteRequest.objects.count(), 1)
+        self.assertEqual(MemoryIndexJob.objects.filter(job_kind=MemoryIndexJob.JobKind.REMEMBER).count(), 1)
+        self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.remember")
+
+        action = AgentActionLog.objects.get(tool_code="memory.remember", status=AgentActionLog.Status.SUCCEEDED)
+        self.assertNotIn("not-a-real-secret-value", json.dumps(action.request_payload))
+        self.assertIn("<SECRET_REDACTED>", json.dumps(action.request_payload))
+
+    def test_memory_update_personal_tool_reports_task_type(self):
+        from apps.memory.models import MemoryKnowledgeItem
+
+        item = MemoryKnowledgeItem.objects.create(
+            memory_id="chat:personal:user:test",
+            scope=MemoryKnowledgeItem.Scope.PERSONAL,
+            owner_user=self.manager,
+            kind=MemoryKnowledgeItem.Kind.FACT,
+            text="old text",
+            text_hash="old-hash",
+            sensitivity="internal",
+            scope_tokens=[f"user:{self.manager.id}"],
+            created_by=self.manager,
+        )
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            result = execute_tool(
+                tool_code="memory.update_personal",
+                actor_context={"user_id": self.manager.id},
+                payload={"memory_id": item.memory_id, "operation": "edit", "new_text": "new text"},
+                request_id="req-ai-memory-update",
+            )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.update_personal")
+
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
 class ChatViewTraceContextTests(TestCase):
@@ -1095,6 +1154,8 @@ class TaskTypeContractTests(TestCase):
                 {"id": "inventory.devices.archive"},
                 {"id": "analytics.summary"},
                 {"id": "memory.search"},
+                {"id": "memory.remember"},
+                {"id": "memory.update_personal"},
             ]
         }
         errors = validate_bounded_tools_exist_in_catalog(catalog)

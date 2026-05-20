@@ -28,7 +28,9 @@
         "manage_assignments": { "type": "boolean" },
         "view_analytics": { "type": "boolean" },
         "manage_departments": { "type": "boolean" },
-        "manage_roles": { "type": "boolean" }
+        "manage_roles": { "type": "boolean" },
+        "memory_organization_write": { "type": "boolean" },
+        "memory_organization_review": { "type": "boolean" }
       },
       "required": [
         "view_scope",

@@ -181,6 +181,8 @@ BOUNDED_TASK_TYPE_IDS = frozenset({
     "analytics.summary.departments",
     "analytics.summary.assignees",
     "memory.search",
+    "memory.remember",
+    "memory.update_personal",
 })
 
 _TASK_TYPE_CATALOG: dict[str, TaskTypeContract] = {
@@ -410,6 +412,36 @@ _TASK_TYPE_CATALOG: dict[str, TaskTypeContract] = {
         example_requests=(
             "Найди в памяти сведения о правилах обработки заявок",
             "Поищи в базе знаний инструкции по медизделиям",
+        ),
+    ),
+    "memory.remember": TaskTypeContract(
+        id="memory.remember",
+        title="Remember chat knowledge",
+        mode=TaskMode.WRITE,
+        description="Queue selected chat messages for personal or organization memory ingestion.",
+        allowed_tools=("memory.remember",),
+        required_slots=(),
+        optional_slots=("session_id", "message_ids", "target_scope", "user_note", "importance"),
+        requires_confirmation=False,
+        output_mode=OutputMode.RESULT,
+        example_requests=(
+            "Запомни это для меня",
+            "Запомни это для всей организации",
+        ),
+    ),
+    "memory.update_personal": TaskTypeContract(
+        id="memory.update_personal",
+        title="Update personal memory",
+        mode=TaskMode.WRITE,
+        description="Edit or delete one personal memory item owned by the actor.",
+        allowed_tools=("memory.update_personal",),
+        required_slots=("memory_id", "operation"),
+        optional_slots=("new_text",),
+        requires_confirmation=False,
+        output_mode=OutputMode.RESULT,
+        example_requests=(
+            "Исправь то, что ты обо мне помнишь",
+            "Забудь этот факт из моей памяти",
         ),
     ),
 }

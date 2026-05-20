@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
@@ -536,12 +538,352 @@ class MemoryGraphReviewItem(models.Model):
         return f"{self.item_kind}:{self.status}:{self.pk}"
 
 
+class MemoryWriteRequest(models.Model):
+    class TargetScope(models.TextChoices):
+        PERSONAL = "personal", "Personal"
+        ORGANIZATION = "organization", "Organization"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        PROCESSING = "processing", "Processing"
+        ACCEPTED = "accepted", "Accepted"
+        CANDIDATE_CREATED = "candidate_created", "Candidate created"
+        FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_write_requests")
+    session = models.ForeignKey(
+        "ai.ChatSession",
+        on_delete=models.PROTECT,
+        related_name="memory_write_requests",
+        blank=True,
+        null=True,
+    )
+    message_ids = models.JSONField(default=list, blank=True)
+    target_scope = models.CharField(max_length=32, choices=TargetScope.choices, default=TargetScope.PERSONAL)
+    user_note = models.TextField(blank=True)
+    importance = models.CharField(max_length=32, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.QUEUED)
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    processed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["actor", "-created_at"]),
+            models.Index(fields=["target_scope", "status"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["request_id"]),
+        ]
+        verbose_name = "Memory write request"
+        verbose_name_plural = "Memory write requests"
+
+    def __str__(self):
+        return f"{self.request_id}:{self.target_scope}:{self.status}"
+
+
+class MemoryKnowledgeItem(models.Model):
+    class Scope(models.TextChoices):
+        PERSONAL = "personal", "Personal"
+        ORGANIZATION = "organization", "Organization"
+
+    class Kind(models.TextChoices):
+        FACT = "fact", "Fact"
+        PREFERENCE = "preference", "Preference"
+        PROCEDURE = "procedure", "Procedure"
+        DECISION = "decision", "Decision"
+        SECRET_REFERENCE = "secret_reference", "Secret reference"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        DELETED = "deleted", "Deleted"
+        SUPERSEDED = "superseded", "Superseded"
+        QUARANTINED = "quarantined", "Quarantined"
+
+    memory_id = models.CharField(max_length=160, unique=True)
+    scope = models.CharField(max_length=32, choices=Scope.choices)
+    owner_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_knowledge_items",
+        blank=True,
+        null=True,
+    )
+    kind = models.CharField(max_length=32, choices=Kind.choices, default=Kind.FACT)
+    text = models.TextField()
+    text_hash = models.CharField(max_length=128)
+    sensitivity = models.CharField(max_length=32, default="internal")
+    scope_tokens = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
+    source_session = models.ForeignKey(
+        "ai.ChatSession",
+        on_delete=models.PROTECT,
+        related_name="memory_knowledge_items",
+        blank=True,
+        null=True,
+    )
+    source_message_ids = models.JSONField(default=list, blank=True)
+    source_content_hash = models.CharField(max_length=128, blank=True)
+    provenance = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_memory_knowledge_items",
+    )
+    supersedes = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="superseded_by",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["scope", "owner_user_id", "-updated_at", "-id"]
+        indexes = [
+            models.Index(fields=["scope", "status"]),
+            models.Index(fields=["owner_user", "status"]),
+            models.Index(fields=["text_hash"]),
+            models.Index(fields=["sensitivity"]),
+            models.Index(fields=["memory_id"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(scope="personal", owner_user__isnull=False) | Q(scope="organization"),
+                name="memory_knowledge_personal_has_owner",
+            ),
+        ]
+        verbose_name = "Memory knowledge item"
+        verbose_name_plural = "Memory knowledge items"
+
+    def __str__(self):
+        return self.memory_id
+
+
+class MemoryKnowledgeEvent(models.Model):
+    class EventType(models.TextChoices):
+        REMEMBERED = "remembered", "Remembered"
+        EDITED = "edited", "Edited"
+        DELETED = "deleted", "Deleted"
+        REFLECTED = "reflected", "Reflected"
+        PROMOTED = "promoted", "Promoted"
+        REJECTED = "rejected", "Rejected"
+        SECRET_CAPTURED = "secret_captured", "Secret captured"
+
+    event_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    event_type = models.CharField(max_length=32, choices=EventType.choices)
+    knowledge_item = models.ForeignKey(
+        MemoryKnowledgeItem,
+        on_delete=models.PROTECT,
+        related_name="events",
+        blank=True,
+        null=True,
+    )
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_knowledge_events")
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["event_type"]),
+            models.Index(fields=["actor", "created_at"]),
+        ]
+        verbose_name = "Memory knowledge event"
+        verbose_name_plural = "Memory knowledge events"
+
+    def __str__(self):
+        return f"{self.event_type}:{self.event_id}"
+
+
+class MemoryKnowledgeCandidate(models.Model):
+    class Status(models.TextChoices):
+        PROPOSED = "proposed", "Proposed"
+        NEEDS_REVIEW = "needs_review", "Needs review"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        MERGED = "merged", "Merged"
+        SUPERSEDED = "superseded", "Superseded"
+
+    source_item = models.ForeignKey(
+        MemoryKnowledgeItem,
+        on_delete=models.PROTECT,
+        related_name="organization_candidates",
+        blank=True,
+        null=True,
+    )
+    proposed_text = models.TextField()
+    proposed_payload = models.JSONField(default=dict, blank=True)
+    evidence = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PROPOSED)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_candidate_reviews",
+        blank=True,
+        null=True,
+    )
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    decision = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_candidates")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_by", "-created_at"]),
+            models.Index(fields=["reviewer", "reviewed_at"]),
+        ]
+        verbose_name = "Memory knowledge candidate"
+        verbose_name_plural = "Memory knowledge candidates"
+
+    def __str__(self):
+        return f"{self.status}:{self.pk}"
+
+
+class MemoryReflectionRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    window_start = models.DateTimeField(blank=True, null=True)
+    window_end = models.DateTimeField(blank=True, null=True)
+    dry_run = models.BooleanField(default=False)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    metrics = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_reflection_runs",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["dry_run"]),
+            models.Index(fields=["window_start", "window_end"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(finished_at__isnull=True) | Q(started_at__isnull=True) | Q(started_at__lte=models.F("finished_at")),
+                name="memory_reflection_run_time_range",
+            ),
+        ]
+        verbose_name = "Memory reflection run"
+        verbose_name_plural = "Memory reflection runs"
+
+    def __str__(self):
+        return f"{self.status}:{self.pk}"
+
+
+class SecretHandle(models.Model):
+    class Provider(models.TextChoices):
+        EXTERNAL_VAULT_LINK = "external_vault_link", "External vault link"
+        DISABLED = "disabled", "Disabled"
+        LOCAL_STUB = "local_stub", "Local stub"
+        OPENBAO = "openbao", "OpenBao"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REVOKED = "revoked", "Revoked"
+        UNAVAILABLE = "unavailable", "Unavailable"
+
+    handle = models.CharField(max_length=160, unique=True)
+    provider = models.CharField(max_length=64, choices=Provider.choices, default=Provider.EXTERNAL_VAULT_LINK)
+    label = models.CharField(max_length=255)
+    owner_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="secret_handles",
+        blank=True,
+        null=True,
+    )
+    scope = models.CharField(max_length=32, blank=True)
+    url = models.CharField(max_length=1000, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
+    sensitivity = models.CharField(max_length=32, default="secret")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_secret_handles")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["provider", "status"]),
+            models.Index(fields=["owner_user", "status"]),
+            models.Index(fields=["handle"]),
+        ]
+        verbose_name = "Secret handle"
+        verbose_name_plural = "Secret handles"
+
+    def __str__(self):
+        return self.handle
+
+
+class SecretAccessAudit(models.Model):
+    class Action(models.TextChoices):
+        CREATE = "create", "Create"
+        LINK = "link", "Link"
+        ROTATE = "rotate", "Rotate"
+        REVOKE = "revoke", "Revoke"
+        SERVICE_RESOLVE = "service_resolve", "Service resolve"
+
+    class Decision(models.TextChoices):
+        ALLOWED = "allowed", "Allowed"
+        DENIED = "denied", "Denied"
+        FAILED = "failed", "Failed"
+
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="secret_access_audits")
+    secret_handle = models.ForeignKey(SecretHandle, on_delete=models.PROTECT, related_name="access_audits")
+    action = models.CharField(max_length=32, choices=Action.choices)
+    decision = models.CharField(max_length=32, choices=Decision.choices)
+    request_id = models.CharField(max_length=120, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["actor", "-created_at"]),
+            models.Index(fields=["secret_handle", "-created_at"]),
+            models.Index(fields=["action", "decision"]),
+            models.Index(fields=["request_id"]),
+        ]
+        verbose_name = "Secret access audit"
+        verbose_name_plural = "Secret access audits"
+
+    def __str__(self):
+        return f"{self.secret_handle_id}:{self.action}:{self.decision}"
+
+
 class MemoryIndexJob(models.Model):
     class JobKind(models.TextChoices):
         DISCOVER = "discover", "Discover"
         SYNC = "sync", "Sync"
         REINDEX = "reindex", "Reindex"
         EVAL = "eval", "Eval"
+        REMEMBER = "remember", "Remember"
+        REFLECT = "reflect", "Reflect"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

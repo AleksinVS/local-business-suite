@@ -341,6 +341,51 @@
         "Найди в памяти сведения о правилах обработки заявок",
         "Поищи в базе знаний инструкции по медизделиям"
       ]
+    },
+    {
+      "id": "memory.remember",
+      "title": "Remember chat knowledge",
+      "mode": "write",
+      "description": "Queue selected chat messages for personal or organization memory ingestion.",
+      "allowed_tools": [
+        "memory.remember"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "session_id",
+        "message_ids",
+        "target_scope",
+        "user_note",
+        "importance"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Запомни это для меня",
+        "Запомни это для всей организации"
+      ]
+    },
+    {
+      "id": "memory.update_personal",
+      "title": "Update personal memory",
+      "mode": "write",
+      "description": "Edit or delete one personal memory item owned by the actor.",
+      "allowed_tools": [
+        "memory.update_personal"
+      ],
+      "required_slots": [
+        "memory_id",
+        "operation"
+      ],
+      "optional_slots": [
+        "new_text"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Исправь то, что ты обо мне помнишь",
+        "Забудь этот факт из моей памяти"
+      ]
     }
   ]
 }

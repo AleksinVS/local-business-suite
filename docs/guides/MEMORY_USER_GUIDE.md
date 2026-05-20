@@ -104,6 +104,31 @@ Eval report пишется только в `data/memory/eval/`.
 - ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
 - облачная маршрутизация для чувствительных случаев не включена.
 
+## MVP расширение: память из AI-чата
+
+AI-чат использует `memory.search` как read путь к memory service. Диалоги самого чата хранятся в `ChatSession` и `ChatMessage` и не считаются долговременной curated memory без отдельного pipeline.
+
+Для запросов вида "запомни" добавлен MVP-контур:
+
+- по умолчанию знание пишется в персональную память пользователя;
+- запись в общую память организации требует явного намерения пользователя и соответствующего права;
+- `memory.remember` ставит request в очередь и возвращает статус;
+- команда `memory_reflect_chats` обрабатывает queued requests и может создавать кандидатов в общие знания из персональной памяти;
+- кандидаты в общие знания публикуются только после review владельца базы/графа знаний;
+- пользователь сможет исправлять и удалять свою персональную память через чат;
+- секреты сохраняются только через secret handle: агент видит `<SECRET_HANDLE:...>` и metadata, но не значение секрета;
+- MVP secret backend использует Vaultwarden-compatible external link: пользователь сам вводит/читает secret value во внешнем vault UI.
+
+Архитектурное решение: `docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md`.
+Implementation plan: `docs/architecture/MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md`.
+
+Операторская команда:
+
+```bash
+python manage.py memory_reflect_chats --dry-run
+python manage.py memory_reflect_chats
+```
+
 ## Как проверить пользователю
 
 1. Открыть AI-чат под обычным пользователем.

@@ -1,0 +1,36 @@
+{
+  "task_id": "05-permissions-admin-eval",
+  "title": "Add permissions, admin workflows and eval coverage",
+  "status": "ready",
+  "objective": "Harden the feature with explicit capabilities, review UI/admin and security evaluation.",
+  "write_scope": [
+    "apps/memory/policies.py",
+    "apps/memory/admin.py",
+    "apps/memory/management/commands/memory_eval.py",
+    "apps/core/json_utils.py",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "docs/guides/",
+    "docs/deployment/",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py"
+  ],
+  "requirements": [
+    "Add capabilities for personal read/write/edit/delete, organization write/propose/review and secret handle operations.",
+    "Add admin visibility for write requests, candidates and secret handles without values.",
+    "Add eval cases for chat memory, candidate promotion and secret leakage.",
+    "Update deployment and user guides."
+  ],
+  "acceptance_checks": [
+    "Unauthorized user cannot read another user's personal memory.",
+    "Personal owner can edit/delete own memory.",
+    "Knowledge owner can accept/reject organization candidate.",
+    "Eval detects secret leakage regressions."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

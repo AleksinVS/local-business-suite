@@ -4,7 +4,36 @@
 
 ## Active
 
-- Нет активных задач.
+### Завершение системы памяти: chat-derived memory, reflection и secret handles
+
+Довести систему памяти до целевого состояния с персональной/организационной памятью из AI-чата, queued `memory.remember`, sleep-time reflection, candidate promotion и unified secret handles.
+
+Контекст:
+- базовая архитектура памяти принята в `docs/adr/ADR-0003-ai-memory-service.md`;
+- ingestion документов принят в `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
+- chat-derived memory и secret handles приняты в `docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md`;
+- gap analysis находится в `docs/architecture/MEMORY_COMPLETION_GAP_ANALYSIS.md`;
+- implementation plan находится в `docs/architecture/MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md`;
+- active planning находится в `docs/planning/active/memory-system-completion.md`;
+- workflow package находится в `workflow/active/memory-chat-reflection-secret-handles/`.
+
+Предварительный scope:
+- модели и atomic storage для `data/memory/chat_knowledge/`;
+- `memory.remember` как write tool, который ставит ingestion request в очередь;
+- scheduled `memory_reflect_chats`;
+- organization knowledge candidates с review владельца базы/графа знаний;
+- personal memory edit/delete через чат;
+- provider-neutral `SecretHandleBackend`;
+- span-level secret extraction вместо блокировки всего документа;
+- permissions, admin visibility, eval и deployment/user docs.
+
+Критерии готовности к завершению:
+- explicit remember defaults to personal memory;
+- organization write требует явного intent и permission;
+- reflection-derived organization knowledge публикуется только после review;
+- secret value не попадает в prompt/tool trace/index/log;
+- non-secret text продолжает ingestion при наличии secret span;
+- `python manage.py check`, `python manage.py validate_architecture_contracts`, scoped tests и `memory_eval --dry-run` проходят.
 
 ## Next
 
@@ -63,10 +92,6 @@
 - определены allowed operations: только retrieval или retrieval + managed ingestion;
 - выбран механизм auth: gateway token, service accounts, mTLS или другой вариант;
 - описаны форматы ошибок, citations и audit trace.
-
-### Методика работы с LLM в чате
-
-Продумать контур сжатия контекста, суммаризации диалогов, смены заголовка после первой суммаризации и режимов заполнения памяти: оперативный режим и отложенный режим "сна" в ненагруженное время.
 
 ## Blocked
 

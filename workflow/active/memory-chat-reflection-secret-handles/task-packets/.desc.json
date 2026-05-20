@@ -1,0 +1,8 @@
+{
+  ".": "Task packets workflow-блока memory-chat-reflection-secret-handles",
+  "01-data-model-and-storage.json": "Модели и файловое хранилище chat-derived memory",
+  "02-remember-tool.json": "Queued memory.remember tool",
+  "03-reflection-and-candidates.json": "Sleep-time reflection и кандидаты в общие знания",
+  "04-secret-handles.json": "SecretHandle interface и span-level secret handling",
+  "05-permissions-admin-eval.json": "Права, admin/UX и eval"
+}

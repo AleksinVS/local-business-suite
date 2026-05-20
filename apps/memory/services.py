@@ -125,3 +125,23 @@ def deactivate_snapshot_memory_indexes(*, snapshot):
     from .ingestion import deactivate_snapshot_indexes
 
     deactivate_snapshot_indexes(snapshot=snapshot)
+
+
+def queue_memory_remember_for_actor(*, actor, session, payload, request_id=""):
+    from .chat_memory import queue_memory_remember
+
+    return queue_memory_remember(actor=actor, session=session, payload=payload, request_id=request_id)
+
+
+def update_personal_memory_for_actor(*, actor, payload):
+    from .chat_memory import delete_personal_memory, edit_personal_memory
+
+    operation = str(payload.get("operation", "")).strip().lower()
+    memory_id = str(payload.get("memory_id", "")).strip()
+    if operation == "edit":
+        return edit_personal_memory(actor=actor, memory_id=memory_id, new_text=payload.get("new_text", ""))
+    if operation == "delete":
+        return delete_personal_memory(actor=actor, memory_id=memory_id)
+    from django.core.exceptions import ValidationError
+
+    raise ValidationError("operation must be 'edit' or 'delete'.")

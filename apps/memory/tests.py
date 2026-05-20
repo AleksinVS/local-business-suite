@@ -16,6 +16,7 @@ from .admin import (
     MemoryEvalCaseAdmin,
     MemoryGraphFactAdmin,
     MemoryIndexJobAdmin,
+    MemoryKnowledgeItemAdmin,
     MemorySnapshotAdmin,
     MemorySourceAdmin,
 )
@@ -31,9 +32,16 @@ from .models import (
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemoryIndexJob,
+    MemoryKnowledgeCandidate,
+    MemoryKnowledgeEvent,
+    MemoryKnowledgeItem,
+    MemoryReflectionRun,
     MemorySnapshot,
     MemorySource,
     MemorySourceObject,
+    MemoryWriteRequest,
+    SecretAccessAudit,
+    SecretHandle,
 )
 from .policies import can_access_chunk, can_access_graph_fact, can_manage_memory, user_scope_tokens
 from .services import (
@@ -229,6 +237,13 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphExtractionRun: django_admin.site._registry[MemoryGraphExtractionRun].__class__,
             MemoryGraphSchemaProposal: django_admin.site._registry[MemoryGraphSchemaProposal].__class__,
             MemoryGraphReviewItem: django_admin.site._registry[MemoryGraphReviewItem].__class__,
+            MemoryWriteRequest: django_admin.site._registry[MemoryWriteRequest].__class__,
+            MemoryKnowledgeItem: MemoryKnowledgeItemAdmin,
+            MemoryKnowledgeEvent: django_admin.site._registry[MemoryKnowledgeEvent].__class__,
+            MemoryKnowledgeCandidate: django_admin.site._registry[MemoryKnowledgeCandidate].__class__,
+            MemoryReflectionRun: django_admin.site._registry[MemoryReflectionRun].__class__,
+            SecretHandle: django_admin.site._registry[SecretHandle].__class__,
+            SecretAccessAudit: django_admin.site._registry[SecretAccessAudit].__class__,
         }
 
         for model, admin_class in expected_admin_classes.items():
@@ -253,6 +268,13 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphExtractionRun,
             MemoryGraphSchemaProposal,
             MemoryGraphReviewItem,
+            MemoryWriteRequest,
+            MemoryKnowledgeItem,
+            MemoryKnowledgeEvent,
+            MemoryKnowledgeCandidate,
+            MemoryReflectionRun,
+            SecretHandle,
+            SecretAccessAudit,
         ):
             with self.subTest(model=model.__name__):
                 model_admin = django_admin.site._registry[model]
@@ -700,6 +722,124 @@ class MemoryPrivacyPipelineTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(snapshot.status, MemorySnapshot.Status.BLOCKED)
         self.assertEqual(snapshot.blocked_reason, "credential_material_detected")
         self.assertEqual(snapshot.pii_policy_applied, "deidentify_before_index")
+
+    def test_secret_scanner_detects_russian_password_assignment(self):
+        from .security import scan_for_secrets
+
+        result = scan_for_secrets("Запомни пароль: E2E-Secret-Value-987!")
+
+        self.assertTrue(result.blocked)
+        self.assertEqual(result.findings[0].finding_type, "credential_assignment")
+
+
+class MemoryChatKnowledgeTests(TestCase):
+    def create_chat(self, *, username="chat-memory-user", text="Запомни: насос alpha требует калибровку."):
+        from apps.ai.models import ChatMessage, ChatSession
+
+        user = User.objects.create_user(username=username, password="pass")
+        session = ChatSession.objects.create(user=user, title="Memory chat")
+        message = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=text)
+        return user, session, message
+
+    def test_remember_request_queues_personal_memory_by_default(self):
+        from .chat_memory import process_memory_write_request, queue_memory_remember
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat()
+            result = queue_memory_remember(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id], "user_note": "важно"},
+                request_id="req-remember-1",
+            )
+            request = MemoryWriteRequest.objects.get(request_id=result["request_id"])
+
+            self.assertEqual(request.target_scope, MemoryWriteRequest.TargetScope.PERSONAL)
+            self.assertEqual(request.status, MemoryWriteRequest.Status.QUEUED)
+
+            processed = process_memory_write_request(request)
+            request.refresh_from_db()
+
+            self.assertEqual(request.status, MemoryWriteRequest.Status.ACCEPTED)
+            self.assertTrue(MemoryKnowledgeItem.objects.filter(owner_user=user, scope=MemoryKnowledgeItem.Scope.PERSONAL).exists())
+            self.assertTrue((Path(tmpdir) / "memory" / "chat_knowledge" / "users" / str(user.id) / "memory.current.json").exists())
+            self.assertIn("memory_id", processed)
+
+    def test_secret_span_becomes_handle_and_non_secret_text_is_indexed(self):
+        from .chat_memory import process_memory_write_request, queue_memory_remember
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir), LOCAL_BUSINESS_SECRET_VAULT_BASE_URL="https://vault.example"):
+            user, session, message = self.create_chat(
+                text="Запомни: тестовый стенд называется alpha. Пароль: not-a-real-secret-value"
+            )
+            queued = queue_memory_remember(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id]},
+                request_id="req-secret-memory",
+            )
+            request = MemoryWriteRequest.objects.get(request_id=queued["request_id"])
+
+            process_memory_write_request(request)
+            item = MemoryKnowledgeItem.objects.get(owner_user=user)
+
+            self.assertIn("тестовый стенд называется alpha", item.text)
+            self.assertIn("<SECRET_HANDLE:secret:", item.text)
+            self.assertNotIn("not-a-real-secret-value", item.text)
+            self.assertEqual(SecretHandle.objects.count(), 1)
+            self.assertEqual(SecretAccessAudit.objects.count(), 1)
+
+    def test_organization_memory_requires_staff_permission(self):
+        from django.core.exceptions import PermissionDenied
+
+        from .chat_memory import queue_memory_remember
+
+        user, session, message = self.create_chat(username="org-denied-user")
+
+        with self.assertRaises(PermissionDenied):
+            queue_memory_remember(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id], "target_scope": "organization"},
+                request_id="req-org-denied",
+            )
+
+    def test_reflection_creates_organization_candidate_for_high_importance_personal_memory(self):
+        from .chat_memory import process_memory_write_request, propose_reflection_candidates, queue_memory_remember
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat(text="Запомни: общий регламент alpha действует для отдела.")
+            queued = queue_memory_remember(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id], "importance": "organization_candidate"},
+                request_id="req-candidate",
+            )
+            process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
+
+            candidates = propose_reflection_candidates()
+
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0].status, MemoryKnowledgeCandidate.Status.PROPOSED)
+
+    def test_owner_can_edit_and_delete_personal_memory(self):
+        from .chat_memory import delete_personal_memory, edit_personal_memory, process_memory_write_request, queue_memory_remember
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat()
+            queued = queue_memory_remember(actor=user, session=session, payload={"message_ids": [message.id]})
+            process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
+            item = MemoryKnowledgeItem.objects.get(owner_user=user)
+
+            edited = edit_personal_memory(actor=user, memory_id=item.memory_id, new_text="Насос alpha калибруется ежемесячно.")
+            item.refresh_from_db()
+            self.assertEqual(edited["status"], MemoryKnowledgeItem.Status.ACTIVE)
+            self.assertIn("ежемесячно", item.text)
+
+            deleted = delete_personal_memory(actor=user, memory_id=item.memory_id)
+            item.refresh_from_db()
+            self.assertEqual(deleted["status"], MemoryKnowledgeItem.Status.DELETED)
+            self.assertEqual(item.status, MemoryKnowledgeItem.Status.DELETED)
 
 
 class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):

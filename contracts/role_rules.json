@@ -16,7 +16,9 @@
     "manage_assignments": false,
     "view_analytics": false,
     "manage_departments": false,
-    "manage_roles": false
+    "manage_roles": false,
+    "memory_organization_write": false,
+    "memory_organization_review": false
   },
   "technician": {
     "display_name": "Техник (Медтехник)",
@@ -34,7 +36,9 @@
     "manage_assignments": false,
     "view_analytics": false,
     "manage_departments": false,
-    "manage_roles": false
+    "manage_roles": false,
+    "memory_organization_write": false,
+    "memory_organization_review": false
   },
   "manager": {
     "display_name": "Менеджер (Администратор)",
@@ -52,6 +56,8 @@
     "manage_assignments": true,
     "view_analytics": true,
     "manage_departments": true,
-    "manage_roles": true
+    "manage_roles": true,
+    "memory_organization_write": true,
+    "memory_organization_review": true
   }
 }

@@ -1,0 +1,5 @@
+{
+  ".": "Playwright e2e configuration and tests",
+  "playwright.config.ts": "Playwright configuration for project e2e tests with artifacts under .local/playwright",
+  "tests": "Permanent Playwright e2e tests"
+}

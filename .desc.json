@@ -14,6 +14,8 @@
   "archive/": "Завершённые документы и отчёты",
   "manage.py": "Точка входа Django CLI",
   "Makefile": "Команды сборки и проверки (venv, install, check, test, contracts, gen-struct)",
+  "package.json": "Node.js dev-зависимости и npm-скрипты, включая Playwright CLI для e2e",
+  "package-lock.json": "Lock-файл Node.js dev-зависимостей",
   "requirements.txt": "Зависимости Python",
   "requirements.lock": "Lock-файл зависимостей (pip-compile)",
   "CLAUDE.md": "Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)",

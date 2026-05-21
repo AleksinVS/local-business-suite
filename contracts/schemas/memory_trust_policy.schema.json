@@ -1,0 +1,72 @@
+{
+  "title": "Memory Trust Policy",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "trust_statuses",
+    "authority_classes",
+    "defaults_by_source_kind",
+    "direct_context_policy",
+    "review_roles"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "trust_statuses": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["trusted", "review_required", "blocked"] },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "legacy_trust_status_mapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["trusted", "review_required", "blocked"]
+      }
+    },
+    "authority_classes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "defaults_by_source_kind": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/trustRule"
+      }
+    },
+    "direct_context_policy": {
+      "type": "object"
+    },
+    "review_roles": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "trustRule": {
+      "type": "object",
+      "properties": {
+        "trust_status": {
+          "type": "string",
+          "enum": ["trusted", "review_required", "blocked", "candidate_only", "quarantined"]
+        },
+        "authority_class": { "type": "string" },
+        "trusted_for_context": { "type": "boolean" },
+        "requires_source_review": { "type": "boolean" },
+        "review_owner": { "type": "string" },
+        "untrusted_handling": {
+          "type": "string",
+          "enum": ["review_required", "blocked", "candidate_only", "quarantine", "block"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

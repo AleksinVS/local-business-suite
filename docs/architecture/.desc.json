@@ -13,5 +13,8 @@
   "MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md": "План памяти из AI-чата, reflection и secret handles",
   "MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md": "План сбора знаний из внешних информационных систем",
   "MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md": "Legacy gap review реализации external information system connector MVP",
+  "MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md": "План trusted sources, claim/belief layer и lightweight retrieval orchestration",
+  "MEMORY_MVP_SIMPLIFICATION_PLAN.md": "План упрощения MVP-архитектуры памяти",
+  "MEMORY_MVP_REMEDIATION_PLAN.md": "План исправления разрывов MVP-памяти",
   "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки"
 }

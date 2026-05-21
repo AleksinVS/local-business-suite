@@ -1,6 +1,6 @@
-# План: chat-derived memory, sleep-time reflection и secret handles
+# План: chat-derived memory, queue processing, future reflection и secret handles
 
-Статус: архитектурный implementation plan; MVP data model, queued `memory.remember`, personal edit/delete services, reflection command and Vaultwarden-compatible external link backend implemented 2026-05-20.
+Статус: архитектурный implementation plan; MVP data model, `memory.remember`, personal edit/delete services, queue processor command and Vaultwarden-compatible external link backend implemented 2026-05-20. Уточнено ADR-0010: `MemoryKnowledgeItem` является главным объектом памяти MVP, а полноценная ночная рефлексия перенесена на следующий этап.
 
 Дата: 2026-05-20.
 
@@ -17,14 +17,14 @@
 ## Принятые пользовательские решения
 
 - По умолчанию "запомни" пишет в персональную память пользователя.
-- Общая организационная память используется, если пользователь явно сказал "для всех / для организации" и имеет право, либо если reflection создала кандидата в общие знания.
+- Общая организационная память используется, если пользователь явно сказал "для всех / для организации" и имеет право, либо если обработчик очереди создал кандидата в общие знания.
 - Право прямой записи в организационную память настраивается правами пользователя.
 - Кандидаты в общие знания требуют обязательной модерации владельцем базы/графа знаний.
 - На первом этапе все секреты идут через единый provider-neutral `SecretHandleBackend`, где Vaultwarden является предварительно одобренным MVP-хранилищем для human-entered/human-read secret values.
 - Пользователь должен уметь удалить или исправить свою персональную память через чат.
-- `memory.remember` считается успешным, если поставил ingestion job/request в очередь и вернул статус.
+- `memory.remember` считается успешным, если поставил `MemoryWriteRequest` в очередь и вернул `status=queued`; `memory_id` появляется только после обработки очереди.
 - Агент видит только `<SECRET_HANDLE:...>` и metadata; значение секрета пользователь пишет/читает самостоятельно через ссылку, переданную агентом.
-- Reflection должна предлагать важные персональные знания как кандидаты в организационную память, но публикация в общую память идет только через audit владельца базы/графа знаний.
+- Совместимый обработчик очереди может предлагать важные персональные знания как кандидаты в организационную память, но публикация в общую память идет только через audit владельца базы/графа знаний.
 
 ## Термины
 
@@ -34,7 +34,8 @@
 - Organization memory: общая память организации, доступная по scope/policy.
 - Knowledge event: append-only событие изменения memory state.
 - Current projection: актуальная агрегированная версия memory-файла.
-- Reflection: отложенная консолидация чатов и remembered events в дешевое ненагруженное время.
+- Queue processor: обработчик queued remember requests и простых кандидатов в общую память.
+- Future reflection: будущая отложенная консолидация чатов и remembered events в дешевое ненагруженное время.
 - Candidate: предложение добавить знание в общую память.
 - Secret handle: ссылка на секрет в контролируемом secret backend без раскрытия value агенту.
 
@@ -113,7 +114,7 @@ data/memory/chat_knowledge/
   - source personal item, proposed org item, evidence, reviewer, status;
   - statuses: `proposed`, `needs_review`, `accepted`, `rejected`, `merged`, `superseded`.
 - `MemoryReflectionRun`
-  - window, profile, counts, status, errors, started_at, finished_at.
+  - сейчас используется как совместимый журнал обработки очереди; полноценная reflection window будет уточнена отдельно.
 - `SecretHandle`
   - opaque handle, provider, label, owner/scope metadata, created_by, sensitivity, status;
   - no secret value.
@@ -141,14 +142,16 @@ Outputs:
 - `status`;
 - `target_scope`;
 - `queued_at`;
+- `job_id`;
 - `message`.
 
 Rules:
 
 - default target scope is `personal`;
 - organization target requires explicit user wording and permission;
-- tool only queues work and returns status;
-- no direct DB/index writes from agent runtime;
+- обычный tool только создает `MemoryWriteRequest` со статусом `queued` и `MemoryIndexJob` со статусом `pending`;
+- обработчик очереди сохраняет `MemoryKnowledgeItem`, обновляет файлы и индексы, после чего знание находится через `memory.search`;
+- `memory_id`, `event_id` и `processed_at` относятся к результату обработки очереди, а не к первичному ответу инструмента;
 - user confirmation depends on normal write-tool policy.
 
 ### `memory.update_personal`
@@ -172,7 +175,7 @@ Rules:
 
 Mode: write/internal.
 
-Used by reflection or permitted users to create organization candidates.
+Used by queue processor, future reflection or permitted users to create organization candidates.
 
 ### `memory.review_candidate`
 
@@ -180,7 +183,7 @@ Mode: write/admin.
 
 Used by knowledge owner / graph owner to accept, edit, reject or merge organization candidates.
 
-## Ingestion and reflection pipeline
+## Ingestion and queue processing pipeline
 
 ### Immediate request path
 
@@ -188,30 +191,37 @@ Used by knowledge owner / graph owner to accept, edit, reject or merge organizat
 User says "remember ..."
   -> AI runtime calls memory.remember with message refs
   -> permission and scope check
-  -> MemoryWriteRequest queued
-  -> lightweight job extracts safe candidate if possible
-  -> event appended to personal/org target
-  -> current projection rebuilt
-  -> MemorySnapshot/MemoryChunk updated for retrieval
-  -> audit written
-  -> bot reports queued/accepted/candidate status
+  -> MemoryWriteRequest created with queued status
+  -> MemoryIndexJob created with pending status
+  -> bot reports request_id, job_id and queued status
 ```
 
-### Sleep-time reflection
+### Queue processing path
 
 ```text
 Scheduled memory_reflect_chats
-  -> select unprocessed ChatMessage windows and MemoryWriteRequest rows
-  -> retrieve existing personal memory projection
-  -> extract stable facts/preferences/procedures/decisions
-  -> remove ephemeral chat noise
-  -> span-level PII/secret processing
-  -> deduplicate and merge
-  -> update personal memory events/projection
-  -> create organization candidates for cross-user/org-relevant knowledge
-  -> update chunks/indexes
-  -> write MemoryReflectionRun and audit
+  -> select queued MemoryWriteRequest rows
+  -> process explicit remember requests
+  -> MemoryKnowledgeItem saved as main MVP memory object
+  -> event appended to personal/org target
+  -> current projection rebuilt
+  -> MemorySnapshot/MemoryChunk updated for retrieval
+  -> default full-text index updated
+  -> request accepted and processed result includes memory_id/event_id
 ```
+
+### Queue processor command
+
+```text
+Scheduled memory_reflect_chats
+  -> select queued MemoryWriteRequest rows
+  -> retrieve existing personal memory projection
+  -> create organization candidates for cross-user/org-relevant knowledge
+  -> update chunks/indexes for processed requests
+  -> write MemoryReflectionRun compatibility metrics
+```
+
+This command is not full sleep-time reflection. Future reflection will separately analyze chat windows, merge repeated knowledge and find stable patterns.
 
 Scheduling:
 

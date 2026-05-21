@@ -12,6 +12,9 @@
   "memory_sources.schema.json": "Schema для каталога источников сервиса памяти",
   "memory_profiles.schema.json": "Schema для профилей chunking, extraction, indexing и ranking памяти",
   "memory_routing.schema.json": "Schema для правил sensitivity routing памяти",
+  "memory_trust_policy.schema.json": "Schema для политики надежных источников памяти",
+  "memory_claims_policy.schema.json": "Schema для политики claims/beliefs памяти",
+  "memory_retrieval_budget.schema.json": "Schema для бюджета retrieval orchestration памяти",
   "memory_ingestion_profiles.schema.json": "Schema для профилей ingestion-коннектора памяти",
   "memory_graph_schema.schema.json": "Schema для единой схемы графа памяти"
 }

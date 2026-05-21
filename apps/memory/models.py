@@ -11,12 +11,34 @@ class MemorySource(models.Model):
         DISABLED = "disabled", "Disabled"
         ERROR = "error", "Error"
 
+    class TrustStatus(models.TextChoices):
+        TRUSTED = "trusted", "Trusted"
+        REVIEW_REQUIRED = "review_required", "Review required"
+        CANDIDATE_ONLY = "candidate_only", "Candidate only"
+        QUARANTINED = "quarantined", "Quarantined"
+        BLOCKED = "blocked", "Blocked"
+
+    class AuthorityClass(models.TextChoices):
+        SYSTEM_OF_RECORD = "system_of_record", "System of record"
+        APPROVED_CORPUS = "approved_corpus", "Approved corpus"
+        APPROVED_USER_MEMORY = "approved_user_memory", "Approved user memory"
+        REVIEWED_ORG_KNOWLEDGE = "reviewed_org_knowledge", "Reviewed organization knowledge"
+        EXTERNAL_OBSERVATION = "external_observation", "External observation"
+        CANDIDATE_INPUT = "candidate_input", "Candidate input"
+
     code = models.CharField(max_length=120, unique=True)
     title = models.CharField(max_length=255)
     source_kind = models.CharField(max_length=64)
     domain = models.CharField(max_length=64)
     owner = models.CharField(max_length=64, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ENABLED)
+    trust_status = models.CharField(max_length=32, choices=TrustStatus.choices, blank=True)
+    authority_class = models.CharField(max_length=64, choices=AuthorityClass.choices, blank=True)
+    trusted_for_context = models.BooleanField(default=False)
+    requires_source_review = models.BooleanField(default=True)
+    review_owner = models.CharField(max_length=120, blank=True)
+    trusted_context_kinds = models.JSONField(default=list, blank=True)
+    untrusted_handling = models.CharField(max_length=32, blank=True)
     sync_mode = models.CharField(max_length=32, blank=True)
     scope_rule = models.CharField(max_length=120, blank=True)
     sensitivity = models.CharField(max_length=32)
@@ -39,6 +61,8 @@ class MemorySource(models.Model):
             models.Index(fields=["domain"]),
             models.Index(fields=["source_kind"]),
             models.Index(fields=["sensitivity"]),
+            models.Index(fields=["trust_status", "trusted_for_context"]),
+            models.Index(fields=["authority_class"]),
         ]
         verbose_name = "Memory source"
         verbose_name_plural = "Memory sources"
@@ -748,6 +772,107 @@ class MemoryKnowledgeCandidate(models.Model):
 
     def __str__(self):
         return f"{self.status}:{self.pk}"
+
+
+class MemoryClaim(models.Model):
+    class ClaimType(models.TextChoices):
+        FACT = "fact", "Fact"
+        PREFERENCE = "preference", "Preference"
+        PROCEDURE = "procedure", "Procedure"
+        POLICY = "policy", "Policy"
+        DECISION = "decision", "Decision"
+        METRIC_OBSERVATION = "metric_observation", "Metric observation"
+        INCIDENT = "incident", "Incident"
+        ACTION_OUTCOME = "action_outcome", "Action outcome"
+
+    class Status(models.TextChoices):
+        CANDIDATE = "candidate", "Candidate"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        CONTESTED = "contested", "Contested"
+        SUPERSEDED = "superseded", "Superseded"
+        EXPIRED = "expired", "Expired"
+
+    claim_id = models.CharField(max_length=160, unique=True)
+    claim_type = models.CharField(max_length=32, choices=ClaimType.choices, default=ClaimType.FACT)
+    text = models.TextField()
+    payload = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.CANDIDATE)
+    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    source = models.ForeignKey(
+        MemorySource,
+        on_delete=models.PROTECT,
+        related_name="claims",
+        blank=True,
+        null=True,
+    )
+    source_chunk = models.ForeignKey(
+        MemoryChunk,
+        on_delete=models.PROTECT,
+        related_name="claims",
+        blank=True,
+        null=True,
+    )
+    snapshot = models.ForeignKey(
+        MemorySnapshot,
+        on_delete=models.PROTECT,
+        related_name="claims",
+        blank=True,
+        null=True,
+    )
+    knowledge_item = models.ForeignKey(
+        MemoryKnowledgeItem,
+        on_delete=models.PROTECT,
+        related_name="claims",
+        blank=True,
+        null=True,
+    )
+    evidence = models.JSONField(default=list, blank=True)
+    evidence_hash = models.CharField(max_length=128, blank=True)
+    scope_tokens = models.JSONField(default=list, blank=True)
+    sensitivity = models.CharField(max_length=32, default="internal")
+    valid_from = models.DateTimeField(blank=True, null=True)
+    valid_to = models.DateTimeField(blank=True, null=True)
+    observed_at = models.DateTimeField(blank=True, null=True)
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_claim_reviews",
+        blank=True,
+        null=True,
+    )
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    decision_note = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_claims")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "-observed_at", "-id"]
+        indexes = [
+            models.Index(fields=["claim_id"]),
+            models.Index(fields=["claim_type", "status"]),
+            models.Index(fields=["status", "sensitivity"]),
+            models.Index(fields=["source", "status"]),
+            models.Index(fields=["knowledge_item", "status"]),
+            models.Index(fields=["reviewer", "reviewed_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(confidence__gte=0) & Q(confidence__lte=1),
+                name="memory_claim_confidence_0_1",
+            ),
+            models.CheckConstraint(
+                condition=Q(valid_to__isnull=True) | Q(valid_from__isnull=True) | Q(valid_from__lte=models.F("valid_to")),
+                name="memory_claim_valid_range",
+            ),
+        ]
+        verbose_name = "Memory claim"
+        verbose_name_plural = "Memory claims"
+
+    def __str__(self):
+        return self.claim_id
 
 
 class MemoryReflectionRun(models.Model):

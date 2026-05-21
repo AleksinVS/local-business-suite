@@ -4,6 +4,23 @@
 
 ## Active
 
+### Trusted sources, claim/belief layer и lightweight retrieval
+
+Первый срез реализован, MVP-граница синхронизирована через `ADR-0010`: `MemoryBelief` переносится на следующие этапы, а главным объектом сохраненного знания становится `MemoryKnowledgeItem`. В active backlog остаются будущие claim/belief governance и production hardening после MVP.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md`;
+- проектный план находится в `docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md`;
+- active planning находится в `docs/planning/active/memory-trusted-sources-claims-retrieval.md`;
+- workflow package находится в `workflow/active/memory-trusted-sources-claims-retrieval/`.
+
+Предварительный scope:
+- добавить trust policy в контракты источников памяти;
+- исключить `candidate_only`, `quarantined` и `blocked` источники из обычного `memory.search` context;
+- добавить claim/belief lifecycle с evidence, contradictions, freshness и review;
+- реализовать deterministic rank fusion/context packing без обязательного LLM rerank;
+- добавить off-peak digest/reflection scoring и security eval для memory poisoning.
+
 ### Knowledge-driven business analytics
 
 MVP vertical slice реализован: контракты аналитики, контрольные модели, fixture-first IMAP/email ingestion, общий extraction packet, дедупликация, пересчет метрик, reflection-кандидаты и AI diagnostics routing. В active backlog остается production hardening и подключение реальных источников.

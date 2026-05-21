@@ -2,6 +2,7 @@
   ".": "Скрипты и инструменты разработки",
   "dev/": "Инструменты разработки (генератор структуры)",
   "dev/generate-structure.js": "Генератор PROJECT_STRUCTURE.yaml из .desc.json",
+  "e2e/": "Playwright e2e конфигурация и тесты",
   "init_project.ps1": "Инициализация проекта (PowerShell)",
   "run_windows.ps1": "Запуск на Windows (PowerShell)",
   "run_agent_runtime.ps1": "Запуск agent runtime (PowerShell)",

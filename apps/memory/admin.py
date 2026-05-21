@@ -5,6 +5,7 @@ from django.utils import timezone
 from .models import (
     MemoryAccessAudit,
     MemoryChunk,
+    MemoryClaim,
     MemoryEvalCase,
     MemoryGraphEntity,
     MemoryGraphExtractionRun,
@@ -35,6 +36,9 @@ class MemorySourceAdmin(admin.ModelAdmin):
         "domain",
         "source_kind",
         "status",
+        "trust_status",
+        "authority_class",
+        "trusted_for_context",
         "sensitivity",
         "snapshot_count",
         "blocked_snapshot_count",
@@ -42,7 +46,16 @@ class MemorySourceAdmin(admin.ModelAdmin):
         "last_synced_at",
         "updated_at",
     )
-    list_filter = ("status", "domain", "source_kind", "sensitivity", "sync_mode")
+    list_filter = (
+        "status",
+        "trust_status",
+        "authority_class",
+        "trusted_for_context",
+        "domain",
+        "source_kind",
+        "sensitivity",
+        "sync_mode",
+    )
     search_fields = ("code", "title", "owner")
     readonly_fields = ("created_at", "updated_at")
 
@@ -353,6 +366,18 @@ class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
     search_fields = ("source_item__memory_id", "created_by__username", "reviewer__username", "decision")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("source_item", "created_by", "reviewer")
+
+
+@admin.register(MemoryClaim)
+class MemoryClaimAdmin(admin.ModelAdmin):
+    list_display = ("claim_id", "claim_type", "status", "source", "knowledge_item", "confidence", "sensitivity", "reviewed_at")
+    list_filter = ("claim_type", "status", "sensitivity", "source__domain", "reviewed_at", "created_at")
+    search_fields = ("claim_id", "text", "source__code", "knowledge_item__memory_id", "evidence_hash")
+    readonly_fields = ("claim_id", "evidence_hash", "created_at", "updated_at")
+    autocomplete_fields = ("source", "source_chunk", "snapshot", "knowledge_item", "reviewer", "created_by")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("source", "source_chunk", "snapshot", "knowledge_item", "reviewer", "created_by")
 
 
 @admin.register(MemoryReflectionRun)

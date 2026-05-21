@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "name": "memory_retrieval_budget",
+  "description": "Runtime and background budgets for deterministic memory retrieval orchestration.",
+  "hot_path": {
+    "trusted_context_only_default": true,
+    "raw_candidate_limit": 40,
+    "final_item_limit": 8,
+    "timeout_ms": 800,
+    "llm_required": false
+  },
+  "rank_fusion": {
+    "authority_boost": 0.25,
+    "freshness_boost": 0.1,
+    "reviewed_knowledge_boost": 0.35,
+    "scope_match_boost": 0.1,
+    "candidate_penalty": 0.6,
+    "contested_penalty": 0.8,
+    "expired_penalty": 0.9,
+    "low_confidence_penalty": 0.25,
+    "same_source_penalty": 0.05
+  },
+  "context_packing": {
+    "max_items": 8,
+    "max_tokens": 1200,
+    "max_items_per_source": 2
+  },
+  "optional_llm_rerank": {
+    "enabled": false,
+    "top_k": 5,
+    "timeout_ms": 250
+  },
+  "background_batches": {
+    "claim_extraction_batch_size": 50,
+    "digest_batch_size": 100,
+    "cache_by_content_hash": true
+  }
+}

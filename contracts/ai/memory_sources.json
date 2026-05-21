@@ -15,6 +15,15 @@
     "pii_policy": "no_pii_expected",
     "versioning_mode": "snapshot_only",
     "retention_policy": "default_internal",
+    "trust_status": "review_required",
+    "authority_class": "candidate_input",
+    "trusted_for_context": false,
+    "requires_source_review": true,
+    "review_owner": "knowledge_owner",
+    "trusted_context_kinds": [
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
     "extractor_profile": "project_docs_v1",
     "chunking_profile": "long_policy_doc_v1",
     "index_profiles": [
@@ -43,6 +52,17 @@
     "pii_policy": "reject_pii",
     "versioning_mode": "snapshot_only",
     "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation",
+      "graph_fact"
+    ],
+    "untrusted_handling": "review_required",
     "extractor_profile": "contract_json_v1",
     "chunking_profile": "structured_contract_v1",
     "index_profiles": [
@@ -70,6 +90,17 @@
     "pii_policy": "deidentify_before_index",
     "versioning_mode": "hard_active_soft_raw",
     "retention_policy": "short_lived_eval",
+    "trust_status": "trusted",
+    "authority_class": "approved_corpus",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation",
+      "graph_fact"
+    ],
+    "untrusted_handling": "review_required",
     "extractor_profile": "workorder_event_v1",
     "chunking_profile": "short_business_event_v1",
     "index_profiles": [
@@ -95,6 +126,17 @@
     "pii_policy": "no_pii_expected",
     "versioning_mode": "hard_active_soft_raw",
     "retention_policy": "short_lived_eval",
+    "trust_status": "trusted",
+    "authority_class": "approved_corpus",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation",
+      "graph_fact"
+    ],
+    "untrusted_handling": "review_required",
     "extractor_profile": "inventory_device_v1",
     "chunking_profile": "short_business_event_v1",
     "index_profiles": [
@@ -120,6 +162,15 @@
     "pii_policy": "deidentify_before_index",
     "versioning_mode": "hard_active_soft_raw",
     "retention_policy": "external_default",
+    "trust_status": "review_required",
+    "authority_class": "candidate_input",
+    "trusted_for_context": false,
+    "requires_source_review": true,
+    "review_owner": "knowledge_owner",
+    "trusted_context_kinds": [
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
     "extractor_profile": "external_api_object_v1",
     "chunking_profile": "external_api_object_v1",
     "index_profiles": [

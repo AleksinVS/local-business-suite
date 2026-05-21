@@ -22,3 +22,6 @@ wfastcgi.ini
 .codex/
 deployments/
 VOB3/
+node_modules/
+playwright-report/
+test-results/

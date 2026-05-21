@@ -7,6 +7,9 @@
   "memory_sources.json": "Дефолтный каталог источников сервиса памяти СоСНА",
   "memory_profiles.json": "Дефолтные профили chunking, extraction, indexing и ranking для памяти",
   "memory_routing.json": "Дефолтные правила sensitivity routing для памяти",
+  "memory_trust_policy.json": "Политика надежных источников памяти и допуска в direct agent context",
+  "memory_claims_policy.json": "Политика жизненного цикла claims/beliefs памяти",
+  "memory_retrieval_budget.json": "Бюджеты lightweight retrieval orchestration без обязательного LLM в hot path",
   "memory_ingestion_profiles.json": "Дефолтные профили ingestion-коннектора памяти: adapters, parsers, OCR, limits и policies",
   "memory_graph_schema.json": "Дефолтная единая схема графа памяти для bootstrapping и extraction"
 }

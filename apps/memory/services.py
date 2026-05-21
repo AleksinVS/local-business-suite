@@ -1,6 +1,6 @@
 from django.utils import timezone
 
-from .models import MemoryAccessAudit, MemoryIndexJob, MemorySource
+from .models import MemoryAccessAudit, MemoryClaim, MemoryIndexJob, MemoryKnowledgeItem, MemorySource
 from .policies import user_scope_tokens
 
 
@@ -15,6 +15,13 @@ def sync_sources_from_contract(sources_payload):
                 "domain": item["domain"],
                 "owner": item.get("owner", ""),
                 "status": MemorySource.Status.ENABLED if item.get("enabled", True) else MemorySource.Status.DISABLED,
+                "trust_status": item.get("trust_status", ""),
+                "authority_class": item.get("authority_class", ""),
+                "trusted_for_context": bool(item.get("trusted_for_context", False)),
+                "requires_source_review": bool(item.get("requires_source_review", True)),
+                "review_owner": item.get("review_owner", ""),
+                "trusted_context_kinds": item.get("trusted_context_kinds", []),
+                "untrusted_handling": item.get("untrusted_handling", ""),
                 "sync_mode": item.get("sync_mode", ""),
                 "scope_rule": item.get("scope_rule", ""),
                 "sensitivity": item["sensitivity"],
@@ -27,6 +34,71 @@ def sync_sources_from_contract(sources_payload):
         )
         sources.append(source)
     return sources
+
+
+def create_claim_for_knowledge_item(*, item: MemoryKnowledgeItem, created_by=None, status=None):
+    from .chat_memory import _sha256
+
+    actor = created_by or item.created_by
+    claim_status = status or MemoryClaim.Status.ACCEPTED
+    evidence = [
+        {
+            "kind": "memory_knowledge_item",
+            "memory_id": item.memory_id,
+            "source_content_hash": item.source_content_hash,
+            "source_message_ids": item.source_message_ids,
+        }
+    ]
+    claim_id = f"claim:{_sha256(item.memory_id + ':' + item.text)[:32]}"
+    claim, _ = MemoryClaim.objects.update_or_create(
+        claim_id=claim_id,
+        defaults={
+            "claim_type": _claim_type_for_knowledge_kind(item.kind),
+            "text": item.text,
+            "payload": {
+                "memory_id": item.memory_id,
+                "scope": item.scope,
+                "kind": item.kind,
+            },
+            "status": claim_status,
+            "confidence": "1.0000" if claim_status == MemoryClaim.Status.ACCEPTED else "0.5000",
+            "knowledge_item": item,
+            "evidence": evidence,
+            "evidence_hash": _sha256(str(evidence)),
+            "scope_tokens": item.scope_tokens,
+            "sensitivity": item.sensitivity,
+            "observed_at": item.updated_at,
+            "reviewer": actor if item.scope == MemoryKnowledgeItem.Scope.ORGANIZATION else None,
+            "reviewed_at": timezone.now() if item.scope == MemoryKnowledgeItem.Scope.ORGANIZATION else None,
+            "decision_note": "Accepted from explicit chat memory write." if claim_status == MemoryClaim.Status.ACCEPTED else "",
+            "metadata": {
+                "source": "chat_memory",
+                "secret_handles": (item.metadata or {}).get("secret_handles", []),
+            },
+            "created_by": actor,
+        },
+    )
+    return claim
+
+
+def compile_knowledge_item_digest(*, scope_tokens=None, limit=100):
+    queryset = MemoryKnowledgeItem.objects.filter(status=MemoryKnowledgeItem.Status.ACTIVE).order_by("-updated_at", "-id")
+    tokens = set(scope_tokens or [])
+    records = []
+    for item in queryset[: max(int(limit), 1)]:
+        if tokens and not set(item.scope_tokens or []) & tokens:
+            continue
+        records.append(
+            {
+                "memory_id": item.memory_id,
+                "text": item.text,
+                "scope": item.scope,
+                "scope_tokens": item.scope_tokens,
+                "sensitivity": item.sensitivity,
+                "updated_at": item.updated_at.isoformat(),
+            }
+        )
+    return records
 
 
 def create_index_job(*, job_kind, source=None, created_by=None, request_id="", payload=None):
@@ -145,3 +217,14 @@ def update_personal_memory_for_actor(*, actor, payload):
     from django.core.exceptions import ValidationError
 
     raise ValidationError("operation must be 'edit' or 'delete'.")
+
+
+def _claim_type_for_knowledge_kind(kind: str) -> str:
+    mapping = {
+        MemoryKnowledgeItem.Kind.FACT: MemoryClaim.ClaimType.FACT,
+        MemoryKnowledgeItem.Kind.PREFERENCE: MemoryClaim.ClaimType.PREFERENCE,
+        MemoryKnowledgeItem.Kind.PROCEDURE: MemoryClaim.ClaimType.PROCEDURE,
+        MemoryKnowledgeItem.Kind.DECISION: MemoryClaim.ClaimType.DECISION,
+        MemoryKnowledgeItem.Kind.SECRET_REFERENCE: MemoryClaim.ClaimType.FACT,
+    }
+    return mapping.get(kind, MemoryClaim.ClaimType.FACT)

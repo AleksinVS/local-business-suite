@@ -10,7 +10,13 @@ from django.core.exceptions import PermissionDenied, ValidationError
 
 from .graph_backends import DjangoGraphMemoryBackend
 from .models import MemoryChunk, MemoryGraphFact, MemorySnapshot
-from .policies import can_access_chunk, can_access_graph_fact, user_scope_tokens
+from .policies import (
+    can_access_chunk,
+    can_access_graph_fact,
+    effective_source_trust,
+    source_allows_direct_context,
+    user_scope_tokens,
+)
 from .routing import resolve_retrieval_route, route_allows_context_kind
 from .services import record_access_audit
 from .vector_backends import get_default_backend
@@ -30,6 +36,7 @@ def memory_search(
     vector_backend=None,
     graph_backend=None,
     request_id="",
+    trusted_context_only=True,
 ):
     query_text = _normalize_query(query)
     query_hash = _query_hash(query_text)
@@ -63,6 +70,7 @@ def memory_search(
         }
 
         citations_by_id: dict[str, dict] = {}
+        candidate_items = []
         items = []
         returned_chunk_ids: list[str] = []
         returned_fact_ids: list[str] = []
@@ -72,21 +80,22 @@ def memory_search(
             candidates=vector_candidates,
             allowed_sensitivities=route_decision.allowed_sensitivities,
             trace=trace,
+            trusted_context_only=trusted_context_only,
         ):
-            _append_item(item, items, citations_by_id, returned_chunk_ids, returned_fact_ids, normalized_limit)
-            if len(items) >= normalized_limit:
-                break
+            candidate_items.append(item)
 
-        if len(items) < normalized_limit:
-            for item in _graph_items(
-                actor=actor,
-                candidates=graph_candidates,
-                allowed_sensitivities=route_decision.allowed_sensitivities,
-                trace=trace,
-            ):
-                _append_item(item, items, citations_by_id, returned_chunk_ids, returned_fact_ids, normalized_limit)
-                if len(items) >= normalized_limit:
-                    break
+        for item in _graph_items(
+            actor=actor,
+            candidates=graph_candidates,
+            allowed_sensitivities=route_decision.allowed_sensitivities,
+            trace=trace,
+            trusted_context_only=trusted_context_only,
+        ):
+            candidate_items.append(item)
+
+        ranked_items = _rank_and_pack_items(candidate_items, limit=normalized_limit, trace=trace)
+        for item in ranked_items:
+            _append_item(item, items, citations_by_id, returned_chunk_ids, returned_fact_ids, normalized_limit)
 
         citations = list(citations_by_id.values())
         result = {
@@ -99,6 +108,7 @@ def memory_search(
                 "returned_count": len(items),
                 "citation_count": len(citations),
                 "route": route_decision.as_trace(),
+                "trusted_context_only": trusted_context_only,
             },
         }
         trace["returned_count"] = len(items)
@@ -163,7 +173,53 @@ def _search_graph_candidates(*, graph_backend, actor, query, scope_tokens, sensi
     )
 
 
-def _chunk_items(*, actor, candidates, allowed_sensitivities, trace):
+def _rank_and_pack_items(items, *, limit, trace):
+    budget = _retrieval_budget()
+    context_budget = budget.get("context_packing", {})
+    max_items = min(limit, int(context_budget.get("max_items", limit) or limit))
+    max_tokens = int(context_budget.get("max_tokens", 1200) or 1200)
+    max_items_per_source = int(context_budget.get("max_items_per_source", 2) or 2)
+    fusion = budget.get("rank_fusion", {})
+
+    ranked = []
+    for index, item in enumerate(items):
+        score = _rank_score(item, fusion=fusion)
+        ranked.append((score, index, item))
+    ranked.sort(key=lambda value: (-value[0], value[1]))
+
+    packed = []
+    source_counts: dict[str, int] = {}
+    token_count = 0
+    for score, _index, item in ranked:
+        source_key = _item_source_key(item)
+        if source_key:
+            count = source_counts.get(source_key, 0)
+            if count >= max_items_per_source:
+                _bump(trace, "context_pack_diversity_denied")
+                continue
+            source_counts[source_key] = count + 1
+        estimated_tokens = _estimate_tokens(_item_text(item))
+        if packed and token_count + estimated_tokens > max_tokens:
+            _bump(trace, "context_pack_token_budget_denied")
+            continue
+        item["score"] = score
+        packed.append(item)
+        token_count += estimated_tokens
+        if len(packed) >= max_items:
+            break
+
+    trace["rank_fusion"] = {
+        "input_count": len(items),
+        "packed_count": len(packed),
+        "max_items": max_items,
+        "max_tokens": max_tokens,
+        "estimated_tokens": token_count,
+        "llm_used": False,
+    }
+    return packed
+
+
+def _chunk_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only):
     chunk_ids = [_candidate_id(candidate, "chunk_id") for candidate in candidates]
     chunks = _chunks_by_id(chunk_ids)
 
@@ -182,8 +238,12 @@ def _chunk_items(*, actor, candidates, allowed_sensitivities, trace):
         if not _chunk_is_retrievable(chunk):
             _bump(trace, "inactive_or_blocked_chunk")
             continue
+        trust_decision = effective_source_trust(chunk.snapshot.source)
+        if trusted_context_only and not source_allows_direct_context(chunk.snapshot.source, "retrieved_chunk"):
+            _bump(trace, "trust_gate_denied_chunk")
+            continue
 
-        citation = _chunk_citation(chunk)
+        citation = _chunk_citation(chunk, trust_decision=trust_decision)
         if citation is None:
             _bump(trace, "missing_chunk_citation")
             continue
@@ -209,12 +269,15 @@ def _chunk_items(*, actor, candidates, allowed_sensitivities, trace):
                     "snapshot_hash": chunk.snapshot_hash,
                     "position": chunk.position,
                     "sensitivity": chunk.sensitivity,
+                    "trust_status": trust_decision.trust_status,
+                    "authority_class": trust_decision.authority_class,
+                    "trusted_for_context": trust_decision.trusted_for_context,
                 }
             ),
         }
 
 
-def _graph_items(*, actor, candidates, allowed_sensitivities, trace):
+def _graph_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only):
     fact_ids = [_candidate_id(candidate, "fact_id") for candidate in candidates]
     facts = _facts_by_id(fact_ids)
 
@@ -235,8 +298,12 @@ def _graph_items(*, actor, candidates, allowed_sensitivities, trace):
         if not _fact_is_retrievable(fact):
             _bump(trace, "inactive_or_blocked_fact")
             continue
+        trust_decision = effective_source_trust(fact.snapshot.source)
+        if trusted_context_only and not source_allows_direct_context(fact.snapshot.source, "graph_fact"):
+            _bump(trace, "trust_gate_denied_fact")
+            continue
 
-        citation = _fact_citation(fact)
+        citation = _fact_citation(fact, trust_decision=trust_decision)
         if citation is None:
             _bump(trace, "missing_fact_citation")
             continue
@@ -263,6 +330,9 @@ def _graph_items(*, actor, candidates, allowed_sensitivities, trace):
                     "source_object_id": fact.source_chunk.source_object_id,
                     "snapshot_hash": fact.snapshot_hash,
                     "sensitivity": fact.sensitivity,
+                    "trust_status": trust_decision.trust_status,
+                    "authority_class": trust_decision.authority_class,
+                    "trusted_for_context": trust_decision.trusted_for_context,
                 }
             ),
         }
@@ -334,7 +404,7 @@ def _fact_is_retrievable(fact: MemoryGraphFact) -> bool:
     )
 
 
-def _chunk_citation(chunk: MemoryChunk) -> dict | None:
+def _chunk_citation(chunk: MemoryChunk, *, trust_decision) -> dict | None:
     if not chunk.chunk_id or not chunk.source_code or not chunk.source_object_id or not chunk.snapshot_hash:
         return None
     return {
@@ -347,10 +417,13 @@ def _chunk_citation(chunk: MemoryChunk) -> dict | None:
         "position": chunk.position,
         "text_hash": chunk.text_hash,
         "sensitivity": chunk.sensitivity,
+        "trust_status": trust_decision.trust_status,
+        "authority_class": trust_decision.authority_class,
+        "trusted_for_context": trust_decision.trusted_for_context,
     }
 
 
-def _fact_citation(fact: MemoryGraphFact) -> dict | None:
+def _fact_citation(fact: MemoryGraphFact, *, trust_decision) -> dict | None:
     chunk = fact.source_chunk
     chunk_id = getattr(chunk, "chunk_id", "")
     if not fact.fact_id or not chunk_id:
@@ -368,6 +441,9 @@ def _fact_citation(fact: MemoryGraphFact) -> dict | None:
         "position": chunk.position,
         "text_hash": chunk.text_hash,
         "sensitivity": fact.sensitivity,
+        "trust_status": trust_decision.trust_status,
+        "authority_class": trust_decision.authority_class,
+        "trusted_for_context": trust_decision.trusted_for_context,
     }
 
 
@@ -439,6 +515,55 @@ def _candidate_metadata(candidate) -> dict:
     else:
         metadata = getattr(candidate, "metadata", {}) or {}
     return dict(metadata) if isinstance(metadata, Mapping) else {}
+
+
+def _rank_score(item: Mapping[str, Any], *, fusion: Mapping[str, Any]) -> float:
+    base = item.get("score")
+    try:
+        score = float(base) if base is not None else 1.0
+    except (TypeError, ValueError):
+        score = 1.0
+
+    metadata = item.get("metadata") or {}
+    authority_class = metadata.get("authority_class")
+    if authority_class in {"system_of_record", "approved_corpus", "reviewed_org_knowledge", "approved_user_memory"}:
+        score += float(fusion.get("authority_boost", 0.25) or 0)
+    try:
+        confidence = float(metadata.get("confidence", 1))
+    except (TypeError, ValueError):
+        confidence = 1
+    if confidence < 0.5:
+        score -= float(fusion.get("low_confidence_penalty", 0.25) or 0)
+    return max(score, 0.0)
+
+
+def _item_source_key(item: Mapping[str, Any]) -> str:
+    metadata = item.get("metadata") or {}
+    return str(metadata.get("source_code") or item.get("kind") or "")
+
+
+def _item_text(item: Mapping[str, Any]) -> str:
+    if "text" in item:
+        return str(item.get("text") or "")
+    fact = item.get("fact")
+    if isinstance(fact, Mapping):
+        return " ".join(str(fact.get(key, "")) for key in ("subject_id", "predicate", "object_id"))
+    return ""
+
+
+def _estimate_tokens(text: str) -> int:
+    value = str(text or "").strip()
+    if not value:
+        return 0
+    return max(1, len(value) // 4)
+
+
+def _retrieval_budget() -> dict:
+    return dict(getattr(settings, "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET", {}) or {})
+
+
+def _query_terms(query: str) -> tuple[str, ...]:
+    return tuple(term for term in str(query or "").lower().split() if len(term) >= 3)[:8]
 
 
 def _effective_scope_tokens(actor, requested_scope_tokens) -> tuple[str, ...] | None:

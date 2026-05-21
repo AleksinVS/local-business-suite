@@ -1,0 +1,29 @@
+{
+  "name": "local-business-suite",
+  "version": "1.0.0",
+  "description": "Корпоративный портал для управления техническим обслуживанием и ремонтами медицинских изделий с поддержкой Active Directory, AI-чата, локальной системы памяти и аналитического контура.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "playwright:install": "playwright install chromium",
+    "test:e2e": "playwright test -c scripts/e2e/playwright.config.ts",
+    "test:e2e:headed": "playwright test -c scripts/e2e/playwright.config.ts --headed",
+    "test:e2e:ui": "playwright test -c scripts/e2e/playwright.config.ts --ui"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AleksinVS/local-business-suite.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AleksinVS/local-business-suite/issues"
+  },
+  "homepage": "https://github.com/AleksinVS/local-business-suite#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

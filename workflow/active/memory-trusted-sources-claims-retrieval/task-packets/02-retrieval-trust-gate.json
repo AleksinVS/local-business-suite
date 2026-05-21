@@ -1,0 +1,31 @@
+{
+  "task_id": "02-retrieval-trust-gate",
+  "title": "Enforce trusted-source retrieval gate",
+  "status": "completed",
+  "objective": "Prevent unaudited source content from entering normal agent memory context while preserving admin/review access paths.",
+  "write_scope": [
+    "apps/memory/retrieval.py",
+    "apps/memory/policies.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Add trusted_context_only=true as the default for normal memory.search.",
+    "Filter candidate_only, quarantined and blocked source content before context packing.",
+    "Include trust status and authority class in citation metadata.",
+    "Keep review/admin selectors able to inspect candidate evidence with explicit permission.",
+    "Record trust-gate filtering in MemoryAccessAudit retrieval_trace."
+  ],
+  "acceptance_checks": [
+    "Untrusted chunk is not returned by normal memory.search.",
+    "Trusted chunk remains retrievable with the right scope.",
+    "Graph facts from untrusted sources are filtered.",
+    "Audit trace records trust_gate_denied counts.",
+    "Agent tool test proves untrusted prompt-injection text is not returned."
+  ],
+  "verification_commands": [
+    "python manage.py test apps.memory.tests apps.ai.tests"
+  ]
+}

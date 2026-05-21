@@ -1,0 +1,51 @@
+{
+  "block_id": "memory-trusted-sources-claims-retrieval",
+  "status": "implemented_first_slice",
+  "created_at": "2026-05-21",
+  "architecture_sources": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md",
+    "docs/adr/ADR-0006-external-system-knowledge-connectors.md",
+    "docs/adr/ADR-0008-knowledge-driven-business-analytics.md",
+    "docs/adr/ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md",
+    "docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md",
+    "docs/planning/active/memory-trusted-sources-claims-retrieval.md"
+  ],
+  "goal": "Restrict agent memory context to trusted sources, route untrusted sources through candidates, add claim/belief governance, and keep retrieval orchestration deterministic and cheap by default.",
+  "execution_order": [
+    "01-contracts-and-source-trust-policy",
+    "02-retrieval-trust-gate",
+    "03-claim-belief-model",
+    "04-lightweight-retrieval-orchestration",
+    "05-reflection-digests-and-eval"
+  ],
+  "global_constraints": [
+    "Do not bypass Django policy, scope or sensitivity checks.",
+    "Do not treat safe corpus as automatically trusted source context.",
+    "Do not allow candidate_only, quarantined or blocked source content in normal agent memory.search context.",
+    "Do not require local LLM calls in hot-path retrieval.",
+    "Do not store or return secret values.",
+    "Keep runtime-generated data under data/ and temporary agent artifacts under .local/."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run"
+  ],
+  "implementation_result": {
+    "completed_at": "2026-05-21",
+    "implemented_task_packets": [
+      "01-contracts-and-source-trust-policy",
+      "02-retrieval-trust-gate",
+      "03-claim-belief-model",
+      "04-lightweight-retrieval-orchestration",
+      "05-reflection-digests-and-eval"
+    ],
+    "notes": [
+      "Hot-path memory.search remains deterministic and does not call an LLM by default.",
+      "Untrusted source evidence remains available for review paths, but direct agent context is trusted-only.",
+      "Claim and belief governance is implemented as Django models for the MVP."
+    ]
+  }
+}

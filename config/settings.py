@@ -23,10 +23,13 @@ from apps.core.json_utils import (
     validate_dataset_registry_payload,
     validate_integration_registry_payload,
     validate_memory_profiles_payload,
+    validate_memory_claims_policy_payload,
     validate_memory_graph_schema_payload,
     validate_memory_ingestion_profiles_payload,
+    validate_memory_retrieval_budget_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
+    validate_memory_trust_policy_payload,
     validate_role_rules_payload,
     validate_task_brief_payload,
     validate_workflow_rules_payload,
@@ -302,6 +305,21 @@ LOCAL_BUSINESS_AI_MODELS_FILE = get_contract_path("models.json", "LOCAL_BUSINESS
 LOCAL_BUSINESS_MEMORY_SOURCES_FILE = get_contract_path("memory_sources.json", "LOCAL_BUSINESS_MEMORY_SOURCES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_PROFILES_FILE = get_contract_path("memory_profiles.json", "LOCAL_BUSINESS_MEMORY_PROFILES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_ROUTING_FILE = get_contract_path("memory_routing.json", "LOCAL_BUSINESS_MEMORY_ROUTING_FILE", sub_dir="ai")
+LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE = get_contract_path(
+    "memory_trust_policy.json",
+    "LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE",
+    sub_dir="ai",
+)
+LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE = get_contract_path(
+    "memory_claims_policy.json",
+    "LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE",
+    sub_dir="ai",
+)
+LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE = get_contract_path(
+    "memory_retrieval_budget.json",
+    "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE",
+    sub_dir="ai",
+)
 LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE = get_contract_path(
     "memory_ingestion_profiles.json",
     "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
@@ -459,6 +477,15 @@ try:
 
     LOCAL_BUSINESS_MEMORY_ROUTING = load_json_file(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
     validate_memory_routing_payload(LOCAL_BUSINESS_MEMORY_ROUTING)
+
+    LOCAL_BUSINESS_MEMORY_TRUST_POLICY = load_json_file(LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE)
+    validate_memory_trust_policy_payload(LOCAL_BUSINESS_MEMORY_TRUST_POLICY)
+
+    LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY = load_json_file(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE)
+    validate_memory_claims_policy_payload(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY)
+
+    LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET = load_json_file(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE)
+    validate_memory_retrieval_budget_payload(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET)
 
     LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
     validate_memory_ingestion_profiles_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES)

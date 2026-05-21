@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.core.json_utils import atomic_write_json
 from apps.memory.deidentification import redact_text
-from apps.memory.policies import scope_tokens_match
+from apps.memory.policies import normalize_trust_status, scope_tokens_match
 from apps.memory.routing import resolve_retrieval_route
 from apps.memory.security import scan_for_secrets
 
@@ -51,6 +51,8 @@ class Command(BaseCommand):
             _check_secret_bait(),
             _check_forbidden_scope(),
             _check_secret_route_denied(),
+            _check_trust_policy_blocks_external_by_default(),
+            _check_retrieval_budget_hot_path_has_no_llm(),
         ]
         return {
             "suite": "memory_smoke_security",
@@ -125,6 +127,41 @@ def _check_secret_route_denied():
         "details": {
             "sensitivity": "secret",
             "denied": denied,
+        },
+    }
+
+
+def _check_trust_policy_blocks_external_by_default():
+    policy = getattr(settings, "LOCAL_BUSINESS_MEMORY_TRUST_POLICY", {}) or {}
+    defaults = policy.get("defaults_by_source_kind") or {}
+    external_default = defaults.get("external_api_snapshot") or {}
+    effective_trust_status = normalize_trust_status(external_default.get("trust_status"))
+    passed = (
+        effective_trust_status == "review_required"
+        and external_default.get("trusted_for_context") is False
+    )
+    return {
+        "name": "trust_policy_external_review_required",
+        "passed": passed,
+        "details": {
+            "trust_status": external_default.get("trust_status"),
+            "effective_trust_status": effective_trust_status,
+            "trusted_for_context": external_default.get("trusted_for_context"),
+        },
+    }
+
+
+def _check_retrieval_budget_hot_path_has_no_llm():
+    budget = getattr(settings, "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET", {}) or {}
+    hot_path = budget.get("hot_path") or {}
+    rerank = budget.get("optional_llm_rerank") or {}
+    passed = hot_path.get("llm_required") is False and rerank.get("enabled") is False
+    return {
+        "name": "retrieval_budget_no_hot_path_llm",
+        "passed": passed,
+        "details": {
+            "hot_path_llm_required": hot_path.get("llm_required"),
+            "optional_llm_rerank_enabled": rerank.get("enabled"),
         },
     }
 

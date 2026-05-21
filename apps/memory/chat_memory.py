@@ -16,6 +16,8 @@ from apps.ai.models import ChatMessage
 
 from .ingestion import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, index_snapshot_text
 from .models import (
+    MemoryChunk,
+    MemoryGraphFact,
     MemoryIndexJob,
     MemoryKnowledgeCandidate,
     MemoryKnowledgeEvent,
@@ -27,6 +29,7 @@ from .models import (
 from .policies import can_write_organization_memory, can_write_personal_memory
 from .secret_backends import get_secret_backend
 from .security import scan_for_secrets
+from .vector_backends import get_default_backend
 
 
 CHAT_MEMORY_PERSONAL_SOURCE = "ai_chat_personal"
@@ -85,6 +88,45 @@ def queue_memory_remember(*, actor, session, payload, request_id=""):
         "job_id": job.pk,
         "message": "Memory ingestion request queued.",
     }
+
+
+def remember_memory_now(*, actor, session, payload, request_id=""):
+    queued = queue_memory_remember(actor=actor, session=session, payload=payload, request_id=request_id)
+    request = MemoryWriteRequest.objects.get(request_id=queued["request_id"])
+    job = MemoryIndexJob.objects.filter(pk=queued["job_id"]).first()
+    if job is not None:
+        job.status = MemoryIndexJob.Status.RUNNING
+        job.started_at = timezone.now()
+        job.attempts += 1
+        job.save(update_fields=["status", "started_at", "attempts", "updated_at"])
+    try:
+        processed = process_memory_write_request(request)
+    except Exception as exc:
+        if job is not None:
+            job.status = MemoryIndexJob.Status.FAILED
+            job.finished_at = timezone.now()
+            job.error_message = str(exc)
+            job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
+        raise
+    request.refresh_from_db()
+    result = {
+        "memory_id": processed["memory_id"],
+        "request_id": queued["request_id"],
+        "status": request.status,
+        "target_scope": request.target_scope,
+        "processed_at": request.processed_at.isoformat() if request.processed_at else "",
+        "job_id": queued["job_id"],
+        "event_id": processed["event_id"],
+        "secret_handles": processed.get("secret_handles", []),
+        "message": "Memory knowledge item saved.",
+    }
+    if job is not None:
+        job.status = MemoryIndexJob.Status.SUCCEEDED
+        job.finished_at = timezone.now()
+        job.result = result
+        job.error_message = ""
+        job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
+    return result
 
 
 @transaction.atomic
@@ -277,7 +319,21 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
 
 def index_knowledge_item(item: MemoryKnowledgeItem):
     source = _chat_memory_source(item.scope)
-    MemorySnapshot.objects.filter(source=source, source_object_id=item.memory_id, is_active=True).update(
+    vector_backend = get_default_backend()
+    previous_snapshots = list(
+        MemorySnapshot.objects.filter(source=source, source_object_id=item.memory_id, is_active=True)
+    )
+    previous_chunk_ids = list(
+        MemoryChunk.objects.filter(snapshot__in=previous_snapshots, is_active=True).values_list("chunk_id", flat=True)
+    )
+    if previous_chunk_ids and hasattr(vector_backend, "deactivate"):
+        vector_backend.deactivate(previous_chunk_ids)
+    MemoryChunk.objects.filter(snapshot__in=previous_snapshots, is_active=True).update(is_active=False, updated_at=timezone.now())
+    MemoryGraphFact.objects.filter(snapshot__in=previous_snapshots, is_active=True).update(
+        is_active=False,
+        updated_at=timezone.now(),
+    )
+    MemorySnapshot.objects.filter(pk__in=[snapshot.pk for snapshot in previous_snapshots]).update(
         is_active=False,
         valid_to=timezone.now(),
         updated_at=timezone.now(),
@@ -304,6 +360,7 @@ def index_knowledge_item(item: MemoryKnowledgeItem):
     return index_snapshot_text(
         snapshot=snapshot,
         safe_text=item.text,
+        vector_backend=vector_backend,
         chunk_size=DEFAULT_CHUNK_SIZE,
         chunk_overlap=DEFAULT_CHUNK_OVERLAP,
     )
@@ -371,7 +428,28 @@ def process_queued_memory_requests(*, limit=100):
         status=MemoryWriteRequest.Status.QUEUED
     ).order_by("created_at", "id")[:limit]
     for request in queryset:
-        processed.append(process_memory_write_request(request))
+        job = _memory_write_request_job(request)
+        if job is not None:
+            job.status = MemoryIndexJob.Status.RUNNING
+            job.started_at = timezone.now()
+            job.attempts += 1
+            job.save(update_fields=["status", "started_at", "attempts", "updated_at"])
+        try:
+            result = process_memory_write_request(request)
+        except Exception as exc:
+            if job is not None:
+                job.status = MemoryIndexJob.Status.FAILED
+                job.finished_at = timezone.now()
+                job.error_message = str(exc)
+                job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
+            raise
+        if job is not None:
+            job.status = MemoryIndexJob.Status.SUCCEEDED
+            job.finished_at = timezone.now()
+            job.result = result
+            job.error_message = ""
+            job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
+        processed.append(result)
     return processed
 
 
@@ -404,6 +482,17 @@ def _load_source_messages(request: MemoryWriteRequest):
     return messages
 
 
+def _memory_write_request_job(request: MemoryWriteRequest):
+    return (
+        MemoryIndexJob.objects.filter(
+            job_kind=MemoryIndexJob.JobKind.REMEMBER,
+            payload__memory_write_request_id=request.pk,
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+
+
 def _build_raw_memory_text(*, request: MemoryWriteRequest, messages: Iterable[ChatMessage]) -> str:
     parts = [message.content for message in messages if message.content]
     if request.user_note:
@@ -422,6 +511,17 @@ def _chat_memory_source(scope: str) -> MemorySource:
             "domain": "chat_memory",
             "owner": "memory",
             "status": MemorySource.Status.ENABLED,
+            "trust_status": MemorySource.TrustStatus.TRUSTED,
+            "authority_class": (
+                MemorySource.AuthorityClass.REVIEWED_ORG_KNOWLEDGE
+                if scope == MemoryKnowledgeItem.Scope.ORGANIZATION
+                else MemorySource.AuthorityClass.APPROVED_USER_MEMORY
+            ),
+            "trusted_for_context": True,
+            "requires_source_review": False,
+            "review_owner": "knowledge_owner" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "memory_owner",
+            "trusted_context_kinds": ["retrieved_chunk", "citation", "graph_fact"],
+            "untrusted_handling": "review_required",
             "sync_mode": "event_driven",
             "scope_rule": "chat_memory_scope",
             "sensitivity": "internal",

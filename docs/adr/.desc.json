@@ -7,5 +7,7 @@
   "ADR-0005-chat-derived-memory-and-secret-handles.md": "ADR: Память из AI-чата, reflection jobs и secret handles",
   "ADR-0006-external-system-knowledge-connectors.md": "ADR: Коннекторы сбора знаний из внешних информационных систем",
   "ADR-0007-settings-center-and-contextual-help.md": "ADR: Settings Center, контекстная справка и управляемые runtime-настройки",
-  "ADR-0008-knowledge-driven-business-analytics.md": "ADR: Knowledge-driven business analytics"
+  "ADR-0008-knowledge-driven-business-analytics.md": "ADR: Knowledge-driven business analytics",
+  "ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md": "ADR: Trusted memory sources, claim/belief layer and lightweight retrieval",
+  "ADR-0010-memory-mvp-simplification.md": "ADR: Упрощение MVP-архитектуры памяти"
 }

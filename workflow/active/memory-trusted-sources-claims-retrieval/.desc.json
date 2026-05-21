@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: trusted sources, claim/belief layer and lightweight retrieval orchestration",
+  "BLOCK_BRIEF.md": "Brief для усиления памяти через trusted sources, claims и дешевый retrieval",
+  "ARCHITECT_PLAN.json": "Исполнительный план блока trusted sources, claims and lightweight retrieval",
+  "EXECUTOR_REPORT.01-05.md": "Отчет исполнения пяти task packets trusted memory sources и claim/belief retrieval",
+  "TASK_ACCEPTANCE.01-05.md": "Приемка реализации пяти task packets trusted memory sources и claim/belief retrieval",
+  "task-packets": "Task packets для реализации trusted source gate, claim/belief layer и lightweight retrieval"
+}

@@ -1,0 +1,31 @@
+{
+  "task_id": "01-remember-queues-request",
+  "title": "Вернуть memory.remember к постановке задачи в очередь",
+  "status": "completed",
+  "objective": "Сделать так, чтобы AI-инструмент memory.remember только создавал MemoryWriteRequest и MemoryIndexJob, а не сохранял знание синхронно.",
+  "write_scope": [
+    "apps/ai/tooling.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "apps/memory/services.py",
+    "apps/memory/chat_memory.py",
+    "apps/ai/tests.py",
+    "apps/memory/tests.py"
+  ],
+  "requirements": [
+    "apps.ai.tooling для memory.remember должен вызывать queue_memory_remember_for_actor.",
+    "Первичный result инструмента должен содержать request_id, status, target_scope, queued_at, job_id, message.",
+    "Первичный result не должен требовать memory_id, event_id, processed_at.",
+    "MemoryWriteRequest должен оставаться queued после вызова AI-инструмента.",
+    "MemoryIndexJob должен оставаться pending после вызова AI-инструмента.",
+    "Синхронный helper можно оставить только как внутренний тестовый/сервисный путь, но не использовать в AI-инструменте."
+  ],
+  "acceptance_checks": [
+    "Тест AI-инструмента memory.remember ожидает status queued.",
+    "После вызова инструмента нет MemoryKnowledgeItem, если обработчик очереди не запускался.",
+    "AgentActionLog не содержит значения секретов."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py test apps.ai.tests apps.memory.tests"
+  ]
+}

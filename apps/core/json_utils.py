@@ -269,6 +269,50 @@ REQUIRED_MEMORY_SOURCE_KEYS = {
     "ignore_patterns",
 }
 
+OPTIONAL_MEMORY_SOURCE_TRUST_KEYS = {
+    "trust_status",
+    "authority_class",
+    "trusted_for_context",
+    "requires_source_review",
+    "review_owner",
+    "trusted_context_kinds",
+    "untrusted_handling",
+}
+
+REQUIRED_MEMORY_TRUST_POLICY_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "trust_statuses",
+    "authority_classes",
+    "defaults_by_source_kind",
+    "direct_context_policy",
+    "review_roles",
+}
+
+REQUIRED_MEMORY_CLAIMS_POLICY_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "claim_types",
+    "claim_statuses",
+    "belief_statuses",
+    "review_rules",
+    "freshness_windows",
+    "contradiction_policy",
+}
+
+REQUIRED_MEMORY_RETRIEVAL_BUDGET_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "hot_path",
+    "rank_fusion",
+    "context_packing",
+    "optional_llm_rerank",
+    "background_batches",
+}
+
 REQUIRED_MEMORY_INGESTION_PROFILES_ROOT_KEYS = {
     "version",
     "name",
@@ -473,6 +517,53 @@ MEMORY_CONTEXT_KIND_VALUES = {
     "citation",
     "metadata",
     "graph_fact",
+    "claim",
+    "belief",
+}
+
+MEMORY_TRUST_STATUS_VALUES = {
+    "trusted",
+    "review_required",
+    "candidate_only",
+    "quarantined",
+    "blocked",
+}
+
+MEMORY_AUTHORITY_CLASS_VALUES = {
+    "system_of_record",
+    "approved_corpus",
+    "approved_user_memory",
+    "reviewed_org_knowledge",
+    "external_observation",
+    "candidate_input",
+}
+
+MEMORY_UNTRUSTED_HANDLING_VALUES = {
+    "review_required",
+    "candidate_only",
+    "quarantine",
+    "block",
+    "blocked",
+}
+
+MEMORY_CLAIM_TYPE_VALUES = {
+    "fact",
+    "preference",
+    "procedure",
+    "policy",
+    "decision",
+    "metric_observation",
+    "incident",
+    "action_outcome",
+}
+
+MEMORY_CLAIM_STATUS_VALUES = {
+    "candidate",
+    "accepted",
+    "rejected",
+    "contested",
+    "superseded",
+    "expired",
 }
 
 MEMORY_ADAPTER_KIND_VALUES = {
@@ -1030,6 +1121,7 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
             scope_mapping = external_connector.get("scope_mapping")
             if scope_mapping != "manual":
                 raise ValidationError(f"Memory source '{code}' должен использовать external_connector.scope_mapping 'manual'.")
+        _validate_memory_source_trust_fields(item, source_code=code)
         if chunking_profiles and item["chunking_profile"] not in chunking_profiles:
             raise ValidationError(
                 f"Memory source '{code}' ссылается на неизвестный chunking_profile "
@@ -1053,6 +1145,176 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
                 f"Memory source '{code}' ссылается на неизвестный sensitivity "
                 f"'{item['sensitivity']}'."
             )
+
+
+def validate_memory_trust_policy_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory trust policy")
+    missing = REQUIRED_MEMORY_TRUST_POLICY_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory trust policy не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for key in ("version", "name", "description"):
+        if not isinstance(payload.get(key), str) or not payload.get(key):
+            raise ValidationError(f"Поле '{key}' в memory trust policy должно быть непустой строкой.")
+    _ensure_list_of_strings(payload.get("trust_statuses"), "Поле trust_statuses в memory trust policy")
+    unknown_statuses = set(payload["trust_statuses"]) - MEMORY_TRUST_STATUS_VALUES
+    if unknown_statuses:
+        raise ValidationError(
+            "Memory trust policy содержит неизвестные trust_statuses: "
+            + ", ".join(sorted(unknown_statuses))
+            + "."
+        )
+    _ensure_list_of_strings(payload.get("authority_classes"), "Поле authority_classes в memory trust policy")
+    unknown_authorities = set(payload["authority_classes"]) - MEMORY_AUTHORITY_CLASS_VALUES
+    if unknown_authorities:
+        raise ValidationError(
+            "Memory trust policy содержит неизвестные authority_classes: "
+            + ", ".join(sorted(unknown_authorities))
+            + "."
+        )
+    defaults = payload.get("defaults_by_source_kind")
+    if not isinstance(defaults, dict) or not defaults:
+        raise ValidationError("Поле defaults_by_source_kind в memory trust policy должно быть непустым JSON-объектом.")
+    for source_kind, rule in defaults.items():
+        if source_kind not in MEMORY_SOURCE_KIND_VALUES and source_kind not in {"ai_chat", "email_imap", "test", "*"}:
+            raise ValidationError(f"Memory trust policy содержит неизвестный source_kind '{source_kind}'.")
+        if not isinstance(rule, dict):
+            raise ValidationError(f"Trust default для source_kind '{source_kind}' должен быть JSON-объектом.")
+        _validate_trust_rule(rule, context=f"defaults_by_source_kind.{source_kind}")
+    direct_context_policy = payload.get("direct_context_policy")
+    if not isinstance(direct_context_policy, dict):
+        raise ValidationError("Поле direct_context_policy в memory trust policy должно быть JSON-объектом.")
+    allowed_statuses = direct_context_policy.get("allowed_trust_statuses")
+    _ensure_list_of_strings(allowed_statuses, "Поле direct_context_policy.allowed_trust_statuses")
+    if set(allowed_statuses) - MEMORY_TRUST_STATUS_VALUES:
+        raise ValidationError("direct_context_policy.allowed_trust_statuses содержит неизвестные статусы.")
+    allowed_authorities = direct_context_policy.get("allowed_authority_classes")
+    _ensure_list_of_strings(allowed_authorities, "Поле direct_context_policy.allowed_authority_classes")
+    if set(allowed_authorities) - MEMORY_AUTHORITY_CLASS_VALUES:
+        raise ValidationError("direct_context_policy.allowed_authority_classes содержит неизвестные authority classes.")
+    if not isinstance(direct_context_policy.get("require_trusted_for_context", True), bool):
+        raise ValidationError("direct_context_policy.require_trusted_for_context должно быть boolean.")
+    review_roles = payload.get("review_roles")
+    if not isinstance(review_roles, dict):
+        raise ValidationError("Поле review_roles в memory trust policy должно быть JSON-объектом.")
+
+
+def validate_memory_claims_policy_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory claims policy")
+    missing = REQUIRED_MEMORY_CLAIMS_POLICY_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory claims policy не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for key in ("version", "name", "description"):
+        if not isinstance(payload.get(key), str) or not payload.get(key):
+            raise ValidationError(f"Поле '{key}' в memory claims policy должно быть непустой строкой.")
+    _ensure_list_of_strings(payload.get("claim_types"), "Поле claim_types в memory claims policy")
+    if set(payload["claim_types"]) - MEMORY_CLAIM_TYPE_VALUES:
+        raise ValidationError("Memory claims policy содержит неизвестные claim_types.")
+    _ensure_list_of_strings(payload.get("claim_statuses"), "Поле claim_statuses в memory claims policy")
+    if set(payload["claim_statuses"]) - MEMORY_CLAIM_STATUS_VALUES:
+        raise ValidationError("Memory claims policy содержит неизвестные claim_statuses.")
+    _ensure_list_of_strings(payload.get("belief_statuses"), "Поле belief_statuses в memory claims policy")
+    if set(payload["belief_statuses"]) - MEMORY_CLAIM_STATUS_VALUES:
+        raise ValidationError("Memory claims policy содержит неизвестные belief_statuses.")
+    for key in ("review_rules", "freshness_windows", "contradiction_policy"):
+        if not isinstance(payload.get(key), dict):
+            raise ValidationError(f"Поле {key} в memory claims policy должно быть JSON-объектом.")
+
+
+def validate_memory_retrieval_budget_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory retrieval budget")
+    missing = REQUIRED_MEMORY_RETRIEVAL_BUDGET_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory retrieval budget не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for key in ("version", "name", "description"):
+        if not isinstance(payload.get(key), str) or not payload.get(key):
+            raise ValidationError(f"Поле '{key}' в memory retrieval budget должно быть непустой строкой.")
+    hot_path = payload.get("hot_path")
+    if not isinstance(hot_path, dict):
+        raise ValidationError("Поле hot_path в memory retrieval budget должно быть JSON-объектом.")
+    for key in ("raw_candidate_limit", "final_item_limit", "timeout_ms"):
+        _ensure_positive_int(hot_path.get(key), f"hot_path.{key}")
+    rank_fusion = payload.get("rank_fusion")
+    if not isinstance(rank_fusion, dict):
+        raise ValidationError("Поле rank_fusion в memory retrieval budget должно быть JSON-объектом.")
+    for key in ("authority_boost", "freshness_boost", "scope_match_boost"):
+        _ensure_number(rank_fusion.get(key), f"rank_fusion.{key}")
+    boost_key = "reviewed_knowledge_boost" if "reviewed_knowledge_boost" in rank_fusion else "accepted_belief_boost"
+    _ensure_number(rank_fusion.get(boost_key), f"rank_fusion.{boost_key}")
+    for key in ("candidate_penalty", "contested_penalty", "expired_penalty", "low_confidence_penalty", "same_source_penalty"):
+        _ensure_number(rank_fusion.get(key), f"rank_fusion.{key}")
+    context_packing = payload.get("context_packing")
+    if not isinstance(context_packing, dict):
+        raise ValidationError("Поле context_packing в memory retrieval budget должно быть JSON-объектом.")
+    for key in ("max_items", "max_tokens", "max_items_per_source"):
+        _ensure_positive_int(context_packing.get(key), f"context_packing.{key}")
+    llm_rerank = payload.get("optional_llm_rerank")
+    if not isinstance(llm_rerank, dict) or not isinstance(llm_rerank.get("enabled", False), bool):
+        raise ValidationError("optional_llm_rerank.enabled должно быть boolean.")
+    if llm_rerank.get("enabled"):
+        _ensure_positive_int(llm_rerank.get("top_k"), "optional_llm_rerank.top_k")
+        _ensure_positive_int(llm_rerank.get("timeout_ms"), "optional_llm_rerank.timeout_ms")
+    background = payload.get("background_batches")
+    if not isinstance(background, dict):
+        raise ValidationError("Поле background_batches в memory retrieval budget должно быть JSON-объектом.")
+    for key in ("claim_extraction_batch_size", "digest_batch_size"):
+        _ensure_positive_int(background.get(key), f"background_batches.{key}")
+
+
+def _validate_memory_source_trust_fields(item, *, source_code: str) -> None:
+    unknown_keys = set(item.keys()) & OPTIONAL_MEMORY_SOURCE_TRUST_KEYS
+    if not unknown_keys:
+        return
+    rule = {
+        key: item[key]
+        for key in OPTIONAL_MEMORY_SOURCE_TRUST_KEYS
+        if key in item
+    }
+    _validate_trust_rule(rule, context=f"memory source '{source_code}'")
+    trusted_context_kinds = item.get("trusted_context_kinds")
+    if trusted_context_kinds is not None:
+        _ensure_list_of_strings(trusted_context_kinds, f"Поле trusted_context_kinds у memory source '{source_code}'")
+        unknown_kinds = set(trusted_context_kinds) - MEMORY_CONTEXT_KIND_VALUES
+        if unknown_kinds:
+            raise ValidationError(
+                f"Memory source '{source_code}' содержит неизвестные trusted_context_kinds: "
+                + ", ".join(sorted(unknown_kinds))
+                + "."
+            )
+
+
+def _validate_trust_rule(rule, *, context: str) -> None:
+    trust_status = rule.get("trust_status")
+    if trust_status is not None and trust_status not in MEMORY_TRUST_STATUS_VALUES:
+        raise ValidationError(f"{context} содержит недопустимый trust_status.")
+    authority_class = rule.get("authority_class")
+    if authority_class is not None and authority_class not in MEMORY_AUTHORITY_CLASS_VALUES:
+        raise ValidationError(f"{context} содержит недопустимый authority_class.")
+    if "trusted_for_context" in rule and not isinstance(rule.get("trusted_for_context"), bool):
+        raise ValidationError(f"{context}: trusted_for_context должно быть boolean.")
+    if "requires_source_review" in rule and not isinstance(rule.get("requires_source_review"), bool):
+        raise ValidationError(f"{context}: requires_source_review должно быть boolean.")
+    review_owner = rule.get("review_owner")
+    if review_owner is not None and (not isinstance(review_owner, str) or not review_owner):
+        raise ValidationError(f"{context}: review_owner должен быть непустой строкой.")
+    untrusted_handling = rule.get("untrusted_handling")
+    if untrusted_handling is not None and untrusted_handling not in MEMORY_UNTRUSTED_HANDLING_VALUES:
+        raise ValidationError(f"{context} содержит недопустимый untrusted_handling.")
+
+
+def _ensure_positive_int(value, label: str) -> None:
+    if type(value) is not int or value <= 0:
+        raise ValidationError(f"Поле {label} должно быть положительным числом.")
+
+
+def _ensure_number(value, label: str) -> None:
+    if not isinstance(value, (int, float)):
+        raise ValidationError(f"Поле {label} должно быть числом.")
 
 
 def validate_memory_ingestion_profiles_payload(payload):

@@ -106,6 +106,50 @@
           "short_lived_raw_quarantine"
         ]
       },
+      "trust_status": {
+        "type": "string",
+        "enum": ["trusted", "review_required", "blocked", "candidate_only", "quarantined"]
+      },
+      "authority_class": {
+        "type": "string",
+        "enum": [
+          "system_of_record",
+          "approved_corpus",
+          "approved_user_memory",
+          "reviewed_org_knowledge",
+          "external_observation",
+          "candidate_input"
+        ]
+      },
+      "trusted_for_context": {
+        "type": "boolean"
+      },
+      "requires_source_review": {
+        "type": "boolean"
+      },
+      "review_owner": {
+        "type": "string"
+      },
+      "trusted_context_kinds": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "question",
+            "retrieved_chunk",
+            "citation",
+            "metadata",
+            "graph_fact",
+            "claim",
+            "belief"
+          ]
+        },
+        "uniqueItems": true
+      },
+      "untrusted_handling": {
+        "type": "string",
+        "enum": ["review_required", "blocked", "candidate_only", "quarantine", "block"]
+      },
       "extractor_profile": { "type": "string" },
       "chunking_profile": { "type": "string" },
       "index_profiles": {

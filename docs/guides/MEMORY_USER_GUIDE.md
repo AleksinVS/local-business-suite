@@ -37,8 +37,27 @@
 - `snapshot_hash`;
 - `text_hash`;
 - `sensitivity`.
+- `trust_status`;
+- `authority_class`;
+- `trusted_for_context`.
 
 Если AI дает утверждение "из памяти", но citations отсутствуют, такой ответ нельзя считать подтвержденным данными memory service.
+
+## Надежные источники и сохраненные знания
+
+Safe corpus означает, что текст прошел privacy/security pipeline и может храниться или индексироваться. Это не означает, что источник можно напрямую отдавать агенту.
+
+Для обычного `memory.search` теперь действует trusted-only правило:
+
+- `trusted` источники могут попадать в agent context после scope/sensitivity/citation checks;
+- `review_required` источники можно хранить и разбирать, но нельзя напрямую отдавать агенту до проверки;
+- `blocked` источники не используются;
+- старые значения `candidate_only` и `quarantined` совместимо отображаются в `review_required`;
+- untrusted источники могут использоваться как evidence для review/candidate flow;
+- `MemoryKnowledgeItem` является главным объектом сохраненного знания MVP;
+- `MemoryClaim` не создается обычным "запомни"; `MemoryBelief` не входит в MVP-схему и не возвращается обычным `memory.search`.
+
+Если источник safe, но не trusted, оператор должен провести проверку источника или конкретного знания перед публикацией в общую память.
 
 ## Администрирование
 
@@ -98,7 +117,9 @@ Eval report пишется только в `data/memory/eval/`.
 - embeddings пока представлены интерфейсом, но не генерируются;
 - SQLite FTS используется как локальный MVP full-text backend;
 - Kuzu backend пока lazy placeholder;
-- `memory.search` выполняет простую выдачу: vector/full-text candidates, затем graph candidates;
+- `memory.search` выполняет trusted-only gate, deterministic rank fusion и context packing без обязательного LLM;
+- review UI для источников и знаний пока представлен Django Admin;
+- claim extraction и `MemoryClaim` перенесены на следующие этапы; `MemoryBelief` не входит в MVP-схему;
 - ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, bootstrap package и graph schema proposals;
 - PDF/Office/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
 - ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
@@ -112,8 +133,10 @@ AI-чат использует `memory.search` как read путь к memory se
 
 - по умолчанию знание пишется в персональную память пользователя;
 - запись в общую память организации требует явного намерения пользователя и соответствующего права;
-- `memory.remember` ставит request в очередь и возвращает статус;
-- команда `memory_reflect_chats` обрабатывает queued requests и может создавать кандидатов в общие знания из персональной памяти;
+- `memory.remember` ставит запрос в очередь и возвращает `request_id`, `job_id`, `status=queued`, `target_scope` и `queued_at`;
+- пока обработчик очереди не запускался, `MemoryKnowledgeItem` еще не создан и `memory_id` в первичном ответе отсутствует;
+- команда `memory_reflect_chats` остается совместимой командой обработки очереди "запомни" и создания кандидатов, но не является полноценной ночной рефлексией;
+- после обработки очереди запрос получает состояние `accepted`, создается `MemoryKnowledgeItem`, а сохраненный фрагмент находится через `memory.search`;
 - кандидаты в общие знания публикуются только после review владельца базы/графа знаний;
 - пользователь сможет исправлять и удалять свою персональную память через чат;
 - секреты сохраняются только через secret handle: агент видит `<SECRET_HANDLE:...>` и metadata, но не значение секрета;
@@ -122,7 +145,7 @@ AI-чат использует `memory.search` как read путь к memory se
 Архитектурное решение: `docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md`.
 Implementation plan: `docs/architecture/MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md`.
 
-Операторская команда:
+Операторская команда совместимости для обработки очереди:
 
 ```bash
 python manage.py memory_reflect_chats --dry-run

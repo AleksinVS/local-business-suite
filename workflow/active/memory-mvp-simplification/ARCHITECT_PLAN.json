@@ -1,0 +1,41 @@
+{
+  "block_id": "memory-mvp-simplification",
+  "status": "completed",
+  "created_at": "2026-05-21",
+  "architecture_sources": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md",
+    "docs/adr/ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md",
+    "docs/adr/ADR-0010-memory-mvp-simplification.md",
+    "docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md",
+    "docs/planning/active/memory-mvp-simplification.md"
+  ],
+  "goal": "Упростить MVP памяти: сделать MemoryKnowledgeItem главным объектом сохраненного знания, убрать MemoryBelief из обычного пути выполнения и упростить правила надежности источников.",
+  "execution_order": [
+    "01-primary-knowledge-item-path",
+    "02-remove-memory-belief-from-runtime",
+    "03-queue-processor-vs-reflection",
+    "04-simplify-source-trust-policy",
+    "05-docs-tests-and-acceptance"
+  ],
+  "global_constraints": [
+    "Не менять физическое хранение сообщений чата в этом блоке.",
+    "Не проектировать финальную стратегию поиска по графу в этом блоке.",
+    "Не ослаблять проверки прав доступа, чувствительности и надежности источника.",
+    "Не удалять пользовательские данные без безопасного пути миграции.",
+    "Сохранить совместимость векторного, полнотекстового и текущего графового поиска.",
+    "Хранить runtime-данные в data/, временные агентные артефакты - в .local/."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run",
+    "npm run test:e2e"
+  ],
+  "notes": [
+    "MemoryClaim не является главным объектом памяти MVP. Его автоматическое создание нужно проверить и отключить, если оно не нужно принятому MVP-пути.",
+    "MemoryBelief переносится на следующие этапы для работы с противоречиями и принятыми позициями системы.",
+    "Поиск по графу остается доступным, но условия его включения и правила ранжирования будут спланированы отдельно."
+  ]
+}

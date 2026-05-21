@@ -12,9 +12,12 @@ from django.urls import reverse
 
 import apps.core.json_utils as json_utils
 from apps.core.json_utils import (
+    validate_memory_claims_policy_payload,
     validate_memory_profiles_payload,
+    validate_memory_retrieval_budget_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
+    validate_memory_trust_policy_payload,
 )
 from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
@@ -217,6 +220,9 @@ class ArchitectureContractTests(TestCase):
         required_settings = (
             "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
             "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
+            "LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE",
+            "LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE",
+            "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE",
         )
         for setting_name in required_settings:
             if not hasattr(settings, setting_name):
@@ -299,6 +305,22 @@ class ArchitectureContractTests(TestCase):
                 }
             )
 
+    def test_memory_trust_policy_rejects_invalid_trust_status(self):
+        payload = json.loads((Path(__file__).resolve().parents[2] / "contracts" / "ai" / "memory_trust_policy.json").read_text(encoding="utf-8"))
+        payload["defaults_by_source_kind"]["external_api_snapshot"]["trust_status"] = "trusted_by_prompt"
+
+        with self.assertRaisesMessage(ValidationError, "trust_status"):
+            validate_memory_trust_policy_payload(payload)
+
+    def test_memory_claims_and_retrieval_budget_contracts_pass(self):
+        default_contracts = Path(__file__).resolve().parents[2] / "contracts" / "ai"
+        validate_memory_claims_policy_payload(
+            json.loads((default_contracts / "memory_claims_policy.json").read_text(encoding="utf-8"))
+        )
+        validate_memory_retrieval_budget_payload(
+            json.loads((default_contracts / "memory_retrieval_budget.json").read_text(encoding="utf-8"))
+        )
+
     def test_validate_architecture_contracts_reads_memory_contract_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
@@ -307,6 +329,9 @@ class ArchitectureContractTests(TestCase):
             sources_path = tmp_path / "memory_sources.json"
             ingestion_profiles_path = tmp_path / "memory_ingestion_profiles.json"
             graph_schema_path = tmp_path / "memory_graph_schema.json"
+            trust_policy_path = tmp_path / "memory_trust_policy.json"
+            claims_policy_path = tmp_path / "memory_claims_policy.json"
+            retrieval_budget_path = tmp_path / "memory_retrieval_budget.json"
             default_contracts = Path(__file__).resolve().parents[2] / "contracts" / "ai"
             profiles_payload = json.loads((default_contracts / "memory_profiles.json").read_text(encoding="utf-8"))
             routing_payload = json.loads((default_contracts / "memory_routing.json").read_text(encoding="utf-8"))
@@ -314,6 +339,9 @@ class ArchitectureContractTests(TestCase):
             ingestion_profiles_payload = json.loads(
                 (default_contracts / "memory_ingestion_profiles.json").read_text(encoding="utf-8")
             )
+            trust_policy_payload = json.loads((default_contracts / "memory_trust_policy.json").read_text(encoding="utf-8"))
+            claims_policy_payload = json.loads((default_contracts / "memory_claims_policy.json").read_text(encoding="utf-8"))
+            retrieval_budget_payload = json.loads((default_contracts / "memory_retrieval_budget.json").read_text(encoding="utf-8"))
             routing_payload["routes"]["secret"]["default_llm"] = "local"
             profiles_path.write_text(json.dumps(profiles_payload), encoding="utf-8")
             routing_path.write_text(
@@ -323,6 +351,9 @@ class ArchitectureContractTests(TestCase):
             sources_path.write_text(json.dumps(sources_payload), encoding="utf-8")
             ingestion_profiles_path.write_text(json.dumps(ingestion_profiles_payload), encoding="utf-8")
             graph_schema_path.write_text(json.dumps(valid_memory_graph_schema_payload()), encoding="utf-8")
+            trust_policy_path.write_text(json.dumps(trust_policy_payload), encoding="utf-8")
+            claims_policy_path.write_text(json.dumps(claims_policy_payload), encoding="utf-8")
+            retrieval_budget_path.write_text(json.dumps(retrieval_budget_payload), encoding="utf-8")
 
             with override_settings(
                 LOCAL_BUSINESS_MEMORY_PROFILES_FILE=profiles_path,
@@ -330,6 +361,9 @@ class ArchitectureContractTests(TestCase):
                 LOCAL_BUSINESS_MEMORY_SOURCES_FILE=sources_path,
                 LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE=ingestion_profiles_path,
                 LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE=graph_schema_path,
+                LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE=trust_policy_path,
+                LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE=claims_policy_path,
+                LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE=retrieval_budget_path,
             ):
                 with self.assertRaisesMessage(ValidationError, "secret"):
                     call_command("validate_architecture_contracts")

@@ -302,7 +302,7 @@ TOOLS = [
         "domain": "memory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Queue an ingestion request to remember selected AI chat messages as personal or organization memory.",
+        "description": "Queue selected AI chat messages for later ingestion as personal or organization memory.",
         "inputs": [
             "session_id",
             "message_ids",

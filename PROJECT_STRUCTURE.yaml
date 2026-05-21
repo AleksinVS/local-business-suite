@@ -159,12 +159,14 @@ docs: # Документация проекта
     ADR-0005-chat-derived-memory-and-secret-handles.md: file # ADR: Память из AI-чата, reflection jobs и secret handles
     ADR-0006-external-system-knowledge-connectors.md: file # ADR: Коннекторы сбора знаний из внешних информационных систем
     ADR-0007-settings-center-and-contextual-help.md: file # ADR: Settings Center, контекстная справка и управляемые runtime-настройки
+    ADR-0008-knowledge-driven-business-analytics.md: file # ADR: Knowledge-driven business analytics
   architecture: # Архитектурные документы проекта
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
     blueprint.md: file # Blueprint — детальный план системы
     DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
     INTEGRATIONS.md: file # Интеграции с внешними системами
+    KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md: file # План непрерывной бизнес-аналитики из знаний, email, документов и DMS
     MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md: file # План памяти из AI-чата, reflection и secret handles
     MEMORY_COMPLETION_GAP_ANALYSIS.md: file # Gap analysis текущей реализации системы памяти
     MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md: file # Legacy gap review реализации external information system connector MVP
@@ -181,6 +183,7 @@ docs: # Документация проекта
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     CHANGE_PATTERNS.md: file # Паттерны внесения изменений
+    KNOWLEDGE_ANALYTICS_OPERATIONS.md: file # Операционный guide по knowledge-driven business analytics, IMAP, DMS и дедупликации
     MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md: file # Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний
     MEMORY_INGESTION_OPERATIONS.md: file # Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти
     MEMORY_USER_GUIDE.md: file # Руководство пользователя и администратора по системе памяти
@@ -192,6 +195,7 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
+      knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-external-connector-legacy-gap-remediation.md: file # Активный план устранения legacy gaps external connector MVP
       memory-external-systems-connector.md: file # Активный план сбора знаний из внешних информационных систем
       memory-system-completion.md: file # Активный план завершения системы памяти
@@ -259,6 +263,10 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   base.html: file # Базовый шаблон (navbar, sidebar, HTMX скрипты)
 workflow: # Исполнительные workflow-пакеты для сложных работ
   active: # Активные workflow-блоки
+    knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Architect execution plan for knowledge-driven business analytics
+      BLOCK_BRIEF.md: file # Brief for the knowledge-driven business analytics workflow
     memory-chat-reflection-secret-handles: # Workflow-блок для chat-derived memory, reflection и secret handles
       ARCHITECT_PLAN.json: file # Архитектурный план исполнения
       BLOCK_BRIEF.md: file # Brief workflow-блока

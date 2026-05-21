@@ -1,0 +1,28 @@
+{
+  "task_id": "05-analytics-store-and-metrics",
+  "title": "Add analytics runtime store, facts, metrics, monitors and signals",
+  "status": "planned",
+  "read_scope": [
+    "apps/analytics/",
+    "contracts/analytics/",
+    "docs/architecture/ANALYTICS_MODEL.md",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "contracts/analytics/",
+    "docs/deployment/",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Store bulk analytics facts and snapshots in data/analytics/ as Parquet-compatible datasets.",
+    "Use Django DB for control-plane models: runs, signals, diagnostics, cases and audit.",
+    "Add metrics for department reports and regulator requests as the first universal MVP examples.",
+    "Create monitor evaluation and signal generation from AnalyticsFactDelta.",
+    "Write SampleManifest for each scoped analysis run."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py analytics_recalculate_metrics --dry-run"
+  ]
+}

@@ -189,6 +189,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/POLICY_MODEL.md` — модель ролей и политик.
 - `docs/architecture/INTEGRATIONS.md` — стратегия интеграций.
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
+- `docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md` — непрерывная бизнес-аналитика из знаний, email, документов и DMS.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
 - `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план queued API-коннекторов и landing zone для внешних ИС.

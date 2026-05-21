@@ -1,0 +1,29 @@
+{
+  "task_id": "01-contracts-and-scope-rules",
+  "title": "Add analytics contracts and analysis scope rules",
+  "status": "planned",
+  "read_scope": [
+    "contracts/analytics/",
+    "contracts/schemas/",
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md"
+  ],
+  "write_scope": [
+    "contracts/analytics/",
+    "contracts/schemas/",
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "apps/core/tests.py",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Add schemas for analytics sources, analysis_scope_rules, business_facts, metrics, monitors, diagnostic_playbooks, workflow_routes, dedup_rules and retention_profiles.",
+    "Analysis scope rules must support source allowlists, source exclusions, time windows, scope_tokens, sensitivity filters, sampling strategy and hard limits.",
+    "Validation must reject prompt-only access boundaries and missing owner/sensitivity fields."
+  ],
+  "acceptance_checks": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests"
+  ]
+}

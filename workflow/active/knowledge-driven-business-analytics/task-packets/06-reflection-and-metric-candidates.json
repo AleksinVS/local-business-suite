@@ -1,0 +1,29 @@
+{
+  "task_id": "06-reflection-and-metric-candidates",
+  "title": "Implement reflection over knowledge deltas and metric candidate review",
+  "status": "planned",
+  "read_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "apps/ai/",
+    "contracts/analytics/",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "apps/ai/",
+    "contracts/analytics/",
+    "tests"
+  ],
+  "requirements": [
+    "Analyze KnowledgeDelta and AnalyticsFactDelta for repeated issues, rising topics and gaps in existing metrics.",
+    "Create MetricCandidate, MonitorCandidate and KnowledgeCandidate records instead of directly publishing new organization-wide knowledge or metrics.",
+    "Include evidence refs and rationale for each candidate.",
+    "Support dry-run reflection command."
+  ],
+  "acceptance_checks": [
+    "python manage.py analytics_reflect_knowledge --dry-run",
+    "python manage.py test apps.analytics.tests apps.memory.tests"
+  ]
+}

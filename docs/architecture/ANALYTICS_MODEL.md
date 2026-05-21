@@ -1,5 +1,10 @@
 # Analytics Model
 
+Extended target architecture:
+
+- `docs/adr/ADR-0008-knowledge-driven-business-analytics.md` defines analytics as a continuous knowledge-driven business control loop.
+- `docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md` describes email content analysis, memory-driven analytics, DMS integration, scope rules, dedup/provenance and AI diagnostic workflows.
+
 Current implementation:
 
 - `apps.analytics` is an operational dashboard over the Django OLTP database.

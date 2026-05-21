@@ -8,7 +8,7 @@ The system is organized into several layers:
 1.  **Core Platform:** Django-based monorepo providing authentication, roles, shared dictionaries, and the primary web interface.
 2.  **AI Block:** An autonomous agent runtime based on LangGraph and MCP that interacts with the platform via a secure tool gateway.
 3.  **Memory Layer:** Django-owned AI memory with safe corpus, retrieval tools, graph facts, document ingestion, moderated graph schema bootstrapping, chat-derived personal/organization memory, secret handles and planned external information system connectors.
-4.  **Analytics Layer:** A separate analytical path that uses Parquet exports and DuckDB for efficient querying without stressing the OLTP database.
+4.  **Analytics Layer:** A knowledge-driven business analytics path that combines memory deltas, email contents, documents, optional DMS/API enrichment, Parquet/DuckDB storage, metric monitors and AI diagnostic workflows.
 
 ## Key Documentation
 
@@ -20,6 +20,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[AI Architecture](../../ai/chat_agent/ARCHITECTURE.md)**: Technical details of the AI agent, tool gateway, and confirmation flows.
 - **[Integrations](INTEGRATIONS.md)**: Strategy for connecting with legacy enterprise systems (Bridges).
 - **[Analytics Model](ANALYTICS_MODEL.md)**: Design of the analytical layer (Parquet + DuckDB + Evidence).
+- **[Knowledge-driven Analytics Plan](KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md)**: Continuous business analytics from memory, email contents, documents, optional DMS and AI diagnostics.
 - **[Memory Service Plan](MEMORY_SERVICE_IMPLEMENTATION_PLAN.md)**: Implementation plan for the AI memory service.
 - **[Memory Ingestion and Bootstrapping Plan](MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md)**: Final plan for corporate document ingestion and graph schema bootstrapping.
 - **[Memory Completion Gap Analysis](MEMORY_COMPLETION_GAP_ANALYSIS.md)**: Current gaps between implemented MVP and target memory system.
@@ -42,3 +43,4 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0004: Memory ingestion connector and graph schema bootstrapping](../adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md)
 - [ADR-0005: Chat-derived memory, reflection jobs and secret handles](../adr/ADR-0005-chat-derived-memory-and-secret-handles.md)
 - [ADR-0006: External system knowledge connectors](../adr/ADR-0006-external-system-knowledge-connectors.md)
+- [ADR-0008: Knowledge-driven business analytics](../adr/ADR-0008-knowledge-driven-business-analytics.md)

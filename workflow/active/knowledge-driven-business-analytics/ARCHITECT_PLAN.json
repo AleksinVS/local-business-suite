@@ -1,6 +1,6 @@
 {
   "block_id": "knowledge-driven-business-analytics",
-  "status": "planned",
+  "status": "mvp_vertical_slice_implemented",
   "created_at": "2026-05-21",
   "architecture_sources": [
     "docs/adr/ADR-0008-knowledge-driven-business-analytics.md",

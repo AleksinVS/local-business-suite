@@ -1,6 +1,8 @@
 {
   ".": "Операционные дашборды внутри Django",
+  "management": "Management commands for analytics ingestion, extraction, deduplication, metrics and diagnostics",
   "models.py": "Модели аналитики",
+  "services.py": "Сервисы knowledge-driven analytics pipeline",
   "views.py": "Представления дашбордов",
   "urls.py": "URL-маршруты аналитики",
   "admin.py": "Регистрация моделей в Django Admin",

@@ -1,0 +1,49 @@
+[
+  {
+    "code": "department_reports_daily",
+    "title": "Daily department report analysis",
+    "owner": "operations",
+    "sources": ["department_reports_imap", "memory_knowledge"],
+    "include": {
+      "folders": ["INBOX"],
+      "time_window": "now-24h",
+      "fact_types": ["department_report_received", "department_issue_reported", "deadline_committed"]
+    },
+    "exclude": {
+      "sensitivity": ["secret"]
+    },
+    "limits": {
+      "max_source_items": 1000,
+      "max_tokens_per_item": 6000
+    },
+    "sampling": {
+      "strategy": "changed_since_watermark",
+      "fallback": "latest"
+    },
+    "requires_audit": true
+  },
+  {
+    "code": "regulator_requests_daily",
+    "title": "Daily regulator request analysis",
+    "owner": "compliance",
+    "sources": ["regulator_requests_imap", "memory_knowledge"],
+    "include": {
+      "folders": ["INBOX", "Sent"],
+      "time_window": "now-24h",
+      "fact_types": ["regulator_request_received", "regulator_response_sent", "deadline_committed"]
+    },
+    "exclude": {
+      "sensitivity": ["secret"]
+    },
+    "limits": {
+      "max_source_items": 1000,
+      "max_threads": 250,
+      "max_tokens_per_item": 6000
+    },
+    "sampling": {
+      "strategy": "top_risk",
+      "fallback": "latest"
+    },
+    "requires_audit": true
+  }
+]

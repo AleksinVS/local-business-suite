@@ -1,0 +1,38 @@
+[
+  {
+    "code": "department_report_received",
+    "title": "Department report received",
+    "owner": "operations",
+    "description": "A department head report was received and parsed.",
+    "dimensions": ["department", "period", "author"],
+    "measures": ["reports"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "department_issue_reported",
+    "title": "Department issue reported",
+    "owner": "operations",
+    "description": "A report contains a risk, issue or operational problem.",
+    "dimensions": ["department", "issue_type", "period"],
+    "measures": ["issues"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "regulator_request_received",
+    "title": "Regulator request received",
+    "owner": "compliance",
+    "description": "A regulator request was received.",
+    "dimensions": ["regulator", "topic", "department"],
+    "measures": ["requests", "requested_documents", "deadline_days"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "deadline_committed",
+    "title": "Deadline committed",
+    "owner": "operations",
+    "description": "A deadline or commitment was extracted from a source item.",
+    "dimensions": ["department", "commitment_type"],
+    "measures": ["commitments"],
+    "sensitivity": "confidential"
+  }
+]

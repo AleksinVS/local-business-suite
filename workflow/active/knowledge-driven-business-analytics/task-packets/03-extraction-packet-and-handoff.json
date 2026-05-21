@@ -1,7 +1,7 @@
 {
   "task_id": "03-extraction-packet-and-handoff",
   "title": "Create shared extraction packet and handoff to memory and analytics",
-  "status": "planned",
+  "status": "mvp_implemented",
   "read_scope": [
     "apps/analytics/",
     "apps/memory/",

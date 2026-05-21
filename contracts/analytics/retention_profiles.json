@@ -1,0 +1,18 @@
+[
+  {
+    "code": "normalized_default",
+    "owner": "analytics",
+    "raw_retention_days": 0,
+    "normalized_retention_days": 90,
+    "fact_retention_days": 730,
+    "audit_retention_days": 1095
+  },
+  {
+    "code": "email_normalized_default",
+    "owner": "analytics",
+    "raw_retention_days": 0,
+    "normalized_retention_days": 90,
+    "fact_retention_days": 730,
+    "audit_retention_days": 1095
+  }
+]

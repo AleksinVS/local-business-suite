@@ -1,7 +1,7 @@
 {
   "task_id": "06-reflection-and-metric-candidates",
   "title": "Implement reflection over knowledge deltas and metric candidate review",
-  "status": "planned",
+  "status": "mvp_implemented",
   "read_scope": [
     "apps/analytics/",
     "apps/memory/",

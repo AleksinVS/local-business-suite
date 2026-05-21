@@ -1,7 +1,7 @@
 {
   "task_id": "04-dedup-provenance-registry",
   "title": "Implement cross-source deduplication and provenance registry",
-  "status": "planned",
+  "status": "mvp_implemented",
   "read_scope": [
     "apps/analytics/",
     "apps/memory/",

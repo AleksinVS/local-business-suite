@@ -1,0 +1,18 @@
+[
+  {
+    "code": "department_issue_review",
+    "title": "Review department operational issue",
+    "owner": "operations",
+    "target": "analytics_case",
+    "requires_confirmation": true,
+    "allowed_autonomous_actions": ["create_draft_case"]
+  },
+  {
+    "code": "regulator_request_review",
+    "title": "Review regulator request",
+    "owner": "compliance",
+    "target": "analytics_case",
+    "requires_confirmation": true,
+    "allowed_autonomous_actions": ["create_draft_case"]
+  }
+]

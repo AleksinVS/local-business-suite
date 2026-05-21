@@ -6,6 +6,15 @@ from django.core.exceptions import ValidationError
 from django.core.exceptions import ImproperlyConfigured
 
 from apps.core.json_utils import (
+    validate_analytics_business_facts_payload,
+    validate_analytics_dedup_rules_payload,
+    validate_analytics_diagnostic_playbooks_payload,
+    validate_analytics_metrics_payload,
+    validate_analytics_monitors_payload,
+    validate_analytics_retention_profiles_payload,
+    validate_analytics_scope_rules_payload,
+    validate_analytics_sources_payload,
+    validate_analytics_workflow_routes_payload,
     validate_ai_registry_payload,
     validate_ai_task_types_payload,
     validate_ai_tools_payload,
@@ -275,6 +284,15 @@ LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUS
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
 LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", sub_dir="integrations")
 LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = get_contract_path("datasets.json", "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", sub_dir="analytics") # Note: analytics in data/analytics/
+LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE = get_contract_path("sources.json", "LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE = get_contract_path("analysis_scope_rules.json", "LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE = get_contract_path("business_facts.json", "LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_METRICS_FILE = get_contract_path("metrics.json", "LOCAL_BUSINESS_ANALYTICS_METRICS_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE = get_contract_path("monitors.json", "LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE = get_contract_path("diagnostic_playbooks.json", "LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE = get_contract_path("workflow_routes.json", "LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE = get_contract_path("dedup_rules.json", "LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE", sub_dir="analytics")
+LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE = get_contract_path("retention_profiles.json", "LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE", sub_dir="analytics")
 LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE = BASE_DIR / "workflow" / "ai_artifacts" / "task_brief_template.json"
 LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE = BASE_DIR / "workflow" / "ai_artifacts" / "template.json"
 LOCAL_BUSINESS_AI_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_AI_REGISTRY_FILE", sub_dir="ai")
@@ -396,6 +414,24 @@ try:
         LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE
     )
     validate_dataset_registry_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS)
+    LOCAL_BUSINESS_ANALYTICS_SOURCES = load_json_file(LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)
+    validate_analytics_sources_payload(LOCAL_BUSINESS_ANALYTICS_SOURCES)
+    LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES = load_json_file(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE)
+    validate_analytics_scope_rules_payload(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES)
+    LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS = load_json_file(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE)
+    validate_analytics_business_facts_payload(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS)
+    LOCAL_BUSINESS_ANALYTICS_METRICS = load_json_file(LOCAL_BUSINESS_ANALYTICS_METRICS_FILE)
+    validate_analytics_metrics_payload(LOCAL_BUSINESS_ANALYTICS_METRICS)
+    LOCAL_BUSINESS_ANALYTICS_MONITORS = load_json_file(LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE)
+    validate_analytics_monitors_payload(LOCAL_BUSINESS_ANALYTICS_MONITORS)
+    LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS = load_json_file(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
+    validate_analytics_diagnostic_playbooks_payload(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS)
+    LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES = load_json_file(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE)
+    validate_analytics_workflow_routes_payload(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES)
+    LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES = load_json_file(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE)
+    validate_analytics_dedup_rules_payload(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES)
+    LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES = load_json_file(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE)
+    validate_analytics_retention_profiles_payload(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES)
 
     LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = load_json_file(
         LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE

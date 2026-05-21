@@ -426,10 +426,10 @@ def archive_device_for_actor(*, actor, payload):
 
 
 def get_analytics_summary_for_actor(*, actor, payload):
-    from apps.workorders.policies import can_manage_inventory
+    from apps.workorders.policies import can_view_analytics
     from django.db.models import Count
 
-    if not can_manage_inventory(actor):
+    if not can_view_analytics(actor):
         raise PermissionDenied("Analytics access is not allowed for this user.")
 
     summary_type = payload.get("summary_type")

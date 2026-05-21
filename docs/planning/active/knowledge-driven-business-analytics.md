@@ -1,6 +1,6 @@
 # Knowledge-driven business analytics
 
-Статус: active planning.
+Статус: active planning; MVP vertical slice implemented 2026-05-21, production connectors and Parquet/DuckDB backend remain follow-up tracks.
 
 Дата создания: 2026-05-21.
 

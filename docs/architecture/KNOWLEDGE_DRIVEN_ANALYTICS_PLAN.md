@@ -1,6 +1,6 @@
 # План: knowledge-driven business analytics
 
-Статус: архитектурный план.
+Статус: архитектурный план; MVP control-plane, contracts, fixture-first IMAP sync, extraction packets, dedup candidates, metrics, signals, reflection and diagnostic commands implemented 2026-05-21.
 
 Дата: 2026-05-21.
 

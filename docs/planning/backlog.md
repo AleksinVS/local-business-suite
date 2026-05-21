@@ -6,7 +6,7 @@
 
 ### Knowledge-driven business analytics
 
-Спроектировать и реализовать универсальный контур непрерывной бизнес-аналитики из знаний памяти, содержимого электронной почты, документов, optional DMS и внешних источников-обогащений.
+MVP vertical slice реализован: контракты аналитики, контрольные модели, fixture-first IMAP/email ingestion, общий extraction packet, дедупликация, пересчет метрик, reflection-кандидаты и AI diagnostics routing. В active backlog остается production hardening и подключение реальных источников.
 
 Контекст:
 - архитектурное решение находится в `docs/adr/ADR-0008-knowledge-driven-business-analytics.md`;
@@ -15,23 +15,13 @@
 - active planning находится в `docs/planning/active/knowledge-driven-business-analytics.md`;
 - workflow package находится в `workflow/active/knowledge-driven-business-analytics/`.
 
-Предварительный scope:
-- добавить contracts/schema для analytics sources, scope rules, business facts, metrics, monitors, diagnostics, routes, dedup и retention;
-- реализовать IMAP baseline для анализа содержимого писем;
-- сделать shared extraction packet, который питает и память, и аналитику;
-- добавить cross-source dedup/provenance registry для email, attachments, files и DMS;
-- добавить analytics store на `data/analytics/` + Parquet/DuckDB;
-- реализовать пересчет метрик из KnowledgeDelta/AnalyticsFactDelta;
-- добавить reflection для поиска закономерностей и кандидатов новых метрик;
-- предусмотреть optional DMS connector;
-- добавить AI diagnostics and workflow routing.
-
-Критерии готовности к старту:
-- выбран первый pilot mailbox/report process;
-- data owner подтвердил анализ содержимого писем;
-- определены scope, retention и authority rules для дедупликации;
-- выбран первый набор метрик: отчеты заведующих, регуляторные запросы или другой процесс;
-- подтверждено, доступен ли RabbitMQ/Celery в целевой среде.
+Оставшийся scope:
+- подключить production IMAP/IDLE adapter с UIDVALIDITY/UID watermarks и секретами из deployment-среды;
+- заменить JSONL fallback на Parquet/DuckDB после выбора runtime-зависимостей;
+- подключить production queue backend для scheduled/polling jobs;
+- добавить LLM/parser extraction backend вместо deterministic MVP extractor;
+- реализовать optional DMS connector для выбранной системы документооборота;
+- провести pilot tuning scope, retention, authority и dedup rules с владельцем данных.
 
 ### Сбор знаний из внешних информационных систем
 

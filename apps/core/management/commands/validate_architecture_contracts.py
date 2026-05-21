@@ -4,6 +4,15 @@ from django.core.management.base import BaseCommand
 
 from apps.ai.tool_definitions import TOOLS
 from apps.core.json_utils import (
+    validate_analytics_business_facts_payload,
+    validate_analytics_dedup_rules_payload,
+    validate_analytics_diagnostic_playbooks_payload,
+    validate_analytics_metrics_payload,
+    validate_analytics_monitors_payload,
+    validate_analytics_retention_profiles_payload,
+    validate_analytics_scope_rules_payload,
+    validate_analytics_sources_payload,
+    validate_analytics_workflow_routes_payload,
     load_json_file,
     validate_ai_identity_model_alignment,
     validate_ai_registry_payload,
@@ -44,6 +53,17 @@ class Command(BaseCommand):
         validate_role_rules_payload(role_payload, workflow_payload=workflow_payload)
         validate_integration_registry_payload(load_json_file(settings.LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE))
         validate_dataset_registry_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE))
+        validate_analytics_sources_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE))
+        validate_analytics_scope_rules_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE))
+        validate_analytics_business_facts_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE))
+        validate_analytics_metrics_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_METRICS_FILE))
+        validate_analytics_monitors_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE))
+        validate_analytics_diagnostic_playbooks_payload(
+            load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
+        )
+        validate_analytics_workflow_routes_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE))
+        validate_analytics_dedup_rules_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE))
+        validate_analytics_retention_profiles_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE))
         validate_task_brief_payload(load_json_file(settings.LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE))
         validate_change_plan_payload(load_json_file(settings.LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE))
         registry_payload = load_json_file(settings.LOCAL_BUSINESS_AI_REGISTRY_FILE)

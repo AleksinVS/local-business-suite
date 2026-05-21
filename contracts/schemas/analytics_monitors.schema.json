@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Monitors",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "metric_code", "condition", "threshold", "severity", "workflow_route", "enabled"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "metric_code": { "type": "string", "minLength": 1 },
+      "condition": { "enum": ["gt", "gte", "lt", "lte", "eq", "neq"] },
+      "threshold": { "type": "number" },
+      "severity": { "enum": ["info", "warning", "high", "critical"] },
+      "workflow_route": { "type": "string", "minLength": 1 },
+      "enabled": { "type": "boolean" }
+    }
+  }
+}

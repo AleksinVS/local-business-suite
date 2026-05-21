@@ -1,7 +1,7 @@
 {
   "task_id": "05-analytics-store-and-metrics",
   "title": "Add analytics runtime store, facts, metrics, monitors and signals",
-  "status": "planned",
+  "status": "mvp_jsonl_fallback_implemented",
   "read_scope": [
     "apps/analytics/",
     "contracts/analytics/",

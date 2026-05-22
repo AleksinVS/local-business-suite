@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterable, Mapping
-from pathlib import Path
 from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 
-from .graph_backends import DjangoGraphMemoryBackend
-from .models import MemoryChunk, MemoryGraphFact, MemorySnapshot
+from .knowledge_files import read_knowledge_item_file
+from .models import MemorySearchDocument, MemorySourceObject
 from .policies import (
-    can_access_chunk,
-    can_access_graph_fact,
+    can_access_search_document,
     effective_source_trust,
+    search_document_scope_tokens,
+    search_document_sensitivity,
+    search_document_source,
     source_allows_direct_context,
     user_scope_tokens,
 )
@@ -37,11 +38,15 @@ def memory_search(
     graph_backend=None,
     request_id="",
     trusted_context_only=True,
+    search_mode="knowledge_default",
+    include_source_data=False,
 ):
     query_text = _normalize_query(query)
     query_hash = _query_hash(query_text)
     normalized_limit = _normalize_limit(limit)
-    trace: dict[str, Any] = {"filtered": {}}
+    normalized_search_mode = _normalize_search_mode(search_mode)
+    allowed_corpus_types = _allowed_corpus_types(normalized_search_mode)
+    trace: dict[str, Any] = {"filtered": {}, "search_mode": normalized_search_mode}
 
     try:
         _assert_actor(actor)
@@ -72,30 +77,38 @@ def memory_search(
         citations_by_id: dict[str, dict] = {}
         candidate_items = []
         items = []
-        returned_chunk_ids: list[str] = []
+        returned_document_ids: list[str] = []
         returned_fact_ids: list[str] = []
 
-        for item in _chunk_items(
+        for item in _document_items(
             actor=actor,
             candidates=vector_candidates,
             allowed_sensitivities=route_decision.allowed_sensitivities,
             trace=trace,
             trusted_context_only=trusted_context_only,
+            allowed_corpus_types=allowed_corpus_types,
         ):
             candidate_items.append(item)
 
-        for item in _graph_items(
-            actor=actor,
-            candidates=graph_candidates,
-            allowed_sensitivities=route_decision.allowed_sensitivities,
-            trace=trace,
-            trusted_context_only=trusted_context_only,
-        ):
+        for item in graph_candidates:
             candidate_items.append(item)
 
         ranked_items = _rank_and_pack_items(candidate_items, limit=normalized_limit, trace=trace)
         for item in ranked_items:
-            _append_item(item, items, citations_by_id, returned_chunk_ids, returned_fact_ids, normalized_limit)
+            _append_item(item, items, citations_by_id, returned_document_ids, returned_fact_ids, normalized_limit)
+
+        if len(items) == 0 and _source_data_fallback_allowed(normalized_search_mode, include_source_data):
+            for item in _source_data_fallback_items(
+                actor=actor,
+                query=query_text,
+                allowed_sensitivities=route_decision.allowed_sensitivities,
+                limit=normalized_limit,
+                trace=trace,
+            ):
+                items.append(item)
+                returned_document_ids.append(str(item.get("id", "")))
+                if len(items) >= normalized_limit:
+                    break
 
         citations = list(citations_by_id.values())
         result = {
@@ -109,15 +122,18 @@ def memory_search(
                 "citation_count": len(citations),
                 "route": route_decision.as_trace(),
                 "trusted_context_only": trusted_context_only,
+                "search_mode": normalized_search_mode,
+                "corpus_types": sorted(allowed_corpus_types),
             },
         }
         trace["returned_count"] = len(items)
         trace["citation_count"] = len(citations)
+        trace["returned_document_ids"] = returned_document_ids
         record_access_audit(
             actor=actor,
             request_id=request_id,
             query_hash=query_hash,
-            returned_chunk_ids=returned_chunk_ids,
+            returned_document_ids=returned_document_ids,
             returned_fact_ids=returned_fact_ids,
             policy_decision="allowed",
             retrieval_trace=trace,
@@ -134,9 +150,14 @@ def memory_search(
         raise
 
 
-def read_safe_chunk_text(chunk: MemoryChunk) -> str:
-    path = _resolve_safe_text_path(chunk.text_path)
-    return path.read_text(encoding="utf-8")
+def read_search_document_text(document: MemorySearchDocument) -> str:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE:
+        if document.knowledge_item_id is None:
+            raise ValidationError("Knowledge search document has no knowledge item.")
+        return read_knowledge_item_file(document.knowledge_item).body
+    if document.source_object_id:
+        return document.source_object.file_name or document.source_object.relative_path or document.source_object.object_id
+    return ""
 
 
 def _search_vector_candidates(*, vector_backend, query, scope_tokens, sensitivity, limit):
@@ -144,7 +165,7 @@ def _search_vector_candidates(*, vector_backend, query, scope_tokens, sensitivit
     if backend is None:
         return []
     if not hasattr(backend, "search"):
-        raise ValidationError("Vector memory backend must provide search().")
+        raise ValidationError("Memory search backend must provide search().")
     return list(
         backend.search(
             query,
@@ -156,21 +177,12 @@ def _search_vector_candidates(*, vector_backend, query, scope_tokens, sensitivit
 
 
 def _search_graph_candidates(*, graph_backend, actor, query, scope_tokens, sensitivity, limit):
-    backend = graph_backend or DjangoGraphMemoryBackend()
-    if backend is None:
+    if graph_backend is None:
         return []
-    if not hasattr(backend, "search_facts"):
-        raise ValidationError("Graph memory backend must provide search_facts().")
-    return list(
-        backend.search_facts(
-            query,
-            scope_tokens=scope_tokens,
-            sensitivity=sensitivity,
-            active_only=True,
-            user=actor,
-            limit=_candidate_limit(limit),
-        )
-    )
+    if not hasattr(graph_backend, "search_facts"):
+        return []
+    # Графовый поиск будет перепривязан к MemorySearchDocument отдельным блоком.
+    return []
 
 
 def _rank_and_pack_items(items, *, limit, trace):
@@ -219,263 +231,279 @@ def _rank_and_pack_items(items, *, limit, trace):
     return packed
 
 
-def _chunk_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only):
-    chunk_ids = [_candidate_id(candidate, "chunk_id") for candidate in candidates]
-    chunks = _chunks_by_id(chunk_ids)
+def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types):
+    document_ids = [_candidate_id(candidate, "document_id") for candidate in candidates]
+    documents = _documents_by_id(document_ids)
 
     for candidate in candidates:
-        chunk_id = _candidate_id(candidate, "chunk_id")
-        chunk = chunks.get(chunk_id)
-        if chunk is None:
-            _bump(trace, "missing_chunk")
+        document_id = _candidate_id(candidate, "document_id")
+        document = documents.get(document_id)
+        if document is None:
+            _bump(trace, "missing_document")
             continue
-        if not _chunk_route_allowed(chunk, allowed_sensitivities):
-            _bump(trace, "route_denied_chunk")
+        if not _document_route_allowed(document, allowed_sensitivities):
+            _bump(trace, "route_denied_document")
             continue
-        if not can_access_chunk(actor, chunk):
-            _bump(trace, "policy_denied_chunk")
+        if not can_access_search_document(actor, document):
+            _bump(trace, "policy_denied_document")
             continue
-        if not _chunk_is_retrievable(chunk):
-            _bump(trace, "inactive_or_blocked_chunk")
+        if not _document_is_retrievable(document):
+            _bump(trace, "inactive_or_blocked_document")
             continue
-        trust_decision = effective_source_trust(chunk.snapshot.source)
-        if trusted_context_only and not source_allows_direct_context(chunk.snapshot.source, "retrieved_chunk"):
-            _bump(trace, "trust_gate_denied_chunk")
+        if document.corpus_type not in allowed_corpus_types:
+            _bump(trace, "corpus_denied_document")
             continue
 
-        citation = _chunk_citation(chunk, trust_decision=trust_decision)
+        source = search_document_source(document)
+        trust_decision = effective_source_trust(source)
+        if trusted_context_only and not source_allows_direct_context(source, "retrieved_chunk"):
+            _bump(trace, "trust_gate_denied_document")
+            continue
+
+        citation = _document_citation(document, trust_decision=trust_decision)
         if citation is None:
-            _bump(trace, "missing_chunk_citation")
+            _bump(trace, "missing_document_citation")
             continue
         try:
-            text = read_safe_chunk_text(chunk)
+            text = read_search_document_text(document)
         except (OSError, ValidationError):
-            _bump(trace, "unsafe_or_missing_chunk_text")
+            _bump(trace, "unsafe_or_missing_document_text")
             continue
 
+        metadata = _safe_metadata(
+            {
+                **_candidate_metadata(candidate),
+                **dict(document.metadata or {}),
+                "corpus_type": document.corpus_type,
+                "source_code": _document_source_code(document, source=source),
+                "source_kind": _document_source_kind(document, source=source),
+                "source_object_id": _document_source_object_id(document),
+                "sensitivity": search_document_sensitivity(document),
+                "trust_status": trust_decision.trust_status,
+                "authority_class": trust_decision.authority_class,
+                "trusted_for_context": trust_decision.trusted_for_context,
+                "index_status": document.index_status,
+            }
+        )
+        is_knowledge = document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE
         yield {
-            "id": chunk.chunk_id,
-            "kind": "memory_chunk",
+            "id": document.document_id,
+            "kind": "knowledge" if is_knowledge else "source_data",
+            "result_type": "knowledge" if is_knowledge else "source_data",
+            "knowledge_id": document.knowledge_item.memory_id if is_knowledge and document.knowledge_item_id else "",
             "text": text,
             "score": _candidate_score(candidate),
             "citation_ids": [citation["id"]],
             "citations": [citation],
-            "metadata": _safe_metadata(
-                {
-                    **_candidate_metadata(candidate),
-                    **dict(chunk.metadata or {}),
-                    "source_code": chunk.source_code,
-                    "source_object_id": chunk.source_object_id,
-                    "snapshot_hash": chunk.snapshot_hash,
-                    "position": chunk.position,
-                    "sensitivity": chunk.sensitivity,
-                    "trust_status": trust_decision.trust_status,
-                    "authority_class": trust_decision.authority_class,
-                    "trusted_for_context": trust_decision.trusted_for_context,
-                }
-            ),
+            "source_refs": _document_source_refs(document),
+            "source_object_id": _document_source_object_id(document),
+            "source_uri": _document_source_uri(document),
+            "source_kind": _document_source_kind(document, source=source),
+            "source_code": _document_source_code(document, source=source),
+            "index_status": document.index_status,
+            "metadata": metadata,
         }
 
 
-def _graph_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only):
-    fact_ids = [_candidate_id(candidate, "fact_id") for candidate in candidates]
-    facts = _facts_by_id(fact_ids)
-
-    for candidate in candidates:
-        fact_id = _candidate_id(candidate, "fact_id")
-        fact = facts.get(fact_id)
-        if fact is None and isinstance(candidate, MemoryGraphFact):
-            fact = candidate
-        if fact is None:
-            _bump(trace, "missing_fact")
-            continue
-        if not _fact_route_allowed(fact, allowed_sensitivities):
-            _bump(trace, "route_denied_fact")
-            continue
-        if not can_access_graph_fact(actor, fact):
-            _bump(trace, "policy_denied_fact")
-            continue
-        if not _fact_is_retrievable(fact):
-            _bump(trace, "inactive_or_blocked_fact")
-            continue
-        trust_decision = effective_source_trust(fact.snapshot.source)
-        if trusted_context_only and not source_allows_direct_context(fact.snapshot.source, "graph_fact"):
-            _bump(trace, "trust_gate_denied_fact")
-            continue
-
-        citation = _fact_citation(fact, trust_decision=trust_decision)
-        if citation is None:
-            _bump(trace, "missing_fact_citation")
-            continue
-
-        yield {
-            "id": fact.fact_id,
-            "kind": "memory_graph_fact",
-            "fact": {
-                "subject_id": fact.subject_id,
-                "predicate": fact.predicate,
-                "object_id": fact.object_id,
-                "subject_type": fact.subject_type,
-                "object_type": fact.object_type,
-                "confidence": str(fact.confidence),
-            },
-            "score": _candidate_score(candidate),
-            "citation_ids": [citation["id"]],
-            "citations": [citation],
-            "metadata": _safe_metadata(
-                {
-                    **_candidate_metadata(candidate),
-                    **dict(fact.metadata or {}),
-                    "source_code": fact.source_chunk.source_code,
-                    "source_object_id": fact.source_chunk.source_object_id,
-                    "snapshot_hash": fact.snapshot_hash,
-                    "sensitivity": fact.sensitivity,
-                    "trust_status": trust_decision.trust_status,
-                    "authority_class": trust_decision.authority_class,
-                    "trusted_for_context": trust_decision.trusted_for_context,
-                }
-            ),
-        }
-
-
-def _append_item(item, items, citations_by_id, returned_chunk_ids, returned_fact_ids, limit):
+def _append_item(item, items, citations_by_id, returned_document_ids, returned_fact_ids, limit):
     if len(items) >= limit:
         return
-    citations = item.pop("citations")
-    if not citations:
-        return
+    citations = item.pop("citations", [])
     for citation in citations:
         citations_by_id.setdefault(citation["id"], citation)
-    if item["kind"] == "memory_chunk":
-        returned_chunk_ids.append(item["id"])
+    if item["kind"] in {"knowledge", "source_data"}:
+        returned_document_ids.append(item["id"])
     elif item["kind"] == "memory_graph_fact":
         returned_fact_ids.append(item["id"])
     items.append(item)
 
 
-def _chunks_by_id(chunk_ids):
-    ids = [chunk_id for chunk_id in _dedupe(chunk_ids) if chunk_id]
+def _documents_by_id(document_ids):
+    ids = [document_id for document_id in _dedupe(document_ids) if document_id]
     if not ids:
         return {}
-    records = MemoryChunk.objects.select_related("snapshot", "snapshot__source").filter(chunk_id__in=ids)
-    by_id = {chunk.chunk_id: chunk for chunk in records}
-    return {chunk_id: by_id[chunk_id] for chunk_id in ids if chunk_id in by_id}
+    records = (
+        MemorySearchDocument.objects.select_related("knowledge_item", "source_object", "source_object__source")
+        .filter(document_id__in=ids)
+    )
+    by_id = {document.document_id: document for document in records}
+    return {document_id: by_id[document_id] for document_id in ids if document_id in by_id}
 
 
-def _facts_by_id(fact_ids):
-    ids = [fact_id for fact_id in _dedupe(fact_ids) if fact_id]
-    if not ids:
-        return {}
-    records = MemoryGraphFact.objects.select_related("source_chunk", "snapshot", "snapshot__source").filter(fact_id__in=ids)
-    by_id = {fact.fact_id: fact for fact in records}
-    return {fact_id: by_id[fact_id] for fact_id in ids if fact_id in by_id}
-
-
-def _chunk_route_allowed(chunk, allowed_sensitivities) -> bool:
+def _document_route_allowed(document: MemorySearchDocument, allowed_sensitivities) -> bool:
+    sensitivity = search_document_sensitivity(document)
     return (
-        chunk.sensitivity in allowed_sensitivities
-        and route_allows_context_kind(chunk.sensitivity, "retrieved_chunk")
-        and route_allows_context_kind(chunk.sensitivity, "citation")
+        sensitivity in allowed_sensitivities
+        and route_allows_context_kind(sensitivity, "retrieved_chunk")
+        and route_allows_context_kind(sensitivity, "citation")
     )
 
 
-def _fact_route_allowed(fact, allowed_sensitivities) -> bool:
-    return (
-        fact.sensitivity in allowed_sensitivities
-        and route_allows_context_kind(fact.sensitivity, "graph_fact")
-        and route_allows_context_kind(fact.sensitivity, "citation")
-    )
+def _document_is_retrievable(document: MemorySearchDocument) -> bool:
+    return document.index_status == MemorySearchDocument.IndexStatus.READY
 
 
-def _chunk_is_retrievable(chunk: MemoryChunk) -> bool:
-    return (
-        chunk.is_active
-        and chunk.snapshot.is_active
-        and chunk.snapshot.status == MemorySnapshot.Status.READY
-    )
-
-
-def _fact_is_retrievable(fact: MemoryGraphFact) -> bool:
-    return (
-        fact.is_active
-        and fact.source_chunk.is_active
-        and fact.snapshot.is_active
-        and fact.snapshot.status == MemorySnapshot.Status.READY
-    )
-
-
-def _chunk_citation(chunk: MemoryChunk, *, trust_decision) -> dict | None:
-    if not chunk.chunk_id or not chunk.source_code or not chunk.source_object_id or not chunk.snapshot_hash:
+def _document_citation(document: MemorySearchDocument, *, trust_decision) -> dict | None:
+    source_code = _document_source_code(document)
+    if not document.document_id or not source_code:
         return None
     return {
-        "id": f"memory-chunk:{chunk.chunk_id}",
-        "kind": "memory_chunk",
-        "source_code": chunk.source_code,
-        "source_object_id": chunk.source_object_id,
-        "chunk_id": chunk.chunk_id,
-        "snapshot_hash": chunk.snapshot_hash,
-        "position": chunk.position,
-        "text_hash": chunk.text_hash,
-        "sensitivity": chunk.sensitivity,
+        "id": f"memory-document:{document.document_id}",
+        "kind": "knowledge" if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE else "source_data",
+        "result_type": "knowledge" if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE else "source_data",
+        "document_id": document.document_id,
+        "knowledge_id": document.knowledge_item.memory_id if document.knowledge_item_id else "",
+        "source_code": source_code,
+        "source_kind": _document_source_kind(document),
+        "source_object_id": _document_source_object_id(document),
+        "source_refs": _document_source_refs(document),
+        "body_hash": document.body_hash,
+        "sensitivity": search_document_sensitivity(document),
         "trust_status": trust_decision.trust_status,
         "authority_class": trust_decision.authority_class,
         "trusted_for_context": trust_decision.trusted_for_context,
     }
 
 
-def _fact_citation(fact: MemoryGraphFact, *, trust_decision) -> dict | None:
-    chunk = fact.source_chunk
-    chunk_id = getattr(chunk, "chunk_id", "")
-    if not fact.fact_id or not chunk_id:
-        return None
-    if not chunk.source_code or not chunk.source_object_id or not fact.snapshot_hash:
-        return None
-    return {
-        "id": f"memory-fact:{fact.fact_id}",
-        "kind": "memory_graph_fact",
-        "fact_id": fact.fact_id,
-        "source_code": chunk.source_code,
-        "source_object_id": chunk.source_object_id,
-        "chunk_id": chunk_id,
-        "snapshot_hash": fact.snapshot_hash,
-        "position": chunk.position,
-        "text_hash": chunk.text_hash,
-        "sensitivity": fact.sensitivity,
-        "trust_status": trust_decision.trust_status,
-        "authority_class": trust_decision.authority_class,
-        "trusted_for_context": trust_decision.trusted_for_context,
+def _normalize_search_mode(value) -> str:
+    mode = str(value or "knowledge_default").strip()
+    allowed = {
+        "knowledge_default",
+        "knowledge_precise",
+        "knowledge_semantic",
+        "knowledge_graph",
+        "source_explicit",
+        "source_fallback",
     }
+    if mode not in allowed:
+        raise ValidationError("Unsupported memory search mode.")
+    return mode
 
 
-def _resolve_safe_text_path(text_path: str) -> Path:
-    value = str(text_path or "").strip()
-    if not value:
-        raise ValidationError("Memory chunk text_path is empty.")
+def _allowed_corpus_types(search_mode: str) -> set[str]:
+    if search_mode == "source_explicit":
+        return {"source_data"}
+    if search_mode == "source_fallback":
+        return {"knowledge", "source_data"}
+    return {"knowledge"}
 
-    path = Path(value)
-    if path.is_absolute():
-        candidates = (path,)
-    else:
-        candidates = (
-            Path(settings.BASE_DIR) / path,
-            Path(settings.DATA_DIR) / path,
+
+def _source_data_fallback_allowed(search_mode: str, include_source_data: bool) -> bool:
+    return bool(include_source_data or search_mode in {"knowledge_default", "source_fallback", "source_explicit"})
+
+
+def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, trace):
+    terms = _query_terms(query)
+    if not terms:
+        return []
+    queryset = MemorySourceObject.objects.select_related("source").filter(source__status="enabled")
+    if allowed_sensitivities:
+        queryset = queryset.filter(source__sensitivity__in=allowed_sensitivities)
+    items = []
+    actor_tokens = user_scope_tokens(actor)
+    for source_object in queryset.order_by("-last_seen_at", "id")[:200]:
+        haystack = " ".join(
+            [
+                source_object.file_name,
+                source_object.relative_path,
+                source_object.object_uri,
+                source_object.object_id,
+            ]
+        ).lower()
+        if not all(term.lower() in haystack for term in terms[:3]):
+            continue
+        object_tokens = set((source_object.metadata or {}).get("scope_tokens") or [])
+        if object_tokens and not object_tokens & actor_tokens and not getattr(actor, "is_superuser", False):
+            _bump(trace, "source_data_scope_denied")
+            continue
+        if not object_tokens and not getattr(actor, "is_superuser", False):
+            _bump(trace, "source_data_missing_scope")
+            continue
+        document = _source_object_document(source_object)
+        items.append(
+            {
+                "id": document.document_id,
+                "kind": "source_data",
+                "result_type": "source_data",
+                "source_object_id": source_object.object_id,
+                "source_uri": source_object.object_uri,
+                "source_kind": source_object.source.source_kind,
+                "source_code": source_object.source.code,
+                "index_status": document.index_status,
+                "warning": "Это исходный объект, а не принятое знание.",
+                "metadata": _safe_metadata(
+                    {
+                        "file_name": source_object.file_name,
+                        "relative_path": source_object.relative_path,
+                        "content_hash": source_object.content_hash,
+                        "sensitivity": source_object.source.sensitivity,
+                        "corpus_type": "source_data",
+                    }
+                ),
+            }
         )
-
-    safe_root = (Path(settings.DATA_DIR) / "memory" / "safe_corpus").resolve()
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        if _is_relative_to(resolved, safe_root):
-            return resolved
-
-    raise ValidationError("Memory chunk text_path is outside the safe corpus.")
+        if len(items) >= limit:
+            break
+    trace["source_data_fallback_count"] = len(items)
+    return items
 
 
-def _is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
+def _source_object_document(source_object: MemorySourceObject) -> MemorySearchDocument:
+    document_id = "source:" + hashlib.sha256(f"{source_object.source.code}:{source_object.object_id}".encode("utf-8")).hexdigest()[:40]
+    document, _ = MemorySearchDocument.objects.get_or_create(
+        document_id=document_id,
+        defaults={
+            "corpus_type": MemorySearchDocument.CorpusType.SOURCE_DATA,
+            "object_kind": MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+            "source_object": source_object,
+            "body_hash": source_object.content_hash,
+            "index_status": MemorySearchDocument.IndexStatus.READY,
+            "metadata": {
+                "file_name": source_object.file_name,
+                "relative_path": source_object.relative_path,
+                "content_hash": source_object.content_hash,
+            },
+        },
+    )
+    return document
+
+
+def _document_source_code(document: MemorySearchDocument, *, source=None) -> str:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        return document.knowledge_item.source_code
+    source = source or search_document_source(document)
+    return source.code if source is not None else ""
+
+
+def _document_source_kind(document: MemorySearchDocument, *, source=None) -> str:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        return document.knowledge_item.source_kind
+    source = source or search_document_source(document)
+    return source.source_kind if source is not None else ""
+
+
+def _document_source_object_id(document: MemorySearchDocument) -> str:
+    if document.source_object_id:
+        return document.source_object.object_id
+    if document.knowledge_item_id:
+        return document.knowledge_item.memory_id
+    return ""
+
+
+def _document_source_uri(document: MemorySearchDocument) -> str:
+    if document.source_object_id:
+        return document.source_object.object_uri
+    if document.knowledge_item_id:
+        return f"knowledge_repo:{document.knowledge_item.knowledge_file_path}"
+    return ""
+
+
+def _document_source_refs(document: MemorySearchDocument) -> list[dict]:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        return list(document.knowledge_item.source_refs or [])
+    if document.source_object_id:
+        return [{"kind": "source_object", "value": document.source_object.object_id}]
+    return []
 
 
 def _safe_metadata(metadata: Mapping[str, Any]) -> dict:
@@ -543,12 +571,7 @@ def _item_source_key(item: Mapping[str, Any]) -> str:
 
 
 def _item_text(item: Mapping[str, Any]) -> str:
-    if "text" in item:
-        return str(item.get("text") or "")
-    fact = item.get("fact")
-    if isinstance(fact, Mapping):
-        return " ".join(str(fact.get(key, "")) for key in ("subject_id", "predicate", "object_id"))
-    return ""
+    return str(item.get("text") or "")
 
 
 def _estimate_tokens(text: str) -> int:
@@ -651,5 +674,5 @@ def _dedupe(values):
 
 __all__ = [
     "memory_search",
-    "read_safe_chunk_text",
+    "read_search_document_text",
 ]

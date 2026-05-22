@@ -7,7 +7,7 @@ Welcome to the `local-business-suite` architecture documentation. This project i
 The system is organized into several layers:
 1.  **Core Platform:** Django-based monorepo providing authentication, roles, shared dictionaries, and the primary web interface.
 2.  **AI Block:** An autonomous agent runtime based on LangGraph and MCP that interacts with the platform via a secure tool gateway.
-3.  **Memory Layer:** Django-owned AI memory with safe corpus, retrieval tools, graph facts, document ingestion, moderated graph schema bootstrapping, chat-derived personal/organization memory, secret handles and planned external information system connectors.
+3.  **Memory Layer:** Django-owned AI memory moving toward file-backed accepted knowledge, separate source data, separate indexes, graph facts, document ingestion, moderated graph schema bootstrapping, chat-derived personal/organization memory, secret handles and planned external information system connectors.
 4.  **Analytics Layer:** A knowledge-driven business analytics path that combines memory deltas, email contents, documents, optional DMS/API enrichment, Parquet/DuckDB storage, metric monitors and AI diagnostic workflows.
 
 ## Key Documentation
@@ -26,6 +26,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[Memory Completion Gap Analysis](MEMORY_COMPLETION_GAP_ANALYSIS.md)**: Current gaps between implemented MVP and target memory system.
 - **[Chat Memory and Secret Handles Plan](MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md)**: Plan for `memory.remember`, sleep-time reflection, organization candidates and secret handles.
 - **[External Systems Connector Plan](MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md)**: Plan for collecting knowledge from external information systems through queued connectors and normalized landing zone.
+- **[File-backed Knowledge Plan](MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md)**: Target memory architecture with accepted knowledge in Git-versioned files, separate databases, temporary source processing and unified search over knowledge and source data.
 
 ## Core Principles
 
@@ -44,3 +45,4 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0005: Chat-derived memory, reflection jobs and secret handles](../adr/ADR-0005-chat-derived-memory-and-secret-handles.md)
 - [ADR-0006: External system knowledge connectors](../adr/ADR-0006-external-system-knowledge-connectors.md)
 - [ADR-0008: Knowledge-driven business analytics](../adr/ADR-0008-knowledge-driven-business-analytics.md)
+- [ADR-0011: File-backed knowledge and unified search](../adr/ADR-0011-file-backed-knowledge-and-unified-search.md)

@@ -1,0 +1,35 @@
+{
+  "task_id": "02-knowledge-indexing-without-chunks",
+  "title": "Перевести индексацию знаний с chunks на document_id",
+  "status": "completed",
+  "objective": "Сделать так, чтобы файловое знание индексировалось через MemorySearchDocument, а не через MemorySnapshot и MemoryChunk.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/knowledge_files.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/management/commands/knowledge_index_worker.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py"
+  ],
+  "requirements": [
+    "index_knowledge_item должен создавать или обновлять MemorySearchDocument с corpus_type=knowledge.",
+    "Полнотекстовый backend должен принимать document_id вместо chunk_id или иметь совместимый thin adapter без использования MemoryChunk.",
+    "Индексный текст для knowledge берется из файла знания через reader/knowledge_files helper.",
+    "Результат поиска должен возвращать knowledge_id, result_type=knowledge, text, source_refs, source_kind, scope и index_status.",
+    "Если индекс еще не готов, knowledge result должен поддерживать degraded mode по файлу знания со статусом indexing_pending.",
+    "Секретные значения не должны попадать в индекс."
+  ],
+  "acceptance_checks": [
+    "После обработки memory.remember создается MemorySearchDocument.",
+    "После обработки memory.remember не создаются MemorySnapshot и MemoryChunk.",
+    "memory.search находит сохраненное знание по тексту.",
+    "Поиск не требует chunk_id.",
+    "Пользователь без прав не видит чужое персональное знание."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "./.venv/bin/python manage.py memory_file_backed_e2e"
+  ]
+}

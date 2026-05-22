@@ -4,8 +4,11 @@ import apps.ai.models
 
 
 def backfill_expires_at(apps, schema_editor):
+    table_names = set(schema_editor.connection.introspection.table_names())
+    if "ai_pendingaction" not in table_names:
+        return
     PendingAction = apps.get_model("ai", "PendingAction")
-    PendingAction.objects.filter(expires_at__isnull=True).update(
+    PendingAction.objects.using(schema_editor.connection.alias).filter(expires_at__isnull=True).update(
         expires_at=django.utils.timezone.now() + django.utils.timezone.timedelta(minutes=15)
     )
 

@@ -17,6 +17,7 @@ class SlashCommand(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="slash_commands",
+        db_constraint=False,
     )
     name = models.CharField(
         max_length=64,
@@ -58,7 +59,12 @@ class ChatSession(models.Model):
         ARCHIVED = "archived", "Archived"
 
     external_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ai_chat_sessions")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ai_chat_sessions",
+        db_constraint=False,
+    )
     title = models.CharField(max_length=255, blank=True)
     channel = models.CharField(max_length=32, choices=Channel.choices, default=Channel.INTERNAL)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
@@ -116,7 +122,12 @@ class PendingAction(models.Model):
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     tool_code = models.CharField(max_length=120)
     action_kind = models.CharField(max_length=16)
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ai_pending_actions")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ai_pending_actions",
+        db_constraint=False,
+    )
     session = models.ForeignKey(
         ChatSession,
         on_delete=models.SET_NULL,
@@ -171,7 +182,12 @@ class AgentActionLog(models.Model):
         null=True,
         related_name="actions",
     )
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ai_actions")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="ai_actions",
+        db_constraint=False,
+    )
     tool_code = models.CharField(max_length=120)
     action_kind = models.CharField(max_length=16, choices=ActionKind.choices)
     status = models.CharField(max_length=16, choices=Status.choices)

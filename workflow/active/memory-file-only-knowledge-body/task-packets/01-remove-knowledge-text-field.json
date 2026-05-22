@@ -1,0 +1,31 @@
+{
+  "task_id": "01-remove-knowledge-text-field",
+  "title": "Удалить MemoryKnowledgeItem.text",
+  "status": "ready",
+  "objective": "Убрать хранение полного текста знания из базы metadata.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/admin.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py"
+  ],
+  "requirements": [
+    "Удалить поле MemoryKnowledgeItem.text.",
+    "Так как внедрения не было, не писать data migration для переноса текста.",
+    "Оставить text_hash, knowledge_file_path, knowledge_file_hash и knowledge_file_commit.",
+    "Обновить admin, factories и тесты так, чтобы они не создавали MemoryKnowledgeItem с text.",
+    "Проверить, что в коде нет чтения item.text для активного пути."
+  ],
+  "acceptance_checks": [
+    "rg по apps без migrations не находит активных обращений к MemoryKnowledgeItem.text или item.text в контексте знания.",
+    "makemigrations --check --dry-run проходит после созданной миграции.",
+    "manage.py check проходит."
+  ],
+  "verification_commands": [
+    "rg -n \"MemoryKnowledgeItem\\.text|item\\.text|text=\\\"\" apps/memory apps/ai --glob '!**/migrations/**'",
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests"
+  ]
+}

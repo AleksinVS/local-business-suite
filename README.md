@@ -45,13 +45,15 @@
 
 - синхронизирует источники из `contracts/ai/memory_sources.json`;
 - пропускает данные через privacy pipeline перед индексированием;
-- хранит safe corpus, manifests и локальные индексы в `data/memory/`;
-- поддерживает полнотекстовый MVP backend на SQLite FTS;
+- хранит принятые знания в runtime Git-репозитории `data/knowledge_repo/`;
+- хранит метаданные знаний в `data/db/knowledge_meta.sqlite3`, а индексы отдельно в `data/indexes/`;
+- поддерживает локальный SQLite-поиск по перестраиваемым токенам без хранения полного текста знания в индексе;
 - хранит графовые факты через backend-neutral интерфейс;
 - обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
 - поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа;
 - поддерживает MVP подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
+- выносит данные чатов в `data/db/chat.sqlite3`, а управляющие модели аналитики в `data/db/analytics_control.sqlite3`;
 - возвращает AI-чату только безопасные результаты с `citations`;
 - пишет каждый разрешенный или запрещенный поиск в `MemoryAccessAudit`.
 
@@ -62,11 +64,15 @@
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — бизнес-опросники для подключения внешних ИС и первичного описания сущностей графа знаний.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — как развернуть, настроить и проверить память.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации и архитектурные пояснения.
+- `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md` — целевая схема файловых знаний, раздельных баз и единого поиска.
+- `docs/architecture/MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md` — план строгого хранения текста знания только в файле знания.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — финальный план ingestion-коннектора и bootstrapping схемы графа.
 - `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план сбора знаний из внешних информационных систем.
 - `docs/adr/ADR-0003-ai-memory-service.md` — архитектурное решение по памяти.
 - `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md` — архитектурное решение по ingestion и bootstrapping.
 - `docs/adr/ADR-0006-external-system-knowledge-connectors.md` — архитектурное решение по коннекторам внешних ИС.
+- `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md` — архитектурное решение по файловым знаниям и единому поиску.
+- `docs/adr/ADR-0013-file-only-knowledge-body.md` — архитектурное решение: текст знания только в файле, индекс перестраиваемый.
 - `contracts/ai/memory_sources.json` — источники памяти.
 - `contracts/ai/memory_profiles.json` — профили chunking, extraction, indexing и ranking.
 - `contracts/ai/memory_routing.json` — правила маршрутизации по sensitivity.
@@ -77,6 +83,8 @@
 
 - production scheduler/Celery пока не подключен;
 - embeddings-интерфейс заложен, но в MVP используется локальный full-text backend;
+- старый слой `MemorySnapshot`/`MemoryChunk` удален из текущей схемы; индексация идет через `MemorySearchDocument`;
+- отдельное DuckDB-хранилище аналитических срезов еще не подключено;
 - external connector MVP имеет generic envelope/queue/worker, но source-specific pilot adapter выбирается и реализуется отдельно;
 - Kuzu backend подготовлен как lazy placeholder;
 - ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.log`), а Office/PDF/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
@@ -143,6 +151,10 @@ python manage.py memory_prepare_bootstrap_package --source-code <code> --departm
 python manage.py memory_graph_extract --source-code <code> --dry-run
 python manage.py memory_reindex --dry-run
 python manage.py memory_eval --dry-run
+python manage.py knowledge_writer_worker --dry-run
+python manage.py knowledge_index_worker --dry-run
+python manage.py knowledge_reflection_worker --dry-run
+python manage.py memory_verify_knowledge_files --strict
 ```
 
 Ожидаемый smoke-результат для eval:
@@ -176,6 +188,10 @@ Runtime-данные не коммитятся:
 
 - база данных, медиа и логи;
 - `data/contracts/` — рабочие копии контрактов;
+- `data/knowledge_repo/` — runtime Git-репозиторий знаний;
+- `data/db/chat.sqlite3`, `data/db/knowledge_meta.sqlite3`, `data/db/analytics_control.sqlite3`;
+- `data/indexes/` — полнотекстовые, векторные и графовые индексы;
+- `data/processing/` — временные raw/safe/extraction слои;
 - `data/memory/safe_corpus/`;
 - `data/memory/indexes/`;
 - `data/memory/manifests/`;

@@ -1,0 +1,35 @@
+{
+  "task_id": "06-reflection-and-migration-hardening",
+  "title": "Отдельная рефлексия, миграция и усиление надежности",
+  "status": "implemented",
+  "goal": "Отделить ночную рефлексию от обработки записи, завершить миграцию существующих знаний и добавить проверки устойчивости.",
+  "write_scope": [
+    "apps/memory/",
+    "apps/analytics/",
+    "apps/ai/",
+    "docs/",
+    "workflow/active/memory-file-backed-knowledge/"
+  ],
+  "steps": [
+    "Переименовать совместимый обработчик очереди записи, оставив старую команду как alias на переходный период.",
+    "Добавить knowledge_reflection_worker для off-peak обработки.",
+    "Добавить генерацию summary-файлов рядом со знаниями.",
+    "Добавить кандидатов в корпоративные знания из персональных знаний через аудит.",
+    "Добавить кандидатов новых типов графа по статистике, без автоматического применения.",
+    "Добавить миграционную проверку: old MemoryKnowledgeItem count equals exported file count with matching hashes.",
+    "Добавить e2e-сценарий полного пути."
+  ],
+  "acceptance_checks": [
+    "Обработчик записи и ночная рефлексия запускаются разными командами.",
+    "Summary-файлы пересобираются из принятых знаний.",
+    "Персональные знания становятся organization candidates, но не публикуются без аудита.",
+    "Новые graph entity types создаются как candidates.",
+    "Миграционная проверка подтверждает соответствие старых записей и файлов."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests apps.analytics.tests",
+    "python manage.py memory_eval --dry-run",
+    "npm run test:e2e"
+  ]
+}

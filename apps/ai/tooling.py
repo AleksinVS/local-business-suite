@@ -125,6 +125,8 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
             sensitivity=payload.get("sensitivity"),
             limit=payload.get("limit", 5),
             request_id=actor_context.get("request_id", ""),
+            search_mode=payload.get("search_mode", "knowledge_default"),
+            include_source_data=bool(payload.get("include_source_data", False)),
         )
     elif tool_code == "memory.remember":
         from apps.memory.services import queue_memory_remember_for_actor

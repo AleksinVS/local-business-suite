@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
-from .models import MemoryChunk, MemoryGraphFact, MemorySource
+from .models import MemorySearchDocument, MemorySource
 
 PUBLIC_SCOPE_TOKEN = "org:default"
 TRUSTED_STATUS = "trusted"
@@ -77,16 +77,23 @@ def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
     return bool(set(required_tokens) & set(allowed_tokens))
 
 
-def can_access_chunk(user, chunk: MemoryChunk) -> bool:
+def can_access_search_document(user, document: MemorySearchDocument) -> bool:
     if getattr(user, "is_superuser", False):
         return True
-    return chunk.is_active and scope_tokens_match(chunk.scope_tokens, user_scope_tokens(user))
+    return document.index_status == MemorySearchDocument.IndexStatus.READY and scope_tokens_match(
+        search_document_scope_tokens(document),
+        user_scope_tokens(user),
+    )
 
 
-def can_access_graph_fact(user, fact: MemoryGraphFact) -> bool:
+def can_access_knowledge_item(user, item) -> bool:
     if getattr(user, "is_superuser", False):
         return True
-    return fact.is_active and scope_tokens_match(fact.scope_tokens, user_scope_tokens(user))
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if item.status != "active":
+        return False
+    return scope_tokens_match(item.scope_tokens, user_scope_tokens(user))
 
 
 def effective_source_trust(source: MemorySource | None) -> SourceTrustDecision:
@@ -141,6 +148,38 @@ def source_allows_direct_context(source: MemorySource | None, context_kind: str 
     if context_kind and decision.trusted_context_kinds:
         return context_kind in decision.trusted_context_kinds
     return True
+
+
+def search_document_scope_tokens(document: MemorySearchDocument) -> list[str]:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        return list(document.knowledge_item.scope_tokens or [])
+    if document.source_object_id:
+        return list((document.source_object.metadata or {}).get("scope_tokens") or [])
+    return []
+
+
+def search_document_sensitivity(document: MemorySearchDocument) -> str:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        return document.knowledge_item.sensitivity
+    if document.source_object_id and document.source_object.source_id:
+        return document.source_object.source.sensitivity
+    return ""
+
+
+def search_document_source(document: MemorySearchDocument) -> MemorySource | None:
+    if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
+        source = MemorySource.objects.filter(code=document.knowledge_item.source_code).first()
+        if source is not None:
+            return source
+        fallback_code = (
+            "ai_chat_organization"
+            if document.knowledge_item.scope == "organization"
+            else "ai_chat_personal"
+        )
+        return MemorySource.objects.filter(code=fallback_code).first()
+    if document.source_object_id:
+        return document.source_object.source
+    return None
 
 
 def _user_has_role_flag(user, flag: str) -> bool:

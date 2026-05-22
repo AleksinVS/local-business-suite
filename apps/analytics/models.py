@@ -65,6 +65,7 @@ class AnalyticsExtractionRun(models.Model):
         related_name="analytics_extraction_runs",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -206,6 +207,7 @@ class AnalyticsDuplicateCandidate(models.Model):
         related_name="analytics_duplicate_reviews",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -370,6 +372,7 @@ class AnalyticsDiagnosticRun(models.Model):
         related_name="analytics_diagnostic_runs",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -436,6 +439,7 @@ class AnalyticsMetricCandidate(models.Model):
         related_name="analytics_metric_candidate_reviews",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -478,7 +482,12 @@ class AnalyticsSampleManifest(models.Model):
 
 
 class AnalyticsAccessAudit(models.Model):
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="analytics_access_audits")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="analytics_access_audits",
+        db_constraint=False,
+    )
     action = models.CharField(max_length=120)
     decision = models.CharField(max_length=32)
     scope_tokens = models.JSONField(default=list, blank=True)

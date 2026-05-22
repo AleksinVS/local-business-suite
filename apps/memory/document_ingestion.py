@@ -10,7 +10,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from .acl import acl_blocks_ingestion, resolve_file_acl, scope_tokens_for_source_object
-from .graph_backends import DjangoGraphMemoryBackend
 from .models import (
     MemoryGraphEntity,
     MemoryGraphExtractionRun,
@@ -18,12 +17,13 @@ from .models import (
     MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
-    MemorySnapshot,
+    MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
 )
 from .security import assert_no_secrets
-from .services import apply_snapshot_privacy_pipeline, index_ready_snapshot_text
+from .deidentification import deidentify_text
+from .vector_backends import MemoryIndexRecord, get_default_backend
 
 
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log"}
@@ -175,7 +175,7 @@ def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=Non
                 continue
 
             try:
-                snapshot_result = ingest_source_object_text(
+                document_result = ingest_source_object_text(
                     source_object=source_object,
                     safe_text=outcome["text"],
                     partial_reason=outcome["partial_reason"],
@@ -199,7 +199,7 @@ def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=Non
                 status=outcome["status"],
                 partial_reason=outcome["partial_reason"],
                 ingested=True,
-                metadata={"snapshot_id": snapshot_result["snapshot_id"], **outcome["metadata"]},
+                metadata={"document_id": document_result["document_id"], **outcome["metadata"]},
             )
             metrics["partial" if outcome["status"] == MemorySourceObject.IngestionStatus.PARTIAL else "ingested"] += 1
         return _finish_run(run, metrics=metrics)
@@ -216,25 +216,28 @@ def prepare_bootstrap_package(*, source: MemorySource, department: str, dry_run=
         objects = objects[:limit]
     blocks = []
     for source_object in objects:
-        snapshots = MemorySnapshot.objects.filter(source=source, source_object_id=source_object.object_id, is_active=True)
-        for snapshot in snapshots:
-            for chunk in snapshot.chunks.filter(is_active=True).order_by("position"):
-                try:
-                    text = Path(chunk.text_path).read_text(encoding="utf-8")
-                except OSError:
-                    text = ""
-                blocks.append(
-                    {
-                        "source_code": source.code,
-                        "department": department,
-                        "object_id": source_object.object_id,
-                        "relative_path": source_object.relative_path,
-                        "snapshot_hash": snapshot.content_hash,
-                        "chunk_id": chunk.chunk_id,
-                        "text_hash": chunk.text_hash,
-                        "text": text,
-                    }
-                )
+        document = MemorySearchDocument.objects.filter(
+            source_object=source_object,
+            corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+            index_status=MemorySearchDocument.IndexStatus.READY,
+        ).first()
+        if document is None:
+            continue
+        try:
+            text = _read_text_file(Path(source_object.object_uri))
+        except OSError:
+            text = ""
+        blocks.append(
+            {
+                "source_code": source.code,
+                "department": department,
+                "object_id": source_object.object_id,
+                "relative_path": source_object.relative_path,
+                "document_id": document.document_id,
+                "text_hash": document.body_hash,
+                "text": text,
+            }
+        )
     package = {
         "source_code": source.code,
         "department": department,
@@ -269,7 +272,7 @@ def discover_schema_proposals_from_package(*, package, dry_run=False):
                     {
                         "source_code": block.get("source_code"),
                         "object_id": block.get("object_id"),
-                        "chunk_id": block.get("chunk_id"),
+                        "document_id": block.get("document_id"),
                         "text_hash": block.get("text_hash"),
                     }
                 )
@@ -299,45 +302,48 @@ def extract_graph_instances(*, source: MemorySource, dry_run=False, limit=None):
         status=MemoryGraphExtractionRun.Status.RUNNING,
         started_at=timezone.now(),
     )
-    metrics = {"chunks": 0, "entities": 0, "facts": 0, "review_items": 0, "dry_run": dry_run}
-    chunks = source.snapshots.filter(status=MemorySnapshot.Status.READY, is_active=True).prefetch_related("chunks")
+    metrics = {"documents": 0, "entities": 0, "facts": 0, "review_items": 0, "dry_run": dry_run}
+    documents = MemorySearchDocument.objects.select_related("source_object", "source_object__source").filter(
+        source_object__source=source,
+        corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+        index_status=MemorySearchDocument.IndexStatus.READY,
+    )
     try:
-        for snapshot in chunks:
-            for chunk in snapshot.chunks.filter(is_active=True).order_by("position"):
-                if limit and metrics["chunks"] >= limit:
-                    break
-                metrics["chunks"] += 1
-                text = Path(chunk.text_path).read_text(encoding="utf-8") if chunk.text_path and Path(chunk.text_path).exists() else ""
-                entity_payloads = _extract_simple_entities(text)
-                if dry_run:
-                    metrics["entities"] += len(entity_payloads)
-                    continue
-                for payload in entity_payloads:
-                    MemoryGraphEntity.objects.update_or_create(
-                        entity_id=payload["entity_id"],
-                        defaults={
-                            "entity_type": payload["entity_type"],
-                            "canonical_name": payload["canonical_name"],
-                            "aliases": [],
-                            "attributes": payload.get("attributes", {}),
-                            "scope_tokens": chunk.scope_tokens,
-                            "sensitivity": chunk.sensitivity,
-                            "is_active": True,
-                        },
-                    )
-                    metrics["entities"] += 1
-                if "unknown:" in text:
-                    MemoryGraphReviewItem.objects.create(
-                        item_kind=MemoryGraphReviewItem.ItemKind.UNKNOWN_TYPE,
-                        status=MemoryGraphReviewItem.Status.NEEDS_EXPERT_REVIEW,
-                        source=source,
-                        snapshot=snapshot,
-                        payload={"marker": "unknown:"},
-                        evidence=[{"chunk_id": chunk.chunk_id}],
-                    )
-                    metrics["review_items"] += 1
-            if limit and metrics["chunks"] >= limit:
+        for document in documents.order_by("document_id"):
+            if limit and metrics["documents"] >= limit:
                 break
+            metrics["documents"] += 1
+            try:
+                text = _read_text_file(Path(document.source_object.object_uri))
+            except OSError:
+                text = ""
+            entity_payloads = _extract_simple_entities(text)
+            if dry_run:
+                metrics["entities"] += len(entity_payloads)
+                continue
+            for payload in entity_payloads:
+                MemoryGraphEntity.objects.update_or_create(
+                    entity_id=payload["entity_id"],
+                    defaults={
+                        "entity_type": payload["entity_type"],
+                        "canonical_name": payload["canonical_name"],
+                        "aliases": [],
+                        "attributes": payload.get("attributes", {}),
+                        "scope_tokens": (document.source_object.metadata or {}).get("scope_tokens") or [],
+                        "sensitivity": document.source_object.source.sensitivity,
+                        "is_active": True,
+                    },
+                )
+                metrics["entities"] += 1
+            if "unknown:" in text:
+                MemoryGraphReviewItem.objects.create(
+                    item_kind=MemoryGraphReviewItem.ItemKind.UNKNOWN_TYPE,
+                    status=MemoryGraphReviewItem.Status.NEEDS_EXPERT_REVIEW,
+                    source=source,
+                    payload={"marker": "unknown:"},
+                    evidence=[{"document_id": document.document_id}],
+                )
+                metrics["review_items"] += 1
         run.status = MemoryGraphExtractionRun.Status.SUCCEEDED
         run.finished_at = timezone.now()
         run.metrics = metrics
@@ -535,47 +541,77 @@ def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: s
     scope_tokens = scope_tokens_for_source_object(source_object=source_object, profile=profile)
     if not scope_tokens:
         raise ValueError("No resolved memory scope tokens for source object.")
-    MemorySnapshot.objects.filter(source=source, source_object_id=source_object.object_id, is_active=True).update(
-        is_active=False,
-        valid_to=timezone.now(),
-        updated_at=timezone.now(),
-    )
-    snapshot = MemorySnapshot.objects.create(
-        source=source,
-        source_object_id=source_object.object_id,
-        content_hash=source_object.content_hash,
-        schema_version=getattr(settings, "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA", {}).get("schema_version", "memory-graph-schema-v1"),
-        extractor_version="memory-document-ingestion-mvp-v1",
-        status=MemorySnapshot.Status.READY,
-        extracted_at=timezone.now(),
-        raw_path=source_object.object_uri,
-        pii_policy_applied=source.pii_policy or "deidentify_before_index",
-        scope_tokens=scope_tokens,
-        sensitivity=source.sensitivity,
-        metadata={
-            "relative_path": source_object.relative_path,
-            "partial": bool(partial_reason),
-            "partial_reason": partial_reason,
-            "raw_mode": "reference_only",
-            "acl": (source_object.metadata or {}).get("acl", {}),
+    privacy_result = deidentify_text(safe_text or "", secret_key=settings.SECRET_KEY)
+    if privacy_result.blocked:
+        raise ValueError(privacy_result.reason or "Source object was blocked by privacy pipeline.")
+    document_id = _source_document_id(source_object)
+    metadata = {
+        "relative_path": source_object.relative_path,
+        "file_name": source_object.file_name,
+        "partial": bool(partial_reason),
+        "partial_reason": partial_reason,
+        "raw_mode": "reference_only",
+        "acl": (source_object.metadata or {}).get("acl", {}),
+        "source_object_id": source_object.object_id,
+    }
+    document, _ = MemorySearchDocument.objects.update_or_create(
+        document_id=document_id,
+        defaults={
+            "corpus_type": MemorySearchDocument.CorpusType.SOURCE_DATA,
+            "object_kind": MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+            "source_object": source_object,
+            "body_hash": sha256_text(privacy_result.safe_text),
+            "index_status": MemorySearchDocument.IndexStatus.READY,
+            "metadata": metadata,
+            "indexed_at": timezone.now(),
         },
     )
-    privacy_result = apply_snapshot_privacy_pipeline(
-        snapshot=snapshot,
-        text=safe_text,
-        secret_key=settings.SECRET_KEY,
+    source_object.metadata = {
+        **(source_object.metadata or {}),
+        "scope_tokens": scope_tokens,
+        "last_search_document_id": document.document_id,
+    }
+    source_object.save(update_fields=["metadata", "updated_at"])
+    index_text = " ".join(
+        value
+        for value in [
+            source_object.file_name,
+            source_object.relative_path,
+            source_object.object_id,
+            source_object.content_hash,
+        ]
+        if value
     )
-    if snapshot.status != MemorySnapshot.Status.READY:
-        raise ValueError(privacy_result.reason or "Snapshot was blocked by privacy pipeline.")
-    return index_ready_snapshot_text(
-        snapshot=snapshot,
-        safe_text=privacy_result.safe_text,
-        graph_backend=DjangoGraphMemoryBackend(),
+    get_default_backend().upsert(
+        MemoryIndexRecord(
+            document_id=document.document_id,
+            text=index_text,
+            metadata={
+                **metadata,
+                "corpus_type": "source_data",
+                "result_type": "source_data",
+                "source_code": source.code,
+                "source_kind": source.source_kind,
+                "source_object_id": source_object.object_id,
+            },
+            scope_tokens=scope_tokens,
+            sensitivity=source.sensitivity,
+            is_active=True,
+        )
     )
+    return {"document_id": document.document_id, "document_ids": [document.document_id], "source_object_id": source_object.object_id}
 
 
 def stable_object_id(*, source: MemorySource, relative_path: str):
     return "file:" + hashlib.sha256(f"{source.code}:{relative_path}".encode("utf-8")).hexdigest()[:40]
+
+
+def _source_document_id(source_object: MemorySourceObject):
+    return "source:" + hashlib.sha256(f"{source_object.source.code}:{source_object.object_id}".encode("utf-8")).hexdigest()[:40]
+
+
+def sha256_text(value: str):
+    return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
 
 
 def sha256_file(path: Path):

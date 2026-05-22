@@ -4,6 +4,31 @@
 
 ## Active
 
+### Файловые знания, раздельные базы и единый поиск
+
+Спроектирован целевой переход памяти: принятые знания хранятся в runtime Git-репозитории, исходные данные остаются в источниках, метаданные и индексы вынесены в отдельные базы, поиск по знаниям и файловому хранилищу идет через единый сервис.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
+- проектный план находится в `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
+- active planning находится в `docs/planning/active/memory-file-backed-knowledge.md`;
+- workflow package находится в `workflow/active/memory-file-backed-knowledge/`.
+
+Предварительный scope:
+- добавить runtime Git-репозиторий знаний и формат файла знания;
+- реализовать writer service с очередью, lock, temporary file, atomic rename и Git commit;
+- реализовать reader service с проверкой прав;
+- вынести metadata знаний, чаты и управляющие модели аналитики в отдельные базы;
+- сделать единый search/index service для корпусов `knowledge` и `source_data`;
+- заменить `MemorySnapshot`/`MemoryChunk` прямой индексной записью `MemorySearchDocument`;
+- добавить degraded mode для `indexing_pending`;
+- отделить ночную рефлексию от обработки записи;
+- мигрировать существующие `MemoryKnowledgeItem` в файлы с проверкой хэшей.
+
+Отдельный исполнительный блок по упрощению индексного слоя реализован и ожидает приемки/архивации:
+- active planning находится в `docs/planning/active/memory-snapshot-chunk-removal.md`;
+- workflow package находится в `workflow/active/memory-snapshot-chunk-removal/`.
+
 ### Trusted sources, claim/belief layer и lightweight retrieval
 
 Первый срез реализован, MVP-граница синхронизирована через `ADR-0010`: `MemoryBelief` переносится на следующие этапы, а главным объектом сохраненного знания становится `MemoryKnowledgeItem`. В active backlog остаются будущие claim/belief governance и production hardening после MVP.

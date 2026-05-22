@@ -32,9 +32,11 @@ from .services import (
 )
 
 User = get_user_model()
+RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
 
 
 class AnalyticsDashboardTests(TestCase):
+    databases = RUNTIME_DATABASES
     def setUp(self):
         self.department = Department.objects.create(name="Приемное отделение")
         self.device = MedicalDevice.objects.create(
@@ -70,6 +72,7 @@ class AnalyticsDashboardTests(TestCase):
 
 
 class KnowledgeDrivenAnalyticsTests(TestCase):
+    databases = RUNTIME_DATABASES
     def test_email_fixture_sync_extracts_business_facts_and_metrics(self):
         with analytics_contract_settings() as settings_override:
             with override_settings(**settings_override):

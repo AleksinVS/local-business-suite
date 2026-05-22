@@ -14,6 +14,8 @@
 
 Текущий implementation status: в `apps.memory` добавлены `MemorySourceObject`, `MemoryIngestionRun`, `MemoryIngestionIssue`, `MemoryGraphSchemaProposal`, `MemoryGraphEntity`, `MemoryGraphExtractionRun`, `MemoryGraphReviewItem`, команды `memory_discover_source`, `memory_ingest_source`, `memory_prepare_bootstrap_package`, `memory_graph_schema_discover`, `memory_graph_extract`, контракты `memory_ingestion_profiles.json` и `memory_graph_schema.json`. Production parser/OCR backend для PDF/Office/scans остается отдельным следующим этапом.
 
+Дополнение 2026-05-22: после перехода к файловым знаниям ingestion больше не создает постоянный слой `MemorySnapshot`/`MemoryChunk`. Для поиска создается `MemorySearchDocument`, а временные обработанные файлы остаются только в processing-зоне и удаляются по регламенту. Разделы ниже, где описаны safe corpus/chunks, являются исторической частью плана и заменяются целевой схемой из `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`.
+
 ## Принятые решения
 
 - Первое внедрение: Windows Server в домене Active Directory.

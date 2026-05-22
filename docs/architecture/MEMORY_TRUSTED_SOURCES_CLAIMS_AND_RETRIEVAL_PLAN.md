@@ -23,9 +23,9 @@
 
 - контракты `memory_trust_policy.json`, `memory_claims_policy.json`, `memory_retrieval_budget.json`;
 - поля доверия у `MemorySource`;
-- trusted-only gate в `memory.search` для chunks и graph facts;
+- trusted-only gate в `memory.search` для поисковых документов и graph facts;
 - citations с `trust_status`, `authority_class`, `trusted_for_context`;
-- модели `MemoryClaim` и `MemoryBelief` оставлены как совместимая заготовка с admin visibility;
+- `MemoryClaim` и `MemoryBelief` вынесены из MVP-схемы; future-stage policy оставлен как контракт будущего слоя;
 - обычный explicit chat memory больше не создает `MemoryClaim` и `MemoryBelief`;
 - deterministic rank fusion и context packing без LLM в hot path;
 - digest обработки очереди считается по активным `MemoryKnowledgeItem`;
@@ -99,7 +99,7 @@ Review может проходить на двух уровнях:
 
 ## Future Claim/Belief Layer
 
-ADR-0010 переносит этот слой за пределы готового MVP. `MemoryClaim` и `MemoryBelief` могут оставаться в схеме для будущей проверки противоречий, но обычный `memory.remember` их не создает, а обычный `memory.search` их не возвращает.
+ADR-0010 и ADR-0013 переносят этот слой за пределы готового MVP. `MemoryClaim` и `MemoryBelief` не входят в текущую MVP-схему; обычный `memory.remember` их не создает, а обычный `memory.search` их не возвращает.
 
 ### Что такое claim
 

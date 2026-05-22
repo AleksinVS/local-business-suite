@@ -1,0 +1,35 @@
+{
+  "task_id": "03-unified-search-index-service",
+  "title": "Единый search/index service",
+  "status": "implemented",
+  "goal": "Объединить поиск по знаниям и файловому хранилищу через один сервис с корпусами knowledge и source_data.",
+  "write_scope": [
+    "apps/memory/",
+    "apps/ai/",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "docs/"
+  ],
+  "steps": [
+    "Добавить понятие corpus_type: knowledge, source_data.",
+    "Перенести текущий SQLite FTS backend на общий search index path data/indexes/fulltext/search.sqlite3.",
+    "Добавить режимы поиска: knowledge_default, knowledge_precise, knowledge_semantic, knowledge_graph, source_explicit, source_fallback.",
+    "Добавить deterministic rank fusion без обязательного LLM rerank.",
+    "Сделать source_data fallback только при пустом knowledge result и разрешающей политике.",
+    "Добавить degraded mode для indexing_pending source objects.",
+    "Обновить memory.search tool contract и тесты."
+  ],
+  "acceptance_checks": [
+    "Обычный memory.search ищет только в knowledge.",
+    "Явный запрос поиска в файлах включает source_data.",
+    "При пустом knowledge result fallback возвращает source_data только если политика разрешает.",
+    "Каждый knowledge result содержит source_refs.",
+    "indexing_pending result не содержит неподтвержденных утверждений о содержимом файла."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run",
+    "npm run test:e2e"
+  ]
+}

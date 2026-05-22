@@ -4,6 +4,8 @@
 
 Legacy gap review: `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`.
 
+Дополнение 2026-05-22: handoff внешнего коннектора больше не создает постоянные `MemorySnapshot`/`MemoryChunk`. Нормализованный объект внешней системы записывается как `MemorySourceObject`, а для поиска создается `MemorySearchDocument`. Старые упоминания safe corpus/chunks ниже являются историей исходного проектирования и заменяются файловой схемой знаний из ADR-0011.
+
 Дата: 2026-05-20.
 
 Связанные документы:

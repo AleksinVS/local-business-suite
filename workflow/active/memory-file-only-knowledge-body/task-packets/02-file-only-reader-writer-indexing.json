@@ -1,0 +1,37 @@
+{
+  "task_id": "02-file-only-reader-writer-indexing",
+  "title": "Перевести writer, reader, index и summary на файлы знаний",
+  "status": "ready",
+  "objective": "Сделать так, чтобы запись, чтение, индексация и summary работали с текстом только через файл знания.",
+  "write_scope": [
+    "apps/memory/knowledge_files.py",
+    "apps/memory/chat_memory.py",
+    "apps/memory/management/commands/knowledge_writer_worker.py",
+    "apps/memory/management/commands/knowledge_index_worker.py",
+    "apps/memory/management/commands/memory_verify_knowledge_files.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py"
+  ],
+  "requirements": [
+    "Добавить writer helper, который принимает текст процесса и пишет файл знания без сохранения текста в модели.",
+    "После успешной записи файла создать или обновить MemoryKnowledgeItem metadata.",
+    "Удалить fallback read_knowledge_item_file() на текст из базы.",
+    "read_knowledge_item_file() должен считать отсутствие файла или mismatch hash ошибкой целостности в strict path.",
+    "index_knowledge_item должен читать текст из файла знания.",
+    "edit_personal_memory должен писать новую версию файла, обновлять hash/commit и ставить index_status=indexing_pending.",
+    "delete_personal_memory должен менять metadata/status и деактивировать SearchDocument/index без чтения текста из базы.",
+    "rebuild_knowledge_summaries должен читать тексты из файлов знаний."
+  ],
+  "acceptance_checks": [
+    "memory.remember создает файл знания и MemoryKnowledgeItem без текстового поля.",
+    "memory.search возвращает текст, прочитанный из файла.",
+    "Удаление файла знания приводит к ошибке проверки, а не к чтению из базы.",
+    "Summary содержит тексты, прочитанные из файлов.",
+    "memory_file_backed_e2e проходит."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py memory_verify_knowledge_files --strict",
+    "./.venv/bin/python manage.py memory_file_backed_e2e"
+  ]
+}

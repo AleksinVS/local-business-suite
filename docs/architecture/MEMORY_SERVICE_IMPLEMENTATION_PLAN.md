@@ -10,6 +10,18 @@
 
 Базовый MVP `apps.memory`, `memory.search`, контракты, metadata-модели, document ingestion/discovery и graph schema bootstrapping частично реализованы.
 
+## Дополнение 2026-05-22: файловые знания и прямой поисковый документ
+
+Часть раннего плана ниже описывает `MemorySnapshot` и `MemoryChunk` как основной путь индексации. Это устарело для текущего MVP.
+
+Актуальное решение зафиксировано в:
+
+- `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
+- `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
+- `docs/planning/active/memory-snapshot-chunk-removal.md`.
+
+Текущая схема: знания хранятся в файлах и Git, метаданные знания - в `MemoryKnowledgeItem`, поисковая запись - в `MemorySearchDocument`. Старые модели `MemorySnapshot`, `MemoryChunk` и привязанный к ним `MemoryGraphFact` удалены из модели Django миграцией `0007`. Графовый поиск временно выключен до отдельной стратегии графового индекса.
+
 После уточнения требований по памяти из AI-чата принят отдельный ADR:
 
 - `docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md`.

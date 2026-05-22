@@ -266,6 +266,8 @@ TOOLS = [
             "query",
             "limit",
             "sensitivity",
+            "search_mode",
+            "include_source_data",
         ],
         "input_schemas": {
             "query": {
@@ -286,6 +288,21 @@ TOOLS = [
                     "pii_original",
                     "secret",
                 ],
+            },
+            "search_mode": {
+                "description": "Simple deterministic search mode. Defaults to knowledge_default.",
+                "enum": [
+                    "knowledge_default",
+                    "knowledge_precise",
+                    "knowledge_semantic",
+                    "knowledge_graph",
+                    "source_explicit",
+                    "source_fallback",
+                ],
+            },
+            "include_source_data": {
+                "description": "Allow source-data fallback when knowledge search returns nothing.",
+                "type": "boolean",
             },
         },
         "outputs": [

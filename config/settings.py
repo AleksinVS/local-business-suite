@@ -42,6 +42,17 @@ for runtime_dir in (
     DATA_DIR / "media",
     DATA_DIR / "logs",
     DATA_DIR / "contracts",
+    DATA_DIR / "knowledge_repo",
+    DATA_DIR / "queues",
+    DATA_DIR / "indexes" / "fulltext",
+    DATA_DIR / "indexes" / "vector",
+    DATA_DIR / "indexes" / "graph",
+    DATA_DIR / "processing" / "raw_quarantine",
+    DATA_DIR / "processing" / "safe_work",
+    DATA_DIR / "processing" / "extraction_packets",
+    DATA_DIR / "processing" / "cleanup_manifests",
+    DATA_DIR / "cache",
+    DATA_DIR / "analytics" / "duckdb",
 ):
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
@@ -185,8 +196,31 @@ DATABASES = {
         "OPTIONS": {
             "timeout": 20,
         },
+    },
+    "chat": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": DATA_DIR / "db" / "chat.sqlite3",
+        "OPTIONS": {
+            "timeout": 20,
+        },
+    },
+    "knowledge_meta": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": DATA_DIR / "db" / "knowledge_meta.sqlite3",
+        "OPTIONS": {
+            "timeout": 20,
+        },
+    },
+    "analytics_control": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": DATA_DIR / "db" / "analytics_control.sqlite3",
+        "OPTIONS": {
+            "timeout": 20,
+        },
     }
 }
+
+DATABASE_ROUTERS = ["apps.core.db_routers.LocalBusinessDatabaseRouter"]
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -340,6 +374,25 @@ LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH = Path(
         DATA_DIR / "memory" / "queues" / "external_connectors.sqlite3",
     )
 )
+LOCAL_BUSINESS_DB_SPLIT_ENABLED = os.environ.get("LOCAL_BUSINESS_DB_SPLIT_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR = Path(
+    os.environ.get("LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR", DATA_DIR / "knowledge_repo")
+)
+LOCAL_BUSINESS_KNOWLEDGE_WRITER_QUEUE_PATH = Path(
+    os.environ.get("LOCAL_BUSINESS_KNOWLEDGE_WRITER_QUEUE_PATH", DATA_DIR / "queues" / "knowledge_writer.sqlite3")
+)
+LOCAL_BUSINESS_SEARCH_INDEX_PATH = Path(
+    os.environ.get("LOCAL_BUSINESS_SEARCH_INDEX_PATH", DATA_DIR / "indexes" / "fulltext" / "search.sqlite3")
+)
+LOCAL_BUSINESS_PROCESSING_DIR = Path(
+    os.environ.get("LOCAL_BUSINESS_PROCESSING_DIR", DATA_DIR / "processing")
+)
+LOCAL_BUSINESS_PROCESSING_RETENTION_DAYS = int(os.environ.get("LOCAL_BUSINESS_PROCESSING_RETENTION_DAYS", "7"))
 
 LOCAL_BUSINESS_AI_GATEWAY_TOKEN = os.environ.get(
     "LOCAL_BUSINESS_AI_GATEWAY_TOKEN", "dev-ai-gateway-token"

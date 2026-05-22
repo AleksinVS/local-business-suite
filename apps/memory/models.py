@@ -71,156 +71,6 @@ class MemorySource(models.Model):
         return self.code
 
 
-class MemorySnapshot(models.Model):
-    class Status(models.TextChoices):
-        READY = "ready", "Ready"
-        BLOCKED = "blocked", "Blocked"
-        FAILED = "failed", "Failed"
-
-    source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="snapshots")
-    source_object_id = models.CharField(max_length=255)
-    content_hash = models.CharField(max_length=128)
-    schema_version = models.CharField(max_length=64)
-    extractor_version = models.CharField(max_length=120, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.READY)
-    extracted_at = models.DateTimeField()
-    valid_from = models.DateTimeField(blank=True, null=True)
-    valid_to = models.DateTimeField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    raw_path = models.CharField(max_length=500)
-    safe_path = models.CharField(max_length=500, blank=True)
-    pii_policy_applied = models.CharField(max_length=120, blank=True)
-    scope_tokens = models.JSONField(default=list, blank=True)
-    sensitivity = models.CharField(max_length=32)
-    blocked_reason = models.TextField(blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-extracted_at", "-id"]
-        indexes = [
-            models.Index(fields=["source", "source_object_id"]),
-            models.Index(fields=["content_hash"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["sensitivity"]),
-            models.Index(fields=["-extracted_at", "-id"]),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["source", "source_object_id", "content_hash"],
-                name="memory_snapshot_source_obj_hash_uniq",
-            ),
-            models.UniqueConstraint(
-                fields=["source", "source_object_id"],
-                condition=Q(is_active=True),
-                name="memory_one_active_snapshot_per_obj",
-            ),
-            models.CheckConstraint(
-                condition=Q(valid_to__isnull=True) | Q(valid_from__isnull=True) | Q(valid_from__lte=models.F("valid_to")),
-                name="memory_snapshot_valid_range",
-            ),
-        ]
-        verbose_name = "Memory snapshot"
-        verbose_name_plural = "Memory snapshots"
-
-    def __str__(self):
-        return f"{self.source.code}:{self.source_object_id}@{self.content_hash[:12]}"
-
-
-class MemoryChunk(models.Model):
-    snapshot = models.ForeignKey(MemorySnapshot, on_delete=models.PROTECT, related_name="chunks")
-    chunk_id = models.CharField(max_length=160, unique=True)
-    source_code = models.CharField(max_length=120)
-    source_object_id = models.CharField(max_length=255)
-    snapshot_hash = models.CharField(max_length=128)
-    position = models.PositiveIntegerField(default=0)
-    text_path = models.CharField(max_length=500, blank=True)
-    text_hash = models.CharField(max_length=128)
-    metadata = models.JSONField(default=dict, blank=True)
-    scope_tokens = models.JSONField(default=list, blank=True)
-    sensitivity = models.CharField(max_length=32)
-    valid_from = models.DateTimeField(blank=True, null=True)
-    valid_to = models.DateTimeField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["snapshot_id", "position", "id"]
-        indexes = [
-            models.Index(fields=["source_code", "source_object_id"]),
-            models.Index(fields=["snapshot_hash"]),
-            models.Index(fields=["text_hash"]),
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["sensitivity"]),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["snapshot", "position"],
-                name="memory_chunk_snapshot_position_uniq",
-            ),
-            models.CheckConstraint(
-                condition=Q(valid_to__isnull=True) | Q(valid_from__isnull=True) | Q(valid_from__lte=models.F("valid_to")),
-                name="memory_chunk_valid_range",
-            ),
-        ]
-        verbose_name = "Memory chunk"
-        verbose_name_plural = "Memory chunks"
-
-    def __str__(self):
-        return self.chunk_id
-
-
-class MemoryGraphFact(models.Model):
-    fact_id = models.CharField(max_length=160, unique=True)
-    source_chunk = models.ForeignKey(MemoryChunk, on_delete=models.PROTECT, related_name="graph_facts")
-    snapshot = models.ForeignKey(MemorySnapshot, on_delete=models.PROTECT, related_name="graph_facts")
-    snapshot_hash = models.CharField(max_length=128)
-    subject_id = models.CharField(max_length=160)
-    predicate = models.CharField(max_length=80)
-    object_id = models.CharField(max_length=160)
-    subject_type = models.CharField(max_length=80, blank=True)
-    object_type = models.CharField(max_length=80, blank=True)
-    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
-    extracted_by = models.CharField(max_length=120, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    scope_tokens = models.JSONField(default=list, blank=True)
-    sensitivity = models.CharField(max_length=32)
-    valid_from = models.DateTimeField(blank=True, null=True)
-    valid_to = models.DateTimeField(blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["fact_id"]
-        indexes = [
-            models.Index(fields=["subject_id"]),
-            models.Index(fields=["predicate"]),
-            models.Index(fields=["object_id"]),
-            models.Index(fields=["snapshot_hash"]),
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["sensitivity"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(confidence__gte=0) & Q(confidence__lte=1),
-                name="memory_graph_fact_confidence_0_1",
-            ),
-            models.CheckConstraint(
-                condition=Q(valid_to__isnull=True) | Q(valid_from__isnull=True) | Q(valid_from__lte=models.F("valid_to")),
-                name="memory_graph_fact_valid_range",
-            ),
-        ]
-        verbose_name = "Memory graph fact"
-        verbose_name_plural = "Memory graph facts"
-
-    def __str__(self):
-        return self.fact_id
-
-
 class MemorySourceObject(models.Model):
     class DiscoveryStatus(models.TextChoices):
         SEEN = "seen", "Seen"
@@ -280,6 +130,69 @@ class MemorySourceObject(models.Model):
         return f"{self.source.code}:{self.relative_path}"
 
 
+class MemorySearchDocument(models.Model):
+    class CorpusType(models.TextChoices):
+        KNOWLEDGE = "knowledge", "Knowledge"
+        SOURCE_DATA = "source_data", "Source data"
+
+    class ObjectKind(models.TextChoices):
+        KNOWLEDGE_ITEM = "knowledge_item", "Knowledge item"
+        SOURCE_OBJECT = "source_object", "Source object"
+        SUMMARY = "summary", "Summary"
+        ANALYTICS_SLICE = "analytics_slice", "Analytics slice"
+
+    class IndexStatus(models.TextChoices):
+        PENDING = "indexing_pending", "Indexing pending"
+        READY = "ready", "Ready"
+        DELETED = "deleted", "Deleted"
+        FAILED = "failed", "Failed"
+
+    document_id = models.CharField(max_length=180, unique=True)
+    corpus_type = models.CharField(max_length=32, choices=CorpusType.choices)
+    object_kind = models.CharField(max_length=64, choices=ObjectKind.choices)
+    knowledge_item = models.ForeignKey(
+        "memory.MemoryKnowledgeItem",
+        on_delete=models.PROTECT,
+        related_name="search_documents",
+        blank=True,
+        null=True,
+    )
+    source_object = models.ForeignKey(
+        MemorySourceObject,
+        on_delete=models.PROTECT,
+        related_name="search_documents",
+        blank=True,
+        null=True,
+    )
+    body_hash = models.CharField(max_length=128, blank=True)
+    index_status = models.CharField(max_length=32, choices=IndexStatus.choices, default=IndexStatus.PENDING)
+    metadata = models.JSONField(default=dict, blank=True)
+    indexed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["corpus_type", "document_id"]
+        indexes = [
+            models.Index(fields=["document_id"]),
+            models.Index(fields=["corpus_type", "object_kind"]),
+            models.Index(fields=["index_status"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(corpus_type="knowledge", knowledge_item__isnull=False)
+                | Q(corpus_type="source_data", source_object__isnull=False)
+                | Q(object_kind__in=["summary", "analytics_slice"]),
+                name="memory_search_document_target_present",
+            ),
+        ]
+        verbose_name = "Memory search document"
+        verbose_name_plural = "Memory search documents"
+
+    def __str__(self):
+        return self.document_id
+
+
 class MemoryIngestionRun(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -301,6 +214,7 @@ class MemoryIngestionRun(models.Model):
         related_name="memory_ingestion_runs",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -427,13 +341,6 @@ class MemoryGraphExtractionRun(models.Model):
         FAILED = "failed", "Failed"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="graph_extraction_runs")
-    snapshot = models.ForeignKey(
-        MemorySnapshot,
-        on_delete=models.PROTECT,
-        related_name="graph_extraction_runs",
-        blank=True,
-        null=True,
-    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     started_at = models.DateTimeField(blank=True, null=True)
     finished_at = models.DateTimeField(blank=True, null=True)
@@ -446,7 +353,6 @@ class MemoryGraphExtractionRun(models.Model):
         ordering = ["-created_at", "-id"]
         indexes = [
             models.Index(fields=["source", "-created_at"]),
-            models.Index(fields=["snapshot"]),
             models.Index(fields=["status"]),
         ]
         constraints = [
@@ -491,6 +397,7 @@ class MemoryGraphSchemaProposal(models.Model):
         related_name="memory_graph_schema_reviews",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -533,7 +440,6 @@ class MemoryGraphReviewItem(models.Model):
     item_kind = models.CharField(max_length=64, choices=ItemKind.choices)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.OPEN)
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="graph_review_items", blank=True, null=True)
-    snapshot = models.ForeignKey(MemorySnapshot, on_delete=models.PROTECT, related_name="graph_review_items", blank=True, null=True)
     payload = models.JSONField(default=dict)
     evidence = models.JSONField(default=list, blank=True)
     decision = models.TextField(blank=True)
@@ -543,6 +449,7 @@ class MemoryGraphReviewItem(models.Model):
         related_name="memory_graph_review_items",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -576,13 +483,19 @@ class MemoryWriteRequest(models.Model):
         CANCELLED = "cancelled", "Cancelled"
 
     request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_write_requests")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_write_requests",
+        db_constraint=False,
+    )
     session = models.ForeignKey(
         "ai.ChatSession",
         on_delete=models.PROTECT,
         related_name="memory_write_requests",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     message_ids = models.JSONField(default=list, blank=True)
     target_scope = models.CharField(max_length=32, choices=TargetScope.choices, default=TargetScope.PERSONAL)
@@ -636,9 +549,9 @@ class MemoryKnowledgeItem(models.Model):
         related_name="memory_knowledge_items",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     kind = models.CharField(max_length=32, choices=Kind.choices, default=Kind.FACT)
-    text = models.TextField()
     text_hash = models.CharField(max_length=128)
     sensitivity = models.CharField(max_length=32, default="internal")
     scope_tokens = models.JSONField(default=list, blank=True)
@@ -649,15 +562,24 @@ class MemoryKnowledgeItem(models.Model):
         related_name="memory_knowledge_items",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     source_message_ids = models.JSONField(default=list, blank=True)
     source_content_hash = models.CharField(max_length=128, blank=True)
+    source_refs = models.JSONField(default=list, blank=True)
+    source_code = models.CharField(max_length=120, default="chat")
+    source_kind = models.CharField(max_length=64, default="chat")
+    knowledge_file_path = models.CharField(max_length=1000, blank=True)
+    knowledge_file_hash = models.CharField(max_length=128, blank=True)
+    knowledge_file_commit = models.CharField(max_length=80, blank=True)
+    index_status = models.CharField(max_length=32, default="indexing_pending")
     provenance = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="created_memory_knowledge_items",
+        db_constraint=False,
     )
     supersedes = models.ForeignKey(
         "self",
@@ -677,6 +599,8 @@ class MemoryKnowledgeItem(models.Model):
             models.Index(fields=["text_hash"]),
             models.Index(fields=["sensitivity"]),
             models.Index(fields=["memory_id"]),
+            models.Index(fields=["source_code", "source_kind"]),
+            models.Index(fields=["index_status"]),
         ]
         constraints = [
             models.CheckConstraint(
@@ -710,7 +634,12 @@ class MemoryKnowledgeEvent(models.Model):
         blank=True,
         null=True,
     )
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_knowledge_events")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_knowledge_events",
+        db_constraint=False,
+    )
     payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -753,10 +682,16 @@ class MemoryKnowledgeCandidate(models.Model):
         related_name="memory_candidate_reviews",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     decision = models.TextField(blank=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_candidates")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_candidates",
+        db_constraint=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -772,107 +707,6 @@ class MemoryKnowledgeCandidate(models.Model):
 
     def __str__(self):
         return f"{self.status}:{self.pk}"
-
-
-class MemoryClaim(models.Model):
-    class ClaimType(models.TextChoices):
-        FACT = "fact", "Fact"
-        PREFERENCE = "preference", "Preference"
-        PROCEDURE = "procedure", "Procedure"
-        POLICY = "policy", "Policy"
-        DECISION = "decision", "Decision"
-        METRIC_OBSERVATION = "metric_observation", "Metric observation"
-        INCIDENT = "incident", "Incident"
-        ACTION_OUTCOME = "action_outcome", "Action outcome"
-
-    class Status(models.TextChoices):
-        CANDIDATE = "candidate", "Candidate"
-        ACCEPTED = "accepted", "Accepted"
-        REJECTED = "rejected", "Rejected"
-        CONTESTED = "contested", "Contested"
-        SUPERSEDED = "superseded", "Superseded"
-        EXPIRED = "expired", "Expired"
-
-    claim_id = models.CharField(max_length=160, unique=True)
-    claim_type = models.CharField(max_length=32, choices=ClaimType.choices, default=ClaimType.FACT)
-    text = models.TextField()
-    payload = models.JSONField(default=dict, blank=True)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.CANDIDATE)
-    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
-    source = models.ForeignKey(
-        MemorySource,
-        on_delete=models.PROTECT,
-        related_name="claims",
-        blank=True,
-        null=True,
-    )
-    source_chunk = models.ForeignKey(
-        MemoryChunk,
-        on_delete=models.PROTECT,
-        related_name="claims",
-        blank=True,
-        null=True,
-    )
-    snapshot = models.ForeignKey(
-        MemorySnapshot,
-        on_delete=models.PROTECT,
-        related_name="claims",
-        blank=True,
-        null=True,
-    )
-    knowledge_item = models.ForeignKey(
-        MemoryKnowledgeItem,
-        on_delete=models.PROTECT,
-        related_name="claims",
-        blank=True,
-        null=True,
-    )
-    evidence = models.JSONField(default=list, blank=True)
-    evidence_hash = models.CharField(max_length=128, blank=True)
-    scope_tokens = models.JSONField(default=list, blank=True)
-    sensitivity = models.CharField(max_length=32, default="internal")
-    valid_from = models.DateTimeField(blank=True, null=True)
-    valid_to = models.DateTimeField(blank=True, null=True)
-    observed_at = models.DateTimeField(blank=True, null=True)
-    reviewer = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_claim_reviews",
-        blank=True,
-        null=True,
-    )
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    decision_note = models.TextField(blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_claims")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["status", "-observed_at", "-id"]
-        indexes = [
-            models.Index(fields=["claim_id"]),
-            models.Index(fields=["claim_type", "status"]),
-            models.Index(fields=["status", "sensitivity"]),
-            models.Index(fields=["source", "status"]),
-            models.Index(fields=["knowledge_item", "status"]),
-            models.Index(fields=["reviewer", "reviewed_at"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(confidence__gte=0) & Q(confidence__lte=1),
-                name="memory_claim_confidence_0_1",
-            ),
-            models.CheckConstraint(
-                condition=Q(valid_to__isnull=True) | Q(valid_from__isnull=True) | Q(valid_from__lte=models.F("valid_to")),
-                name="memory_claim_valid_range",
-            ),
-        ]
-        verbose_name = "Memory claim"
-        verbose_name_plural = "Memory claims"
-
-    def __str__(self):
-        return self.claim_id
 
 
 class MemoryReflectionRun(models.Model):
@@ -896,6 +730,7 @@ class MemoryReflectionRun(models.Model):
         related_name="memory_reflection_runs",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -941,13 +776,19 @@ class SecretHandle(models.Model):
         related_name="secret_handles",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     scope = models.CharField(max_length=32, blank=True)
     url = models.CharField(max_length=1000, blank=True)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
     sensitivity = models.CharField(max_length=32, default="secret")
     metadata = models.JSONField(default=dict, blank=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_secret_handles")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_secret_handles",
+        db_constraint=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -978,7 +819,12 @@ class SecretAccessAudit(models.Model):
         DENIED = "denied", "Denied"
         FAILED = "failed", "Failed"
 
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="secret_access_audits")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="secret_access_audits",
+        db_constraint=False,
+    )
     secret_handle = models.ForeignKey(SecretHandle, on_delete=models.PROTECT, related_name="access_audits")
     action = models.CharField(max_length=32, choices=Action.choices)
     decision = models.CharField(max_length=32, choices=Decision.choices)
@@ -1034,6 +880,7 @@ class MemoryIndexJob(models.Model):
         related_name="memory_index_jobs",
         blank=True,
         null=True,
+        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1064,12 +911,17 @@ class MemoryIndexJob(models.Model):
 
 
 class MemoryAccessAudit(models.Model):
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="memory_access_audits")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_access_audits",
+        db_constraint=False,
+    )
     request_id = models.CharField(max_length=120)
     query_hash = models.CharField(max_length=128, blank=True)
     tool_name = models.CharField(max_length=120, default="memory.search")
     allowed_scope_tokens = models.JSONField(default=list, blank=True)
-    returned_chunk_ids = models.JSONField(default=list, blank=True)
+    returned_document_ids = models.JSONField(default=list, blank=True)
     returned_fact_ids = models.JSONField(default=list, blank=True)
     denied_reason = models.TextField(blank=True)
     policy_decision = models.CharField(max_length=32)
@@ -1102,7 +954,7 @@ class MemoryEvalCase(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     question = models.TextField()
     expected_source_codes = models.JSONField(default=list, blank=True)
-    expected_chunk_ids = models.JSONField(default=list, blank=True)
+    expected_document_ids = models.JSONField(default=list, blank=True)
     forbidden_source_codes = models.JSONField(default=list, blank=True)
     forbidden_scope_tokens = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True)

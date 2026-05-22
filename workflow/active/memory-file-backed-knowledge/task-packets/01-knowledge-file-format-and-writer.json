@@ -1,0 +1,34 @@
+{
+  "task_id": "01-knowledge-file-format-and-writer",
+  "title": "Формат файлов знаний и writer service",
+  "status": "implemented",
+  "goal": "Ввести runtime Git-репозиторий знаний, формат файла знания и безопасную запись через очередь.",
+  "write_scope": [
+    "apps/memory/",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "config/settings.py",
+    "docs/",
+    "tests/e2e или существующая e2e-структура проекта"
+  ],
+  "steps": [
+    "Добавить настройки путей data/knowledge_repo и data/queues/knowledge_writer.sqlite3.",
+    "Описать и валидировать формат Markdown + YAML front matter для знания.",
+    "Добавить сервис подготовки knowledge file path по scope, owner и source_code.",
+    "Добавить очередь KnowledgeWriteRequest или совместимый слой поверх существующего MemoryWriteRequest.",
+    "Реализовать writer service: lock, temporary file, os.replace, git add/commit, metadata update, enqueue indexing.",
+    "Перевести memory.remember на постановку задачи записи, без синхронной записи файла."
+  ],
+  "acceptance_checks": [
+    "Новый запрос memory.remember возвращает queued status.",
+    "После worker обработки появляется файл знания в data/knowledge_repo/.",
+    "Файл проходит schema validation.",
+    "Git commit создается для принятого изменения.",
+    "При ошибке записи нет частичного целевого файла."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py validate_architecture_contracts"
+  ]
+}

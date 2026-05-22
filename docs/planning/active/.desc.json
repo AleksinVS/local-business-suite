@@ -8,5 +8,8 @@
   "memory-system-completion.md": "Активный план завершения системы памяти",
   "memory-mvp-simplification.md": "Активный план упрощения MVP-архитектуры памяти",
   "memory-mvp-remediation.md": "Активный план исправления разрывов MVP-памяти",
+  "memory-file-backed-knowledge.md": "Активный план файловых знаний, раздельных баз и единого поиска",
+  "memory-file-only-knowledge-body.md": "Активный план хранения текста знания только в файле знания",
+  "memory-snapshot-chunk-removal.md": "Активный план удаления MemorySnapshot/MemoryChunk из активного пути памяти",
   "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки"
 }

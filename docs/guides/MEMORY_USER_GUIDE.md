@@ -6,11 +6,11 @@
 
 - источники памяти описываются контрактами;
 - исходный текст проходит privacy pipeline;
-- индексы строятся только по safe corpus;
+- индексы строятся по файлам знаний и безопасным поисковым документам;
 - доступ идет через read-only tool `memory.search`;
 - каждый успешный или запрещенный поиск фиксируется в `MemoryAccessAudit`.
 
-Это не замена базе данных и не способ читать raw snapshots. Для пользователей AI-чат возвращает только компактный контекст с citations.
+Это не замена базе данных и не способ читать исходные документы напрямую. Для пользователей AI-чат возвращает только компактный контекст со ссылками на источники.
 
 ## Что доступно обычному пользователю
 
@@ -22,10 +22,10 @@
 
 Ожидаемое поведение:
 
-- если подходящие safe chunks найдены, ответ инструмента содержит `items` и `citations`;
+- если подходящие знания найдены, ответ инструмента содержит `items` и `citations`;
 - если данных нет или scope пользователя не подходит, `items` будет пустым;
 - если запрошен запрещенный уровень чувствительности, запрос будет отклонен и записан в audit;
-- raw paths, raw snapshots и секреты пользователю не возвращаются.
+- пути к исходным файлам, необработанные данные и секреты пользователю не возвращаются.
 
 ## Что проверять в ответе AI
 
@@ -33,8 +33,7 @@
 
 - `source_code`;
 - `source_object_id`;
-- `chunk_id` или `fact_id`;
-- `snapshot_hash`;
+- `knowledge_id` или `document_id`;
 - `text_hash`;
 - `sensitivity`.
 - `trust_status`;
@@ -45,7 +44,7 @@
 
 ## Надежные источники и сохраненные знания
 
-Safe corpus означает, что текст прошел privacy/security pipeline и может храниться или индексироваться. Это не означает, что источник можно напрямую отдавать агенту.
+Безопасный корпус означает, что текст прошел проверку приватности и безопасности и может индексироваться. Это не означает, что источник можно напрямую отдавать агенту.
 
 Для обычного `memory.search` теперь действует trusted-only правило:
 
@@ -55,7 +54,7 @@ Safe corpus означает, что текст прошел privacy/security pi
 - старые значения `candidate_only` и `quarantined` совместимо отображаются в `review_required`;
 - untrusted источники могут использоваться как evidence для review/candidate flow;
 - `MemoryKnowledgeItem` является главным объектом сохраненного знания MVP;
-- `MemoryClaim` не создается обычным "запомни"; `MemoryBelief` не входит в MVP-схему и не возвращается обычным `memory.search`.
+- `MemoryClaim` и `MemoryBelief` не входят в MVP-схему и не возвращаются обычным `memory.search`.
 
 Если источник safe, но не trusted, оператор должен провести проверку источника или конкретного знания перед публикацией в общую память.
 
@@ -64,14 +63,13 @@ Safe corpus означает, что текст прошел privacy/security pi
 Администратор использует Django Admin:
 
 - `MemorySource` — источники памяти и их статус;
-- `MemorySnapshot` — снимки источников, blocked/ready state, artifact presence;
-- `MemoryChunk` — safe chunks без отображения raw text path в поиске;
-- `MemoryGraphFact` — извлеченные графовые факты;
+- `MemorySearchDocument` — прямые поисковые записи для знаний и исходных объектов;
+- `MemoryKnowledgeItem` — метаданные принятых знаний, которые хранятся в файлах;
 - `MemoryIndexJob` — smoke reindex jobs и статус выполнения;
 - `MemoryAccessAudit` — журнал вызовов `memory.search`;
 - `MemoryEvalCase` — сценарии eval/smoke проверок.
 
-В admin намеренно не выводятся raw/safe/text path как обычные searchable поля. Показывается состояние артефактов: present/missing.
+В admin намеренно не выводятся raw/safe/text path как обычные searchable поля. Для исходных объектов показываются только безопасные метаданные и ссылки.
 
 ## Ingestion корпоративных документов
 
@@ -115,11 +113,11 @@ Eval report пишется только в `data/memory/eval/`.
 
 - production scheduler/Celery не подключен;
 - embeddings пока представлены интерфейсом, но не генерируются;
-- SQLite FTS используется как локальный MVP full-text backend;
+- локальный SQLite-поиск хранит перестраиваемые поисковые токены и метаданные, но не хранит полный текст знания для выдачи;
 - Kuzu backend пока lazy placeholder;
 - `memory.search` выполняет trusted-only gate, deterministic rank fusion и context packing без обязательного LLM;
 - review UI для источников и знаний пока представлен Django Admin;
-- claim extraction и `MemoryClaim` перенесены на следующие этапы; `MemoryBelief` не входит в MVP-схему;
+- claim extraction, `MemoryClaim` и `MemoryBelief` перенесены на следующие этапы;
 - ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, bootstrap package и graph schema proposals;
 - PDF/Office/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
 - ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
@@ -155,7 +153,7 @@ python manage.py memory_reflect_chats
 ## Как проверить пользователю
 
 1. Открыть AI-чат под обычным пользователем.
-2. Задать запрос по теме, которая точно должна быть в safe corpus.
+2. Задать запрос по теме, которая точно должна быть в сохраненных знаниях.
 3. Убедиться, что ответ содержит citations.
 4. Попросить найти данные вне своего scope и убедиться, что контекст не возвращается.
 5. Администратору проверить `MemoryAccessAudit`: должны быть записи с `policy_decision=allowed` или `denied`, `query_hash`, returned ids и retrieval trace.

@@ -1,15 +1,12 @@
 from django.contrib import admin
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone
 
 from .models import (
     MemoryAccessAudit,
-    MemoryChunk,
-    MemoryClaim,
     MemoryEvalCase,
     MemoryGraphEntity,
     MemoryGraphExtractionRun,
-    MemoryGraphFact,
     MemoryGraphReviewItem,
     MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
@@ -19,7 +16,7 @@ from .models import (
     MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
     MemoryReflectionRun,
-    MemorySnapshot,
+    MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
     MemoryWriteRequest,
@@ -40,8 +37,7 @@ class MemorySourceAdmin(admin.ModelAdmin):
         "authority_class",
         "trusted_for_context",
         "sensitivity",
-        "snapshot_count",
-        "blocked_snapshot_count",
+        "search_document_count",
         "job_count",
         "last_synced_at",
         "updated_at",
@@ -64,153 +60,50 @@ class MemorySourceAdmin(admin.ModelAdmin):
             super()
             .get_queryset(request)
             .annotate(
-                _snapshot_count=Count("snapshots", distinct=True),
-                _blocked_snapshot_count=Count(
-                    "snapshots",
-                    filter=Q(snapshots__status=MemorySnapshot.Status.BLOCKED),
-                    distinct=True,
-                ),
+                _search_document_count=Count("source_objects__search_documents", distinct=True),
                 _job_count=Count("index_jobs", distinct=True),
             )
         )
 
-    @admin.display(ordering="_snapshot_count", description="Snapshots")
-    def snapshot_count(self, obj):
-        return obj._snapshot_count
-
-    @admin.display(ordering="_blocked_snapshot_count", description="Blocked")
-    def blocked_snapshot_count(self, obj):
-        return obj._blocked_snapshot_count
+    @admin.display(ordering="_search_document_count", description="Search docs")
+    def search_document_count(self, obj):
+        return obj._search_document_count
 
     @admin.display(ordering="_job_count", description="Jobs")
     def job_count(self, obj):
         return obj._job_count
 
 
-@admin.register(MemorySnapshot)
-class MemorySnapshotAdmin(admin.ModelAdmin):
+@admin.register(MemorySearchDocument)
+class MemorySearchDocumentAdmin(admin.ModelAdmin):
     list_display = (
-        "source",
-        "source_object_id",
-        "short_content_hash",
-        "status",
-        "is_active",
-        "sensitivity",
-        "chunk_count",
-        "blocked_reason_short",
-        "extracted_at",
+        "document_id",
+        "corpus_type",
+        "object_kind",
+        "target_display",
+        "index_status",
+        "indexed_at",
     )
-    list_filter = ("status", "is_active", "sensitivity", "source__domain", "source__source_kind", "extracted_at")
-    search_fields = ("source__code", "source_object_id", "content_hash", "blocked_reason")
-    readonly_fields = ("created_at", "updated_at", "storage_state")
-    autocomplete_fields = ("source",)
+    list_filter = ("corpus_type", "object_kind", "index_status")
+    search_fields = ("document_id", "knowledge_item__memory_id", "source_object__object_id", "body_hash")
+    readonly_fields = ("created_at", "updated_at", "indexed_at")
+    autocomplete_fields = ("source_object", "knowledge_item")
     fieldsets = (
-        (None, {"fields": ("source", "source_object_id", "content_hash", "schema_version", "extractor_version")}),
-        ("Lifecycle", {"fields": ("status", "is_active", "extracted_at", "valid_from", "valid_to")}),
-        (
-            "Privacy",
-            {"fields": ("sensitivity", "pii_policy_applied", "blocked_reason", "scope_tokens", "storage_state")},
-        ),
+        (None, {"fields": ("document_id", "corpus_type", "object_kind", "knowledge_item", "source_object")}),
+        ("Index", {"fields": ("body_hash", "index_status", "indexed_at")}),
         ("Metadata", {"fields": ("metadata", "created_at", "updated_at")}),
     )
 
     def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .select_related("source")
-            .annotate(_chunk_count=Count("chunks", distinct=True))
-        )
+        return super().get_queryset(request).select_related("source_object", "knowledge_item")
 
-    def has_add_permission(self, request):
-        return False
-
-    @admin.display(ordering="content_hash", description="Content hash")
-    def short_content_hash(self, obj):
-        return obj.content_hash[:12]
-
-    @admin.display(ordering="_chunk_count", description="Chunks")
-    def chunk_count(self, obj):
-        return obj._chunk_count
-
-    @admin.display(description="Blocked reason")
-    def blocked_reason_short(self, obj):
-        if not obj.blocked_reason:
-            return ""
-        return obj.blocked_reason[:96]
-
-    @admin.display(description="Stored artifacts")
-    def storage_state(self, obj):
-        raw_state = "raw: present" if obj.raw_path else "raw: missing"
-        safe_state = "safe: present" if obj.safe_path else "safe: missing"
-        return f"{raw_state}; {safe_state}"
-
-
-@admin.register(MemoryChunk)
-class MemoryChunkAdmin(admin.ModelAdmin):
-    list_display = (
-        "chunk_id",
-        "source_code",
-        "source_object_id",
-        "position",
-        "is_active",
-        "sensitivity",
-        "text_hash",
-        "graph_fact_count",
-    )
-    list_filter = ("is_active", "sensitivity", "source_code", "snapshot__status", "snapshot__source__domain")
-    search_fields = ("chunk_id", "source_code", "source_object_id", "snapshot_hash", "text_hash")
-    readonly_fields = ("created_at", "updated_at", "storage_state")
-    autocomplete_fields = ("snapshot",)
-    fieldsets = (
-        (None, {"fields": ("snapshot", "chunk_id", "source_code", "source_object_id", "snapshot_hash", "position")}),
-        ("Index metadata", {"fields": ("text_hash", "metadata", "scope_tokens", "sensitivity", "storage_state")}),
-        ("Lifecycle", {"fields": ("is_active", "valid_from", "valid_to", "created_at", "updated_at")}),
-    )
-
-    def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .select_related("snapshot", "snapshot__source")
-            .annotate(_graph_fact_count=Count("graph_facts"))
-        )
-
-    def has_add_permission(self, request):
-        return False
-
-    @admin.display(ordering="_graph_fact_count", description="Facts")
-    def graph_fact_count(self, obj):
-        return obj._graph_fact_count
-
-    @admin.display(description="Stored artifact")
-    def storage_state(self, obj):
-        return "text: present" if obj.text_path else "text: missing"
-
-
-@admin.register(MemoryGraphFact)
-class MemoryGraphFactAdmin(admin.ModelAdmin):
-    list_display = (
-        "fact_id",
-        "source_code",
-        "subject_id",
-        "predicate",
-        "object_id",
-        "confidence",
-        "is_active",
-        "sensitivity",
-    )
-    list_filter = ("predicate", "is_active", "sensitivity", "snapshot__source__domain")
-    search_fields = ("fact_id", "subject_id", "predicate", "object_id", "snapshot_hash")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source_chunk", "snapshot")
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("snapshot", "snapshot__source", "source_chunk")
-
-    @admin.display(ordering="snapshot__source__code", description="Source")
-    def source_code(self, obj):
-        return obj.snapshot.source.code
+    @admin.display(description="Target")
+    def target_display(self, obj):
+        if obj.knowledge_item_id:
+            return obj.knowledge_item.memory_id
+        if obj.source_object_id:
+            return obj.source_object.object_id
+        return ""
 
 
 @admin.register(MemorySourceObject)
@@ -247,7 +140,7 @@ class MemoryIngestionRunAdmin(admin.ModelAdmin):
     autocomplete_fields = ("source", "created_by")
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("source", "created_by").annotate(_issue_count=Count("issues"))
+        return super().get_queryset(request).select_related("source").annotate(_issue_count=Count("issues"))
 
     @admin.display(ordering="_issue_count", description="Issues")
     def issue_count(self, obj):
@@ -301,11 +194,11 @@ class MemoryGraphEntityAdmin(admin.ModelAdmin):
 
 @admin.register(MemoryGraphExtractionRun)
 class MemoryGraphExtractionRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "source", "snapshot", "status", "started_at", "finished_at", "created_at")
+    list_display = ("id", "source", "status", "started_at", "finished_at", "created_at")
     list_filter = ("status", "source__domain", "created_at")
-    search_fields = ("source__code", "snapshot__source_object_id", "error_message")
+    search_fields = ("source__code", "error_message")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source", "snapshot")
+    autocomplete_fields = ("source",)
 
 
 @admin.register(MemoryGraphSchemaProposal)
@@ -319,42 +212,42 @@ class MemoryGraphSchemaProposalAdmin(admin.ModelAdmin):
 
 @admin.register(MemoryGraphReviewItem)
 class MemoryGraphReviewItemAdmin(admin.ModelAdmin):
-    list_display = ("item_kind", "status", "source", "snapshot", "reviewed_by", "reviewed_at", "created_at")
+    list_display = ("item_kind", "status", "source", "reviewed_by", "reviewed_at", "created_at")
     list_filter = ("item_kind", "status", "source__domain", "created_at")
-    search_fields = ("source__code", "snapshot__source_object_id", "decision")
+    search_fields = ("source__code", "decision")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source", "snapshot", "reviewed_by")
+    autocomplete_fields = ("source", "reviewed_by")
 
 
 @admin.register(MemoryWriteRequest)
 class MemoryWriteRequestAdmin(admin.ModelAdmin):
     list_display = ("request_id", "actor", "target_scope", "status", "processed_at", "created_at")
     list_filter = ("target_scope", "status", "created_at", "processed_at")
-    search_fields = ("request_id", "actor__username", "error_message")
+    search_fields = ("request_id", "error_message")
     readonly_fields = ("request_id", "created_at", "updated_at", "processed_at")
     autocomplete_fields = ("actor", "session")
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("actor", "session")
+        return super().get_queryset(request)
 
 
 @admin.register(MemoryKnowledgeItem)
 class MemoryKnowledgeItemAdmin(admin.ModelAdmin):
     list_display = ("memory_id", "scope", "owner_user", "kind", "status", "sensitivity", "updated_at")
     list_filter = ("scope", "kind", "status", "sensitivity", "created_at", "updated_at")
-    search_fields = ("memory_id", "text_hash", "owner_user__username")
+    search_fields = ("memory_id", "text_hash", "knowledge_file_path")
     readonly_fields = ("memory_id", "text_hash", "created_at", "updated_at")
     autocomplete_fields = ("owner_user", "source_session", "created_by", "supersedes")
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("owner_user", "created_by", "source_session")
+        return super().get_queryset(request)
 
 
 @admin.register(MemoryKnowledgeEvent)
 class MemoryKnowledgeEventAdmin(admin.ModelAdmin):
     list_display = ("event_id", "event_type", "knowledge_item", "actor", "created_at")
     list_filter = ("event_type", "created_at")
-    search_fields = ("event_id", "knowledge_item__memory_id", "actor__username")
+    search_fields = ("event_id", "knowledge_item__memory_id")
     readonly_fields = ("event_id", "created_at")
     autocomplete_fields = ("knowledge_item", "actor")
 
@@ -363,21 +256,9 @@ class MemoryKnowledgeEventAdmin(admin.ModelAdmin):
 class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
     list_display = ("id", "status", "source_item", "created_by", "reviewer", "reviewed_at", "created_at")
     list_filter = ("status", "created_at", "reviewed_at")
-    search_fields = ("source_item__memory_id", "created_by__username", "reviewer__username", "decision")
+    search_fields = ("source_item__memory_id", "decision")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("source_item", "created_by", "reviewer")
-
-
-@admin.register(MemoryClaim)
-class MemoryClaimAdmin(admin.ModelAdmin):
-    list_display = ("claim_id", "claim_type", "status", "source", "knowledge_item", "confidence", "sensitivity", "reviewed_at")
-    list_filter = ("claim_type", "status", "sensitivity", "source__domain", "reviewed_at", "created_at")
-    search_fields = ("claim_id", "text", "source__code", "knowledge_item__memory_id", "evidence_hash")
-    readonly_fields = ("claim_id", "evidence_hash", "created_at", "updated_at")
-    autocomplete_fields = ("source", "source_chunk", "snapshot", "knowledge_item", "reviewer", "created_by")
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("source", "source_chunk", "snapshot", "knowledge_item", "reviewer", "created_by")
 
 
 @admin.register(MemoryReflectionRun)
@@ -393,7 +274,7 @@ class MemoryReflectionRunAdmin(admin.ModelAdmin):
 class SecretHandleAdmin(admin.ModelAdmin):
     list_display = ("handle", "provider", "label", "owner_user", "scope", "status", "created_at")
     list_filter = ("provider", "status", "scope", "created_at")
-    search_fields = ("handle", "label", "owner_user__username")
+    search_fields = ("handle", "label")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("owner_user", "created_by")
 
@@ -402,7 +283,7 @@ class SecretHandleAdmin(admin.ModelAdmin):
 class SecretAccessAuditAdmin(admin.ModelAdmin):
     list_display = ("secret_handle", "actor", "action", "decision", "request_id", "created_at")
     list_filter = ("action", "decision", "created_at")
-    search_fields = ("secret_handle__handle", "actor__username", "request_id")
+    search_fields = ("secret_handle__handle", "request_id")
     readonly_fields = ("created_at",)
     autocomplete_fields = ("actor", "secret_handle")
 
@@ -429,7 +310,7 @@ class MemoryIndexJobAdmin(admin.ModelAdmin):
     actions = ("cancel_selected_jobs",)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("source", "created_by")
+        return super().get_queryset(request).select_related("source")
 
     @admin.display(description="Attempts")
     def attempts_display(self, obj):
@@ -460,20 +341,20 @@ class MemoryAccessAuditAdmin(admin.ModelAdmin):
         "actor",
         "tool_name",
         "policy_decision",
-        "returned_chunks_count",
+        "returned_documents_count",
         "returned_facts_count",
         "denied_reason_short",
         "created_at",
     )
-    list_filter = ("policy_decision", "tool_name", "actor", "created_at")
-    search_fields = ("request_id", "actor__username", "query_hash")
+    list_filter = ("policy_decision", "tool_name", "created_at")
+    search_fields = ("request_id", "query_hash")
     readonly_fields = (
         "actor",
         "request_id",
         "query_hash",
         "tool_name",
         "allowed_scope_tokens",
-        "returned_chunk_ids",
+        "returned_document_ids",
         "returned_fact_ids",
         "denied_reason",
         "policy_decision",
@@ -485,21 +366,21 @@ class MemoryAccessAuditAdmin(admin.ModelAdmin):
         (None, {"fields": ("actor", "request_id", "tool_name", "policy_decision", "query_hash")}),
         (
             "Retrieval",
-            {"fields": ("returned_chunk_ids", "returned_fact_ids", "allowed_scope_tokens", "retrieval_trace")},
+            {"fields": ("returned_document_ids", "returned_fact_ids", "allowed_scope_tokens", "retrieval_trace")},
         ),
         ("Denied access", {"fields": ("denied_reason",)}),
         ("Timestamps", {"fields": ("created_at",)}),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("actor")
+        return super().get_queryset(request)
 
     def has_add_permission(self, request):
         return False
 
-    @admin.display(description="Chunks")
-    def returned_chunks_count(self, obj):
-        return len(obj.returned_chunk_ids or [])
+    @admin.display(description="Documents")
+    def returned_documents_count(self, obj):
+        return len(obj.returned_document_ids or [])
 
     @admin.display(description="Facts")
     def returned_facts_count(self, obj):

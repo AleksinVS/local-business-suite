@@ -1,0 +1,33 @@
+{
+  "task_id": "05-chat-and-analytics-db-split",
+  "title": "Раздельные базы для чатов и управляющей аналитики",
+  "status": "implemented",
+  "goal": "Вынести данные диалогов и управляющие модели аналитики из основной базы.",
+  "write_scope": [
+    "apps/ai/",
+    "apps/analytics/",
+    "config/settings.py",
+    "docs/",
+    "tests/e2e или существующая e2e-структура проекта"
+  ],
+  "steps": [
+    "Добавить database aliases chat и analytics_control.",
+    "Добавить database routers для apps.ai chat models и apps.analytics control models.",
+    "Подготовить миграционный план данных из main_vault.sqlite3.",
+    "Добавить команды/инструкции backup, migrate, verify.",
+    "Проверить, что memory source refs на chat messages не ломаются после переноса.",
+    "Проверить, что analytics facts/slices остаются отдельно от knowledge files."
+  ],
+  "acceptance_checks": [
+    "Новые chat records пишутся в data/db/chat.sqlite3.",
+    "Новые analytics control records пишутся в data/db/analytics_control.sqlite3.",
+    "Ссылки знаний на chat source refs остаются валидными.",
+    "Основная база не получает новые chat/analytics control rows после включения routers."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py migrate --plan",
+    "python manage.py test apps.ai.tests apps.analytics.tests apps.memory.tests",
+    "npm run test:e2e"
+  ]
+}

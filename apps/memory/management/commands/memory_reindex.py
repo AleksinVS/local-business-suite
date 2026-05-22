@@ -1,7 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Count
+from django.db.models import Q
 
-from apps.memory.models import MemoryChunk, MemoryGraphFact, MemoryIndexJob, MemorySnapshot, MemorySource
+from apps.memory.models import MemoryIndexJob, MemorySearchDocument, MemorySource
+from apps.memory.policies import search_document_sensitivity
 from apps.memory.services import create_index_job, mark_index_job_failed, mark_index_job_finished, mark_index_job_started
 
 
@@ -28,8 +29,8 @@ class Command(BaseCommand):
             result = self._build_smoke_result(source=source)
             self.stdout.write(
                 "Memory reindex dry-run: "
-                f"sources={result['source_count']}, ready_snapshots={result['ready_snapshot_count']}, "
-                f"active_chunks={result['active_chunk_count']}, active_graph_facts={result['active_graph_fact_count']}"
+                f"sources={result['source_count']}, ready_documents={result['ready_document_count']}, "
+                f"knowledge_documents={result['knowledge_document_count']}, source_data_documents={result['source_data_document_count']}"
             )
             return
 
@@ -54,7 +55,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Memory reindex smoke job {job.pk} succeeded: "
-                f"ready_snapshots={result['ready_snapshot_count']}, active_chunks={result['active_chunk_count']}"
+                f"ready_documents={result['ready_document_count']}"
             )
         )
 
@@ -66,21 +67,15 @@ class Command(BaseCommand):
 
     def _build_smoke_result(self, *, source):
         sources = MemorySource.objects.all()
-        snapshots = MemorySnapshot.objects.select_related("source").filter(is_active=True)
-        chunks = MemoryChunk.objects.filter(is_active=True)
-        facts = MemoryGraphFact.objects.filter(is_active=True)
+        documents = MemorySearchDocument.objects.filter(index_status=MemorySearchDocument.IndexStatus.READY)
         if source is not None:
             sources = sources.filter(pk=source.pk)
-            snapshots = snapshots.filter(source=source)
-            chunks = chunks.filter(snapshot__source=source)
-            facts = facts.filter(snapshot__source=source)
+            documents = documents.filter(Q(source_object__source=source) | Q(knowledge_item__source_code=source.code))
 
-        sensitivity_counts = {
-            item["sensitivity"]: item["count"]
-            for item in snapshots.values("sensitivity").annotate(count=Count("id")).order_by("sensitivity")
-        }
-        ready_snapshots = snapshots.filter(status=MemorySnapshot.Status.READY)
-        missing_safe_path_count = ready_snapshots.filter(safe_path="").count()
+        sensitivity_counts = {}
+        for document in documents.select_related("knowledge_item", "source_object", "source_object__source"):
+            sensitivity = search_document_sensitivity(document)
+            sensitivity_counts[sensitivity] = sensitivity_counts.get(sensitivity, 0) + 1
 
         return {
             "mode": "backend_neutral_smoke",
@@ -88,12 +83,9 @@ class Command(BaseCommand):
             "celery": False,
             "source_code": source.code if source else "",
             "source_count": sources.count(),
-            "snapshot_count": snapshots.count(),
-            "ready_snapshot_count": ready_snapshots.count(),
-            "blocked_snapshot_count": snapshots.filter(status=MemorySnapshot.Status.BLOCKED).count(),
-            "failed_snapshot_count": snapshots.filter(status=MemorySnapshot.Status.FAILED).count(),
-            "active_chunk_count": chunks.count(),
-            "active_graph_fact_count": facts.count(),
-            "ready_snapshots_missing_safe_path": missing_safe_path_count,
+            "document_count": documents.count(),
+            "ready_document_count": documents.count(),
+            "knowledge_document_count": documents.filter(corpus_type=MemorySearchDocument.CorpusType.KNOWLEDGE).count(),
+            "source_data_document_count": documents.filter(corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA).count(),
             "sensitivity_counts": sensitivity_counts,
         }

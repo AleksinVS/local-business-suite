@@ -10,14 +10,14 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 
-SQLITE_FTS_INDEX_RELATIVE_PATH = Path("memory") / "indexes" / "sqlite_fts" / "memory_fts.sqlite3"
+SQLITE_FTS_INDEX_RELATIVE_PATH = Path("indexes") / "fulltext" / "search.sqlite3"
 DEFAULT_SEARCH_LIMIT = 10
 MAX_FALLBACK_CANDIDATES = 1000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class MemoryIndexRecord:
-    chunk_id: str
+    document_id: str
     text: str
     metadata: Mapping[str, Any] = field(default_factory=dict)
     scope_tokens: Sequence[str] = field(default_factory=tuple)
@@ -25,27 +25,50 @@ class MemoryIndexRecord:
     is_active: bool = True
     embedding: Sequence[float] | None = None
 
+    def __init__(
+        self,
+        document_id: str = "",
+        text: str = "",
+        metadata: Mapping[str, Any] | None = None,
+        scope_tokens: Sequence[str] = (),
+        sensitivity: str = "",
+        is_active: bool = True,
+        embedding: Sequence[float] | None = None,
+    ):
+        object.__setattr__(self, "document_id", document_id)
+        object.__setattr__(self, "text", text)
+        object.__setattr__(self, "metadata", metadata or {})
+        object.__setattr__(self, "scope_tokens", scope_tokens)
+        object.__setattr__(self, "sensitivity", sensitivity)
+        object.__setattr__(self, "is_active", is_active)
+        object.__setattr__(self, "embedding", embedding)
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, init=False)
 class MemorySearchResult:
-    chunk_id: str
+    document_id: str
     score: float
     metadata: dict[str, Any]
+
+    def __init__(self, document_id: str = "", score: float = 0.0, metadata: dict[str, Any] | None = None):
+        object.__setattr__(self, "document_id", document_id)
+        object.__setattr__(self, "score", score)
+        object.__setattr__(self, "metadata", metadata or {})
 
 
 @runtime_checkable
 class VectorMemoryBackend(Protocol):
     def upsert(self, record: MemoryIndexRecord) -> None:
-        """Insert or replace one indexed chunk by its stable chunk_id."""
+        """Insert or replace one indexed document by its stable document_id."""
 
     def upsert_many(self, records: Iterable[MemoryIndexRecord]) -> int:
-        """Insert or replace many indexed chunks and return the number processed."""
+        """Insert or replace many indexed documents and return the number processed."""
 
-    def delete(self, chunk_ids: Iterable[str]) -> int:
-        """Remove indexed chunks by chunk_id and return the number of ids processed."""
+    def delete(self, document_ids: Iterable[str]) -> int:
+        """Remove indexed documents by document_id and return the number of ids processed."""
 
-    def deactivate(self, chunk_ids: Iterable[str]) -> int:
-        """Mark chunks inactive by chunk_id and remove them from the searchable FTS table."""
+    def deactivate(self, document_ids: Iterable[str]) -> int:
+        """Mark documents inactive by document_id and remove them from the searchable FTS table."""
 
     def search(
         self,
@@ -54,15 +77,15 @@ class VectorMemoryBackend(Protocol):
         sensitivity: str | Iterable[str] | None = None,
         limit: int = DEFAULT_SEARCH_LIMIT,
     ) -> list[MemorySearchResult]:
-        """Return chunk ids, backend scores, and metadata for matching active chunks."""
+        """Return document ids, backend scores, and metadata for matching active documents."""
 
 
 class SQLiteFTSMemoryBackend:
-    """Embedded full-text backend for the first memory indexing slice.
+    """Embedded SQLite search backend for the first memory indexing slice.
 
-    SQLite FTS5 is used when the Python sqlite3 build supports it. If the
-    extension is unavailable, the same API falls back to a conservative LIKE
-    search over the indexed text table.
+    The backend stores document ids, metadata and derived search tokens. It
+    does not store retrievable full knowledge text; readers load that text
+    from the knowledge file.
     """
 
     def __init__(self, db_path: str | Path | None = None):
@@ -84,18 +107,16 @@ class SQLiteFTSMemoryBackend:
                 for record in prepared_records:
                     connection.execute(
                         """
-                        INSERT INTO memory_chunks (
-                            chunk_id,
-                            body,
+                        INSERT INTO memory_documents (
+                            document_id,
                             metadata_json,
                             scope_tokens_json,
                             sensitivity,
                             is_active,
                             updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                        ON CONFLICT(chunk_id) DO UPDATE SET
-                            body = excluded.body,
+                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(document_id) DO UPDATE SET
                             metadata_json = excluded.metadata_json,
                             scope_tokens_json = excluded.scope_tokens_json,
                             sensitivity = excluded.sensitivity,
@@ -103,8 +124,7 @@ class SQLiteFTSMemoryBackend:
                             updated_at = CURRENT_TIMESTAMP
                         """,
                         (
-                            record.chunk_id,
-                            record.text,
+                            record.document_id,
                             json.dumps(record.metadata, ensure_ascii=False, sort_keys=True),
                             json.dumps(record.scope_tokens, ensure_ascii=False),
                             record.sensitivity,
@@ -112,20 +132,27 @@ class SQLiteFTSMemoryBackend:
                         ),
                     )
                     row = connection.execute(
-                        "SELECT id FROM memory_chunks WHERE chunk_id = ?",
-                        (record.chunk_id,),
+                        "SELECT id FROM memory_documents WHERE document_id = ?",
+                        (record.document_id,),
                     ).fetchone()
                     if fts_enabled and row is not None:
                         self._delete_fts_row(connection, row["id"])
                         if record.is_active:
                             connection.execute(
-                                "INSERT INTO memory_chunks_fts(rowid, chunk_id, body) VALUES (?, ?, ?)",
-                                (row["id"], record.chunk_id, record.text),
+                                "INSERT INTO memory_documents_fts(rowid, document_id, body) VALUES (?, ?, ?)",
+                                (row["id"], record.document_id, record.text),
+                            )
+                    if row is not None:
+                        connection.execute("DELETE FROM memory_document_terms WHERE document_row_id = ?", (row["id"],))
+                        if record.is_active:
+                            connection.executemany(
+                                "INSERT OR IGNORE INTO memory_document_terms(document_row_id, token) VALUES (?, ?)",
+                                ((row["id"], token) for token in _unique_terms(record.text)),
                             )
         return len(prepared_records)
 
-    def delete(self, chunk_ids: Iterable[str]) -> int:
-        ids = _normalise_chunk_ids(chunk_ids)
+    def delete(self, document_ids: Iterable[str]) -> int:
+        ids = _normalise_document_ids(document_ids)
         if not ids:
             return 0
 
@@ -133,13 +160,15 @@ class SQLiteFTSMemoryBackend:
             fts_enabled = self._has_fts(connection)
             with connection:
                 if fts_enabled:
-                    for row in self._rows_for_chunk_ids(connection, ids):
+                    for row in self._rows_for_document_ids(connection, ids):
                         self._delete_fts_row(connection, row["id"])
-                connection.executemany("DELETE FROM memory_chunks WHERE chunk_id = ?", ((chunk_id,) for chunk_id in ids))
+                for row in self._rows_for_document_ids(connection, ids):
+                    connection.execute("DELETE FROM memory_document_terms WHERE document_row_id = ?", (row["id"],))
+                connection.executemany("DELETE FROM memory_documents WHERE document_id = ?", ((document_id,) for document_id in ids))
         return len(ids)
 
-    def deactivate(self, chunk_ids: Iterable[str]) -> int:
-        ids = _normalise_chunk_ids(chunk_ids)
+    def deactivate(self, document_ids: Iterable[str]) -> int:
+        ids = _normalise_document_ids(document_ids)
         if not ids:
             return 0
 
@@ -147,15 +176,17 @@ class SQLiteFTSMemoryBackend:
             fts_enabled = self._has_fts(connection)
             with connection:
                 if fts_enabled:
-                    for row in self._rows_for_chunk_ids(connection, ids):
+                    for row in self._rows_for_document_ids(connection, ids):
                         self._delete_fts_row(connection, row["id"])
+                for row in self._rows_for_document_ids(connection, ids):
+                    connection.execute("DELETE FROM memory_document_terms WHERE document_row_id = ?", (row["id"],))
                 connection.executemany(
                     """
-                    UPDATE memory_chunks
+                    UPDATE memory_documents
                     SET is_active = 0, updated_at = CURRENT_TIMESTAMP
-                    WHERE chunk_id = ?
+                    WHERE document_id = ?
                     """,
-                    ((chunk_id,) for chunk_id in ids),
+                    ((document_id,) for document_id in ids),
                 )
         return len(ids)
 
@@ -186,28 +217,27 @@ class SQLiteFTSMemoryBackend:
                         fetch_limit=_candidate_fetch_limit(limit, allowed_scope_tokens),
                     )
                 except sqlite3.Error:
-                    rows = self._search_like(
+                    rows = self._search_terms(
                         connection,
                         query=query,
                         allowed_sensitivities=allowed_sensitivities,
                     )
             else:
-                rows = self._search_like(
+                rows = self._search_terms(
                     connection,
                     query=query,
                     allowed_sensitivities=allowed_sensitivities,
                 )
 
         results = []
-        terms = _query_terms(query)
         for row in rows:
             scope = _load_json_list(row["scope_tokens_json"])
             if not _scope_matches(scope, allowed_scope_tokens):
                 continue
-            score = float(row["score"]) if row["score"] is not None else _like_score(row["body"], terms)
+            score = float(row["score"]) if row["score"] is not None else 0.0
             results.append(
                 MemorySearchResult(
-                    chunk_id=row["chunk_id"],
+                    document_id=row["document_id"],
                     score=score,
                     metadata=_result_metadata(row["metadata_json"], scope, row["sensitivity"]),
                 )
@@ -226,7 +256,7 @@ class SQLiteFTSMemoryBackend:
     ) -> list[sqlite3.Row]:
         fts_query = _fts_query(query)
         if not fts_query:
-            return self._search_like(
+            return self._search_terms(
                 connection,
                 query=query,
                 allowed_sensitivities=allowed_sensitivities,
@@ -237,15 +267,14 @@ class SQLiteFTSMemoryBackend:
             connection.execute(
                 f"""
                 SELECT
-                    c.chunk_id,
-                    c.body,
+                    c.document_id,
                     c.metadata_json,
                     c.scope_tokens_json,
                     c.sensitivity,
-                    -bm25(memory_chunks_fts) AS score
-                FROM memory_chunks_fts
-                JOIN memory_chunks c ON c.id = memory_chunks_fts.rowid
-                WHERE memory_chunks_fts MATCH ?
+                    -bm25(memory_documents_fts) AS score
+                FROM memory_documents_fts
+                JOIN memory_documents c ON c.id = memory_documents_fts.rowid
+                WHERE memory_documents_fts MATCH ?
                   AND c.is_active = 1
                   {sensitivity_sql}
                 ORDER BY score DESC, c.id ASC
@@ -255,7 +284,7 @@ class SQLiteFTSMemoryBackend:
             )
         )
 
-    def _search_like(
+    def _search_terms(
         self,
         connection: sqlite3.Connection,
         *,
@@ -263,27 +292,31 @@ class SQLiteFTSMemoryBackend:
         allowed_sensitivities: set[str] | None,
     ) -> list[sqlite3.Row]:
         terms = _query_terms(query) or [query]
-        like_sql = " AND ".join("body LIKE ? ESCAPE '\\'" for _ in terms)
-        like_params = [_like_pattern(term) for term in terms]
+        terms = tuple(_unique_terms(" ".join(terms)))
+        if not terms:
+            return []
+        placeholders = ",".join("?" for _ in terms)
         sensitivity_sql, sensitivity_params = _sensitivity_clause(allowed_sensitivities, column="sensitivity")
         return list(
             connection.execute(
                 f"""
                 SELECT
-                    chunk_id,
-                    body,
-                    metadata_json,
-                    scope_tokens_json,
-                    sensitivity,
-                    NULL AS score
-                FROM memory_chunks
-                WHERE is_active = 1
-                  AND {like_sql}
+                    c.document_id,
+                    c.metadata_json,
+                    c.scope_tokens_json,
+                    c.sensitivity,
+                    CAST(COUNT(DISTINCT t.token) AS REAL) / ? AS score
+                FROM memory_documents c
+                JOIN memory_document_terms t ON t.document_row_id = c.id
+                WHERE c.is_active = 1
+                  AND t.token IN ({placeholders})
                   {sensitivity_sql}
-                ORDER BY id ASC
+                GROUP BY c.id
+                HAVING COUNT(DISTINCT t.token) = ?
+                ORDER BY score DESC, c.id ASC
                 LIMIT ?
                 """,
-                (*like_params, *sensitivity_params, MAX_FALLBACK_CANDIDATES),
+                (len(terms), *terms, *sensitivity_params, len(terms), MAX_FALLBACK_CANDIDATES),
             )
         )
 
@@ -303,13 +336,13 @@ class SQLiteFTSMemoryBackend:
     def _ensure_schema(self, connection: sqlite3.Connection) -> None:
         if self._schema_ready:
             return
+        self._drop_legacy_body_schema(connection)
 
         connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS memory_chunks (
+            CREATE TABLE IF NOT EXISTS memory_documents (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chunk_id TEXT NOT NULL UNIQUE,
-                body TEXT NOT NULL,
+                document_id TEXT NOT NULL UNIQUE,
                 metadata_json TEXT NOT NULL DEFAULT '{}',
                 scope_tokens_json TEXT NOT NULL DEFAULT '[]',
                 sensitivity TEXT NOT NULL DEFAULT '',
@@ -318,52 +351,51 @@ class SQLiteFTSMemoryBackend:
             )
             """
         )
-        connection.execute("CREATE INDEX IF NOT EXISTS memory_chunks_active_idx ON memory_chunks(is_active)")
-        connection.execute("CREATE INDEX IF NOT EXISTS memory_chunks_sensitivity_idx ON memory_chunks(sensitivity)")
+        connection.execute("CREATE INDEX IF NOT EXISTS memory_documents_active_idx ON memory_documents(is_active)")
+        connection.execute("CREATE INDEX IF NOT EXISTS memory_documents_sensitivity_idx ON memory_documents(sensitivity)")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_document_terms (
+                document_row_id INTEGER NOT NULL,
+                token TEXT NOT NULL,
+                PRIMARY KEY (document_row_id, token),
+                FOREIGN KEY(document_row_id) REFERENCES memory_documents(id) ON DELETE CASCADE
+            )
+            """
+        )
+        connection.execute("CREATE INDEX IF NOT EXISTS memory_document_terms_token_idx ON memory_document_terms(token)")
 
-        try:
-            connection.execute(
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS memory_chunks_fts
-                USING fts5(chunk_id UNINDEXED, body, tokenize='unicode61')
-                """
-            )
-        except sqlite3.Error:
-            self._fts_enabled = False
-        else:
-            self._fts_enabled = True
-            connection.execute(
-                """
-                INSERT INTO memory_chunks_fts(rowid, chunk_id, body)
-                SELECT c.id, c.chunk_id, c.body
-                FROM memory_chunks c
-                WHERE c.is_active = 1
-                  AND NOT EXISTS (
-                    SELECT 1 FROM memory_chunks_fts f WHERE f.rowid = c.id
-                  )
-                """
-            )
+        connection.execute("DROP TABLE IF EXISTS memory_documents_fts")
+        self._fts_enabled = False
         connection.commit()
         self._schema_ready = True
 
-    def _has_fts(self, connection: sqlite3.Connection) -> bool:
-        if self._fts_enabled is not None:
-            return self._fts_enabled
-        row = connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_chunks_fts'"
-        ).fetchone()
-        self._fts_enabled = row is not None
-        return self._fts_enabled
+    def _drop_legacy_body_schema(self, connection: sqlite3.Connection) -> None:
+        row = connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_documents'").fetchone()
+        if row is None:
+            return
+        columns = [item["name"] for item in connection.execute("PRAGMA table_info(memory_documents)").fetchall()]
+        if "body" not in columns:
+            return
+        connection.execute("DROP TABLE IF EXISTS memory_documents_fts")
+        connection.execute("DROP TABLE IF EXISTS memory_document_terms")
+        connection.execute("DROP TABLE IF EXISTS memory_documents")
 
-    def _rows_for_chunk_ids(self, connection: sqlite3.Connection, chunk_ids: Sequence[str]) -> list[sqlite3.Row]:
-        placeholders = ",".join("?" for _ in chunk_ids)
-        return list(connection.execute(f"SELECT id FROM memory_chunks WHERE chunk_id IN ({placeholders})", chunk_ids))
+    def _has_fts(self, connection: sqlite3.Connection) -> bool:
+        return False
+
+    def _rows_for_document_ids(self, connection: sqlite3.Connection, document_ids: Sequence[str]) -> list[sqlite3.Row]:
+        placeholders = ",".join("?" for _ in document_ids)
+        return list(connection.execute(f"SELECT id FROM memory_documents WHERE document_id IN ({placeholders})", document_ids))
 
     def _delete_fts_row(self, connection: sqlite3.Connection, row_id: int) -> None:
-        connection.execute("DELETE FROM memory_chunks_fts WHERE rowid = ?", (row_id,))
+        connection.execute("DELETE FROM memory_documents_fts WHERE rowid = ?", (row_id,))
 
 
 def default_sqlite_fts_index_path() -> Path:
+    configured = _django_search_index_path()
+    if configured is not None:
+        return configured
     data_dir = _django_data_dir()
     if data_dir is None:
         data_dir = Path.cwd() / "data"
@@ -383,12 +415,26 @@ def _django_data_dir() -> Path | None:
         return None
 
 
+def _django_search_index_path() -> Path | None:
+    try:
+        import os
+
+        from django.conf import settings
+
+        override = os.environ.get("LOCAL_BUSINESS_SEARCH_INDEX_PATH", "").strip()
+        if override:
+            return Path(override)
+        return Path(settings.DATA_DIR) / SQLITE_FTS_INDEX_RELATIVE_PATH
+    except Exception:
+        return None
+
+
 def _prepare_record(record: MemoryIndexRecord) -> MemoryIndexRecord:
-    chunk_id = (record.chunk_id or "").strip()
-    if not chunk_id:
-        raise ValueError("chunk_id is required")
+    document_id = (record.document_id or "").strip()
+    if not document_id:
+        raise ValueError("document_id is required")
     return MemoryIndexRecord(
-        chunk_id=chunk_id,
+        document_id=document_id,
         text=record.text or "",
         metadata=dict(record.metadata or {}),
         scope_tokens=tuple(_normalise_tokens(record.scope_tokens)),
@@ -398,11 +444,11 @@ def _prepare_record(record: MemoryIndexRecord) -> MemoryIndexRecord:
     )
 
 
-def _normalise_chunk_ids(chunk_ids: Iterable[str]) -> tuple[str, ...]:
+def _normalise_document_ids(document_ids: Iterable[str]) -> tuple[str, ...]:
     seen = set()
     ids = []
-    for chunk_id in chunk_ids:
-        value = (chunk_id or "").strip()
+    for document_id in document_ids:
+        value = (document_id or "").strip()
         if value and value not in seen:
             seen.add(value)
             ids.append(value)
@@ -478,19 +524,15 @@ def _fts_query(query: str) -> str:
     return " AND ".join(f'"{term.replace(chr(34), chr(34) + chr(34))}"' for term in terms[:16])
 
 
-def _like_pattern(term: str) -> str:
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
-def _like_score(body: str, terms: Sequence[str]) -> float:
-    text = (body or "").lower()
-    if not text:
-        return 0.0
-    if not terms:
-        return 0.0
-    matches = sum(text.count(term.lower()) for term in terms if term)
-    return matches / max(len(text), 1)
+def _unique_terms(text: str) -> tuple[str, ...]:
+    seen = set()
+    terms = []
+    for term in _query_terms(text):
+        value = term.lower()
+        if value not in seen:
+            seen.add(value)
+            terms.append(value)
+    return tuple(terms)
 
 
 def _load_json_list(value: str) -> list[str]:

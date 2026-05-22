@@ -1,0 +1,43 @@
+{
+  "task_id": "05-claim-boundary-docs-tests",
+  "title": "Зафиксировать границу MemoryClaim и закрыть документацию",
+  "status": "ready",
+  "objective": "Не дать MemoryClaim снова стать дублирующим источником текста знания в MVP.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/services.py",
+    "apps/memory/admin.py",
+    "apps/memory/tests.py",
+    "docs/adr/",
+    "docs/architecture/",
+    "docs/guides/",
+    "docs/planning/active/",
+    "workflow/active/memory-file-only-knowledge-body/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Объяснить в документации, что MemoryClaim - будущий слой проверяемых утверждений, не обычная память MVP.",
+    "Обычный memory.remember не должен создавать MemoryClaim.",
+    "Обычный memory.search не должен возвращать MemoryClaim.",
+    "MemoryClaim не должен хранить полный текст знания; если модель остается, убрать text или заменить на структурированный payload/evidence refs.",
+    "Если проще и не ломает текущие контракты MVP, удалить MemoryClaim из текущей схемы и оставить будущий claim-governance отдельной задачей.",
+    "Обновить README/guide/deployment docs при необходимости.",
+    "Обновить .desc.json и PROJECT_STRUCTURE.yaml."
+  ],
+  "acceptance_checks": [
+    "Документация объясняет MemoryClaim простым языком.",
+    "В active code нет автоматического создания MemoryClaim из обычного memory.remember.",
+    "В модели MemoryClaim нет полного текстового тела или модель удалена из MVP.",
+    "make gen-struct выполнен.",
+    "Unit и e2e проверки проходят."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests apps.analytics.tests",
+    "npm run test:e2e",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

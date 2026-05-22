@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "memory_claims_policy",
-  "description": "Future-stage policy for optional claim and belief lifecycle above MemoryKnowledgeItem, chunks and graph facts. MVP remember/search does not create or return these objects automatically.",
+  "description": "Future-stage policy for optional claim and belief lifecycle above file-backed MemoryKnowledgeItem, search documents and graph facts. MVP schema does not include MemoryClaim/MemoryBelief and remember/search does not create or return these objects automatically.",
   "claim_types": [
     "fact",
     "preference",

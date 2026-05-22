@@ -9,7 +9,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--source-code", required=True, help="MemorySource code to ingest.")
-        parser.add_argument("--dry-run", action="store_true", help="Show ingestion metrics without writing snapshots/chunks.")
+        parser.add_argument("--dry-run", action="store_true", help="Show ingestion metrics without writing search documents.")
         parser.add_argument("--limit", type=int, default=None, help="Optional maximum source objects to process.")
 
     def handle(self, *args, **options):

@@ -14,21 +14,20 @@ from django.utils import timezone
 
 from apps.ai.models import ChatMessage
 
-from .ingestion import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, index_snapshot_text
 from .models import (
-    MemoryChunk,
-    MemoryGraphFact,
     MemoryIndexJob,
     MemoryKnowledgeCandidate,
     MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
-    MemorySnapshot,
+    MemorySearchDocument,
     MemorySource,
     MemoryWriteRequest,
 )
+from .knowledge_files import read_knowledge_item_file, rebuild_knowledge_summaries, write_knowledge_item_file
 from .policies import can_write_organization_memory, can_write_personal_memory
 from .secret_backends import get_secret_backend
 from .security import scan_for_secrets
+from .vector_backends import MemoryIndexRecord
 from .vector_backends import get_default_backend
 
 
@@ -155,6 +154,11 @@ def process_memory_write_request(request: MemoryWriteRequest):
             messages=source_messages,
             secret_handles=sanitized.secret_handles,
         )
+        file_result = write_knowledge_item_file(
+            knowledge_item,
+            body=_normalize_memory_text(sanitized.text),
+            commit_message=f"Remember knowledge {knowledge_item.memory_id}",
+        )
         event = append_knowledge_event(
             knowledge_item=knowledge_item,
             actor=request.actor,
@@ -173,6 +177,8 @@ def process_memory_write_request(request: MemoryWriteRequest):
             "memory_id": knowledge_item.memory_id,
             "event_id": str(event.event_id),
             "secret_handles": list(sanitized.secret_handles),
+            "knowledge_file_path": file_result.relative_path,
+            "knowledge_file_commit": file_result.commit_hash,
         }
         request.status = (
             MemoryWriteRequest.Status.ACCEPTED
@@ -253,13 +259,16 @@ def create_knowledge_item_from_request(*, request: MemoryWriteRequest, safe_text
         "scope": scope,
         "owner_user": owner_user,
         "kind": MemoryKnowledgeItem.Kind.SECRET_REFERENCE if secret_handles else MemoryKnowledgeItem.Kind.FACT,
-        "text": text,
         "text_hash": text_hash,
         "sensitivity": "internal" if not secret_handles else "confidential",
         "scope_tokens": _scope_tokens_for_memory(scope=scope, owner_user=owner_user),
         "status": MemoryKnowledgeItem.Status.ACTIVE,
         "source_session": request.session,
         "source_message_ids": list(request.message_ids or []),
+        "source_refs": _source_refs_for_request(request),
+        "source_code": "chat",
+        "source_kind": "chat",
+        "index_status": "indexing_pending",
         "source_content_hash": source_hash,
         "provenance": {
             "memory_write_request_id": request.pk,
@@ -299,81 +308,97 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
     elif scope == MemoryKnowledgeItem.Scope.ORGANIZATION:
         items = items.filter(owner_user__isnull=True)
 
-    records = [
-        {
-            "memory_id": item.memory_id,
-            "kind": item.kind,
-            "text": item.text,
-            "sensitivity": item.sensitivity,
-            "scope_tokens": item.scope_tokens,
-            "updated_at": item.updated_at.isoformat(),
-            "metadata": item.metadata,
-        }
-        for item in items.order_by("created_at", "id")
-    ]
-    base_dir = _projection_dir(scope=scope, owner_user=owner_user)
-    _atomic_write_text(base_dir / "memory.current.json", json.dumps({"items": records}, ensure_ascii=False, indent=2) + "\n")
-    _atomic_write_text(base_dir / "memory.current.md", _projection_markdown(records))
+    records = []
+    for item in items.order_by("created_at", "id"):
+        try:
+            body = read_knowledge_item_file(item).body
+        except ValidationError:
+            body = ""
+        records.append(
+            {
+                "memory_id": item.memory_id,
+                "kind": item.kind,
+                "text": body,
+                "sensitivity": item.sensitivity,
+                "scope_tokens": item.scope_tokens,
+                "updated_at": item.updated_at.isoformat(),
+                "metadata": item.metadata,
+            }
+        )
+    rebuild_knowledge_summaries(scope=scope, owner_user=owner_user)
     return records
 
 
 def index_knowledge_item(item: MemoryKnowledgeItem):
     source = _chat_memory_source(item.scope)
     vector_backend = get_default_backend()
-    previous_snapshots = list(
-        MemorySnapshot.objects.filter(source=source, source_object_id=item.memory_id, is_active=True)
+    document_id = _knowledge_document_id(item)
+    body = read_knowledge_item_file(item).body
+    stale_document_ids = list(
+        MemorySearchDocument.objects.filter(
+            knowledge_item=item,
+            corpus_type=MemorySearchDocument.CorpusType.KNOWLEDGE,
+        )
+        .exclude(document_id=document_id)
+        .values_list("document_id", flat=True)
     )
-    previous_chunk_ids = list(
-        MemoryChunk.objects.filter(snapshot__in=previous_snapshots, is_active=True).values_list("chunk_id", flat=True)
-    )
-    if previous_chunk_ids and hasattr(vector_backend, "deactivate"):
-        vector_backend.deactivate(previous_chunk_ids)
-    MemoryChunk.objects.filter(snapshot__in=previous_snapshots, is_active=True).update(is_active=False, updated_at=timezone.now())
-    MemoryGraphFact.objects.filter(snapshot__in=previous_snapshots, is_active=True).update(
-        is_active=False,
+    if stale_document_ids and hasattr(vector_backend, "deactivate"):
+        vector_backend.deactivate(stale_document_ids)
+    MemorySearchDocument.objects.filter(document_id__in=stale_document_ids).update(
+        index_status=MemorySearchDocument.IndexStatus.DELETED,
         updated_at=timezone.now(),
     )
-    MemorySnapshot.objects.filter(pk__in=[snapshot.pk for snapshot in previous_snapshots]).update(
-        is_active=False,
-        valid_to=timezone.now(),
-        updated_at=timezone.now(),
-    )
-    snapshot = MemorySnapshot.objects.create(
-        source=source,
-        source_object_id=item.memory_id,
-        content_hash=item.text_hash,
-        schema_version=CHAT_MEMORY_SCHEMA_VERSION,
-        extractor_version=CHAT_MEMORY_EXTRACTOR_VERSION,
-        status=MemorySnapshot.Status.READY,
-        extracted_at=timezone.now(),
-        raw_path=f"chat-memory:{item.memory_id}",
-        pii_policy_applied="chat_memory_secret_handle_redaction",
-        scope_tokens=item.scope_tokens,
-        sensitivity=item.sensitivity,
-        metadata={
-            "memory_id": item.memory_id,
-            "scope": item.scope,
-            "owner_user_id": item.owner_user_id,
-            "source_message_ids": item.source_message_ids,
+    metadata = {
+        "corpus_type": "knowledge",
+        "result_type": "knowledge",
+        "memory_id": item.memory_id,
+        "knowledge_id": item.memory_id,
+        "scope": item.scope,
+        "owner_user_id": item.owner_user_id,
+        "source_code": item.source_code or source.code,
+        "source_kind": item.source_kind or source.source_kind,
+        "source_refs": item.source_refs,
+        "source_message_ids": item.source_message_ids,
+        "knowledge_file_path": item.knowledge_file_path,
+    }
+    document, _ = MemorySearchDocument.objects.update_or_create(
+        document_id=document_id,
+        defaults={
+            "corpus_type": MemorySearchDocument.CorpusType.KNOWLEDGE,
+            "object_kind": MemorySearchDocument.ObjectKind.KNOWLEDGE_ITEM,
+            "knowledge_item": item,
+            "body_hash": item.text_hash,
+            "index_status": MemorySearchDocument.IndexStatus.READY,
+            "metadata": metadata,
+            "indexed_at": timezone.now(),
         },
     )
-    return index_snapshot_text(
-        snapshot=snapshot,
-        safe_text=item.text,
-        vector_backend=vector_backend,
-        chunk_size=DEFAULT_CHUNK_SIZE,
-        chunk_overlap=DEFAULT_CHUNK_OVERLAP,
-    )
+    if vector_backend is not None:
+        vector_backend.upsert(
+            MemoryIndexRecord(
+                document_id=document.document_id,
+                text=body,
+                metadata=metadata,
+                scope_tokens=item.scope_tokens,
+                sensitivity=item.sensitivity,
+                is_active=True,
+            )
+        )
+    item.index_status = "ready"
+    item.save(update_fields=["index_status", "updated_at"])
+    return {"document_ids": [document.document_id], "fact_ids": [], "knowledge_id": item.memory_id}
 
 
 def edit_personal_memory(*, actor, memory_id: str, new_text: str):
     item = _get_owned_personal_memory(actor=actor, memory_id=memory_id)
     sanitized = sanitize_memory_text(new_text, actor=actor, scope=MemoryKnowledgeItem.Scope.PERSONAL)
-    item.text = _normalize_memory_text(sanitized.text)
-    item.text_hash = _sha256(item.text)
+    body = _normalize_memory_text(sanitized.text)
+    item.text_hash = _sha256(body)
     item.kind = MemoryKnowledgeItem.Kind.SECRET_REFERENCE if sanitized.secret_handles else item.kind
     item.metadata = {**(item.metadata or {}), "secret_handles": list(sanitized.secret_handles)}
-    item.save(update_fields=["text", "text_hash", "kind", "metadata", "updated_at"])
+    item.index_status = "indexing_pending"
+    item.save(update_fields=["text_hash", "kind", "metadata", "index_status", "updated_at"])
+    write_knowledge_item_file(item, body=body, commit_message=f"Edit knowledge {item.memory_id}")
     event = append_knowledge_event(
         knowledge_item=item,
         actor=actor,
@@ -387,8 +412,11 @@ def edit_personal_memory(*, actor, memory_id: str, new_text: str):
 
 def delete_personal_memory(*, actor, memory_id: str):
     item = _get_owned_personal_memory(actor=actor, memory_id=memory_id)
+    body = read_knowledge_item_file(item).body
     item.status = MemoryKnowledgeItem.Status.DELETED
-    item.save(update_fields=["status", "updated_at"])
+    item.index_status = "deleted"
+    item.save(update_fields=["status", "index_status", "updated_at"])
+    write_knowledge_item_file(item, body=body, commit_message=f"Delete knowledge {item.memory_id}")
     event = append_knowledge_event(
         knowledge_item=item,
         actor=actor,
@@ -396,20 +424,25 @@ def delete_personal_memory(*, actor, memory_id: str):
         payload={},
     )
     rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
-    MemorySnapshot.objects.filter(source_object_id=item.memory_id, is_active=True).update(
-        is_active=False,
-        valid_to=timezone.now(),
-        updated_at=timezone.now(),
-    )
+    document_ids = list(MemorySearchDocument.objects.filter(knowledge_item=item).values_list("document_id", flat=True))
+    if document_ids:
+        backend = get_default_backend()
+        if hasattr(backend, "deactivate"):
+            backend.deactivate(document_ids)
+        MemorySearchDocument.objects.filter(document_id__in=document_ids).update(
+            index_status=MemorySearchDocument.IndexStatus.DELETED,
+            updated_at=timezone.now(),
+        )
     return {"memory_id": item.memory_id, "event_id": str(event.event_id), "status": item.status}
 
 
 def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_by):
+    proposed_text = read_knowledge_item_file(source_item).body
     candidate, _ = MemoryKnowledgeCandidate.objects.get_or_create(
         source_item=source_item,
         status=MemoryKnowledgeCandidate.Status.PROPOSED,
         defaults={
-            "proposed_text": source_item.text,
+            "proposed_text": proposed_text,
             "proposed_payload": {
                 "source_memory_id": source_item.memory_id,
                 "source_owner_user_id": source_item.owner_user_id,
@@ -424,7 +457,7 @@ def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_b
 
 def process_queued_memory_requests(*, limit=100):
     processed = []
-    queryset = MemoryWriteRequest.objects.select_related("actor", "session").filter(
+    queryset = MemoryWriteRequest.objects.filter(
         status=MemoryWriteRequest.Status.QUEUED
     ).order_by("created_at", "id")[:limit]
     for request in queryset:
@@ -456,8 +489,7 @@ def process_queued_memory_requests(*, limit=100):
 def propose_reflection_candidates(*, limit=100):
     candidates = []
     queryset = (
-        MemoryKnowledgeItem.objects.select_related("owner_user", "created_by")
-        .filter(scope=MemoryKnowledgeItem.Scope.PERSONAL, status=MemoryKnowledgeItem.Status.ACTIVE)
+        MemoryKnowledgeItem.objects.filter(scope=MemoryKnowledgeItem.Scope.PERSONAL, status=MemoryKnowledgeItem.Status.ACTIVE)
         .order_by("created_at", "id")
     )
     for item in queryset[:limit]:
@@ -498,6 +530,19 @@ def _build_raw_memory_text(*, request: MemoryWriteRequest, messages: Iterable[Ch
     if request.user_note:
         parts.append(request.user_note)
     return "\n\n".join(parts)
+
+
+def _source_refs_for_request(request: MemoryWriteRequest) -> list[dict[str, str]]:
+    refs = []
+    if request.session_id:
+        for message_id in request.message_ids or []:
+            refs.append(
+                {
+                    "kind": "chat_message",
+                    "value": f"chat_session:{request.session_id}/message:{message_id}",
+                }
+            )
+    return refs
 
 
 def _chat_memory_source(scope: str) -> MemorySource:
@@ -588,6 +633,10 @@ def _scope_tokens_for_memory(*, scope: str, owner_user=None) -> list[str]:
 def _memory_id(*, scope: str, owner_user, text_hash: str) -> str:
     owner = f"user-{owner_user.id}" if owner_user else "org-default"
     return f"chat:{scope}:{owner}:{text_hash[:24]}"
+
+
+def _knowledge_document_id(item: MemoryKnowledgeItem) -> str:
+    return "knowledge:" + _sha256(f"{item.memory_id}:{item.text_hash}")[:40]
 
 
 def _source_content_hash(*, messages, user_note: str) -> str:

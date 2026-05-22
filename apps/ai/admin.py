@@ -5,7 +5,7 @@ from .models import ChatSession, ChatMessage, PendingAction, AgentActionLog, Cha
 class ChatSessionAdmin(admin.ModelAdmin):
     list_display = ("external_id", "user", "channel", "status", "created_at")
     list_filter = ("channel", "status", "created_at")
-    search_fields = ("external_id", "user__username", "title")
+    search_fields = ("external_id", "title")
 
 @admin.register(ChatMessage)
 class ChatMessageAdmin(admin.ModelAdmin):
@@ -23,13 +23,13 @@ class ChatAttachmentAdmin(admin.ModelAdmin):
 class PendingActionAdmin(admin.ModelAdmin):
     list_display = ("token", "tool_code", "action_kind", "status", "actor", "created_at")
     list_filter = ("action_kind", "status", "created_at")
-    search_fields = ("tool_code", "actor__username")
+    search_fields = ("tool_code",)
 
 @admin.register(AgentActionLog)
 class AgentActionLogAdmin(admin.ModelAdmin):
     list_display = ("id", "tool_code", "action_kind", "status", "actor", "created_at")
     list_filter = ("action_kind", "status", "created_at")
-    search_fields = ("tool_code", "actor__username")
+    search_fields = ("tool_code",)
 
 
 @admin.register(SlashCommand)

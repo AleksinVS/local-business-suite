@@ -15,8 +15,8 @@ from django.utils import timezone
 
 from apps.core.json_utils import atomic_write_json
 
-from .ingestion import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, index_snapshot_text
-from .models import MemorySnapshot, MemorySource
+from .models import MemorySearchDocument, MemorySource, MemorySourceObject
+from .vector_backends import MemoryIndexRecord, get_default_backend
 from .security import scan_for_secrets
 
 
@@ -493,59 +493,93 @@ def handoff_external_envelope_to_memory(*, envelope: dict, envelope_path: Path |
     validate_external_envelope(envelope)
     source = MemorySource.objects.get(code=envelope["source_code"])
     assert_external_upsert_not_stale(source=source, envelope=envelope)
-    source_object_id = _source_object_id(envelope)
+    source_object_ref = _source_object_ref(envelope)
     if envelope["operation"] == "delete":
-        updated = MemorySnapshot.objects.filter(source=source, source_object_id=source_object_id, is_active=True).update(
-            is_active=False,
-            valid_to=timezone.now(),
+        document_ids = list(
+            MemorySearchDocument.objects.filter(
+                source_object__source=source,
+                source_object__object_id=source_object_ref,
+                corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+            ).values_list("document_id", flat=True)
+        )
+        updated = MemorySearchDocument.objects.filter(document_id__in=document_ids).update(
+            index_status=MemorySearchDocument.IndexStatus.DELETED,
             updated_at=timezone.now(),
         )
+        if document_ids:
+            get_default_backend().deactivate(document_ids)
         append_external_tombstone(source=source, envelope=envelope)
-        return {"operation": "delete", "source_object_id": source_object_id, "deactivated_snapshots": updated}
+        return {"operation": "delete", "source_object_id": source_object_ref, "deactivated_documents": updated}
 
     safe_text = render_external_envelope_text(envelope)
     with transaction.atomic():
-        MemorySnapshot.objects.filter(source=source, source_object_id=source_object_id, is_active=True).update(
-            is_active=False,
-            valid_to=timezone.now(),
-            updated_at=timezone.now(),
-        )
-        snapshot_defaults = {
-            "schema_version": envelope["schema_version"],
-            "extractor_version": "external-api-mvp-v1",
-            "status": MemorySnapshot.Status.READY,
-            "extracted_at": timezone.now(),
-            "valid_to": None,
-            "is_active": True,
-            "raw_path": str(envelope_path or envelope.get("external_url") or f"external:{source_object_id}"),
-            "pii_policy_applied": source.pii_policy or "deidentify_before_index",
-            "scope_tokens": list(envelope.get("scope_tokens") or ["org:default"]),
-            "sensitivity": envelope.get("sensitivity") or source.sensitivity,
-            "metadata": {
-                "external": {
-                    "collection": envelope["collection"],
-                    "object_type": envelope["object_type"],
-                    "external_id": envelope["external_id"],
-                    "external_url": envelope.get("external_url", ""),
-                    "source_updated_at": envelope.get("source_updated_at", ""),
-                },
-                "provenance": envelope.get("provenance", {}),
-                "retention_class": envelope.get("retention_class", ""),
-            },
-        }
-        snapshot, _ = MemorySnapshot.objects.update_or_create(
+        source_object, _ = MemorySourceObject.objects.update_or_create(
             source=source,
-            source_object_id=source_object_id,
-            content_hash=envelope["content_hash"],
-            defaults=snapshot_defaults,
+            object_id=source_object_ref,
+            defaults={
+                "object_uri": envelope.get("external_url") or str(envelope_path or f"external:{source_object_ref}"),
+                "relative_path": f"{envelope['collection']}/{envelope['external_id']}",
+                "file_name": str(envelope["external_id"]),
+                "extension": "",
+                "mime_type": "application/json",
+                "size_bytes": len(json.dumps(envelope.get("payload") or {}, ensure_ascii=False).encode("utf-8")),
+                "content_hash": envelope["content_hash"],
+                "etag_or_inode": envelope.get("source_updated_at", ""),
+                "last_seen_at": timezone.now(),
+                "last_stable_at": timezone.now(),
+                "discovery_status": MemorySourceObject.DiscoveryStatus.SEEN,
+                "ingestion_status": MemorySourceObject.IngestionStatus.INGESTED,
+                "last_ingested_at": timezone.now(),
+                "metadata": {
+                    "scope_tokens": list(envelope.get("scope_tokens") or ["org:default"]),
+                    "external": {
+                        "collection": envelope["collection"],
+                        "object_type": envelope["object_type"],
+                        "external_id": envelope["external_id"],
+                    },
+                },
+            },
         )
-    indexed = index_snapshot_text(
-        snapshot=snapshot,
-        safe_text=safe_text,
-        chunk_size=DEFAULT_CHUNK_SIZE,
-        chunk_overlap=DEFAULT_CHUNK_OVERLAP,
+        document_id = _external_document_id(source=source, source_object_ref=source_object_ref)
+        metadata = {
+            "corpus_type": "source_data",
+            "result_type": "source_data",
+            "external": {
+                "collection": envelope["collection"],
+                "object_type": envelope["object_type"],
+                "external_id": envelope["external_id"],
+                "external_url": envelope.get("external_url", ""),
+                "source_updated_at": envelope.get("source_updated_at", ""),
+            },
+            "provenance": envelope.get("provenance", {}),
+            "retention_class": envelope.get("retention_class", ""),
+            "source_code": source.code,
+            "source_kind": source.source_kind,
+            "source_object_id": source_object_ref,
+        }
+        document, _ = MemorySearchDocument.objects.update_or_create(
+            document_id=document_id,
+            defaults={
+                "corpus_type": MemorySearchDocument.CorpusType.SOURCE_DATA,
+                "object_kind": MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+                "source_object": source_object,
+                "body_hash": envelope["content_hash"],
+                "index_status": MemorySearchDocument.IndexStatus.READY,
+                "metadata": metadata,
+                "indexed_at": timezone.now(),
+            },
+        )
+    get_default_backend().upsert(
+        MemoryIndexRecord(
+            document_id=document.document_id,
+            text=safe_text,
+            metadata=metadata,
+            scope_tokens=list(envelope.get("scope_tokens") or ["org:default"]),
+            sensitivity=envelope.get("sensitivity") or source.sensitivity,
+            is_active=True,
+        )
     )
-    return {"operation": "upsert", "snapshot_id": snapshot.id, **indexed}
+    return {"operation": "upsert", "source_object_id": source_object_ref, "document_id": document.document_id, "document_ids": [document.document_id]}
 
 
 def validate_external_envelope(envelope: dict):
@@ -607,7 +641,7 @@ def append_external_tombstone(*, source: MemorySource, envelope: dict) -> Path:
         "collection": envelope["collection"],
         "object_type": envelope["object_type"],
         "external_id": envelope["external_id"],
-        "source_object_id": _source_object_id(envelope),
+        "source_object_ref": _source_object_ref(envelope),
         "source_updated_at": envelope.get("source_updated_at", ""),
         "content_hash": envelope["content_hash"],
         "deleted_at": timezone.now().isoformat(),
@@ -774,8 +808,12 @@ def _sha256_json(payload: dict) -> str:
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def _source_object_id(envelope: dict) -> str:
+def _source_object_ref(envelope: dict) -> str:
     return f"external:{envelope['collection']}:{envelope['object_type']}:{envelope['external_id']}"
+
+
+def _external_document_id(*, source: MemorySource, source_object_ref: str) -> str:
+    return "source:" + hashlib.sha256(f"{source.code}:{source_object_ref}".encode("utf-8")).hexdigest()[:40]
 
 
 def _external_connector_config(source: MemorySource) -> dict:

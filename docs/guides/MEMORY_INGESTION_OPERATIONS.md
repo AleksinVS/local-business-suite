@@ -217,7 +217,7 @@ Stage B, working schema evolution:
 - unknown patterns, conflicts, noisy terms и coverage gaps собираются как proposals;
 - periodic review выполняют профильные эксперты и владелец графа.
 
-Каждый accepted graph fact обязан иметь provenance: source, object id, snapshot hash, chunk id или evidence position, schema version, extractor, confidence, scope tokens и sensitivity.
+Каждый accepted graph fact обязан иметь provenance: source, object id, `document_id` или evidence position, schema version, extractor, confidence, scope tokens и sensitivity.
 
 ## Cloud/OCR ограничения
 

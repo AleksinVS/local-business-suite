@@ -5,12 +5,12 @@ from apps.memory.models import MemorySource
 
 
 class Command(BaseCommand):
-    help = "Extract graph entities/facts from ready memory chunks using the accepted graph schema baseline."
+    help = "Extract graph entities/facts from ready memory documents using the accepted graph schema baseline."
 
     def add_arguments(self, parser):
         parser.add_argument("--source-code", required=True, help="MemorySource code to process.")
         parser.add_argument("--dry-run", action="store_true", help="Count extractable graph items without writing them.")
-        parser.add_argument("--limit", type=int, default=None, help="Optional maximum chunks to process.")
+        parser.add_argument("--limit", type=int, default=None, help="Optional maximum documents to process.")
 
     def handle(self, *args, **options):
         try:
@@ -22,7 +22,7 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 "Memory graph extraction "
                 f"{'dry-run ' if options['dry_run'] else ''}finished for {source.code}: "
-                f"chunks={metrics['chunks']}, entities={metrics['entities']}, "
+                f"documents={metrics['documents']}, entities={metrics['entities']}, "
                 f"facts={metrics['facts']}, review_items={metrics['review_items']}"
             )
         )

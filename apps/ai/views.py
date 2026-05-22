@@ -163,7 +163,7 @@ def validate_gateway_actor(actor_context, session_id=None):
     if not session_id:
         return None
     session_external_id = normalize_session_external_id(session_id)
-    session = ChatSession.objects.filter(external_id=session_external_id).select_related("user").first()
+    session = ChatSession.objects.filter(external_id=session_external_id).first()
     if not session:
         return None
     actor_user_id = actor_context.get("user_id")
@@ -189,8 +189,8 @@ class AIHubView(AIManagementMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["tool_registry"] = settings.LOCAL_BUSINESS_AI_TOOLS["tools"]
         context["task_types"] = settings.LOCAL_BUSINESS_AI_TASK_TYPES["task_types"]
-        context["recent_sessions"] = ChatSession.objects.select_related("user")[:10]
-        context["recent_actions"] = AgentActionLog.objects.select_related("actor", "session")[:20]
+        context["recent_sessions"] = ChatSession.objects.all()[:10]
+        context["recent_actions"] = AgentActionLog.objects.select_related("session")[:20]
         return context
 
 

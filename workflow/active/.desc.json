@@ -7,5 +7,8 @@
   "memory-trusted-sources-claims-retrieval": "Workflow: trusted sources, claim/belief layer и lightweight retrieval",
   "memory-mvp-simplification": "Workflow: упрощение MVP-архитектуры памяти",
   "memory-mvp-remediation": "Workflow: исправление разрывов MVP-памяти",
+  "memory-file-backed-knowledge": "Workflow: файловые знания, раздельные базы и единый поиск",
+  "memory-file-only-knowledge-body": "Workflow: текст знания только в файле знания",
+  "memory-snapshot-chunk-removal": "Workflow: удаление MemorySnapshot/MemoryChunk из активного пути памяти",
   "settings-center-gui": "Workflow: Settings Center, GUI настроек и контекстная справка"
 }

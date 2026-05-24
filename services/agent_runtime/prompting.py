@@ -38,15 +38,19 @@ def _build_memory_section() -> str:
         [
             "",
             "## Система памяти (Memory Service):",
-            "- Память доступна через read-only инструмент `memory.search`.",
+            "- Для поиска используй `memory.search`.",
+            "- Для просьбы пользователя \"запомни\" используй `memory.remember`; инструмент ставит задачу записи в очередь и возвращает статус, а не записывает знание синхронно.",
+            "- По умолчанию `memory.remember` пишет в персональную память пользователя. В организационную память пиши только при явной просьбе \"для всех\" или \"для организации\"; права проверит Django.",
+            "- Для исправления или удаления персональной памяти используй `memory.update_personal`. Если `memory_id` неизвестен, сначала найди нужное знание через `memory.search` и уточни у пользователя, что менять.",
             "- Используй `memory.search`, когда пользователь просит найти сведения в памяти, безопасном корпусе знаний, прошлых контекстах, индексах, citations или спрашивает, что известно по объекту/заявке/оборудованию.",
-            "- Память хранится и проверяется на стороне Django: источники, snapshots, chunks, graph facts, index jobs, access audit и eval cases.",
-            "- Индексы строятся только по safe corpus после privacy pipeline; raw snapshots, raw paths, секреты и original PII нельзя раскрывать пользователю.",
-            "- Успешный ответ из памяти должен опираться на citations: source_code, source_object_id, chunk_id или fact_id, snapshot_hash, text_hash, sensitivity.",
+            "- Память хранится и проверяется на стороне Django: файлы знаний, метаданные, индексы, graph facts, index jobs, access audit и eval cases.",
+            "- Индексы строятся только по safe corpus после privacy pipeline; raw paths, секреты и original PII нельзя раскрывать пользователю.",
+            "- Если пользователь просит сохранить пароль, токен или другой секрет, не повторяй и не раскрывай значение секрета. `memory.remember` должен сохранить только безопасный `<SECRET_HANDLE:...>` и несекретный контекст; значение секрета остается во внешнем хранилище.",
+            "- Успешный ответ из памяти должен опираться на citations: source_code, source_object_id, knowledge_id, fact_id, snapshot_hash, text_hash, sensitivity.",
             "- Если `memory.search` вернул пустые items, объясни, что подходящий контекст не найден или недоступен по scope пользователя; не выдумывай содержимое памяти.",
             "- Если пользователь спрашивает, как проверить память, предложи: `python manage.py validate_architecture_contracts`, `python manage.py memory_eval --dry-run`, проверку Django Admin и `MemoryAccessAudit`.",
             "- Если пользователь спрашивает про развертывание памяти, ссылайся на `docs/deployment/MEMORY_DEPLOYMENT.md`; для пользовательских сценариев — на `docs/guides/MEMORY_USER_GUIDE.md`.",
-            "- Текущая архитектура: memory service не является отдельным сетевым сервисом; это Django app `apps.memory` плюс tool gateway `memory.search`. Agent runtime и другие сервисы должны обращаться к памяти через Django gateway/API, а не напрямую к индексам.",
+            "- Текущая архитектура: memory service не является отдельным сетевым сервисом; это Django app `apps.memory` плюс tool gateway для `memory.search`, `memory.remember` и `memory.update_personal`. Agent runtime и другие сервисы должны обращаться к памяти через Django gateway/API, а не напрямую к файлам или индексам.",
         ]
     )
 

@@ -17,6 +17,7 @@ def build_tools(
     """
     Build LangChain tools with identity/correlation context.
     """
+    current_session_id = session_id
 
     @tool("workorders.list")
     def list_workorders(status: str = "", limit: int = 20) -> dict:
@@ -154,6 +155,62 @@ def build_tools(
         )
         return result
 
+    @tool("memory.remember")
+    def remember_memory(
+        session_id: str = "",
+        message_ids: list[int] | None = None,
+        target_scope: str = "personal",
+        user_note: str = "",
+        importance: str = "",
+    ) -> dict:
+        """
+        Queue selected chat knowledge for memory ingestion.
+
+        Use this when the user explicitly asks to remember something. If no
+        message_ids are provided, the Django memory service uses the current
+        chat session and the latest user message or user_note. The default
+        target_scope is personal; use organization only when the user clearly
+        asked to remember this for everyone or for the organization.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="memory.remember",
+            actor=actor,
+            payload={
+                "session_id": session_id or current_session_id,
+                "message_ids": message_ids or [],
+                "target_scope": target_scope or "personal",
+                "user_note": user_note,
+                "importance": importance,
+            },
+            session_id=session_id or current_session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("memory.update_personal")
+    def update_personal_memory(memory_id: str, operation: str, new_text: str = "") -> dict:
+        """
+        Edit or delete one personal memory item owned by the current user.
+
+        Use this when the user asks to correct or forget a specific personal
+        memory item. If the memory_id is unknown, search memory first and ask
+        the user to confirm the item before changing it.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="memory.update_personal",
+            actor=actor,
+            payload={"memory_id": memory_id, "operation": operation, "new_text": new_text},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("access.update_role_permissions")
     def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
         """Updates permissions for a specific role. Requires administrator privileges."""
@@ -260,6 +317,8 @@ def build_tools(
         list_departments,
         list_devices,
         search_memory,
+        remember_memory,
+        update_personal_memory,
         update_role_permissions,
         get_role_rules,
         list_users,

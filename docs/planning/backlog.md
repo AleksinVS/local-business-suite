@@ -97,6 +97,31 @@ MVP vertical slice реализован: контракты аналитики, 
 
 ## Next
 
+### Система обезличивания данных и управляемые настройки
+
+Черновик направления: реализовать контур обезличивания, управляемый контрактами, который включается постепенно по источникам, типам данных, целевым системам и этапам обработки.
+
+Контекст:
+- черновое архитектурное решение находится в `docs/adr/ADR-0012-data-anonymization-and-privacy-pipeline.md`;
+- черновой план находится в `docs/planning/active/data-anonymization-privacy-pipeline.md`;
+- связанный Settings Center план находится в `docs/planning/active/settings-center-gui.md`.
+
+Предварительный scope:
+- добавить контракт `contracts/privacy/anonymization_profiles.json` и JSON Schema;
+- реализовать resolver маршрутов `source/type/target/stage -> profile`;
+- включить MVP только на `before_cloud_llm` и `before_external_export`;
+- добавить режимы `off`, `observe`, `warn`, `detect_and_redact`, `stable_pseudonym`, `review`, `block`;
+- добавить audit без исходных PII/secret values;
+- добавить dry-run/eval проверки;
+- позже подключить Settings Center, Presidio-compatible adapter и privacy-worker.
+
+Критерии готовности к старту:
+- утверждены пилотные источники и целевые системы;
+- согласован минимальный набор entity types;
+- согласованы fallback-правила для внешних передач;
+- подготовлен синтетический eval corpus;
+- ADR и план переведены из черновика в принятое состояние.
+
 ### Production parser/OCR backend для ingestion памяти
 
 Подключить production-grade parser/OCR cascade к уже реализованному ingestion MVP.

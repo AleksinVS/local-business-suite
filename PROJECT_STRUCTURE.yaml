@@ -236,6 +236,7 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
+      data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-external-connector-legacy-gap-remediation.md: file # Активный план устранения legacy gaps external connector MVP
       memory-external-systems-connector.md: file # Активный план сбора знаний из внешних информационных систем

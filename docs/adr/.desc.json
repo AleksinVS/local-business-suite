@@ -12,5 +12,6 @@
   "ADR-0010-memory-mvp-simplification.md": "ADR: Упрощение MVP-архитектуры памяти",
   "ADR-0011-file-backed-knowledge-and-unified-search.md": "ADR: Файловые знания, раздельные базы и единый поиск",
   "ADR-0012-data-anonymization-and-privacy-pipeline.md": "ADR: Надежное обезличивание данных и контур приватности",
-  "ADR-0013-file-only-knowledge-body.md": "ADR: Текст знания только в файле знания"
+  "ADR-0013-file-only-knowledge-body.md": "ADR: Текст знания только в файле знания",
+  "ADR-0014-mlflow-memory-evaluation-and-tracing.md": "ADR: MLflow для оценки качества и трассировки системы памяти"
 }

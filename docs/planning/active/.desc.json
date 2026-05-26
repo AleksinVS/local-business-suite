@@ -11,6 +11,7 @@
   "memory-file-backed-knowledge.md": "Активный план файловых знаний, раздельных баз и единого поиска",
   "memory-file-only-knowledge-body.md": "Активный план хранения текста знания только в файле знания",
   "memory-snapshot-chunk-removal.md": "Активный план удаления MemorySnapshot/MemoryChunk из активного пути памяти",
+  "mlflow-memory-evaluation-and-tracing.md": "Черновой план MLflow для оценки качества и трассировки памяти",
   "data-anonymization-privacy-pipeline.md": "Черновой план системы обезличивания данных и управляемых настроек",
   "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки"
 }

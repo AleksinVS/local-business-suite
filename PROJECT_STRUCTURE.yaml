@@ -196,6 +196,7 @@ docs: # Документация проекта
     ADR-0011-file-backed-knowledge-and-unified-search.md: file # ADR: Файловые знания, раздельные базы и единый поиск
     ADR-0012-data-anonymization-and-privacy-pipeline.md: file # ADR: Надежное обезличивание данных и контур приватности
     ADR-0013-file-only-knowledge-body.md: file # ADR: Текст знания только в файле знания
+    ADR-0014-mlflow-memory-evaluation-and-tracing.md: file # ADR: MLflow для оценки качества и трассировки системы памяти
   architecture: # Архитектурные документы проекта
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
@@ -247,6 +248,7 @@ docs: # Документация проекта
       memory-snapshot-chunk-removal.md: file # Активный план удаления MemorySnapshot/MemoryChunk из активного пути памяти
       memory-system-completion.md: file # Активный план завершения системы памяти
       memory-trusted-sources-claims-retrieval.md: file # Активный план trusted sources, claim/belief layer и lightweight retrieval
+      mlflow-memory-evaluation-and-tracing.md: file # Черновой план MLflow для оценки качества и трассировки памяти
       README.md: file # Правила для активных planning-файлов
       settings-center-gui.md: file # Активный план Settings Center, GUI настроек и контекстной справки
     archive: # Архив закрытых или остановленных планов

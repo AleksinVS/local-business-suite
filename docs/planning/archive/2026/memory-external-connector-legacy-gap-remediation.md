@@ -23,7 +23,7 @@
 - Архитектурное решение: `docs/adr/ADR-0006-external-system-knowledge-connectors.md`.
 - Основной план: `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md`.
 - Gap review: `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`.
-- Workflow package: `workflow/active/memory-external-systems-connector/`.
+- Workflow package: `workflow/archive/2026/memory-external-systems-connector/`.
 
 ## Scope
 

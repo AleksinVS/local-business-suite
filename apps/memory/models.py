@@ -248,6 +248,7 @@ class MemoryIngestionIssue(models.Model):
         PARSER_TIMEOUT = "parser_timeout", "Parser timeout"
         OCR_TIMEOUT = "ocr_timeout", "OCR timeout"
         PII_BLOCKED = "pii_blocked", "PII blocked"
+        PII_AUDIT = "pii_audit", "PII audit"
         SECRET_BLOCKED = "secret_blocked", "Secret blocked"
         ACL_UNRESOLVED = "acl_unresolved", "ACL unresolved"
         SCHEMA_UNKNOWN_TYPE = "schema_unknown_type", "Schema unknown type"

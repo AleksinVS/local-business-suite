@@ -18,7 +18,7 @@
 
 - `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
 - `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
-- `docs/planning/active/memory-snapshot-chunk-removal.md`.
+- `docs/planning/archive/2026/memory-snapshot-chunk-removal.md`.
 
 Текущая схема: знания хранятся в файлах и Git, метаданные знания - в `MemoryKnowledgeItem`, поисковая запись - в `MemorySearchDocument`. Старые модели `MemorySnapshot`, `MemoryChunk` и привязанный к ним `MemoryGraphFact` удалены из модели Django миграцией `0007`. Графовый поиск временно выключен до отдельной стратегии графового индекса.
 
@@ -324,16 +324,25 @@ services/
     }
   },
   "ranking_profiles": {
-    "default_hybrid_v1": {
+    "balanced": {
       "vector_weight": 0.45,
-      "fulltext_weight": 0.30,
-      "graph_weight": 0.25,
+      "fulltext_weight": 0.55,
+      "graph_weight": 0.0,
       "fusion": "rrf",
       "reranker": "local_optional"
+    },
+    "source_semantic": {
+      "vector_weight": 0.70,
+      "fulltext_weight": 0.30,
+      "graph_weight": 0.0,
+      "fusion": "rrf",
+      "reranker": "off"
     }
   }
 }
 ```
+
+Актуальное решение по гибридному ранжированию и semantic search по исходным файлам: `docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md`. Веса профилей являются серверной настройкой, а не произвольным payload от ИИ-бота. Новый внешний search API не вводится.
 
 Модели embeddings не фиксировать навсегда. На старте проверить:
 

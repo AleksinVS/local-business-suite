@@ -333,7 +333,10 @@
       ],
       "optional_slots": [
         "limit",
-        "sensitivity"
+        "sensitivity",
+        "search_mode",
+        "ranking_profile",
+        "include_source_data"
       ],
       "requires_confirmation": false,
       "output_mode": "result",

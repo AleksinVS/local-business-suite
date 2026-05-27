@@ -188,6 +188,10 @@ class TestPromptMemorySection(unittest.TestCase):
         self.assertIn("memory.update_personal", section)
         self.assertIn("safe corpus", section)
         self.assertIn("citations", section)
+        self.assertIn("source_explicit", section)
+        self.assertIn("source_semantic", section)
+        self.assertIn("ranking_profile", section)
+        self.assertIn("knowledge_semantic", section)
         self.assertIn("не является отдельным сетевым сервисом", section)
         self.assertNotIn("read-only инструмент `memory.search`", section)
 
@@ -226,6 +230,55 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         self.assertIn("memory.search", tool_names)
         self.assertIn("memory.remember", tool_names)
         self.assertIn("memory.update_personal", tool_names)
+
+    def test_memory_search_tool_forwards_search_options(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "kwargs": kwargs}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        search_tool = next(tool for tool in tools if tool.name == "memory.search")
+
+        result = search_tool.invoke(
+            {
+                "query": "manualftsneedle_xlsx_260526",
+                "limit": 3,
+                "sensitivity": "internal",
+                "search_mode": "source_explicit",
+                "ranking_profile": "source_semantic",
+                "include_source_data": True,
+            }
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "memory.search")
+        self.assertEqual(gateway.calls[0]["session_id"], "session-1")
+        self.assertEqual(
+            gateway.calls[0]["payload"],
+            {
+                "query": "manualftsneedle_xlsx_260526",
+                "limit": 3,
+                "sensitivity": "internal",
+                "search_mode": "source_explicit",
+                "ranking_profile": "source_semantic",
+                "include_source_data": True,
+            },
+        )
 
     def test_memory_remember_tool_uses_current_session_by_default(self):
         from services.agent_runtime.tools import build_tools

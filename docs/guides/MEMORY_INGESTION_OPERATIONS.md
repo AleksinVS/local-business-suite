@@ -92,7 +92,7 @@ Default contracts лежат в `contracts/ai/`, runtime-копии - в `data/c
   "retention_policy": "default_internal",
   "extractor_profile": "project_docs_v1",
   "chunking_profile": "long_policy_doc_v1",
-  "index_profiles": ["fulltext_default", "graph_default"],
+  "index_profiles": ["fulltext_default"],
   "ignore_patterns": ["**/~$*", "**/*.tmp"],
   "ingestion_profile": "corporate_docs_windows_v1"
 }
@@ -141,8 +141,9 @@ python manage.py memory_graph_schema_discover --package <package-json> --dry-run
 python manage.py memory_graph_schema_discover --package <package-json>
 python manage.py memory_graph_extract --source-code <code> --dry-run
 python manage.py memory_graph_extract --source-code <code>
-python manage.py memory_reindex --dry-run
-python manage.py memory_reindex
+python manage.py memory_reindex --corpus all --backend fulltext --dry-run
+python manage.py memory_reindex --corpus all --backend vector --dry-run
+python manage.py memory_reindex --corpus all --backend all
 python manage.py memory_eval --dry-run
 python manage.py memory_eval --output-json
 ```
@@ -168,6 +169,7 @@ Issue/review queue нужна для исключений, а не для все
 - `parser_timeout` - parser не уложился в лимит;
 - `ocr_timeout` - OCR не уложился в лимит;
 - `pii_blocked` - privacy gate заблокировал extracted text;
+- `pii_audit` - PII найдена, документ проиндексирован, администратору нужна проверка;
 - `secret_blocked` - найден secret/token/key;
 - `acl_unresolved` - ACL metadata не удалось получить или интерпретировать;
 - `schema_unknown_type` - найден неизвестный тип для схемы графа;

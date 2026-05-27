@@ -12,6 +12,8 @@
 
 Это не замена базе данных и не способ читать исходные документы напрямую. Для пользователей AI-чат возвращает только компактный контекст со ссылками на источники.
 
+Фактическая граница текущего MVP описана в `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`.
+
 ## Что доступно обычному пользователю
 
 Обычный пользователь работает через AI-чат. Типовые запросы:
@@ -82,7 +84,7 @@
 - raw-документы по умолчанию не копируются в `data/memory/`, хранится ссылка, hash и metadata;
 - password-protected, encrypted, partial, suspicious и unsupported документы попадают в issue/review queue;
 - graph schema proposals проверяются профильными экспертами и владельцем графа;
-- routine graph entities/facts после принятия схемы создаются автоматически, review нужен только для исключений.
+- graph runtime search в `memory.search` пока отключен; graph extraction и schema bootstrapping остаются отдельным подготовительным контуром.
 
 ## Операторские команды
 
@@ -96,8 +98,9 @@ python manage.py memory_sync_source
 Проверить состояние индексирования без Celery и без raw PII indexing:
 
 ```bash
-python manage.py memory_reindex --dry-run
-python manage.py memory_reindex
+python manage.py memory_reindex --corpus all --backend fulltext --dry-run
+python manage.py memory_reindex --corpus all --backend vector --dry-run
+python manage.py memory_reindex --corpus all --backend all
 ```
 
 Запустить synthetic smoke/security eval:
@@ -112,20 +115,26 @@ Eval report пишется только в `data/memory/eval/`.
 ## Ограничения текущей версии
 
 - production scheduler/Celery не подключен;
-- embeddings пока представлены интерфейсом, но не генерируются;
-- локальный SQLite-поиск хранит перестраиваемые поисковые токены и метаданные, но не хранит полный текст знания для выдачи;
-- Kuzu backend пока lazy placeholder;
+- SQLite FTS5 включен для поиска по содержимому документов; token fallback остается на случай недоступности FTS5;
+- LanceDB vector backend включен для локального векторного поиска; по умолчанию используется легкий deterministic test embedding profile;
+- production multilingual embedding model нужно включать явно через `LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE` после подготовки модели и железа;
+- FTS/vector индексы хранят перестраиваемые поисковые производные и метаданные, но не являются источником полного текста для выдачи;
+- graph runtime search отключен и в trace отображается как `disabled/not_ready`;
 - `memory.search` выполняет trusted-only gate, deterministic rank fusion и context packing без обязательного LLM;
 - review UI для источников и знаний пока представлен Django Admin;
 - claim extraction, `MemoryClaim` и `MemoryBelief` перенесены на следующие этапы;
-- ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, bootstrap package и graph schema proposals;
-- PDF/Office/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
+- ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, `.csv/.tsv/.xlsx/.xls`, bootstrap package и graph schema proposals;
+- PDF/DOC/DOCX/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
 - ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
 - облачная маршрутизация для чувствительных случаев не включена.
+
+Результаты `source_data` являются ссылками на исходные объекты, а не принятым знанием. В ответе они должны содержать предупреждение; обычные утверждения агента должны опираться на `knowledge` и citations.
 
 ## MVP расширение: память из AI-чата
 
 AI-чат использует `memory.search` как read путь к memory service. Диалоги самого чата хранятся в `ChatSession` и `ChatMessage` и не считаются долговременной curated memory без отдельного pipeline.
+
+Agent runtime передает в `memory.search` режим поиска. Для обычных вопросов используется `knowledge_default`; для явного поиска по исходным файлам и содержимому документов используется `source_explicit`; для поиска по смыслу в принятых знаниях используется `knowledge_semantic`; для поиска по смыслу в исходных файлах используется `source_explicit` с профилем `source_semantic`; для сценариев, где исходные документы допустимы только как запасной вариант, используется `source_fallback` или `include_source_data=true`.
 
 Для запросов вида "запомни" добавлен MVP-контур:
 

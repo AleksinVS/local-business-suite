@@ -250,7 +250,7 @@ class ArchitectureContractTests(TestCase):
                         "versioning_mode": "hard_active_soft_raw",
                         "extractor_profile": "workorder_v1",
                         "chunking_profile": "short_business_event_v1",
-                        "index_profiles": ["vector_default"],
+                        "index_profiles": ["fulltext_default"],
                     }
                 ]
             )

@@ -1,4 +1,13 @@
 {
   ".": "Архив workflow-блоков за 2026 год",
-  "block-ai-memory-service-2026-05-19": "Архивный workflow-блок реализации сервиса памяти СоСНА"
+  "block-ai-memory-service-2026-05-19": "Архивный workflow-блок реализации сервиса памяти СоСНА",
+  "memory-chat-reflection-secret-handles": "Архивный workflow-блок chat-derived memory, reflection и secret handles",
+  "memory-external-systems-connector": "Архивный workflow-блок external systems connector MVP",
+  "memory-file-content-search": "Архивный workflow-блок FTS и векторного поиска по содержимому файлов",
+  "memory-file-backed-knowledge": "Архивный workflow-блок файловых знаний, раздельных баз и единого поиска",
+  "memory-file-only-knowledge-body": "Архивный workflow-блок хранения текста знания только в файле знания",
+  "memory-mvp-remediation": "Архивный workflow-блок исправления разрывов MVP-памяти",
+  "memory-mvp-simplification": "Архивный workflow-блок упрощения MVP-архитектуры памяти",
+  "memory-snapshot-chunk-removal": "Архивный workflow-блок удаления MemorySnapshot/MemoryChunk из активного пути памяти",
+  "memory-trusted-sources-claims-retrieval": "Архивный workflow-блок trusted sources, claim/belief layer и lightweight retrieval"
 }

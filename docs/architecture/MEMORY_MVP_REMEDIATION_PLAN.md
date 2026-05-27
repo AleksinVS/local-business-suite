@@ -1,6 +1,6 @@
 # План исправления разрывов MVP-памяти
 
-Статус: реализовано в workflow-блоке `workflow/active/memory-mvp-remediation/`.
+Статус: реализовано и архивировано в `workflow/archive/2026/memory-mvp-remediation/`.
 
 Дата: 2026-05-21.
 
@@ -8,7 +8,7 @@
 
 - `docs/adr/ADR-0010-memory-mvp-simplification.md`;
 - `docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md`;
-- `workflow/active/memory-mvp-simplification/TASK_ACCEPTANCE.01-05.md`.
+- `workflow/archive/2026/memory-mvp-simplification/TASK_ACCEPTANCE.01-05.md`.
 
 ## Назначение
 

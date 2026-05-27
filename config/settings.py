@@ -389,6 +389,17 @@ LOCAL_BUSINESS_KNOWLEDGE_WRITER_QUEUE_PATH = Path(
 LOCAL_BUSINESS_SEARCH_INDEX_PATH = Path(
     os.environ.get("LOCAL_BUSINESS_SEARCH_INDEX_PATH", DATA_DIR / "indexes" / "fulltext" / "search.sqlite3")
 )
+LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND = os.environ.get("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND", "lancedb").strip().lower()
+if LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND not in {"disabled", "lancedb", "enabled"}:
+    raise ImproperlyConfigured("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND must be one of: disabled, lancedb, enabled")
+LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE = os.environ.get("LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE", "local_hash_test_v1").strip()
+LOCAL_BUSINESS_MEMORY_TEXT_EXTRACTION_LIMITS = {
+    "max_text_bytes": int(os.environ.get("LOCAL_BUSINESS_MEMORY_TEXT_MAX_BYTES", "1000000")),
+    "max_sheets": int(os.environ.get("LOCAL_BUSINESS_MEMORY_TEXT_MAX_SHEETS", "20")),
+    "max_rows": int(os.environ.get("LOCAL_BUSINESS_MEMORY_TEXT_MAX_ROWS", "5000")),
+    "max_cells": int(os.environ.get("LOCAL_BUSINESS_MEMORY_TEXT_MAX_CELLS", "100000")),
+    "max_cell_chars": int(os.environ.get("LOCAL_BUSINESS_MEMORY_TEXT_MAX_CELL_CHARS", "2000")),
+}
 LOCAL_BUSINESS_PROCESSING_DIR = Path(
     os.environ.get("LOCAL_BUSINESS_PROCESSING_DIR", DATA_DIR / "processing")
 )

@@ -280,12 +280,13 @@
       "domain": "memory",
       "mode": "read",
       "execution_mode": "service_or_read_only_query",
-      "description": "Search indexed memory sources and return bounded results with citations and routing metadata.",
+      "description": "Search accepted memory knowledge and optional source-data references with citations and routing metadata.",
       "inputs": [
         "query",
         "limit",
         "sensitivity",
         "search_mode",
+        "ranking_profile",
         "include_source_data"
       ],
       "input_schemas": {
@@ -309,7 +310,7 @@
           ]
         },
         "search_mode": {
-          "description": "Simple deterministic search mode. Defaults to knowledge_default.",
+          "description": "Simple deterministic search mode. Defaults to knowledge_default. knowledge_graph is accepted for compatibility but graph runtime search is not_ready in the current MVP.",
           "enum": [
             "knowledge_default",
             "knowledge_precise",
@@ -317,6 +318,17 @@
             "knowledge_graph",
             "source_explicit",
             "source_fallback"
+          ]
+        },
+        "ranking_profile": {
+          "description": "Named server-side ranking profile. Defaults from search_mode; raw channel weights are not accepted.",
+          "enum": [
+            "precise",
+            "balanced",
+            "semantic_heavy",
+            "source_content",
+            "source_semantic",
+            "graph_future"
           ]
         },
         "include_source_data": {

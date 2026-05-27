@@ -1,6 +1,6 @@
 # План упрощения MVP-архитектуры памяти
 
-Статус: реализовано в исполнительском блоке `workflow/active/memory-mvp-simplification/`.
+Статус: реализовано и архивировано в `workflow/archive/2026/memory-mvp-simplification/`.
 
 Дата: 2026-05-21.
 

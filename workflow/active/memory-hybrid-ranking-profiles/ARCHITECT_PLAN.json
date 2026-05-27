@@ -1,0 +1,36 @@
+{
+  "block_id": "memory-hybrid-ranking-profiles",
+  "status": "ready_for_implementation",
+  "created_at": "2026-05-27",
+  "architecture_sources": [
+    "docs/adr/ADR-0015-file-content-fts-vector-search.md",
+    "docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md",
+    "docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "goal": "Implement named ranking profiles, source semantic search for indexed files, and agent prompts that choose the correct search mode by user intent.",
+  "execution_order": [
+    "01-ranking-profile-contract",
+    "02-rrf-score-fusion",
+    "03-agent-search-prompts",
+    "04-ranking-profile-e2e",
+    "05-source-semantic-search-policy"
+  ],
+  "global_constraints": [
+    "Do not let the AI bot pass raw fulltext/vector/graph weights.",
+    "Keep source_data distinct from accepted knowledge in results, prompts and trace.",
+    "Use local embeddings only; do not add a new external search API.",
+    "Index source_data vectors only for explicit source modes and keep source_data distinct from accepted knowledge.",
+    "Block and report documents where secrets are detected; index PII-bearing documents with admin audit issue.",
+    "Use document-level source vectors temporarily until MemorySearchSegment is implemented.",
+    "Keep temporary e2e files under .local/.",
+    "Update ADR, planning and generated project structure when files are added."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization",
+    "python manage.py memory_file_content_search_e2e"
+  ]
+}

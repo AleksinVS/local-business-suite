@@ -16,7 +16,7 @@
 - `docs/adr/ADR-0013-file-only-knowledge-body.md`;
 - `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
 - `docs/architecture/MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md`;
-- `workflow/active/memory-file-only-knowledge-body/`.
+- `workflow/archive/2026/memory-file-only-knowledge-body/`.
 
 ## Согласованные решения
 

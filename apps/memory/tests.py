@@ -172,7 +172,7 @@ class MemoryModelFactoryMixin:
             "owner": "operations",
             "sensitivity": "internal",
             "pii_policy": "deidentify_before_index",
-            "index_profiles": ["vector_default", "graph_default"],
+            "index_profiles": ["fulltext_default"],
         }
         defaults.update(overrides)
         return MemorySource.objects.create(**defaults)
@@ -312,7 +312,7 @@ class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase
         available_commands = get_commands()
         checked_commands = []
 
-        self.create_source(code="bootstrap_test_source", source_kind="documentation", index_profiles=["graph_default"])
+        self.create_source(code="bootstrap_test_source", source_kind="documentation", index_profiles=["fulltext_default"])
 
         for command_name, args in command_cases:
             if command_name not in available_commands:
@@ -334,6 +334,7 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
         from .document_ingestion import discover_source_objects
 
         with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
             root = Path(tmpdir) / "memory_docs"
             root.mkdir()
             (root / "procedure.txt").write_text("Procedure calibration device_alpha -> procedure_beta", encoding="utf-8")
@@ -422,6 +423,62 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
             self.assertEqual(issue.issue_kind, MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT)
             self.assertEqual(issue.status, MemoryIngestionIssue.Status.OPEN)
 
+    def test_ingest_source_objects_blocks_secret_and_audits_pii(self):
+        from .document_ingestion import discover_source_objects, ingest_source_objects
+        from .vector_backends import get_default_backend
+
+        with TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "secret.txt").write_text("api_key=sk-test-secret-value-1234567890", encoding="utf-8")
+            (root / "pii.txt").write_text("Контакт audit-person@example.com для проверки.", encoding="utf-8")
+            source = self.create_source(
+                code="local_docs_privacy_gate",
+                source_kind="local_path",
+                domain="docs",
+                scope_rule="authenticated_user",
+                trust_status=MemorySource.TrustStatus.TRUSTED,
+                authority_class=MemorySource.AuthorityClass.APPROVED_CORPUS,
+                trusted_for_context=True,
+                requires_source_review=False,
+                trusted_context_kinds=["retrieved_chunk", "citation"],
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_windows_v1",
+                    "default_acl": {"allow": [{"kind": "group", "name": "privacy-readers"}]},
+                },
+            )
+            Group.objects.create(name="privacy-readers")
+
+            with self.settings(DATA_DIR=data_dir):
+                discover_source_objects(source=source, dry_run=False)
+                metrics = ingest_source_objects(source=source, dry_run=False)
+                pii_index_results = get_default_backend().search(
+                    "audit person",
+                    scope_tokens=["role:privacy-readers"],
+                    sensitivity="internal",
+                    limit=5,
+                )
+
+            self.assertEqual(metrics["issues"], 2)
+            self.assertEqual(metrics["ingested"], 1)
+            secret_object = MemorySourceObject.objects.get(source=source, file_name="secret.txt")
+            pii_object = MemorySourceObject.objects.get(source=source, file_name="pii.txt")
+            self.assertEqual(secret_object.ingestion_status, MemorySourceObject.IngestionStatus.FAILED)
+            self.assertEqual(pii_object.ingestion_status, MemorySourceObject.IngestionStatus.INGESTED)
+            self.assertFalse(MemorySearchDocument.objects.filter(source_object=secret_object).exists())
+            pii_document = MemorySearchDocument.objects.get(source_object=pii_object, index_status=MemorySearchDocument.IndexStatus.READY)
+            secret_issue = MemoryIngestionIssue.objects.get(source_object=secret_object)
+            pii_issue = MemoryIngestionIssue.objects.get(source_object=pii_object)
+            self.assertEqual(secret_issue.issue_kind, MemoryIngestionIssue.IssueKind.SECRET_BLOCKED)
+            self.assertEqual(secret_issue.severity, MemoryIngestionIssue.Severity.BLOCKER)
+            self.assertEqual(pii_issue.issue_kind, MemoryIngestionIssue.IssueKind.PII_AUDIT)
+            self.assertEqual(pii_issue.severity, MemoryIngestionIssue.Severity.WARNING)
+            self.assertNotIn("audit-person@example.com", json.dumps(pii_issue.metadata, ensure_ascii=False))
+            self.assertIn(pii_document.document_id, {item.document_id for item in pii_index_results})
+
     def test_inherited_acl_maps_group_to_scope_tokens(self):
         from .document_ingestion import discover_source_objects, ingest_source_objects
 
@@ -505,7 +562,7 @@ class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
         source = self.create_source()
 
         self.assertEqual(source.status, MemorySource.Status.ENABLED)
-        self.assertEqual(source.index_profiles, ["vector_default", "graph_default"])
+        self.assertEqual(source.index_profiles, ["fulltext_default"])
         self.assertEqual(str(source), source.code)
 
         with self.assertRaises(IntegrityError):
@@ -530,9 +587,9 @@ class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
                 "trusted_for_context": True,
                 "requires_source_review": False,
                 "review_owner": "operations",
-                "trusted_context_kinds": ["retrieved_chunk", "citation", "graph_fact"],
+                "trusted_context_kinds": ["retrieved_chunk", "citation"],
                 "untrusted_handling": "review_required",
-                "index_profiles": ["vector_default"],
+                "index_profiles": ["fulltext_default"],
             },
             {
                 "code": "disabled_source",
@@ -942,7 +999,7 @@ class MemoryExternalConnectorTests(TestCase):
             pii_policy="deidentify_before_index",
             extractor_profile="external_api_object_v1",
             chunking_profile="external_api_object_v1",
-            index_profiles=["fulltext_default", "graph_default"],
+            index_profiles=["fulltext_default"],
             config={
                 "external_connector": {
                     "queue_backend": "sqlite",
@@ -1490,7 +1547,7 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(result["items"], [])
         self.assertEqual(result["citations"], [])
         audit = MemoryAccessAudit.objects.get(request_id="req-memory-belief")
-        self.assertEqual(audit.retrieval_trace["candidate_counts"], {"vector": 0, "graph": 0})
+        self.assertEqual(audit.retrieval_trace["candidate_counts"], {"fulltext": 0, "vector": 0, "graph": 0})
         self.assertFalse(audit.retrieval_trace["rank_fusion"]["llm_used"])
 
     def test_memory_search_denies_secret_route(self):
@@ -1536,3 +1593,100 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(result["items"][0]["result_type"], "source_data")
         self.assertIn("warning", result["items"][0])
         self.assertNotIn("text", result["items"][0])
+        self.assertEqual(
+            MemoryAccessAudit.objects.get(request_id="req-source-fallback").retrieval_trace["search_channels"]["graph"]["status"],
+            "disabled",
+        )
+
+    def test_source_semantic_profile_uses_vector_candidates_for_source_data(self):
+        from .retrieval import memory_search
+        from .vector_backends import MemorySearchResult
+
+        user = User.objects.create_user(username="memory-source-semantic-user", password="pass")
+        source = self.create_source(
+            code="source_semantic_profiles",
+            source_kind="file_share",
+            trust_status=MemorySource.TrustStatus.TRUSTED,
+            authority_class=MemorySource.AuthorityClass.APPROVED_CORPUS,
+            trusted_for_context=True,
+            requires_source_review=False,
+            trusted_context_kinds=["retrieved_chunk", "citation"],
+        )
+        exact_object = MemorySourceObject.objects.create(
+            source=source,
+            object_id="file-exact",
+            object_uri="file://share/exact.txt",
+            relative_path="exact.txt",
+            file_name="exact.txt",
+            content_hash="hash-exact",
+            metadata={"scope_tokens": [f"user:{user.id}"]},
+        )
+        semantic_object = MemorySourceObject.objects.create(
+            source=source,
+            object_id="file-semantic",
+            object_uri="file://share/semantic.txt",
+            relative_path="semantic.txt",
+            file_name="semantic.txt",
+            content_hash="hash-semantic",
+            metadata={"scope_tokens": [f"user:{user.id}"]},
+        )
+        exact_document = MemorySearchDocument.objects.create(
+            document_id="source:exact-profile",
+            corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+            object_kind=MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+            source_object=exact_object,
+            body_hash="hash-exact",
+            index_status=MemorySearchDocument.IndexStatus.READY,
+            metadata={"corpus_type": "source_data"},
+        )
+        semantic_document = MemorySearchDocument.objects.create(
+            document_id="source:semantic-profile",
+            corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+            object_kind=MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+            source_object=semantic_object,
+            body_hash="hash-semantic",
+            index_status=MemorySearchDocument.IndexStatus.READY,
+            metadata={"corpus_type": "source_data"},
+        )
+
+        class FulltextBackend:
+            def search(self, *args, **kwargs):
+                return [
+                    MemorySearchResult(
+                        document_id=exact_document.document_id,
+                        score=10.0,
+                        metadata={"corpus_type": "source_data", "search_channel": "fulltext"},
+                    )
+                ]
+
+        class VectorBackend:
+            def search(self, *args, **kwargs):
+                return [
+                    MemorySearchResult(
+                        document_id=semantic_document.document_id,
+                        score=0.95,
+                        metadata={"corpus_type": "source_data", "search_channel": "vector"},
+                    )
+                ]
+
+        with patch("apps.memory.retrieval.get_default_vector_backend", return_value=VectorBackend()):
+            result = memory_search(
+                actor=user,
+                query="semantic source query",
+                sensitivity="internal",
+                search_mode="source_explicit",
+                ranking_profile="source_semantic",
+                vector_backend=FulltextBackend(),
+                request_id="req-source-semantic-profile",
+            )
+
+        self.assertEqual(result["items"][0]["id"], semantic_document.document_id)
+        self.assertEqual(result["items"][0]["kind"], "source_data")
+        self.assertEqual(result["meta"]["ranking_profile"], "source_semantic")
+        audit = MemoryAccessAudit.objects.get(request_id="req-source-semantic-profile")
+        self.assertTrue(audit.retrieval_trace["search_channels"]["vector"]["requested"])
+        self.assertEqual(
+            audit.retrieval_trace["rank_fusion"]["weights"],
+            {"fulltext": 0.3, "vector": 0.7, "graph": 0.0},
+        )
+        self.assertIn("vector", result["items"][0]["metadata"]["channel_scores"])

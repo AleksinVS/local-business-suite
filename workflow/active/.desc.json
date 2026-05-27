@@ -2,13 +2,6 @@
   ".": "Активные workflow-блоки",
   "README.md": "Правила для активных workflow-блоков",
   "knowledge-driven-business-analytics": "Workflow: knowledge-driven business analytics",
-  "memory-external-systems-connector": "Workflow: сбор знаний из внешних информационных систем",
-  "memory-chat-reflection-secret-handles": "Workflow: chat-derived memory, reflection и secret handles",
-  "memory-trusted-sources-claims-retrieval": "Workflow: trusted sources, claim/belief layer и lightweight retrieval",
-  "memory-mvp-simplification": "Workflow: упрощение MVP-архитектуры памяти",
-  "memory-mvp-remediation": "Workflow: исправление разрывов MVP-памяти",
-  "memory-file-backed-knowledge": "Workflow: файловые знания, раздельные базы и единый поиск",
-  "memory-file-only-knowledge-body": "Workflow: текст знания только в файле знания",
-  "memory-snapshot-chunk-removal": "Workflow: удаление MemorySnapshot/MemoryChunk из активного пути памяти",
-  "settings-center-gui": "Workflow: Settings Center, GUI настроек и контекстная справка"
+  "settings-center-gui": "Workflow: Settings Center, GUI настроек и контекстная справка",
+  "memory-hybrid-ranking-profiles": "Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота"
 }

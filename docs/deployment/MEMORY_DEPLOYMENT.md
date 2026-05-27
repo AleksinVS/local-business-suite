@@ -190,6 +190,7 @@ python manage.py knowledge_index_worker --help
 python manage.py knowledge_reflection_worker --help
 python manage.py memory_verify_knowledge_files --help
 python manage.py memory_file_backed_e2e --help
+python manage.py memory_file_content_search_e2e --help
 python manage.py memory_reflect_chats --help
 python manage.py memory_reindex --help
 python manage.py memory_eval --help
@@ -205,8 +206,9 @@ python manage.py memory_sync_source
 Запустить smoke reindex:
 
 ```bash
-python manage.py memory_reindex --dry-run
-python manage.py memory_reindex
+python manage.py memory_reindex --corpus all --backend fulltext --dry-run
+python manage.py memory_reindex --corpus all --backend vector --dry-run
+python manage.py memory_reindex --corpus all --backend all
 ```
 
 Запустить synthetic eval:

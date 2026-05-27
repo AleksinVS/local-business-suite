@@ -2,6 +2,8 @@
 
 Статус: архитектурный implementation plan; MVP data model, `memory.remember`, personal edit/delete services, queue processor command and Vaultwarden-compatible external link backend implemented 2026-05-20. Уточнено ADR-0010: `MemoryKnowledgeItem` является главным объектом памяти MVP, а полноценная ночная рефлексия перенесена на следующий этап.
 
+Уточнение 2026-05-26: после ADR-0011/ADR-0013 канонический текст принятого знания хранится только в `data/knowledge_repo/`. Путь `data/memory/chat_knowledge/` оставлен только как legacy append-only event log событий, а не как source of truth или текущая projection-память.
+
 Дата: 2026-05-20.
 
 Связанный ADR: `docs/adr/ADR-0005-chat-derived-memory-and-secret-handles.md`.
@@ -33,7 +35,7 @@
 - Personal memory: долговременная память одного пользователя.
 - Organization memory: общая память организации, доступная по scope/policy.
 - Knowledge event: append-only событие изменения memory state.
-- Current projection: актуальная агрегированная версия memory-файла.
+- Current projection: историческое название агрегированной версии memory-файла; в текущем MVP не является источником истины.
 - Queue processor: обработчик queued remember requests и простых кандидатов в общую память.
 - Future reflection: будущая отложенная консолидация чатов и remembered events в дешевое ненагруженное время.
 - Candidate: предложение добавить знание в общую память.
@@ -41,7 +43,7 @@
 
 ## Storage layout
 
-Runtime storage:
+Legacy event log:
 
 ```text
 data/memory/chat_knowledge/

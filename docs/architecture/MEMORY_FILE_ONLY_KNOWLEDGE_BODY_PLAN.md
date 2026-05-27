@@ -1,6 +1,6 @@
 # План: текст знания только в файле знания
 
-Статус: реализовано, ожидает приемки.
+Статус: реализовано и архивировано.
 
 Дата: 2026-05-22.
 
@@ -9,7 +9,7 @@
 - `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
 - `docs/adr/ADR-0013-file-only-knowledge-body.md`;
 - `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
-- `docs/planning/active/memory-file-only-knowledge-body.md`.
+- `docs/planning/archive/2026/memory-file-only-knowledge-body.md`.
 
 ## Назначение
 

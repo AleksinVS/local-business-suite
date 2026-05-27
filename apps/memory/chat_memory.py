@@ -28,7 +28,9 @@ from .policies import can_write_organization_memory, can_write_personal_memory
 from .secret_backends import get_secret_backend
 from .security import scan_for_secrets
 from .vector_backends import MemoryIndexRecord
+from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, SQLITE_FTS_SCHEMA_VERSION
 from .vector_backends import get_default_backend
+from .vector_backends import get_default_vector_backend
 
 
 CHAT_MEMORY_PERSONAL_SOURCE = "ai_chat_personal"
@@ -329,9 +331,11 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
     return records
 
 
-def index_knowledge_item(item: MemoryKnowledgeItem):
+def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
     source = _chat_memory_source(item.scope)
-    vector_backend = get_default_backend()
+    selected_backends = set(index_backends or ())
+    fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
+    vector_backend = get_default_vector_backend() if "vector" in selected_backends else None
     document_id = _knowledge_document_id(item)
     body = read_knowledge_item_file(item).body
     stale_document_ids = list(
@@ -342,7 +346,9 @@ def index_knowledge_item(item: MemoryKnowledgeItem):
         .exclude(document_id=document_id)
         .values_list("document_id", flat=True)
     )
-    if stale_document_ids and hasattr(vector_backend, "deactivate"):
+    if stale_document_ids and hasattr(fulltext_backend, "deactivate"):
+        fulltext_backend.deactivate(stale_document_ids)
+    if stale_document_ids and vector_backend is not None and hasattr(vector_backend, "deactivate"):
         vector_backend.deactivate(stale_document_ids)
     MemorySearchDocument.objects.filter(document_id__in=stale_document_ids).update(
         index_status=MemorySearchDocument.IndexStatus.DELETED,
@@ -361,6 +367,13 @@ def index_knowledge_item(item: MemoryKnowledgeItem):
         "source_message_ids": item.source_message_ids,
         "knowledge_file_path": item.knowledge_file_path,
     }
+    existing_document = MemorySearchDocument.objects.filter(document_id=document_id).first()
+    existing_versions = dict(((existing_document.metadata or {}).get("index_versions") if existing_document else {}) or {})
+    if "fulltext" in selected_backends:
+        existing_versions["fulltext"] = SQLITE_FTS_SCHEMA_VERSION
+    if "vector" in selected_backends:
+        existing_versions["vector"] = LANCEDB_VECTOR_SCHEMA_VERSION
+    metadata["index_versions"] = existing_versions
     document, _ = MemorySearchDocument.objects.update_or_create(
         document_id=document_id,
         defaults={
@@ -373,17 +386,18 @@ def index_knowledge_item(item: MemoryKnowledgeItem):
             "indexed_at": timezone.now(),
         },
     )
+    record = MemoryIndexRecord(
+        document_id=document.document_id,
+        text=body,
+        metadata={**metadata, "content_hash": item.text_hash},
+        scope_tokens=item.scope_tokens,
+        sensitivity=item.sensitivity,
+        is_active=True,
+    )
+    if fulltext_backend is not None:
+        fulltext_backend.upsert(record)
     if vector_backend is not None:
-        vector_backend.upsert(
-            MemoryIndexRecord(
-                document_id=document.document_id,
-                text=body,
-                metadata=metadata,
-                scope_tokens=item.scope_tokens,
-                sensitivity=item.sensitivity,
-                is_active=True,
-            )
-        )
+        vector_backend.upsert(record)
     item.index_status = "ready"
     item.save(update_fields=["index_status", "updated_at"])
     return {"document_ids": [document.document_id], "fact_ids": [], "knowledge_id": item.memory_id}
@@ -426,9 +440,12 @@ def delete_personal_memory(*, actor, memory_id: str):
     rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
     document_ids = list(MemorySearchDocument.objects.filter(knowledge_item=item).values_list("document_id", flat=True))
     if document_ids:
-        backend = get_default_backend()
-        if hasattr(backend, "deactivate"):
-            backend.deactivate(document_ids)
+        fulltext_backend = get_default_backend()
+        if hasattr(fulltext_backend, "deactivate"):
+            fulltext_backend.deactivate(document_ids)
+        vector_backend = get_default_vector_backend()
+        if vector_backend is not None and hasattr(vector_backend, "deactivate"):
+            vector_backend.deactivate(document_ids)
         MemorySearchDocument.objects.filter(document_id__in=document_ids).update(
             index_status=MemorySearchDocument.IndexStatus.DELETED,
             updated_at=timezone.now(),
@@ -565,7 +582,7 @@ def _chat_memory_source(scope: str) -> MemorySource:
             "trusted_for_context": True,
             "requires_source_review": False,
             "review_owner": "knowledge_owner" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "memory_owner",
-            "trusted_context_kinds": ["retrieved_chunk", "citation", "graph_fact"],
+            "trusted_context_kinds": ["retrieved_chunk", "citation"],
             "untrusted_handling": "review_required",
             "sync_mode": "event_driven",
             "scope_rule": "chat_memory_scope",
@@ -573,26 +590,27 @@ def _chat_memory_source(scope: str) -> MemorySource:
             "pii_policy": "secret_handle_redaction",
             "extractor_profile": CHAT_MEMORY_EXTRACTOR_VERSION,
             "chunking_profile": "short_business_event_v1",
-            "index_profiles": ["fulltext_default", "graph_default"],
+            "index_profiles": ["fulltext_default"],
             "config": {"runtime_source": True, "scope": scope},
         },
     )
     return source
 
 
-def _projection_dir(*, scope: str, owner_user=None) -> Path:
+def _legacy_event_log_dir(*, scope: str, owner_user=None) -> Path:
     if scope == MemoryKnowledgeItem.Scope.PERSONAL:
         if owner_user is None:
-            raise ValidationError("owner_user is required for personal projection path.")
+            raise ValidationError("owner_user is required for personal memory event log path.")
         return Path(settings.DATA_DIR) / "memory" / "chat_knowledge" / "users" / str(owner_user.id)
     return Path(settings.DATA_DIR) / "memory" / "chat_knowledge" / "org" / "default"
 
 
 def _append_event_file(event: MemoryKnowledgeEvent):
+    """Write a legacy append-only event log; knowledge text lives in data/knowledge_repo."""
     item = event.knowledge_item
     if item is None:
         return
-    base_dir = _projection_dir(scope=item.scope, owner_user=item.owner_user)
+    base_dir = _legacy_event_log_dir(scope=item.scope, owner_user=item.owner_user)
     now = event.created_at or timezone.now()
     event_path = base_dir / "events" / f"{now:%Y-%m}.jsonl"
     event_payload = {
@@ -608,20 +626,6 @@ def _append_event_file(event: MemoryKnowledgeEvent):
     event_path.parent.mkdir(parents=True, exist_ok=True)
     with event_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event_payload, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def _projection_markdown(records: list[dict]) -> str:
-    lines = ["# Memory", ""]
-    for item in records:
-        lines.append(f"- `{item['memory_id']}` {item['text']}")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _atomic_write_text(path: Path, text: str):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
-    tmp_path.replace(path)
 
 
 def _scope_tokens_for_memory(*, scope: str, owner_user=None) -> list[str]:

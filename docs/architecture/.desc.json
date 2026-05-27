@@ -18,5 +18,6 @@
   "MEMORY_MVP_REMEDIATION_PLAN.md": "План исправления разрывов MVP-памяти",
   "MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md": "План файлового хранения знаний, раздельных баз и единого поиска",
   "MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md": "План хранения текста знания только в файле знания",
+  "MEMORY_MVP_CURRENT_STATE.md": "Текущее фактическое состояние MVP системы памяти",
   "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки"
 }

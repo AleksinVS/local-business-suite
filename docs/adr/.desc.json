@@ -13,5 +13,7 @@
   "ADR-0011-file-backed-knowledge-and-unified-search.md": "ADR: Файловые знания, раздельные базы и единый поиск",
   "ADR-0012-data-anonymization-and-privacy-pipeline.md": "ADR: Надежное обезличивание данных и контур приватности",
   "ADR-0013-file-only-knowledge-body.md": "ADR: Текст знания только в файле знания",
-  "ADR-0014-mlflow-memory-evaluation-and-tracing.md": "ADR: MLflow для оценки качества и трассировки системы памяти"
+  "ADR-0014-mlflow-memory-evaluation-and-tracing.md": "ADR: MLflow для оценки качества и трассировки системы памяти",
+  "ADR-0015-file-content-fts-vector-search.md": "ADR: FTS и векторный поиск по содержимому файлов",
+  "ADR-0016-memory-hybrid-ranking-profiles.md": "ADR: Профили гибридного ранжирования памяти"
 }

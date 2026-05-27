@@ -134,19 +134,39 @@ def build_tools(
         return result
 
     @tool("memory.search")
-    def search_memory(query: str, limit: int = 5, sensitivity: str = "internal") -> dict:
+    def search_memory(
+        query: str,
+        limit: int = 5,
+        sensitivity: str = "internal",
+        search_mode: str = "knowledge_default",
+        ranking_profile: str = "",
+        include_source_data: bool = False,
+    ) -> dict:
         """
         Search the safe memory corpus for cited context available to the current user.
 
         Use this for questions about the memory service, indexed knowledge,
         remembered context, source citations, previous safe context, or facts
-        linked to work orders/devices. The tool returns only safe chunks/facts
-        with citations; it does not expose raw snapshots.
+        linked to work orders/devices. Use source_explicit when the user asks
+        to search original indexed files or source documents. Use
+        ranking_profile=source_content for exact source content and
+        ranking_profile=source_semantic for meaning-based source file search.
+        Use source_fallback when source documents are acceptable if accepted
+        knowledge is empty, and knowledge_semantic for semantic accepted
+        knowledge search. The tool returns only safe chunks/facts with citations;
+        it does not expose raw snapshots or accepted knowledge for source_data.
         """
         result = gateway_client.execute_tool(
             tool_code="memory.search",
             actor=actor,
-            payload={"query": query, "limit": limit, "sensitivity": sensitivity},
+            payload={
+                "query": query,
+                "limit": limit,
+                "sensitivity": sensitivity,
+                "search_mode": search_mode,
+                "ranking_profile": ranking_profile,
+                "include_source_data": include_source_data,
+            },
             session_id=session_id,
             conversation_id=conversation_id,
             request_id=request_id,

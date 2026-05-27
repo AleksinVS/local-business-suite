@@ -48,17 +48,17 @@
 - хранит принятые знания в runtime Git-репозитории `data/knowledge_repo/`;
 - хранит метаданные знаний в `data/db/knowledge_meta.sqlite3`, а индексы отдельно в `data/indexes/`;
 - поддерживает локальный SQLite-поиск по перестраиваемым токенам без хранения полного текста знания в индексе;
-- хранит графовые факты через backend-neutral интерфейс;
 - обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
-- поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа;
-- поддерживает MVP подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
+- поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа, но не включает graph runtime search;
+- содержит reference implementation подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
 - выносит данные чатов в `data/db/chat.sqlite3`, а управляющие модели аналитики в `data/db/analytics_control.sqlite3`;
 - возвращает AI-чату только безопасные результаты с `citations`;
 - пишет каждый разрешенный или запрещенный поиск в `MemoryAccessAudit`.
 
 Основные файлы:
 
+- `docs/architecture/MEMORY_MVP_CURRENT_STATE.md` — фактическая рабочая граница текущей MVP-памяти.
 - `docs/guides/MEMORY_USER_GUIDE.md` — как пользоваться памятью через AI-чат и что проверять в ответах.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — как внедрять ingestion на Windows/UNC, вести issue/review queue и bootstrapping схемы графа.
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — бизнес-опросники для подключения внешних ИС и первичного описания сущностей графа знаний.
@@ -82,12 +82,13 @@
 Ограничения текущей версии:
 
 - production scheduler/Celery пока не подключен;
-- embeddings-интерфейс заложен, но в MVP используется локальный full-text backend;
+- SQLite FTS5 включен для поиска по содержимому документов; token fallback остается как аварийный режим;
+- LanceDB vector backend включен с локальным deterministic test embedding profile; production-модель подключается отдельной настройкой;
 - старый слой `MemorySnapshot`/`MemoryChunk` удален из текущей схемы; индексация идет через `MemorySearchDocument`;
 - отдельное DuckDB-хранилище аналитических срезов еще не подключено;
-- external connector MVP имеет generic envelope/queue/worker, но source-specific pilot adapter выбирается и реализуется отдельно;
-- Kuzu backend подготовлен как lazy placeholder;
-- ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`, `.log`), а Office/PDF/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
+- external connector MVP является reference implementation; source-specific pilot adapter выбирается и реализуется отдельно;
+- graph runtime search отключен и отображается как `disabled/not_ready`;
+- ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.log`, `.json`, `.yaml`, `.yml`, `.csv`, `.tsv`) и табличные `.xlsx/.xls`, а PDF/DOC/DOCX/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
 - внешний API памяти вынесен в backlog и пока не реализуется;
 - облачная маршрутизация для чувствительных случаев не включена.
 
@@ -149,12 +150,14 @@ python manage.py memory_discover_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
 python manage.py memory_graph_extract --source-code <code> --dry-run
-python manage.py memory_reindex --dry-run
+python manage.py memory_reindex --corpus all --backend fulltext --dry-run
+python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py memory_eval --dry-run
 python manage.py knowledge_writer_worker --dry-run
 python manage.py knowledge_index_worker --dry-run
 python manage.py knowledge_reflection_worker --dry-run
 python manage.py memory_verify_knowledge_files --strict
+python manage.py memory_file_content_search_e2e
 ```
 
 Ожидаемый smoke-результат для eval:

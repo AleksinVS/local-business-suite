@@ -1,6 +1,6 @@
 # Active plan: упрощение MVP-архитектуры памяти
 
-Статус: реализовано; workflow acceptance добавлен в `workflow/active/memory-mvp-simplification/`.
+Статус: реализовано; workflow acceptance архивирован в `workflow/archive/2026/memory-mvp-simplification/`.
 
 Дата: 2026-05-21.
 
@@ -22,7 +22,7 @@
 
 Workflow:
 
-- `workflow/active/memory-mvp-simplification/`.
+- `workflow/archive/2026/memory-mvp-simplification/`.
 
 ## Объем работ
 

@@ -6,7 +6,7 @@
 
 Связанный ADR: `docs/adr/ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md`.
 
-Дополнение: MVP-граница упрощена решением `docs/adr/ADR-0010-memory-mvp-simplification.md`. `MemoryBelief` переносится на следующие этапы; `MemoryKnowledgeItem` становится главным объектом сохраненной памяти MVP. Детальная стратегия использования графового поиска будет проработана отдельно.
+Дополнение: MVP-граница упрощена решением `docs/adr/ADR-0010-memory-mvp-simplification.md`. `MemoryBelief` переносится на следующие этапы; `MemoryKnowledgeItem` становится главным объектом сохраненной памяти MVP. После ADR-0015 FTS5 и LanceDB vector retrieval включены для документного индекса; graph runtime search остается отключенным. Фактическая рабочая граница описана в `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`.
 
 ## Назначение
 

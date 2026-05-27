@@ -604,6 +604,7 @@ MEMORY_INGESTION_ISSUE_KIND_VALUES = {
     "parser_timeout",
     "ocr_timeout",
     "pii_blocked",
+    "pii_audit",
     "secret_blocked",
     "acl_unresolved",
     "api_unavailable",

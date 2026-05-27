@@ -52,7 +52,7 @@
   "extractor_profiles": {
     "project_docs_v1": {
       "mode": "text",
-      "graph_extraction": true,
+      "graph_extraction": false,
       "entity_types": [
         "architecture_decision",
         "component",
@@ -63,7 +63,7 @@
     },
     "contract_json_v1": {
       "mode": "structured_json",
-      "graph_extraction": true,
+      "graph_extraction": false,
       "entity_types": [
         "contract",
         "schema",
@@ -74,7 +74,7 @@
     },
     "workorder_event_v1": {
       "mode": "business_event",
-      "graph_extraction": true,
+      "graph_extraction": false,
       "entity_types": [
         "work_order",
         "department",
@@ -85,7 +85,7 @@
     },
     "inventory_device_v1": {
       "mode": "business_object",
-      "graph_extraction": true,
+      "graph_extraction": false,
       "entity_types": [
         "device",
         "department",
@@ -96,7 +96,7 @@
     },
     "external_api_object_v1": {
       "mode": "business_object",
-      "graph_extraction": true,
+      "graph_extraction": false,
       "entity_types": [
         "external_record",
         "department",
@@ -108,6 +108,12 @@
     }
   },
   "embedding_profiles": {
+    "local_hash_test_v1": {
+      "provider": "local",
+      "model": "local-hash-test-v1",
+      "dimensions": 64,
+      "normalization": true
+    },
     "local_multilingual_v1": {
       "provider": "local",
       "model": "BAAI/bge-m3",
@@ -125,28 +131,74 @@
     "vector_default": {
       "index_kind": "vector",
       "backend": "lancedb",
-      "embedding_profile": "local_multilingual_v1",
-      "store_safe_text_only": true
+      "embedding_profile": "local_hash_test_v1",
+      "store_safe_text_only": true,
+      "runtime_status": "enabled",
+      "runtime_note": "LanceDB vector backend enabled with a local test embedding profile by default; production should switch LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE to local_multilingual_v1 after model provisioning."
     },
     "fulltext_default": {
       "index_kind": "fulltext",
       "backend": "sqlite_fts",
       "embedding_profile": null,
-      "store_safe_text_only": true
+      "store_safe_text_only": true,
+      "runtime_status": "enabled",
+      "runtime_note": "SQLite FTS5 is the primary runtime backend; token fallback remains available when FTS5 is unavailable."
     },
     "graph_default": {
       "index_kind": "graph",
       "backend": "kuzu",
       "embedding_profile": null,
-      "store_safe_text_only": true
+      "store_safe_text_only": true,
+      "runtime_status": "disabled",
+      "runtime_note": "Graph runtime search отключен; schema bootstrapping и extraction остаются отдельным future-stage контуром."
     }
   },
   "ranking_profiles": {
-    "default_hybrid_v1": {
+    "precise": {
+      "fusion": "rrf",
+      "vector_weight": 0.1,
+      "fulltext_weight": 0.9,
+      "graph_weight": 0.0,
+      "reranker": "none",
+      "max_results": 12
+    },
+    "balanced": {
       "fusion": "rrf",
       "vector_weight": 0.45,
+      "fulltext_weight": 0.55,
+      "graph_weight": 0.0,
+      "reranker": "none",
+      "max_results": 12
+    },
+    "semantic_heavy": {
+      "fusion": "rrf",
+      "vector_weight": 0.75,
+      "fulltext_weight": 0.25,
+      "graph_weight": 0.0,
+      "reranker": "none",
+      "max_results": 12
+    },
+    "source_content": {
+      "fusion": "rrf",
+      "vector_weight": 0.3,
+      "fulltext_weight": 0.7,
+      "graph_weight": 0.0,
+      "reranker": "none",
+      "max_results": 12
+    },
+    "source_semantic": {
+      "fusion": "rrf",
+      "vector_weight": 0.7,
       "fulltext_weight": 0.3,
-      "graph_weight": 0.25,
+      "graph_weight": 0.0,
+      "reranker": "none",
+      "max_results": 12
+    },
+    "graph_future": {
+      "fusion": "rrf",
+      "vector_weight": 0.35,
+      "fulltext_weight": 0.35,
+      "graph_weight": 0.3,
       "reranker": "none",
       "max_results": 12
     }

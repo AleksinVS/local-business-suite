@@ -20,12 +20,67 @@ from .policies import (
 )
 from .routing import resolve_retrieval_route, route_allows_context_kind
 from .services import record_access_audit
-from .vector_backends import get_default_backend
+from .vector_backends import get_default_backend, get_default_vector_backend
 
 
 DEFAULT_LIMIT = 5
 MAX_LIMIT = 50
 PATH_METADATA_KEYS = {"raw_path", "safe_path", "text_path", "path"}
+RRF_K = 60
+
+DEFAULT_RANKING_PROFILES = {
+    "precise": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.90,
+        "vector_weight": 0.10,
+        "graph_weight": 0.00,
+        "overlap_boost": 0.08,
+    },
+    "balanced": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.55,
+        "vector_weight": 0.45,
+        "graph_weight": 0.00,
+        "overlap_boost": 0.10,
+    },
+    "semantic_heavy": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.25,
+        "vector_weight": 0.75,
+        "graph_weight": 0.00,
+        "overlap_boost": 0.10,
+    },
+    "source_content": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.70,
+        "vector_weight": 0.30,
+        "graph_weight": 0.00,
+        "overlap_boost": 0.10,
+    },
+    "source_semantic": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.30,
+        "vector_weight": 0.70,
+        "graph_weight": 0.00,
+        "overlap_boost": 0.10,
+    },
+    "graph_future": {
+        "fusion": "rrf",
+        "fulltext_weight": 0.35,
+        "vector_weight": 0.35,
+        "graph_weight": 0.30,
+        "overlap_boost": 0.10,
+    },
+}
+
+DEFAULT_PROFILE_BY_SEARCH_MODE = {
+    "knowledge_default": "balanced",
+    "knowledge_precise": "precise",
+    "knowledge_semantic": "semantic_heavy",
+    "knowledge_graph": "graph_future",
+    "source_explicit": "source_content",
+    "source_fallback": "balanced",
+}
 
 
 def memory_search(
@@ -40,13 +95,21 @@ def memory_search(
     trusted_context_only=True,
     search_mode="knowledge_default",
     include_source_data=False,
+    ranking_profile="",
 ):
     query_text = _normalize_query(query)
     query_hash = _query_hash(query_text)
     normalized_limit = _normalize_limit(limit)
     normalized_search_mode = _normalize_search_mode(search_mode)
+    normalized_ranking_profile, ranking_profile_config = _resolve_ranking_profile(ranking_profile, normalized_search_mode)
     allowed_corpus_types = _allowed_corpus_types(normalized_search_mode)
-    trace: dict[str, Any] = {"filtered": {}, "search_mode": normalized_search_mode}
+    trace: dict[str, Any] = {
+        "filtered": {},
+        "search_mode": normalized_search_mode,
+        "ranking_profile": normalized_ranking_profile,
+        "ranking_profile_config": _public_profile_config(ranking_profile_config),
+        "search_channels": _search_channel_trace(normalized_search_mode, ranking_profile_config),
+    }
 
     try:
         _assert_actor(actor)
@@ -54,12 +117,27 @@ def memory_search(
         trace["route"] = route_decision.as_trace()
 
         effective_scope_tokens = _effective_scope_tokens(actor, scope_tokens)
-        vector_candidates = _search_vector_candidates(
-            vector_backend=vector_backend,
-            query=query_text,
-            scope_tokens=effective_scope_tokens,
-            sensitivity=route_decision.allowed_sensitivities,
-            limit=normalized_limit,
+        fulltext_candidates = _annotate_candidate_ranks(
+            _search_fulltext_candidates(
+                fulltext_backend=vector_backend,
+                query=query_text,
+                scope_tokens=effective_scope_tokens,
+                sensitivity=route_decision.allowed_sensitivities,
+                limit=normalized_limit,
+            ),
+            channel="fulltext",
+        )
+        vector_candidates = _annotate_candidate_ranks(
+            _search_vector_candidates(
+                search_mode=normalized_search_mode,
+                ranking_profile_config=ranking_profile_config,
+                query=query_text,
+                scope_tokens=effective_scope_tokens,
+                sensitivity=route_decision.allowed_sensitivities,
+                limit=normalized_limit,
+                allowed_corpus_types=allowed_corpus_types,
+            ),
+            channel="vector",
         )
         graph_candidates = _search_graph_candidates(
             graph_backend=graph_backend,
@@ -69,7 +147,9 @@ def memory_search(
             sensitivity=route_decision.allowed_sensitivities,
             limit=normalized_limit,
         )
+        _update_search_channel_trace(trace, fulltext_candidates=fulltext_candidates, vector_candidates=vector_candidates)
         trace["candidate_counts"] = {
+            "fulltext": len(fulltext_candidates),
             "vector": len(vector_candidates),
             "graph": len(graph_candidates),
         }
@@ -82,7 +162,7 @@ def memory_search(
 
         for item in _document_items(
             actor=actor,
-            candidates=vector_candidates,
+            candidates=[*fulltext_candidates, *vector_candidates],
             allowed_sensitivities=route_decision.allowed_sensitivities,
             trace=trace,
             trusted_context_only=trusted_context_only,
@@ -93,7 +173,13 @@ def memory_search(
         for item in graph_candidates:
             candidate_items.append(item)
 
-        ranked_items = _rank_and_pack_items(candidate_items, limit=normalized_limit, trace=trace)
+        ranked_items = _rank_and_pack_items(
+            candidate_items,
+            limit=normalized_limit,
+            trace=trace,
+            ranking_profile=normalized_ranking_profile,
+            ranking_profile_config=ranking_profile_config,
+        )
         for item in ranked_items:
             _append_item(item, items, citations_by_id, returned_document_ids, returned_fact_ids, normalized_limit)
 
@@ -123,7 +209,10 @@ def memory_search(
                 "route": route_decision.as_trace(),
                 "trusted_context_only": trusted_context_only,
                 "search_mode": normalized_search_mode,
+                "ranking_profile": normalized_ranking_profile,
+                "ranking_profile_config": _public_profile_config(ranking_profile_config),
                 "corpus_types": sorted(allowed_corpus_types),
+                "search_channels": trace["search_channels"],
             },
         }
         trace["returned_count"] = len(items)
@@ -149,7 +238,6 @@ def memory_search(
         )
         raise
 
-
 def read_search_document_text(document: MemorySearchDocument) -> str:
     if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE:
         if document.knowledge_item_id is None:
@@ -160,8 +248,8 @@ def read_search_document_text(document: MemorySearchDocument) -> str:
     return ""
 
 
-def _search_vector_candidates(*, vector_backend, query, scope_tokens, sensitivity, limit):
-    backend = vector_backend or get_default_backend()
+def _search_fulltext_candidates(*, fulltext_backend, query, scope_tokens, sensitivity, limit):
+    backend = fulltext_backend or get_default_backend()
     if backend is None:
         return []
     if not hasattr(backend, "search"):
@@ -176,6 +264,52 @@ def _search_vector_candidates(*, vector_backend, query, scope_tokens, sensitivit
     )
 
 
+def _annotate_candidate_ranks(candidates, *, channel: str):
+    annotated = []
+    for rank, candidate in enumerate(candidates, start=1):
+        metadata = _candidate_metadata(candidate)
+        metadata["search_channel"] = channel
+        metadata["raw_score"] = _candidate_score(candidate)
+        metadata["channel_rank"] = rank
+        metadata["rrf_score"] = _rrf_score(rank)
+        if isinstance(candidate, Mapping):
+            item = dict(candidate)
+            item["metadata"] = metadata
+            annotated.append(item)
+            continue
+        annotated.append(
+            {
+                "document_id": _candidate_id(candidate, "document_id"),
+                "score": _candidate_score(candidate),
+                "metadata": metadata,
+            }
+        )
+    return annotated
+
+
+def _search_vector_candidates(*, search_mode, ranking_profile_config, query, scope_tokens, sensitivity, limit, allowed_corpus_types):
+    if not _vector_search_requested(search_mode, ranking_profile_config):
+        return []
+    backend = get_default_vector_backend()
+    if backend is None:
+        return []
+    if not hasattr(backend, "search"):
+        raise ValidationError("Memory vector backend must provide search().")
+    candidates = list(
+        backend.search(
+            query,
+            scope_tokens=scope_tokens,
+            sensitivity=sensitivity,
+            limit=_candidate_limit(limit),
+        )
+    )
+    return [
+        candidate
+        for candidate in candidates
+        if (_candidate_metadata(candidate).get("corpus_type") or "") in allowed_corpus_types
+    ]
+
+
 def _search_graph_candidates(*, graph_backend, actor, query, scope_tokens, sensitivity, limit):
     if graph_backend is None:
         return []
@@ -185,7 +319,7 @@ def _search_graph_candidates(*, graph_backend, actor, query, scope_tokens, sensi
     return []
 
 
-def _rank_and_pack_items(items, *, limit, trace):
+def _rank_and_pack_items(items, *, limit, trace, ranking_profile, ranking_profile_config):
     budget = _retrieval_budget()
     context_budget = budget.get("context_packing", {})
     max_items = min(limit, int(context_budget.get("max_items", limit) or limit))
@@ -193,9 +327,10 @@ def _rank_and_pack_items(items, *, limit, trace):
     max_items_per_source = int(context_budget.get("max_items_per_source", 2) or 2)
     fusion = budget.get("rank_fusion", {})
 
+    merged_items = _merge_candidate_items(items)
     ranked = []
-    for index, item in enumerate(items):
-        score = _rank_score(item, fusion=fusion)
+    for index, item in enumerate(merged_items):
+        score = _rank_score(item, fusion=fusion, ranking_profile_config=ranking_profile_config)
         ranked.append((score, index, item))
     ranked.sort(key=lambda value: (-value[0], value[1]))
 
@@ -221,7 +356,16 @@ def _rank_and_pack_items(items, *, limit, trace):
             break
 
     trace["rank_fusion"] = {
+        "profile": ranking_profile,
+        "normalization": ranking_profile_config.get("fusion", "rrf"),
+        "weights": {
+            "fulltext": float(ranking_profile_config.get("fulltext_weight", 0) or 0),
+            "vector": float(ranking_profile_config.get("vector_weight", 0) or 0),
+            "graph": float(ranking_profile_config.get("graph_weight", 0) or 0),
+        },
+        "rrf_k": int(ranking_profile_config.get("rrf_k", RRF_K) or RRF_K),
         "input_count": len(items),
+        "merged_count": len(merged_items),
         "packed_count": len(packed),
         "max_items": max_items,
         "max_tokens": max_tokens,
@@ -229,6 +373,41 @@ def _rank_and_pack_items(items, *, limit, trace):
         "llm_used": False,
     }
     return packed
+
+
+def _merge_candidate_items(items):
+    by_id: dict[str, dict[str, Any]] = {}
+    ordered_ids: list[str] = []
+    for item in items:
+        item_id = str(item.get("id") or "")
+        if not item_id:
+            continue
+        metadata = dict(item.get("metadata") or {})
+        channel = metadata.get("search_channel") or metadata.get("search_backend") or "unknown"
+        channel_score = _channel_score_payload(metadata, item.get("score"))
+        if item_id not in by_id:
+            item["metadata"] = {
+                **metadata,
+                "search_channels_matched": [channel],
+                "channel_scores": {channel: channel_score},
+            }
+            by_id[item_id] = item
+            ordered_ids.append(item_id)
+            continue
+        existing = by_id[item_id]
+        existing_metadata = dict(existing.get("metadata") or {})
+        channels = list(existing_metadata.get("search_channels_matched") or [])
+        if channel not in channels:
+            channels.append(channel)
+        channel_scores = dict(existing_metadata.get("channel_scores") or {})
+        channel_scores[channel] = channel_score
+        existing["metadata"] = {
+            **metadata,
+            **existing_metadata,
+            "search_channels_matched": channels,
+            "channel_scores": channel_scores,
+        }
+    return [by_id[item_id] for item_id in ordered_ids]
 
 
 def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types):
@@ -270,6 +449,7 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             _bump(trace, "unsafe_or_missing_document_text")
             continue
 
+        is_knowledge = document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE
         metadata = _safe_metadata(
             {
                 **_candidate_metadata(candidate),
@@ -283,10 +463,10 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
                 "authority_class": trust_decision.authority_class,
                 "trusted_for_context": trust_decision.trusted_for_context,
                 "index_status": document.index_status,
+                "accepted_knowledge": is_knowledge,
             }
         )
-        is_knowledge = document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE
-        yield {
+        item = {
             "id": document.document_id,
             "kind": "knowledge" if is_knowledge else "source_data",
             "result_type": "knowledge" if is_knowledge else "source_data",
@@ -303,6 +483,9 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             "index_status": document.index_status,
             "metadata": metadata,
         }
+        if not is_knowledge:
+            item["warning"] = "Это исходный объект, а не принятое знание."
+        yield item
 
 
 def _append_item(item, items, citations_by_id, returned_document_ids, returned_fact_ids, limit):
@@ -378,6 +561,97 @@ def _normalize_search_mode(value) -> str:
     if mode not in allowed:
         raise ValidationError("Unsupported memory search mode.")
     return mode
+
+
+def _resolve_ranking_profile(value, search_mode: str) -> tuple[str, dict[str, Any]]:
+    profile_id = str(value or "").strip() or DEFAULT_PROFILE_BY_SEARCH_MODE[search_mode]
+    profiles = _ranking_profiles()
+    if profile_id not in profiles:
+        raise ValidationError("Unsupported memory ranking profile.")
+    profile = {**DEFAULT_RANKING_PROFILES.get(profile_id, {}), **dict(profiles[profile_id] or {})}
+    profile.setdefault("fusion", "rrf")
+    profile.setdefault("rrf_k", RRF_K)
+    profile.setdefault("overlap_boost", DEFAULT_RANKING_PROFILES.get(profile_id, {}).get("overlap_boost", 0.0))
+    if profile.get("fusion") != "rrf":
+        raise ValidationError("Only rrf memory ranking fusion is supported in this runtime.")
+    return profile_id, profile
+
+
+def _ranking_profiles() -> dict[str, dict[str, Any]]:
+    configured = dict((getattr(settings, "LOCAL_BUSINESS_MEMORY_PROFILES", {}) or {}).get("ranking_profiles", {}) or {})
+    profiles = {key: dict(value) for key, value in DEFAULT_RANKING_PROFILES.items()}
+    for key, value in configured.items():
+        profiles[key] = {**profiles.get(key, {}), **dict(value or {})}
+    return profiles
+
+
+def _public_profile_config(profile: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "fusion": str(profile.get("fusion") or "rrf"),
+        "weights": {
+            "fulltext": float(profile.get("fulltext_weight", 0) or 0),
+            "vector": float(profile.get("vector_weight", 0) or 0),
+            "graph": float(profile.get("graph_weight", 0) or 0),
+        },
+        "overlap_boost": float(profile.get("overlap_boost", 0) or 0),
+    }
+
+
+def _vector_search_requested(search_mode: str, ranking_profile_config: Mapping[str, Any]) -> bool:
+    if float(ranking_profile_config.get("vector_weight", 0) or 0) <= 0:
+        return False
+    return search_mode in {
+        "knowledge_default",
+        "knowledge_precise",
+        "knowledge_semantic",
+        "knowledge_graph",
+        "source_explicit",
+        "source_fallback",
+    }
+
+
+def _search_channel_trace(search_mode: str, ranking_profile_config: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    vector_requested = _vector_search_requested(search_mode, ranking_profile_config)
+    return {
+        "document_index": {
+            "status": "enabled",
+            "implementation": "memory_search_document",
+            "stores_retrievable_text": False,
+        },
+        "fulltext": {
+            "status": "enabled",
+            "implementation": "sqlite_fts5_with_token_fallback",
+            "prefix_search_used": False,
+            "token_fallback_used": False,
+        },
+        "vector": {
+            "status": "enabled" if vector_requested else "available",
+            "implementation": "lancedb",
+            "requested": vector_requested,
+        },
+        "graph": {
+            "status": "disabled",
+            "reason": "Graph runtime search not_ready; схема и extraction остаются отдельным контуром.",
+            "requested": search_mode == "knowledge_graph",
+        },
+    }
+
+
+def _update_search_channel_trace(trace: dict[str, Any], *, fulltext_candidates, vector_candidates) -> None:
+    search_channels = trace.setdefault("search_channels", {})
+    fulltext = search_channels.setdefault("fulltext", {})
+    fulltext["candidate_count"] = len(fulltext_candidates)
+    fulltext["prefix_search_used"] = any(bool((_candidate_metadata(candidate)).get("prefix_search_used")) for candidate in fulltext_candidates)
+    fulltext["token_fallback_used"] = any(bool((_candidate_metadata(candidate)).get("token_fallback_used")) for candidate in fulltext_candidates)
+    fulltext["fts5_enabled"] = any(bool((_candidate_metadata(candidate)).get("fts5_enabled")) for candidate in fulltext_candidates)
+    vector = search_channels.setdefault("vector", {})
+    vector["candidate_count"] = len(vector_candidates)
+    if vector_candidates:
+        metadata = _candidate_metadata(vector_candidates[0])
+        vector["status"] = "enabled"
+        vector["embedding_model"] = metadata.get("embedding_model", "")
+        vector["embedding_version"] = metadata.get("embedding_version", "")
+        vector["embedding_profile"] = metadata.get("embedding_profile", "")
 
 
 def _allowed_corpus_types(search_mode: str) -> set[str]:
@@ -545,14 +819,24 @@ def _candidate_metadata(candidate) -> dict:
     return dict(metadata) if isinstance(metadata, Mapping) else {}
 
 
-def _rank_score(item: Mapping[str, Any], *, fusion: Mapping[str, Any]) -> float:
-    base = item.get("score")
-    try:
-        score = float(base) if base is not None else 1.0
-    except (TypeError, ValueError):
-        score = 1.0
-
+def _rank_score(item: Mapping[str, Any], *, fusion: Mapping[str, Any], ranking_profile_config: Mapping[str, Any]) -> float:
     metadata = item.get("metadata") or {}
+    channel_scores = metadata.get("channel_scores") or {}
+    score = 0.0
+    for channel, weight_key in (
+        ("fulltext", "fulltext_weight"),
+        ("vector", "vector_weight"),
+        ("graph", "graph_weight"),
+    ):
+        payload = channel_scores.get(channel) or {}
+        try:
+            rrf_score = float(payload.get("rrf_score") or 0)
+        except (TypeError, ValueError):
+            rrf_score = 0.0
+        score += float(ranking_profile_config.get(weight_key, 0) or 0) * rrf_score
+    if len(channel_scores) > 1:
+        score += float(ranking_profile_config.get("overlap_boost", 0) or 0)
+
     authority_class = metadata.get("authority_class")
     if authority_class in {"system_of_record", "approved_corpus", "reviewed_org_knowledge", "approved_user_memory"}:
         score += float(fusion.get("authority_boost", 0.25) or 0)
@@ -563,6 +847,41 @@ def _rank_score(item: Mapping[str, Any], *, fusion: Mapping[str, Any]) -> float:
     if confidence < 0.5:
         score -= float(fusion.get("low_confidence_penalty", 0.25) or 0)
     return max(score, 0.0)
+
+
+def _channel_score_payload(metadata: Mapping[str, Any], fallback_score) -> dict[str, Any]:
+    raw_score = metadata.get("raw_score")
+    if raw_score is None:
+        raw_score = fallback_score
+    try:
+        raw_score = float(raw_score) if raw_score is not None else None
+    except (TypeError, ValueError):
+        raw_score = None
+    rank = metadata.get("channel_rank")
+    try:
+        rank = int(rank) if rank is not None else None
+    except (TypeError, ValueError):
+        rank = None
+    rrf_score = metadata.get("rrf_score")
+    try:
+        rrf_score = float(rrf_score) if rrf_score is not None else (_rrf_score(rank) if rank else 0.0)
+    except (TypeError, ValueError):
+        rrf_score = 0.0
+    return {
+        "raw_score": raw_score,
+        "rank": rank,
+        "rrf_score": rrf_score,
+    }
+
+
+def _rrf_score(rank: int, *, k: int = RRF_K) -> float:
+    try:
+        value = int(rank)
+    except (TypeError, ValueError):
+        return 0.0
+    if value <= 0:
+        return 0.0
+    return 1.0 / (k + value)
 
 
 def _item_source_key(item: Mapping[str, Any]) -> str:

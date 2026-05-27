@@ -207,8 +207,8 @@ Claim 2: согласующий = Петров
 ## Требуемые действия
 
 - Создать проектный план `MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md`.
-- Создать active plan `memory-file-only-knowledge-body.md`.
-- Создать workflow-блок `workflow/active/memory-file-only-knowledge-body/`.
+- Создать active plan `memory-file-only-knowledge-body.md` и после приемки архивировать в `docs/planning/archive/2026/`.
+- Создать workflow-блок для реализации и после приемки архивировать в `workflow/archive/2026/`.
 - Удалить `MemoryKnowledgeItem.text`.
 - Перевести writer/index/search/summary/edit/delete на чтение и запись файлов.
 - Убрать текстовые fallback из reader service.

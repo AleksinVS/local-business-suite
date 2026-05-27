@@ -2,16 +2,7 @@
   ".": "Активные планы крупных направлений",
   "knowledge-driven-business-analytics.md": "Активный план knowledge-driven business analytics",
   "README.md": "Правила для активных planning-файлов",
-  "memory-external-connector-legacy-gap-remediation.md": "Активный план устранения legacy gaps external connector MVP",
-  "memory-external-systems-connector.md": "Активный план сбора знаний из внешних информационных систем",
-  "memory-trusted-sources-claims-retrieval.md": "Активный план trusted sources, claim/belief layer и lightweight retrieval",
-  "memory-system-completion.md": "Активный план завершения системы памяти",
-  "memory-mvp-simplification.md": "Активный план упрощения MVP-архитектуры памяти",
-  "memory-mvp-remediation.md": "Активный план исправления разрывов MVP-памяти",
-  "memory-file-backed-knowledge.md": "Активный план файловых знаний, раздельных баз и единого поиска",
-  "memory-file-only-knowledge-body.md": "Активный план хранения текста знания только в файле знания",
-  "memory-snapshot-chunk-removal.md": "Активный план удаления MemorySnapshot/MemoryChunk из активного пути памяти",
-  "mlflow-memory-evaluation-and-tracing.md": "Черновой план MLflow для оценки качества и трассировки памяти",
   "data-anonymization-privacy-pipeline.md": "Черновой план системы обезличивания данных и управляемых настроек",
-  "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки"
+  "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки",
+  "memory-hybrid-ranking-profiles-and-agent-prompts.md": "Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота"
 }

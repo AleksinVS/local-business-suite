@@ -27,9 +27,7 @@
     "extractor_profile": "project_docs_v1",
     "chunking_profile": "long_policy_doc_v1",
     "index_profiles": [
-      "vector_default",
-      "fulltext_default",
-      "graph_default"
+      "fulltext_default"
     ],
     "ignore_patterns": [
       "**/.local/**",
@@ -59,15 +57,13 @@
     "review_owner": "engineering",
     "trusted_context_kinds": [
       "retrieved_chunk",
-      "citation",
-      "graph_fact"
+      "citation"
     ],
     "untrusted_handling": "review_required",
     "extractor_profile": "contract_json_v1",
     "chunking_profile": "structured_contract_v1",
     "index_profiles": [
-      "fulltext_default",
-      "graph_default"
+      "fulltext_default"
     ],
     "ignore_patterns": [
       "**/*.tmp",
@@ -97,16 +93,13 @@
     "review_owner": "engineering",
     "trusted_context_kinds": [
       "retrieved_chunk",
-      "citation",
-      "graph_fact"
+      "citation"
     ],
     "untrusted_handling": "review_required",
     "extractor_profile": "workorder_event_v1",
     "chunking_profile": "short_business_event_v1",
     "index_profiles": [
-      "vector_default",
-      "fulltext_default",
-      "graph_default"
+      "fulltext_default"
     ],
     "ignore_patterns": []
   },
@@ -133,16 +126,13 @@
     "review_owner": "engineering",
     "trusted_context_kinds": [
       "retrieved_chunk",
-      "citation",
-      "graph_fact"
+      "citation"
     ],
     "untrusted_handling": "review_required",
     "extractor_profile": "inventory_device_v1",
     "chunking_profile": "short_business_event_v1",
     "index_profiles": [
-      "vector_default",
-      "fulltext_default",
-      "graph_default"
+      "fulltext_default"
     ],
     "ignore_patterns": []
   },
@@ -174,8 +164,7 @@
     "extractor_profile": "external_api_object_v1",
     "chunking_profile": "external_api_object_v1",
     "index_profiles": [
-      "fulltext_default",
-      "graph_default"
+      "fulltext_default"
     ],
     "ignore_patterns": [],
     "ingestion_profile": "external_api_snapshot_v1",

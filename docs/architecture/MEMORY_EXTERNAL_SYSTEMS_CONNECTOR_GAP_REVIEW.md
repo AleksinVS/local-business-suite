@@ -9,7 +9,7 @@
 - `docs/adr/ADR-0006-external-system-knowledge-connectors.md`;
 - `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md`;
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md`;
-- `workflow/active/memory-external-systems-connector/`.
+- `workflow/archive/2026/memory-external-systems-connector/`.
 
 ## Назначение
 

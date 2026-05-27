@@ -19,12 +19,12 @@
 
 - `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
 - `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
-- `docs/planning/active/memory-file-backed-knowledge.md`;
-- `workflow/active/memory-file-backed-knowledge/HANDOFF_REPORT.md`.
+- `docs/planning/archive/2026/memory-file-backed-knowledge.md`;
+- `workflow/archive/2026/memory-file-backed-knowledge/HANDOFF_REPORT.md`.
 
 Исполнительный блок:
 
-- `workflow/active/memory-snapshot-chunk-removal/`.
+- `workflow/archive/2026/memory-snapshot-chunk-removal/`.
 
 ## Почему это нужно
 
@@ -159,9 +159,9 @@ git diff --check -- . ':(exclude)BACKLOG.md'
 
 После реализации исполнитель должен добавить:
 
-- `workflow/active/memory-snapshot-chunk-removal/EXECUTOR_REPORT.01-05.md`;
-- `workflow/active/memory-snapshot-chunk-removal/TASK_ACCEPTANCE.01-05.md`;
-- `workflow/active/memory-snapshot-chunk-removal/RETROSPECTIVE.md`.
+- `workflow/archive/2026/memory-snapshot-chunk-removal/EXECUTOR_REPORT.01-05.md`;
+- `workflow/archive/2026/memory-snapshot-chunk-removal/TASK_ACCEPTANCE.01-05.md`;
+- `workflow/archive/2026/memory-snapshot-chunk-removal/RETROSPECTIVE.md`.
 
 ## Реализованный срез
 

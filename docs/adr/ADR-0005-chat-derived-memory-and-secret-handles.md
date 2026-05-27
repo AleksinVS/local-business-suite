@@ -48,7 +48,9 @@ Organization writes are controlled by project permissions. Promotion from person
 
 ### Storage
 
-Store chat-derived knowledge under `data/memory/chat_knowledge/`, not in repository-controlled source directories:
+Amendment 2026-05-26: ADR-0011 and ADR-0013 supersede the original projection-as-storage shape below. Canonical accepted knowledge now lives in `data/knowledge_repo/**/*.md`, with metadata in `MemoryKnowledgeItem`. `data/memory/chat_knowledge/` is retained only as a legacy append-only event log for chat-memory events and must not be treated as the source of truth for accepted knowledge text.
+
+The original MVP storage shape was:
 
 ```text
 data/memory/chat_knowledge/
@@ -62,12 +64,11 @@ data/memory/chat_knowledge/
     events/YYYY-MM.jsonl
 ```
 
-Rules:
+Current rules:
 
-- `events/*.jsonl` are append-only knowledge events with provenance.
-- `memory.current.json` is the canonical machine-readable projection.
-- `memory.current.md` is the human-readable projection for inspection.
-- all writes are atomic: write `.tmp`, fsync where practical, then `os.replace`;
+- `events/*.jsonl` are legacy append-only knowledge events with provenance;
+- `memory.current.json` and `memory.current.md` are no longer canonical projections;
+- canonical knowledge text is read from `data/knowledge_repo/`;
 - Django DB remains the authority for access, status, audit and relations to chat messages;
 - generated files under `data/` are runtime data and are not committed.
 

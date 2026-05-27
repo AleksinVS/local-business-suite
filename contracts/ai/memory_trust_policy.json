@@ -134,8 +134,7 @@
     ],
     "allowed_context_kinds": [
       "retrieved_chunk",
-      "citation",
-      "graph_fact"
+      "citation"
     ]
   },
   "review_roles": {

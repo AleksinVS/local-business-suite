@@ -124,7 +124,12 @@
           "embedding_profile": {
             "type": ["string", "null"]
           },
-          "store_safe_text_only": { "type": "boolean" }
+          "store_safe_text_only": { "type": "boolean" },
+          "runtime_status": {
+            "type": "string",
+            "enum": ["enabled", "degraded", "planned", "disabled", "not_ready"]
+          },
+          "runtime_note": { "type": "string" }
         },
         "additionalProperties": false
       }

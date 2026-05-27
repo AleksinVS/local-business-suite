@@ -23,7 +23,7 @@
 
 Workflow:
 
-- `workflow/active/memory-trusted-sources-claims-retrieval/`.
+- `workflow/archive/2026/memory-trusted-sources-claims-retrieval/`.
 
 ## Scope
 

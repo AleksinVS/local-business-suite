@@ -1,0 +1,29 @@
+{
+  "task_id": "03-agent-search-prompts",
+  "title": "Update AI bot prompts for deterministic memory search mode selection",
+  "status": "ready",
+  "read_scope": [
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/tests/test_normalization.py",
+    "docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md"
+  ],
+  "write_scope": [
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/tests/test_normalization.py",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Prompt must map exact source file/content requests to source_explicit + source_content.",
+    "Prompt must map semantic source file/document requests to source_explicit + source_semantic.",
+    "Prompt must map meaning-based accepted knowledge requests to knowledge_semantic + semantic_heavy.",
+    "Prompt must map exact ids/codes/names/dates to knowledge_precise + precise.",
+    "Prompt must map knowledge-first with source fallback to source_fallback + balanced.",
+    "Prompt must instruct the bot not to pass raw weights and not to present source_data as accepted knowledge.",
+    "Prompt must mention that source semantic search is available only through existing memory.search, not a separate API."
+  ],
+  "acceptance_checks": [
+    "python -m unittest services.agent_runtime.tests.test_normalization"
+  ]
+}

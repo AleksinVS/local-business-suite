@@ -21,8 +21,7 @@
         "question",
         "retrieved_chunk",
         "citation",
-        "metadata",
-        "graph_fact"
+        "metadata"
       ],
       "denial_reason": null
     },
@@ -35,8 +34,7 @@
         "question",
         "retrieved_chunk",
         "citation",
-        "metadata",
-        "graph_fact"
+        "metadata"
       ],
       "denial_reason": null
     },
@@ -49,8 +47,7 @@
         "question",
         "retrieved_chunk",
         "citation",
-        "metadata",
-        "graph_fact"
+        "metadata"
       ],
       "denial_reason": "Confidential memory context is restricted to local processing."
     },
@@ -63,8 +60,7 @@
         "question",
         "retrieved_chunk",
         "citation",
-        "metadata",
-        "graph_fact"
+        "metadata"
       ],
       "denial_reason": "Redacted PII memory context is restricted to local processing."
     },

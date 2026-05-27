@@ -1,5 +1,7 @@
 # Retrospective: memory external systems connector MVP
 
+Архивное уточнение 2026-05-26: упоминания `MemorySnapshot`/chunks ниже относятся к исходному состоянию блока. Текущий handoff external connector идет через `MemorySourceObject` и `MemorySearchDocument`; source-specific development заморожен до выбора pilot source.
+
 ## What Worked
 
 - Reusing `MemorySnapshot` and `index_snapshot_text` kept the connector MVP aligned with existing safe corpus and chunk behavior.

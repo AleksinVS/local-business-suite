@@ -4,48 +4,6 @@
 
 ## Active
 
-### Файловые знания, раздельные базы и единый поиск
-
-Спроектирован целевой переход памяти: принятые знания хранятся в runtime Git-репозитории, исходные данные остаются в источниках, метаданные и индексы вынесены в отдельные базы, поиск по знаниям и файловому хранилищу идет через единый сервис.
-
-Контекст:
-- архитектурное решение находится в `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md`;
-- проектный план находится в `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md`;
-- active planning находится в `docs/planning/active/memory-file-backed-knowledge.md`;
-- workflow package находится в `workflow/active/memory-file-backed-knowledge/`.
-
-Предварительный scope:
-- добавить runtime Git-репозиторий знаний и формат файла знания;
-- реализовать writer service с очередью, lock, temporary file, atomic rename и Git commit;
-- реализовать reader service с проверкой прав;
-- вынести metadata знаний, чаты и управляющие модели аналитики в отдельные базы;
-- сделать единый search/index service для корпусов `knowledge` и `source_data`;
-- заменить `MemorySnapshot`/`MemoryChunk` прямой индексной записью `MemorySearchDocument`;
-- добавить degraded mode для `indexing_pending`;
-- отделить ночную рефлексию от обработки записи;
-- мигрировать существующие `MemoryKnowledgeItem` в файлы с проверкой хэшей.
-
-Отдельный исполнительный блок по упрощению индексного слоя реализован и ожидает приемки/архивации:
-- active planning находится в `docs/planning/active/memory-snapshot-chunk-removal.md`;
-- workflow package находится в `workflow/active/memory-snapshot-chunk-removal/`.
-
-### Trusted sources, claim/belief layer и lightweight retrieval
-
-Первый срез реализован, MVP-граница синхронизирована через `ADR-0010`: `MemoryBelief` переносится на следующие этапы, а главным объектом сохраненного знания становится `MemoryKnowledgeItem`. В active backlog остаются будущие claim/belief governance и production hardening после MVP.
-
-Контекст:
-- архитектурное решение находится в `docs/adr/ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md`;
-- проектный план находится в `docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md`;
-- active planning находится в `docs/planning/active/memory-trusted-sources-claims-retrieval.md`;
-- workflow package находится в `workflow/active/memory-trusted-sources-claims-retrieval/`.
-
-Предварительный scope:
-- добавить trust policy в контракты источников памяти;
-- исключить `candidate_only`, `quarantined` и `blocked` источники из обычного `memory.search` context;
-- добавить claim/belief lifecycle с evidence, contradictions, freshness и review;
-- реализовать deterministic rank fusion/context packing без обязательного LLM rerank;
-- добавить off-peak digest/reflection scoring и security eval для memory poisoning.
-
 ### Knowledge-driven business analytics
 
 MVP vertical slice реализован: контракты аналитики, контрольные модели, fixture-first IMAP/email ingestion, общий extraction packet, дедупликация, пересчет метрик, reflection-кандидаты и AI diagnostics routing. В active backlog остается production hardening и подключение реальных источников.
@@ -65,37 +23,50 @@ MVP vertical slice реализован: контракты аналитики, 
 - реализовать optional DMS connector для выбранной системы документооборота;
 - провести pilot tuning scope, retention, authority и dedup rules с владельцем данных.
 
-### Сбор знаний из внешних информационных систем
+## Next
 
-Спроектировать и реализовать контур подключения внешних информационных систем к памяти через queued API-коннекторы, normalized landing zone и существующий memory ingestion.
+### Профили гибридного ранжирования памяти и подсказки ИИ-бота
+
+FTS5 и LanceDB уже подключены, но гибридное ранжирование пока не нормализует BM25/vector score как разные шкалы. Следующий этап — ввести серверные профили ранжирования, включить semantic search по исходным файлам через локальные embeddings и закрепить, как ИИ-бот выбирает режим поиска по намерению пользователя.
 
 Контекст:
-- базовая архитектура памяти принята в `docs/adr/ADR-0003-ai-memory-service.md`;
-- document ingestion и graph schema bootstrapping приняты в `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
-- архитектурное решение по внешним ИС находится в `docs/adr/ADR-0006-external-system-knowledge-connectors.md`;
-- проектный план находится в `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md`;
-- legacy gap review текущего vertical slice находится в `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`;
-- бизнес-опросники находятся в `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md`;
-- active planning находится в `docs/planning/active/memory-external-systems-connector.md`;
-- workflow package находится в `workflow/active/memory-external-systems-connector/`.
+- архитектурное решение находится в `docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md`;
+- активный план находится в `docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md`;
+- workflow package находится в `workflow/active/memory-hybrid-ranking-profiles/`.
 
 Предварительный scope:
-- согласовать первую pilot-систему и заполнить опросники;
-- добавить contracts/schema для external source connectors;
-- реализовать durable queue с retries, idempotency и dead-letter;
-- реализовать normalized landing zone с manifest/envelopes;
-- сделать handoff в существующий memory ingestion;
-- добавить retention, issue visibility, admin/tests и operations docs.
-- закрыть legacy gaps перед подключением чувствительного production source: raw quarantine hardening, retention cleanup, manifest completeness, tombstones, worker dispatch для fetch/normalize stages, content hash verification.
+- добавить `ranking_profile` в `memory.search` и agent runtime wrapper;
+- заменить сложение raw score на RRF-based fusion;
+- включить LanceDB retrieval для `source_data` в явных source-режимах без нового внешнего API;
+- добавить правила: секрет блокирует индексирование документа и ставит blocker issue; PII индексируется, но ставится в audit queue;
+- реализовать reindex/delete по `document_id` с delete+upsert для LanceDB;
+- добавить trace с профилем, весами, RRF-позициями и итоговым score;
+- уточнить системные подсказки ИИ-бота для `source_explicit`, `knowledge_semantic`, `knowledge_precise`, `source_fallback`;
+- покрыть `precise`, `balanced`, `semantic_heavy`, `source_content` и `source_semantic` e2e-тестами.
 
-Критерии готовности к старту реализации:
+Критерии готовности к старту:
+- подтверждено, что MVP использует RRF, а не min-max как основной fusion;
+- подтверждено, что source semantic search входит в ближайший scope без нового внешнего API и cloud embeddings;
+- согласованы тексты подсказок ИИ-бота.
+
+### Поиск по крупным разделам документов
+
+FTS5 и LanceDB по документу целиком реализованы. Следующий отдельный этап — перейти от документного результата к крупным разделам/листам/диапазонам строк без возврата старой модели `MemoryChunk`.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0015-file-content-fts-vector-search.md`;
+- архивный план реализованного среза находится в `docs/planning/archive/2026/memory-file-content-fts-and-vector-search.md`;
+- предварительно рекомендованный вариант — `MemorySearchSegment` в Django без хранения полного текста.
+
+### Pilot adapter внешней информационной системы
+
+Generic external connector MVP архивирован как reference implementation. Следующий шаг возможен только после выбора первой внешней системы.
+
+Критерии готовности к старту:
 - выбран pilot source и владелец данных;
-- подтвержден способ синхронизации: delta API, `updated_at`, webhook+reconciliation или scheduled full sync;
+- заполнены опросники из `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md`;
 - утверждены sensitivity, scope mapping и retention;
-- согласовано, что queue нужна с первого этапа;
-- определено, можно ли ограничиться DB-backed queue для MVP.
-
-## Next
+- подтвержден способ синхронизации: delta API, `updated_at`, webhook+reconciliation или scheduled full sync.
 
 ### Система обезличивания данных и управляемые настройки
 
@@ -149,6 +120,18 @@ MVP vertical slice реализован: контракты аналитики, 
 - согласовано, какие документы можно отправлять в cloud GLM-OCR на тестах.
 
 ## Later
+
+### Graph runtime search
+
+Graph schema bootstrapping и extraction-команды остаются подготовительным контуром. Возврат graph facts через `memory.search` не включен в MVP и требует отдельной стратегии индекса, прав, provenance и ранжирования.
+
+### Claim/belief governance
+
+`MemoryClaim`/`MemoryBelief` не входят в текущую MVP-схему и обычный путь `memory.remember`/`memory.search`. Возвращаться к этому слою стоит только после появления реальных противоречивых источников и процесса review.
+
+### MLflow quality tracing
+
+Черновой план MLflow архивирован. Контур качества можно вернуть в работу после стабилизации поиска по содержимому и отдельного решения по безопасной записи trace без секретов и необезличенных персональных данных.
 
 ### Внешний API системы памяти
 

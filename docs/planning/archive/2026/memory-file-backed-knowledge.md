@@ -27,8 +27,8 @@
 
 Workflow:
 
-- `workflow/active/memory-file-backed-knowledge/`.
-- `workflow/active/memory-file-only-knowledge-body/` - следующий исполнительный блок для удаления текста знания из базы и индекса.
+- `workflow/archive/2026/memory-file-backed-knowledge/`.
+- `workflow/archive/2026/memory-file-only-knowledge-body/` - исполнительный блок удаления текста знания из базы и индекса.
 
 ## Объем работ
 
@@ -137,5 +137,5 @@ python manage.py memory_verify_knowledge_files --strict
 Остается для следующих срезов:
 
 - отдельное аналитическое хранилище DuckDB;
-- удаление `MemorySnapshot` и `MemoryChunk` из активного пути через `docs/planning/active/memory-snapshot-chunk-removal.md`;
+- удаление `MemorySnapshot` и `MemoryChunk` из активного пути через `docs/planning/archive/2026/memory-snapshot-chunk-removal.md`;
 - детальная стратегия графового поиска.

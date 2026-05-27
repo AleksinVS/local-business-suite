@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 
 
-RETRIEVAL_CONTEXT_KINDS = frozenset({"retrieved_chunk", "citation", "graph_fact"})
+RETRIEVAL_CONTEXT_KINDS = frozenset({"retrieved_chunk", "citation"})
 FALLBACK_SENSITIVITY_LEVELS = (
     "public",
     "internal",
@@ -105,7 +105,7 @@ def _route_allows_retrieval(route: dict) -> bool:
     if route.get("default_llm") == "deny":
         return False
     allowed_context = set(route.get("allowed_context_kinds") or [])
-    return {"citation", "retrieved_chunk"}.issubset(allowed_context) or {"citation", "graph_fact"}.issubset(allowed_context)
+    return {"citation", "retrieved_chunk"}.issubset(allowed_context)
 
 
 def _denial_reason(level: str, route: dict) -> str:
@@ -118,7 +118,7 @@ def _fallback_allowed_route(*, cloud_allowed=True) -> dict:
         "cloud_allowed": cloud_allowed,
         "requires_redaction": True,
         "allow_original_pii": False,
-        "allowed_context_kinds": ["question", "retrieved_chunk", "citation", "metadata", "graph_fact"],
+        "allowed_context_kinds": ["question", "retrieved_chunk", "citation", "metadata"],
         "denial_reason": None,
     }
 

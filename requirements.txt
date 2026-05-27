@@ -13,3 +13,5 @@ langchain==0.3.28
 langgraph==0.6.11
 langchain-openai==0.3.35
 mcp==1.27.0
+python-calamine==0.6.2
+lancedb==0.30.2

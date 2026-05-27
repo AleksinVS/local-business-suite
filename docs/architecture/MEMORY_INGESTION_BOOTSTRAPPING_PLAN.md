@@ -194,6 +194,7 @@ partial_indexed
 parser_timeout
 ocr_timeout
 pii_blocked
+pii_audit
 secret_blocked
 acl_unresolved
 schema_unknown_type

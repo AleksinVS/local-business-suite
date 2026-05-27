@@ -21,12 +21,23 @@ from .models import (
     MemorySource,
     MemorySourceObject,
 )
-from .security import assert_no_secrets
-from .deidentification import deidentify_text
-from .vector_backends import MemoryIndexRecord, get_default_backend
+from .security import scan_for_secrets
+from .deidentification import detect_pii
+from .source_text_extraction import (
+    SUPPORTED_SOURCE_TEXT_EXTENSIONS,
+    TextExtractionError,
+    extract_text_from_file,
+    extraction_limits_from_settings,
+)
+from .vector_backends import (
+    LANCEDB_VECTOR_SCHEMA_VERSION,
+    SQLITE_FTS_SCHEMA_VERSION,
+    MemoryIndexRecord,
+    get_default_backend,
+    get_default_vector_backend,
+)
 
 
-TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log"}
 ENCRYPTED_PDF_MARKER = b"/Encrypt"
 
 
@@ -179,13 +190,14 @@ def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=Non
                     source_object=source_object,
                     safe_text=outcome["text"],
                     partial_reason=outcome["partial_reason"],
+                    extraction_metadata=outcome["metadata"].get("extraction"),
                 )
             except ValueError as exc:
                 _create_issue(
                     source=source,
                     source_object=source_object,
                     run=run,
-                    issue_kind=MemoryIngestionIssue.IssueKind.PII_BLOCKED,
+                    issue_kind=MemoryIngestionIssue.IssueKind.SECRET_BLOCKED,
                     severity=MemoryIngestionIssue.Severity.BLOCKER,
                     message=str(exc),
                     metadata=outcome["metadata"],
@@ -370,7 +382,7 @@ def get_source_ingestion_profile(source: MemorySource):
     return IngestionProfile(
         profile_id=profile_id,
         adapter_kind=adapter["adapter_kind"],
-        supported_extensions={ext.lower() for ext in parser.get("supported_extensions", [])},
+        supported_extensions={ext.lower() for ext in parser.get("supported_extensions", [])} | SUPPORTED_SOURCE_TEXT_EXTENSIONS,
         max_file_size_bytes=int(limit_profile["max_file_size_mb"]) * 1024 * 1024,
         raw_mode=profile["raw_mode"],
         acl_mode=profile["acl_mode"],
@@ -482,25 +494,17 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
             "status": MemorySourceObject.IngestionStatus.SKIPPED,
             "metadata": {**base["metadata"], "acl": acl_metadata},
         }
+    forced_partial_reason = ""
     if source_object.size_bytes > profile.max_file_size_bytes:
-        if profile.partial_indexing_enabled and extension in TEXT_EXTENSIONS:
-            text = _read_text_file(path, max_bytes=profile.max_file_size_bytes)
+        if not profile.partial_indexing_enabled or extension not in SUPPORTED_SOURCE_TEXT_EXTENSIONS:
             return {
                 **base,
-                "text": text,
-                "partial_reason": f"File exceeds {profile.max_file_size_bytes} bytes; indexed first supported segment.",
-                "issue_kind": MemoryIngestionIssue.IssueKind.PARTIAL_INDEXED,
-                "message": "Large text-like document was partially indexed.",
-                "metric": "partial",
-                "status": MemorySourceObject.IngestionStatus.PARTIAL,
+                "issue_kind": MemoryIngestionIssue.IssueKind.FILE_TOO_LARGE,
+                "message": f"File exceeds {profile.max_file_size_bytes} bytes.",
+                "metric": "skipped",
+                "status": MemorySourceObject.IngestionStatus.SKIPPED,
             }
-        return {
-            **base,
-            "issue_kind": MemoryIngestionIssue.IssueKind.FILE_TOO_LARGE,
-            "message": f"File exceeds {profile.max_file_size_bytes} bytes.",
-            "metric": "skipped",
-            "status": MemorySourceObject.IngestionStatus.SKIPPED,
-        }
+        forced_partial_reason = f"File exceeds {profile.max_file_size_bytes} bytes; indexed supported extracted text within limits."
     if extension == ".pdf" and _file_contains(path, ENCRYPTED_PDF_MARKER):
         return {
             **base,
@@ -510,20 +514,59 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
             "metric": "skipped",
             "status": MemorySourceObject.IngestionStatus.SKIPPED,
         }
-    if extension in TEXT_EXTENSIONS:
-        text = _read_text_file(path)
+    if extension in SUPPORTED_SOURCE_TEXT_EXTENSIONS:
         try:
-            assert_no_secrets(text)
-        except ValueError as exc:
+            extracted = extract_text_from_file(path, limits=extraction_limits_from_settings())
+        except TextExtractionError as exc:
+            issue_kind = getattr(MemoryIngestionIssue.IssueKind, str(exc.issue_kind).upper(), MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT)
+            return {
+                **base,
+                "issue_kind": issue_kind,
+                "severity": MemoryIngestionIssue.Severity.ERROR,
+                "message": str(exc),
+                "metric": "skipped",
+                "status": MemorySourceObject.IngestionStatus.SKIPPED,
+                "metadata": {**base["metadata"], **(exc.metadata or {})},
+            }
+        secret_scan = scan_for_secrets(extracted.text)
+        if secret_scan.blocked:
             return {
                 **base,
                 "issue_kind": MemoryIngestionIssue.IssueKind.SECRET_BLOCKED,
                 "severity": MemoryIngestionIssue.Severity.BLOCKER,
-                "message": str(exc),
+                "message": secret_scan.reason or "Sensitive credential material was detected.",
                 "metric": "skipped",
                 "status": MemorySourceObject.IngestionStatus.FAILED,
+                "metadata": {
+                    **base["metadata"],
+                    "secret_findings": _safe_secret_findings(secret_scan.findings),
+                },
             }
-        return {**base, "text": text}
+        partial_reason = forced_partial_reason or extracted.partial_reason
+        pii_findings = detect_pii(extracted.text, secret_key=settings.SECRET_KEY)
+        metadata = {
+            **base["metadata"],
+            "extraction": extracted.metadata,
+            **({"pii_findings": [finding.as_dict() for finding in pii_findings]} if pii_findings else {}),
+        }
+        pii_issue = {
+            "issue_kind": MemoryIngestionIssue.IssueKind.PII_AUDIT,
+            "severity": MemoryIngestionIssue.Severity.WARNING,
+            "message": "PII-like data was detected; document will be indexed and queued for audit.",
+        } if pii_findings else {}
+        if extracted.partial or forced_partial_reason:
+            return {
+                **base,
+                "text": extracted.text,
+                "partial_reason": partial_reason,
+                "issue_kind": pii_issue.get("issue_kind") or MemoryIngestionIssue.IssueKind.PARTIAL_INDEXED,
+                "severity": pii_issue.get("severity", MemoryIngestionIssue.Severity.WARNING),
+                "message": pii_issue.get("message") or "Document was partially indexed within extraction limits.",
+                "metric": "partial",
+                "status": MemorySourceObject.IngestionStatus.PARTIAL,
+                "metadata": metadata,
+            }
+        return {**base, **pii_issue, "text": extracted.text, "metadata": metadata}
     return {
         **base,
         "issue_kind": MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT,
@@ -535,16 +578,37 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
 
 
 @transaction.atomic
-def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: str, partial_reason=""):
+def ingest_source_object_text(
+    *,
+    source_object: MemorySourceObject,
+    safe_text: str,
+    partial_reason="",
+    extraction_metadata=None,
+    index_backends=("fulltext", "vector"),
+):
     source = source_object.source
     profile = get_source_ingestion_profile(source)
     scope_tokens = scope_tokens_for_source_object(source_object=source_object, profile=profile)
     if not scope_tokens:
         raise ValueError("No resolved memory scope tokens for source object.")
-    privacy_result = deidentify_text(safe_text or "", secret_key=settings.SECRET_KEY)
-    if privacy_result.blocked:
-        raise ValueError(privacy_result.reason or "Source object was blocked by privacy pipeline.")
+    index_body = safe_text or ""
+    secret_scan = scan_for_secrets(index_body)
+    if secret_scan.blocked:
+        raise ValueError(secret_scan.reason or "Source object was blocked by secret scanning.")
+    pii_findings = detect_pii(index_body, secret_key=settings.SECRET_KEY)
     document_id = _source_document_id(source_object)
+    selected_backends = set(index_backends or ())
+    fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
+    vector_backend = get_default_vector_backend() if "vector" in selected_backends else None
+    existing_document = MemorySearchDocument.objects.filter(document_id=document_id).first()
+    existing_versions = dict(((existing_document.metadata or {}).get("index_versions") if existing_document else {}) or {})
+    if "fulltext" in selected_backends:
+        existing_versions["fulltext"] = SQLITE_FTS_SCHEMA_VERSION
+    if vector_backend is not None:
+        existing_versions["vector"] = LANCEDB_VECTOR_SCHEMA_VERSION
+        embedding_metadata = vector_backend.embedding_provider.metadata
+    else:
+        embedding_metadata = None
     metadata = {
         "relative_path": source_object.relative_path,
         "file_name": source_object.file_name,
@@ -553,6 +617,16 @@ def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: s
         "raw_mode": "reference_only",
         "acl": (source_object.metadata or {}).get("acl", {}),
         "source_object_id": source_object.object_id,
+        "content_hash": source_object.content_hash,
+        "acl_fingerprint": source_object.acl_fingerprint,
+        "sensitivity": source.sensitivity,
+        "trust_status": source.trust_status,
+        "authority_class": source.authority_class,
+        "extraction": dict(extraction_metadata or {}),
+        "index_versions": existing_versions,
+        "embedding": embedding_metadata.__dict__ if embedding_metadata is not None else {},
+        "pii_detected": bool(pii_findings),
+        "pii_finding_count": len(pii_findings),
     }
     document, _ = MemorySearchDocument.objects.update_or_create(
         document_id=document_id,
@@ -560,7 +634,7 @@ def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: s
             "corpus_type": MemorySearchDocument.CorpusType.SOURCE_DATA,
             "object_kind": MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
             "source_object": source_object,
-            "body_hash": sha256_text(privacy_result.safe_text),
+            "body_hash": sha256_text(index_body),
             "index_status": MemorySearchDocument.IndexStatus.READY,
             "metadata": metadata,
             "indexed_at": timezone.now(),
@@ -570,36 +644,56 @@ def ingest_source_object_text(*, source_object: MemorySourceObject, safe_text: s
         **(source_object.metadata or {}),
         "scope_tokens": scope_tokens,
         "last_search_document_id": document.document_id,
+        "last_extraction": dict(extraction_metadata or {}),
     }
     source_object.save(update_fields=["metadata", "updated_at"])
-    index_text = " ".join(
+    index_text = "\n".join(
         value
         for value in [
             source_object.file_name,
             source_object.relative_path,
             source_object.object_id,
             source_object.content_hash,
+            index_body,
         ]
         if value
     )
-    get_default_backend().upsert(
-        MemoryIndexRecord(
-            document_id=document.document_id,
-            text=index_text,
-            metadata={
-                **metadata,
-                "corpus_type": "source_data",
-                "result_type": "source_data",
-                "source_code": source.code,
-                "source_kind": source.source_kind,
-                "source_object_id": source_object.object_id,
-            },
-            scope_tokens=scope_tokens,
-            sensitivity=source.sensitivity,
-            is_active=True,
-        )
+    record = MemoryIndexRecord(
+        document_id=document.document_id,
+        text=index_text,
+        metadata={
+            **metadata,
+            "corpus_type": "source_data",
+            "result_type": "source_data",
+            "source_code": source.code,
+            "source_kind": source.source_kind,
+            "source_object_id": source_object.object_id,
+            "content_hash": source_object.content_hash,
+        },
+        scope_tokens=scope_tokens,
+        sensitivity=source.sensitivity,
+        is_active=True,
     )
+    if fulltext_backend is not None:
+        fulltext_backend.upsert(record)
+    if vector_backend is not None:
+        vector_backend.upsert(record)
     return {"document_id": document.document_id, "document_ids": [document.document_id], "source_object_id": source_object.object_id}
+
+
+def delete_search_document_indexes(document_ids, *, index_backends=("fulltext", "vector")) -> dict:
+    selected_backends = set(index_backends or ())
+    ids = [str(document_id or "").strip() for document_id in document_ids if str(document_id or "").strip()]
+    result = {"fulltext_deleted": 0, "vector_deleted": 0}
+    if not ids:
+        return result
+    if "fulltext" in selected_backends:
+        result["fulltext_deleted"] = get_default_backend().delete(ids)
+    if "vector" in selected_backends:
+        vector_backend = get_default_vector_backend()
+        if vector_backend is not None:
+            result["vector_deleted"] = vector_backend.delete(ids)
+    return result
 
 
 def stable_object_id(*, source: MemorySource, relative_path: str):
@@ -612,6 +706,21 @@ def _source_document_id(source_object: MemorySourceObject):
 
 def sha256_text(value: str):
     return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
+
+
+def _safe_secret_findings(findings):
+    safe = []
+    for finding in findings:
+        safe.append(
+            {
+                "type": finding.finding_type,
+                "start": finding.start,
+                "end": finding.end,
+                "reason": finding.reason,
+                "confidence": finding.confidence,
+            }
+        )
+    return safe
 
 
 def sha256_file(path: Path):

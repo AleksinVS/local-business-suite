@@ -19,7 +19,7 @@
 - `docs/adr/ADR-0010-memory-mvp-simplification.md`;
 - `docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md`;
 - `docs/architecture/MEMORY_MVP_REMEDIATION_PLAN.md`;
-- `workflow/active/memory-mvp-remediation/`.
+- `workflow/archive/2026/memory-mvp-remediation/`.
 
 ## Объем работ
 

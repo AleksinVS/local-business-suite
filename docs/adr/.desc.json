@@ -15,5 +15,6 @@
   "ADR-0013-file-only-knowledge-body.md": "ADR: Текст знания только в файле знания",
   "ADR-0014-mlflow-memory-evaluation-and-tracing.md": "ADR: MLflow для оценки качества и трассировки системы памяти",
   "ADR-0015-file-content-fts-vector-search.md": "ADR: FTS и векторный поиск по содержимому файлов",
-  "ADR-0016-memory-hybrid-ranking-profiles.md": "ADR: Профили гибридного ранжирования памяти"
+  "ADR-0016-memory-hybrid-ranking-profiles.md": "ADR: Профили гибридного ранжирования памяти",
+  "ADR-0017-memory-audit-review-ui.md": "ADR: UI аудита и ревью проблем памяти и поискового индекса"
 }

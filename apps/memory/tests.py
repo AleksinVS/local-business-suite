@@ -10,9 +10,11 @@ from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command, get_commands
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .admin import (
@@ -37,6 +39,7 @@ from .models import (
     MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
     MemoryReflectionRun,
+    MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
@@ -45,6 +48,8 @@ from .models import (
     SecretHandle,
 )
 from .policies import can_access_search_document, can_manage_memory, effective_source_trust, user_scope_tokens
+from .review_selectors import index_document_queryset, issue_to_review_queue_item, review_issue_queryset
+from .review_services import apply_index_review_action, apply_issue_review_action
 from .knowledge_files import read_knowledge_item_file
 from .services import (
     create_index_job,
@@ -228,6 +233,7 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryKnowledgeEvent: django_admin.site._registry[MemoryKnowledgeEvent].__class__,
             MemoryKnowledgeCandidate: django_admin.site._registry[MemoryKnowledgeCandidate].__class__,
             MemoryReflectionRun: django_admin.site._registry[MemoryReflectionRun].__class__,
+            MemoryReviewAction: django_admin.site._registry[MemoryReviewAction].__class__,
             SecretHandle: django_admin.site._registry[SecretHandle].__class__,
             SecretAccessAudit: django_admin.site._registry[SecretAccessAudit].__class__,
         }
@@ -257,12 +263,228 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryKnowledgeEvent,
             MemoryKnowledgeCandidate,
             MemoryReflectionRun,
+            MemoryReviewAction,
             SecretHandle,
             SecretAccessAudit,
         ):
             with self.subTest(model=model.__name__):
                 model_admin = django_admin.site._registry[model]
                 self.assertTrue(path_fields.isdisjoint(model_admin.search_fields))
+
+
+class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
+    databases = RUNTIME_DATABASES
+
+    def create_review_user(self, username="memory-reviewer", group_name="memory_admin"):
+        user = User.objects.create_user(username=username, password="pass")
+        group, _created = Group.objects.get_or_create(name=group_name)
+        user.groups.add(group)
+        return user
+
+    def create_review_issue(
+        self,
+        *,
+        issue_kind=MemoryIngestionIssue.IssueKind.PII_AUDIT,
+        message=None,
+        source_code="review_source",
+        document_id="source:review-doc-1",
+        scope_tokens=None,
+    ):
+        source = self.create_source(code=source_code, sensitivity="confidential")
+        document = self.create_search_document(
+            source=source,
+            document_id=document_id,
+            scope_tokens=scope_tokens or ["org:default"],
+            metadata={
+                "index_versions": {"fulltext": "sqlite-fts-v1"},
+                "content_hash": "text-hash-1",
+                "pii_probe": "audit-person@example.com",
+            },
+        )
+        issue = MemoryIngestionIssue.objects.create(
+            source=source,
+            source_object=document.source_object,
+            issue_kind=issue_kind,
+            severity=MemoryIngestionIssue.Severity.WARNING,
+            message=message or "PII audit required for audit-person@example.com.",
+            metadata={"detector": "test", "sample": "audit-person@example.com"},
+        )
+        return source, document, issue
+
+    def test_review_ui_requires_review_permission(self):
+        user = User.objects.create_user(username="plain-user", password="pass")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("memory:review_dashboard"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_review_queue_uses_projection_without_persistent_review_case(self):
+        user = self.create_review_user()
+        _source, _document, issue = self.create_review_issue()
+
+        item = issue_to_review_queue_item(issue, user=user)
+
+        self.assertIsNone(get_optional_memory_model("MemoryReviewCase"))
+        self.assertEqual(item.source_model, "MemoryIngestionIssue")
+        self.assertEqual(item.stable_key, f"issue:{issue.pk}")
+        self.assertNotIn("audit-person@example.com", item.safe_summary)
+
+    def test_issue_detail_resolve_writes_safe_review_action(self):
+        user = self.create_review_user()
+        _source, _document, issue = self.create_review_issue()
+        self.client.force_login(user)
+
+        detail_response = self.client.get(reverse("memory:review_issue_detail", kwargs={"pk": issue.pk}))
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "PII audit")
+        self.assertNotContains(detail_response, "audit-person@example.com")
+
+        response = self.client.post(
+            reverse("memory:review_issue_action", kwargs={"pk": issue.pk}),
+            {
+                "action": "resolve",
+                "resolution_code": "audit_accepted",
+                "comment": "Проверено: audit-person@example.com password=supersecretvalue",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, MemoryIngestionIssue.Status.RESOLVED)
+        action = MemoryReviewAction.objects.get(issue=issue, action=MemoryReviewAction.Action.RESOLVE)
+        action_payload = json.dumps(
+            {
+                "comment": action.comment,
+                "safe_metadata": action.safe_metadata,
+                "before_state": action.before_state,
+                "after_state": action.after_state,
+            },
+            ensure_ascii=False,
+        )
+        self.assertNotIn("audit-person@example.com", action_payload)
+        self.assertNotIn("supersecretvalue", action_payload)
+
+    def test_index_health_enqueue_and_delete_stale_actions(self):
+        user = self.create_review_user()
+        _source, document, _issue = self.create_review_issue()
+        self.client.force_login(user)
+
+        list_response = self.client.get(reverse("memory:review_index_list"), {"gap": "missing_vector"})
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, document.document_id)
+
+        enqueue_response = self.client.post(
+            reverse("memory:review_index_action", kwargs={"document_id": document.document_id}),
+            {"action": "enqueue_reindex"},
+        )
+        self.assertEqual(enqueue_response.status_code, 302)
+        job = MemoryIndexJob.objects.get(payload__document_id=document.document_id)
+        self.assertEqual(job.job_kind, MemoryIndexJob.JobKind.REINDEX)
+        self.assertEqual(
+            MemoryReviewAction.objects.get(search_document=document, action=MemoryReviewAction.Action.ENQUEUE_REINDEX).decision,
+            MemoryReviewAction.Decision.QUEUED,
+        )
+
+        with patch("apps.memory.review_services.delete_search_document_indexes", return_value={"fulltext_deleted": 1, "vector_deleted": 1}):
+            delete_response = self.client.post(
+                reverse("memory:review_index_action", kwargs={"document_id": document.document_id}),
+                {"action": "delete_stale_index"},
+            )
+        self.assertEqual(delete_response.status_code, 302)
+        document.refresh_from_db()
+        self.assertEqual(document.index_status, MemorySearchDocument.IndexStatus.DELETED)
+        self.assertTrue(
+            MemoryReviewAction.objects.filter(
+                search_document=document,
+                action=MemoryReviewAction.Action.DELETE_STALE_INDEX,
+            ).exists()
+        )
+
+    def test_review_queue_and_index_pages_filter_by_scope_tokens(self):
+        user = self.create_review_user()
+        _source, visible_document, visible_issue = self.create_review_issue()
+        _hidden_source, hidden_document, hidden_issue = self.create_review_issue(
+            source_code="hidden_source",
+            document_id="source:hidden-doc-1",
+            scope_tokens=["role:hidden-reviewers"],
+        )
+        self.client.force_login(user)
+
+        self.assertIn(visible_issue, list(review_issue_queryset(user)))
+        self.assertNotIn(hidden_issue, list(review_issue_queryset(user)))
+        self.assertIn(visible_document, list(index_document_queryset(user)))
+        self.assertNotIn(hidden_document, list(index_document_queryset(user)))
+
+        dashboard_response = self.client.get(reverse("memory:review_dashboard"))
+        hidden_issue_response = self.client.get(reverse("memory:review_issue_detail", kwargs={"pk": hidden_issue.pk}))
+        hidden_document_response = self.client.get(
+            reverse("memory:review_index_detail", kwargs={"document_id": hidden_document.document_id})
+        )
+
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertEqual(hidden_issue_response.status_code, 404)
+        self.assertEqual(hidden_document_response.status_code, 404)
+
+    def test_hidden_index_document_cannot_be_mutated_by_direct_post(self):
+        user = self.create_review_user()
+        _source, hidden_document, _issue = self.create_review_issue(
+            source_code="hidden_post_source",
+            document_id="source:hidden-post-doc-1",
+            scope_tokens=["role:hidden-reviewers"],
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("memory:review_index_action", kwargs={"document_id": hidden_document.document_id}),
+            {"action": "enqueue_reindex"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(MemoryIndexJob.objects.filter(payload__document_id=hidden_document.document_id).exists())
+
+    def test_delete_stale_index_rejects_healthy_document(self):
+        user = self.create_review_user()
+        source = self.create_source(code="healthy_index_source", sensitivity="confidential")
+        document = self.create_search_document(
+            source=source,
+            document_id="source:healthy-index-doc-1",
+            metadata={
+                "index_versions": {"fulltext": "sqlite-fts-v1", "vector": "sqlite-vector-v1"},
+                "content_hash": "text-hash-1",
+            },
+        )
+
+        with self.assertRaises(ValidationError):
+            apply_index_review_action(
+                actor=user,
+                document=document,
+                action=MemoryReviewAction.Action.DELETE_STALE_INDEX,
+            )
+
+        document.refresh_from_db()
+        self.assertEqual(document.index_status, MemorySearchDocument.IndexStatus.READY)
+
+    def test_index_operator_can_enqueue_issue_reindex_without_issue_review_permission(self):
+        user = self.create_review_user(username="index-operator", group_name="memory_index_operator")
+        _source, document, issue = self.create_review_issue(issue_kind=MemoryIngestionIssue.IssueKind.INDEX_FAILED)
+
+        action = apply_issue_review_action(
+            actor=user,
+            issue=issue,
+            action=MemoryReviewAction.Action.ENQUEUE_REINDEX,
+        )
+
+        self.assertEqual(action.decision, MemoryReviewAction.Decision.QUEUED)
+        self.assertTrue(MemoryIndexJob.objects.filter(payload__document_id=document.document_id).exists())
+
+    def test_index_queryset_without_gap_remains_lazy(self):
+        user = self.create_review_user()
+        self.create_review_issue()
+
+        documents = index_document_queryset(user)
+
+        self.assertNotIsInstance(documents, list)
 
 
 class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase):

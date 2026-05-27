@@ -4,5 +4,6 @@
   "README.md": "Правила для активных planning-файлов",
   "data-anonymization-privacy-pipeline.md": "Черновой план системы обезличивания данных и управляемых настроек",
   "settings-center-gui.md": "Активный план Settings Center, GUI настроек и контекстной справки",
-  "memory-hybrid-ranking-profiles-and-agent-prompts.md": "Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота"
+  "memory-hybrid-ranking-profiles-and-agent-prompts.md": "Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота",
+  "memory-audit-review-ui.md": "Активный план UI аудита и ревью проблем памяти и поискового индекса"
 }

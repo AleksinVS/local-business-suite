@@ -8,6 +8,19 @@ PUBLIC_SCOPE_TOKEN = "org:default"
 TRUSTED_STATUS = "trusted"
 REVIEW_REQUIRED_STATUS = "review_required"
 BLOCKED_STATUS = "blocked"
+MEMORY_REVIEW_CAPABILITIES = {
+    "view_review_queue",
+    "review_issues",
+    "review_privacy_issues",
+    "manage_search_index",
+    "view_memory_access_audit",
+}
+MEMORY_REVIEW_GROUP_CAPABILITIES = {
+    "memory_admin": MEMORY_REVIEW_CAPABILITIES,
+    "memory_auditor": {"view_review_queue", "review_issues", "review_privacy_issues", "view_memory_access_audit"},
+    "memory_index_operator": {"view_review_queue", "manage_search_index"},
+    "memory_observer": {"view_review_queue"},
+}
 LEGACY_TRUST_STATUS_MAPPING = {
     "trusted": TRUSTED_STATUS,
     "candidate_only": REVIEW_REQUIRED_STATUS,
@@ -47,6 +60,59 @@ def user_scope_tokens(user):
 
 def can_manage_memory(user) -> bool:
     return bool(getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False))
+
+
+def has_memory_review_capability(user, capability: str) -> bool:
+    if capability not in MEMORY_REVIEW_CAPABILITIES:
+        return False
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    if user.has_perm(f"memory.{capability}"):
+        return True
+    group_names = set(user.groups.values_list("name", flat=True))
+    return any(capability in MEMORY_REVIEW_GROUP_CAPABILITIES.get(group_name, set()) for group_name in group_names)
+
+
+def can_view_memory_review_queue(user) -> bool:
+    return has_memory_review_capability(user, "view_review_queue")
+
+
+def can_review_memory_issues(user) -> bool:
+    return has_memory_review_capability(user, "review_issues")
+
+
+def can_review_memory_privacy_issues(user) -> bool:
+    return has_memory_review_capability(user, "review_privacy_issues")
+
+
+def can_manage_memory_search_index(user) -> bool:
+    return has_memory_review_capability(user, "manage_search_index")
+
+
+def can_view_memory_access_audit(user) -> bool:
+    return has_memory_review_capability(user, "view_memory_access_audit")
+
+
+def can_review_scoped_search_document(user, document: MemorySearchDocument) -> bool:
+    if getattr(user, "is_superuser", False):
+        return True
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return scope_tokens_match(search_document_scope_tokens(document), user_scope_tokens(user))
+
+
+def can_review_scoped_issue(user, issue) -> bool:
+    if getattr(user, "is_superuser", False):
+        return True
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(issue, "source_object_id", None):
+        required_tokens = (issue.source_object.metadata or {}).get("scope_tokens") or []
+    else:
+        required_tokens = source_scope_tokens(getattr(issue, "source", None))
+    return scope_tokens_match(required_tokens, user_scope_tokens(user))
 
 
 def can_write_personal_memory(user, owner) -> bool:
@@ -156,6 +222,14 @@ def search_document_scope_tokens(document: MemorySearchDocument) -> list[str]:
     if document.source_object_id:
         return list((document.source_object.metadata or {}).get("scope_tokens") or [])
     return []
+
+
+def source_scope_tokens(source: MemorySource | None) -> list[str]:
+    if source is None:
+        return []
+    from .acl import scope_tokens_for_source_scope_rule
+
+    return list(scope_tokens_for_source_scope_rule(source))
 
 
 def search_document_sensitivity(document: MemorySearchDocument) -> str:

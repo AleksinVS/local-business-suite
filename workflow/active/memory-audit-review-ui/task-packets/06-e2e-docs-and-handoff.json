@@ -1,0 +1,37 @@
+{
+  "task_id": "06-e2e-docs-and-handoff",
+  "title": "Add e2e coverage, operator docs and handoff",
+  "status": "completed",
+  "read_scope": [
+    "apps/memory/tests.py",
+    "apps/memory/management/commands/memory_file_content_search_e2e.py",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/planning/active/memory-audit-review-ui.md",
+    "workflow/active/memory-audit-review-ui/"
+  ],
+  "write_scope": [
+    "apps/memory/tests.py",
+    "docs/guides/",
+    "docs/planning/active/memory-audit-review-ui.md",
+    "workflow/active/memory-audit-review-ui/",
+    "PROJECT_STRUCTURE.yaml",
+    "docs/**/.desc.json",
+    "workflow/**/.desc.json"
+  ],
+  "requirements": [
+    "Add Django Client e2e for issue queue -> issue detail -> action -> MemoryReviewAction.",
+    "Add Django Client e2e for index health -> reindex/delete stale action -> MemoryReviewAction.",
+    "Add negative e2e for unauthorized user and privacy-limited user.",
+    "Add safety assertion that responses and action logs do not contain raw secret, raw PII, full extracted text or raw query.",
+    "Update operator documentation with roles, actions and limitations.",
+    "Update planning/workflow status and project structure after implementation."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.settings_center.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e",
+    "make gen-struct"
+  ]
+}

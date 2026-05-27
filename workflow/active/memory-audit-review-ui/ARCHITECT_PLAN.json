@@ -1,0 +1,39 @@
+{
+  "block_id": "memory-audit-review-ui",
+  "status": "implemented_owner_review_pending",
+  "created_at": "2026-05-27",
+  "architecture_sources": [
+    "docs/adr/ADR-0017-memory-audit-review-ui.md",
+    "docs/adr/ADR-0015-file-content-fts-vector-search.md",
+    "docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md",
+    "docs/planning/active/memory-audit-review-ui.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
+  ],
+  "goal": "Implement an operator UI for memory ingestion issues, privacy audit issues, search index health, review actions and safe audit visibility.",
+  "execution_order": [
+    "01-adr-and-model-contract",
+    "02-review-selectors-and-services",
+    "03-review-ui-issue-queue",
+    "04-index-health-ui-and-actions",
+    "05-permissions-audit-and-safety",
+    "06-e2e-docs-and-handoff"
+  ],
+  "global_constraints": [
+    "Use accepted ADR-0017 as the implementation baseline.",
+    "Keep MemoryIngestionIssue as the primary review queue for MVP.",
+    "Do not introduce a persistent MemoryReviewCase in MVP; use selector-level ReviewQueueItem for unified UI lists.",
+    "Do not store full extracted document text in Django.",
+    "Do not expose raw secrets, raw PII or raw query values in UI, action logs, tests or documentation.",
+    "Do not provide force-index actions for documents where secrets were detected.",
+    "Use Django templates and HTMX first; do not build a separate SPA.",
+    "All state-changing UI actions must go through apps.memory services and create MemoryReviewAction.",
+    "Apply server-side permissions to issue, source object, search document and audit visibility.",
+    "Keep temporary e2e files and logs under .local/."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.settings_center.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e"
+  ]
+}

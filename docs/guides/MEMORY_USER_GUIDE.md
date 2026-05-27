@@ -62,13 +62,28 @@
 
 ## Администрирование
 
-Администратор использует Django Admin:
+Администратор использует рабочий UI ревью памяти:
+
+```text
+/memory/review/
+```
+
+В нем доступны:
+
+- сводка открытых issues и состояния индекса;
+- очередь `MemoryIngestionIssue`;
+- карточка issue с безопасными metadata и действиями acknowledge/assign/resolve/ignore/reindex;
+- список и карточка `MemorySearchDocument` с FTS/vector diagnostics;
+- журнал `MemoryReviewAction`.
+
+Для низкоуровневого осмотра остается Django Admin:
 
 - `MemorySource` — источники памяти и их статус;
 - `MemorySearchDocument` — прямые поисковые записи для знаний и исходных объектов;
 - `MemoryKnowledgeItem` — метаданные принятых знаний, которые хранятся в файлах;
 - `MemoryIndexJob` — smoke reindex jobs и статус выполнения;
 - `MemoryAccessAudit` — журнал вызовов `memory.search`;
+- `MemoryReviewAction` — неизменяемый журнал решений ревьюера;
 - `MemoryEvalCase` — сценарии eval/smoke проверок.
 
 В admin намеренно не выводятся raw/safe/text path как обычные searchable поля. Для исходных объектов показываются только безопасные метаданные и ссылки.
@@ -121,7 +136,7 @@ Eval report пишется только в `data/memory/eval/`.
 - FTS/vector индексы хранят перестраиваемые поисковые производные и метаданные, но не являются источником полного текста для выдачи;
 - graph runtime search отключен и в trace отображается как `disabled/not_ready`;
 - `memory.search` выполняет trusted-only gate, deterministic rank fusion и context packing без обязательного LLM;
-- review UI для источников и знаний пока представлен Django Admin;
+- review UI для issues памяти и состояния поискового индекса доступен в `/memory/review/`; Django Admin остается техническим fallback;
 - claim extraction, `MemoryClaim` и `MemoryBelief` перенесены на следующие этапы;
 - ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, `.csv/.tsv/.xlsx/.xls`, bootstrap package и graph schema proposals;
 - PDF/DOC/DOCX/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;

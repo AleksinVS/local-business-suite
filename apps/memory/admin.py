@@ -16,6 +16,7 @@ from .models import (
     MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
     MemoryReflectionRun,
+    MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
@@ -149,11 +150,20 @@ class MemoryIngestionRunAdmin(admin.ModelAdmin):
 
 @admin.register(MemoryIngestionIssue)
 class MemoryIngestionIssueAdmin(admin.ModelAdmin):
-    list_display = ("issue_kind", "status", "severity", "source", "source_object_display", "message_short", "created_at")
-    list_filter = ("issue_kind", "status", "severity", "source__domain", "created_at")
+    list_display = (
+        "issue_kind",
+        "status",
+        "severity",
+        "source",
+        "source_object_display",
+        "assigned_to",
+        "message_short",
+        "created_at",
+    )
+    list_filter = ("issue_kind", "status", "severity", "source__domain", "assigned_to", "created_at")
     search_fields = ("source__code", "source_object__relative_path", "message")
     readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source", "source_object", "run")
+    autocomplete_fields = ("source", "source_object", "run", "assigned_to", "reviewed_by")
     actions = ("acknowledge_selected", "resolve_selected", "ignore_selected")
 
     def get_queryset(self, request):
@@ -182,6 +192,41 @@ class MemoryIngestionIssueAdmin(admin.ModelAdmin):
     def ignore_selected(self, request, queryset):
         updated = queryset.update(status=MemoryIngestionIssue.Status.IGNORED, updated_at=timezone.now())
         self.message_user(request, f"Ignored {updated} memory ingestion issue(s).")
+
+
+@admin.register(MemoryReviewAction)
+class MemoryReviewActionAdmin(admin.ModelAdmin):
+    list_display = ("id", "action", "decision", "actor", "issue", "search_document", "source_object", "created_at")
+    list_filter = ("action", "decision", "created_at")
+    search_fields = (
+        "issue__message",
+        "search_document__document_id",
+        "source_object__relative_path",
+        "index_job__request_id",
+        "comment",
+    )
+    readonly_fields = (
+        "actor",
+        "action",
+        "decision",
+        "issue",
+        "search_document",
+        "source_object",
+        "index_job",
+        "access_audit",
+        "before_state",
+        "after_state",
+        "safe_metadata",
+        "comment",
+        "created_at",
+    )
+    autocomplete_fields = ("actor", "issue", "search_document", "source_object", "index_job", "access_audit")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MemoryGraphEntity)

@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для UI аудита и ревью памяти",
+  "01-adr-and-model-contract.json": "Принятие ADR, уточнение модели review action и issue/index contracts",
+  "02-review-selectors-and-services.json": "Selectors, permission filters и сервисы действий ревью",
+  "03-review-ui-issue-queue.json": "Dashboard, очередь issues и карточка issue",
+  "04-index-health-ui-and-actions.json": "Index health UI и действия reindex/delete stale",
+  "05-permissions-audit-and-safety.json": "Права доступа, audit log и проверки отсутствия raw secret/PII/raw query",
+  "06-e2e-docs-and-handoff.json": "E2E, пользовательская документация и handoff"
+}

@@ -23,6 +23,7 @@ urlpatterns = [
     path("ai/", include("apps.ai.urls")),
     path("analytics/", include("apps.analytics.urls")),
     path("inventory/", include("apps.inventory.urls")),
+    path("memory/", include("apps.memory.urls")),
     path("settings/", include("apps.settings_center.urls")),
     path("workorders/", include("apps.workorders.urls")),
     path("waiting-list/", include("apps.waiting_list.urls")),

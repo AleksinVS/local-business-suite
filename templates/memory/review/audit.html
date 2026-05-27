@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Журнал ревью памяти | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+{% include "memory/review/_nav.html" %}
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Audit</p>
+      <h1>Журнал действий ревью</h1>
+    </div>
+  </div>
+  <form method="get" class="memory-review-filters">
+    <select name="action">
+      <option value="">Все действия</option>
+      {% for value, label in action_choices %}
+        <option value="{{ value }}" {% if filters.action == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="decision">
+      <option value="">Все решения</option>
+      {% for value, label in decision_choices %}
+        <option value="{{ value }}" {% if filters.decision == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Фильтр</button>
+    <a class="button-link-muted" href="{% url 'memory:review_audit' %}">Сбросить</a>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Actor</th>
+          <th>Action</th>
+          <th>Decision</th>
+          <th>Issue</th>
+          <th>Document</th>
+          <th>Job</th>
+          <th>Комментарий</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in actions %}
+          <tr>
+            <td>{{ item.created_at }}</td>
+            <td>{{ item.actor }}</td>
+            <td>{{ item.action }}</td>
+            <td>{{ item.decision }}</td>
+            <td>{% if item.issue_id %}<a href="{% url 'memory:review_issue_detail' item.issue_id %}">#{{ item.issue_id }}</a>{% endif %}</td>
+            <td>{% if item.search_document_id %}<a href="{% url 'memory:review_index_detail' item.search_document.document_id %}"><code>{{ item.search_document.document_id }}</code></a>{% endif %}</td>
+            <td>{{ item.index_job_id|default:"" }}</td>
+            <td>{{ item.comment }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="muted">Действий пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

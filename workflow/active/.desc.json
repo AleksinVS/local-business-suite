@@ -3,5 +3,6 @@
   "README.md": "Правила для активных workflow-блоков",
   "knowledge-driven-business-analytics": "Workflow: knowledge-driven business analytics",
   "settings-center-gui": "Workflow: Settings Center, GUI настроек и контекстная справка",
-  "memory-hybrid-ranking-profiles": "Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота"
+  "memory-hybrid-ranking-profiles": "Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота",
+  "memory-audit-review-ui": "Workflow: UI аудита и ревью проблем памяти и поискового индекса"
 }

@@ -160,6 +160,21 @@ Memory eval checks: passed=4, failed=0
 
 Issue/review queue нужна для исключений, а не для всего потока документов.
 
+Рабочий UI находится по адресу:
+
+```text
+/memory/review/
+```
+
+Основные разделы:
+
+- `Сводка` — счетчики открытых issues, blocker/privacy cases и проблем состояния индекса;
+- `Issues` — очередь `MemoryIngestionIssue` с фильтрами по статусу, severity, типу, источнику и группам проблем;
+- `Индекс` — состояние `MemorySearchDocument`, FTS/vector metadata и действия reindex/delete stale;
+- `Журнал` — неизменяемые `MemoryReviewAction` для решений оператора.
+
+UI использует `ReviewQueueItem` как read-only проекцию для списков. Постоянной таблицы `ReviewCase` в MVP нет: источником истины остаются `MemoryIngestionIssue`, `MemorySearchDocument` и `MemoryReviewAction`.
+
 Типовые issue kinds:
 
 - `encrypted_file` - password-protected или encrypted файл пропущен;
@@ -175,6 +190,11 @@ Issue/review queue нужна для исключений, а не для все
 - `schema_unknown_type` - найден неизвестный тип для схемы графа;
 - `schema_unknown_relation` - найдена неизвестная связь;
 - `canonicalization_conflict` - конфликт нормализации сущности.
+- `index_failed` - документ не удалось переиндексировать;
+- `index_stale` - metadata индекса устарела;
+- `fts_missing` - FTS-запись отсутствует или версия неизвестна;
+- `vector_missing` - vector-запись отсутствует или версия неизвестна;
+- `source_deleted_index_left` - исходный объект исчез, но индексная запись еще требует очистки.
 
 Статусы:
 
@@ -195,6 +215,21 @@ ignored
 - `ignored` допустим только с понятной причиной, например устаревший файл или намеренно неподдерживаемый формат.
 
 Password-protected, encrypted, partial и suspicious документы не должны тихо исчезать из процесса: они остаются видимыми в issue queue и audit.
+
+Правила операторских действий:
+
+- `secret_blocked` нельзя принудительно индексировать через UI; оператор исправляет источник или инициирует повторную переиндексацию после устранения причины;
+- `pii_audit` можно acknowledged/resolved, документ остается индексированным согласно локальной privacy-модели;
+- reindex из UI создает `MemoryIndexJob`, а не меняет индекс напрямую из шаблона;
+- delete stale удаляет FTS/vector записи через backend service и пишет `MemoryReviewAction`;
+- комментарии и metadata в журнале проходят safe serializer: raw secrets, необезличенная PII, полный извлеченный текст и raw query не должны попадать в UI или журнал.
+
+Минимальные роли:
+
+- `memory_admin` — полный контур ревью и действий с индексом;
+- `memory_auditor` — privacy/audit issues и безопасный просмотр;
+- `memory_index_operator` — reindex/delete stale/retry failed index;
+- `memory_observer` — только чтение безопасной очереди.
 
 ## Schema Review Queue
 

@@ -254,6 +254,11 @@ class MemoryIngestionIssue(models.Model):
         SCHEMA_UNKNOWN_TYPE = "schema_unknown_type", "Schema unknown type"
         SCHEMA_UNKNOWN_RELATION = "schema_unknown_relation", "Schema unknown relation"
         CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Canonicalization conflict"
+        INDEX_FAILED = "index_failed", "Index failed"
+        INDEX_STALE = "index_stale", "Index stale"
+        FTS_MISSING = "fts_missing", "FTS missing"
+        VECTOR_MISSING = "vector_missing", "Vector missing"
+        SOURCE_DELETED_INDEX_LEFT = "source_deleted_index_left", "Source deleted index left"
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"
@@ -288,6 +293,25 @@ class MemoryIngestionIssue(models.Model):
     severity = models.CharField(max_length=16, choices=Severity.choices, default=Severity.WARNING)
     message = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="assigned_memory_ingestion_issues",
+        blank=True,
+        null=True,
+        db_constraint=False,
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reviewed_memory_ingestion_issues",
+        blank=True,
+        null=True,
+        db_constraint=False,
+    )
+    resolution_code = models.CharField(max_length=80, blank=True)
+    resolution_note = models.TextField(blank=True)
+    review_due_at = models.DateTimeField(blank=True, null=True)
     resolved_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -299,12 +323,110 @@ class MemoryIngestionIssue(models.Model):
             models.Index(fields=["issue_kind"]),
             models.Index(fields=["severity"]),
             models.Index(fields=["created_at"]),
+            models.Index(fields=["assigned_to", "status"]),
+            models.Index(fields=["review_due_at"]),
         ]
         verbose_name = "Memory ingestion issue"
         verbose_name_plural = "Memory ingestion issues"
 
     def __str__(self):
         return f"{self.issue_kind}:{self.status}:{self.pk}"
+
+
+class MemoryReviewAction(models.Model):
+    class Action(models.TextChoices):
+        ACKNOWLEDGE = "acknowledge", "Acknowledge"
+        ASSIGN = "assign", "Assign"
+        REQUEST_EXPERT_REVIEW = "request_expert_review", "Request expert review"
+        RESOLVE = "resolve", "Resolve"
+        IGNORE = "ignore", "Ignore"
+        REOPEN = "reopen", "Reopen"
+        COMMENT = "comment", "Comment"
+        DRY_RUN_REINDEX = "dry_run_reindex", "Dry-run reindex"
+        ENQUEUE_REINDEX = "enqueue_reindex", "Enqueue reindex"
+        RETRY_INDEX = "retry_index", "Retry index"
+        DELETE_STALE_INDEX = "delete_stale_index", "Delete stale index"
+        MARK_INDEX_CLEANED = "mark_index_cleaned", "Mark index cleaned"
+        CREATE_ISSUE = "create_issue", "Create issue"
+
+    class Decision(models.TextChoices):
+        APPLIED = "applied", "Applied"
+        QUEUED = "queued", "Queued"
+        REJECTED = "rejected", "Rejected"
+        FAILED = "failed", "Failed"
+        INFO = "info", "Info"
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_review_actions",
+        db_constraint=False,
+    )
+    action = models.CharField(max_length=40, choices=Action.choices)
+    decision = models.CharField(max_length=32, choices=Decision.choices, default=Decision.APPLIED)
+    issue = models.ForeignKey(
+        MemoryIngestionIssue,
+        on_delete=models.PROTECT,
+        related_name="review_actions",
+        blank=True,
+        null=True,
+    )
+    search_document = models.ForeignKey(
+        MemorySearchDocument,
+        on_delete=models.PROTECT,
+        related_name="review_actions",
+        blank=True,
+        null=True,
+    )
+    source_object = models.ForeignKey(
+        MemorySourceObject,
+        on_delete=models.PROTECT,
+        related_name="review_actions",
+        blank=True,
+        null=True,
+    )
+    index_job = models.ForeignKey(
+        "memory.MemoryIndexJob",
+        on_delete=models.PROTECT,
+        related_name="review_actions",
+        blank=True,
+        null=True,
+    )
+    access_audit = models.ForeignKey(
+        "memory.MemoryAccessAudit",
+        on_delete=models.PROTECT,
+        related_name="review_actions",
+        blank=True,
+        null=True,
+    )
+    before_state = models.JSONField(default=dict, blank=True)
+    after_state = models.JSONField(default=dict, blank=True)
+    safe_metadata = models.JSONField(default=dict, blank=True)
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["action", "-created_at"]),
+            models.Index(fields=["decision", "-created_at"]),
+            models.Index(fields=["issue", "-created_at"]),
+            models.Index(fields=["search_document", "-created_at"]),
+            models.Index(fields=["source_object", "-created_at"]),
+            models.Index(fields=["actor", "-created_at"]),
+        ]
+        permissions = [
+            ("view_review_queue", "Can view memory review queue"),
+            ("review_issues", "Can review memory issues"),
+            ("review_privacy_issues", "Can review memory privacy issues"),
+            ("manage_search_index", "Can manage memory search index"),
+            ("view_memory_access_audit", "Can view memory access audit"),
+        ]
+        verbose_name = "Memory review action"
+        verbose_name_plural = "Memory review actions"
+
+    def __str__(self):
+        return f"{self.action}:{self.decision}:{self.pk}"
 
 
 class MemoryGraphEntity(models.Model):

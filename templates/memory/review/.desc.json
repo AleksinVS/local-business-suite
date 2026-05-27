@@ -1,0 +1,10 @@
+{
+  ".": "Шаблоны рабочего UI ревью памяти",
+  "_nav.html": "Навигация между сводкой, issues, индексом и журналом",
+  "dashboard.html": "Сводка открытых issues, privacy/blocker счетчиков и состояния индекса",
+  "issue_list.html": "Очередь MemoryIngestionIssue с фильтрами",
+  "issue_detail.html": "Карточка issue, безопасные metadata и действия ревью",
+  "index_list.html": "Список MemorySearchDocument с diagnostics FTS/vector",
+  "index_detail.html": "Карточка search document и действия reindex/delete stale",
+  "audit.html": "Журнал MemoryReviewAction"
+}

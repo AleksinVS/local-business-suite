@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Индекс памяти | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+{% include "memory/review/_nav.html" %}
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Search index</p>
+      <h1>Состояние поискового индекса</h1>
+    </div>
+  </div>
+
+  <form method="get" class="memory-review-filters">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Document ID, путь, объект">
+    <select name="corpus_type">
+      <option value="">Все corpus</option>
+      {% for value, label in corpus_types %}
+        <option value="{{ value }}" {% if filters.corpus_type == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="object_kind">
+      <option value="">Все object kind</option>
+      {% for value, label in object_kinds %}
+        <option value="{{ value }}" {% if filters.object_kind == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="index_status">
+      <option value="">Все статусы</option>
+      {% for value, label in index_statuses %}
+        <option value="{{ value }}" {% if filters.index_status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="gap">
+      <option value="">Все diagnostics</option>
+      <option value="missing_fts" {% if filters.gap == "missing_fts" %}selected{% endif %}>FTS missing</option>
+      <option value="missing_vector" {% if filters.gap == "missing_vector" %}selected{% endif %}>Vector missing</option>
+      <option value="failed" {% if filters.gap == "failed" %}selected{% endif %}>Failed</option>
+    </select>
+    <button type="submit">Фильтр</button>
+    <a class="button-link-muted" href="{% url 'memory:review_index_list' %}">Сбросить</a>
+  </form>
+</section>
+
+<section class="panel">
+  {% if result_limited %}
+    <p class="muted">Показаны первые 200 документов. Уточните фильтр.</p>
+  {% endif %}
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Document ID</th>
+          <th>Corpus</th>
+          <th>Статус</th>
+          <th>Источник</th>
+          <th>Target</th>
+          <th>Diagnostics</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in documents %}
+          <tr>
+            <td><span class="badge memory-badge-{{ item.severity }}">{{ item.severity }}</span></td>
+            <td><code>{{ item.title }}</code></td>
+            <td>{{ item.target_type }}</td>
+            <td>{{ item.status }}</td>
+            <td><code>{{ item.source }}</code></td>
+            <td>{{ item.target_id }}</td>
+            <td>{{ item.safe_summary }}</td>
+            <td><a class="button-link-muted" href="{{ item.links.detail }}">Открыть</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="muted">Документы не найдены.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

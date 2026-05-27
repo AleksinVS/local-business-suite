@@ -1,0 +1,33 @@
+{
+  "task_id": "05-permissions-audit-and-safety",
+  "title": "Harden permissions, audit visibility and sensitive-data safety",
+  "status": "completed",
+  "read_scope": [
+    "apps/memory/policies.py",
+    "apps/memory/services.py",
+    "apps/memory/views.py",
+    "apps/settings_center/policies.py",
+    "apps/accounts/models.py",
+    "apps/memory/tests.py",
+    "templates/memory/review/"
+  ],
+  "write_scope": [
+    "apps/memory/policies.py",
+    "apps/memory/services.py",
+    "apps/memory/views.py",
+    "apps/memory/tests.py",
+    "templates/memory/review/"
+  ],
+  "requirements": [
+    "Implement capabilities: memory.view_review_queue, memory.review_issues, memory.review_privacy_issues, memory.manage_search_index, memory.view_memory_access_audit.",
+    "Return 403 for users without required rights.",
+    "Filter source objects and search documents by server-side policy, not by UI controls.",
+    "Mask or omit raw paths unless the user has a service-level right.",
+    "Verify MemoryReviewAction and rendered pages do not include raw secret values, raw PII, full extracted text or raw query.",
+    "Ensure MemoryAccessAudit is shown only through safe fields."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.settings_center.tests"
+  ]
+}

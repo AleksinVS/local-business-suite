@@ -57,6 +57,13 @@
               <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
             </a>
           {% endif %}
+          {% if show_memory_review_nav %}
+            <a href="{% url 'memory:review_dashboard' %}" data-tooltip="Ревью памяти">
+              <span class="nav-icon">MR</span>
+              <span class="nav-text">Ревью памяти</span>
+              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', 'MR', '{% url 'memory:review_dashboard' %}')">☆</button>
+            </a>
+          {% endif %}
           {% if show_admin_nav %}
             <a href="{% url 'admin:index' %}" data-tooltip="Django admin">
               <span class="nav-icon">🛠️</span>

@@ -1732,6 +1732,143 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+.memory-review-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.memory-review-tabs a {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.75rem;
+  color: var(--text-main);
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+.memory-review-tabs a:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.memory-review-metrics {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-top: 1rem;
+}
+
+.memory-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.75rem;
+}
+
+.memory-review-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.memory-review-filters,
+.memory-review-actions,
+.memory-review-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.memory-review-filters {
+  margin-top: 1rem;
+}
+
+.memory-review-filters input,
+.memory-review-filters select,
+.memory-review-inline-form input,
+.memory-review-inline-form select {
+  min-height: 38px;
+  border-radius: 6px;
+}
+
+.memory-review-filters input[type="search"] {
+  min-width: min(360px, 100%);
+}
+
+.memory-review-comment-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.memory-review-comment-form textarea {
+  border-radius: 6px;
+  width: 100%;
+}
+
+.memory-review-status {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.memory-review-dl {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) 1fr;
+  gap: 0.45rem 0.75rem;
+  margin: 0;
+}
+
+.memory-review-dl dt {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.memory-review-dl dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory-review-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow: auto;
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.memory-badge-blocker,
+.memory-badge-error {
+  background: var(--danger-bg);
+  color: #991b1b;
+}
+
+.memory-badge-warning {
+  background: var(--warning-bg);
+  color: #92400e;
+}
+
+.memory-badge-info {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.memory-badge-ready,
+.memory-badge-resolved {
+  background: var(--success-bg);
+  color: #047857;
+}
+
 /* Timeline */
 .timeline {
   position: relative;

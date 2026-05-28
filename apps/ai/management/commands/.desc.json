@@ -1,5 +1,6 @@
 {
   ".": "Management commands for AI chat runtime data",
+  "cleanup_ai_window_context.py": "Delete expired AI window context snapshots",
   "cleanup_expired_ai_actions.py": "Mark expired pending AI actions as expired",
   "migrate_legacy_chat_db.py": "Copy legacy chat tables from main_vault.sqlite3 to data/db/chat.sqlite3"
 }

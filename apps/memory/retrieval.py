@@ -96,6 +96,7 @@ def memory_search(
     search_mode="knowledge_default",
     include_source_data=False,
     ranking_profile="",
+    source_codes=None,
 ):
     query_text = _normalize_query(query)
     query_hash = _query_hash(query_text)
@@ -103,12 +104,14 @@ def memory_search(
     normalized_search_mode = _normalize_search_mode(search_mode)
     normalized_ranking_profile, ranking_profile_config = _resolve_ranking_profile(ranking_profile, normalized_search_mode)
     allowed_corpus_types = _allowed_corpus_types(normalized_search_mode)
+    allowed_source_codes = _normalize_tokens(source_codes)
     trace: dict[str, Any] = {
         "filtered": {},
         "search_mode": normalized_search_mode,
         "ranking_profile": normalized_ranking_profile,
         "ranking_profile_config": _public_profile_config(ranking_profile_config),
         "search_channels": _search_channel_trace(normalized_search_mode, ranking_profile_config),
+        "source_codes": list(allowed_source_codes or []),
     }
 
     try:
@@ -167,6 +170,7 @@ def memory_search(
             trace=trace,
             trusted_context_only=trusted_context_only,
             allowed_corpus_types=allowed_corpus_types,
+            allowed_source_codes=set(allowed_source_codes or ()),
         ):
             candidate_items.append(item)
 
@@ -190,6 +194,7 @@ def memory_search(
                 allowed_sensitivities=route_decision.allowed_sensitivities,
                 limit=normalized_limit,
                 trace=trace,
+                allowed_source_codes=set(allowed_source_codes or ()),
             ):
                 items.append(item)
                 returned_document_ids.append(str(item.get("id", "")))
@@ -238,12 +243,17 @@ def memory_search(
         )
         raise
 
-def read_search_document_text(document: MemorySearchDocument) -> str:
+def read_search_document_text(document: MemorySearchDocument, *, actor=None) -> str:
     if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE:
         if document.knowledge_item_id is None:
             raise ValidationError("Knowledge search document has no knowledge item.")
         return read_knowledge_item_file(document.knowledge_item).body
     if document.source_object_id:
+        from .services import render_source_object_text
+
+        rendered = render_source_object_text(document.source_object, actor=actor)
+        if rendered:
+            return rendered
         return document.source_object.file_name or document.source_object.relative_path or document.source_object.object_id
     return ""
 
@@ -410,7 +420,7 @@ def _merge_candidate_items(items):
     return [by_id[item_id] for item_id in ordered_ids]
 
 
-def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types):
+def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types, allowed_source_codes):
     document_ids = [_candidate_id(candidate, "document_id") for candidate in candidates]
     documents = _documents_by_id(document_ids)
 
@@ -434,6 +444,9 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             continue
 
         source = search_document_source(document)
+        if allowed_source_codes and _document_source_code(document, source=source) not in allowed_source_codes:
+            _bump(trace, "source_code_denied_document")
+            continue
         trust_decision = effective_source_trust(source)
         if trusted_context_only and not source_allows_direct_context(source, "retrieved_chunk"):
             _bump(trace, "trust_gate_denied_document")
@@ -444,7 +457,7 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             _bump(trace, "missing_document_citation")
             continue
         try:
-            text = read_search_document_text(document)
+            text = read_search_document_text(document, actor=actor)
         except (OSError, ValidationError):
             _bump(trace, "unsafe_or_missing_document_text")
             continue
@@ -666,11 +679,13 @@ def _source_data_fallback_allowed(search_mode: str, include_source_data: bool) -
     return bool(include_source_data or search_mode in {"knowledge_default", "source_fallback", "source_explicit"})
 
 
-def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, trace):
+def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, trace, allowed_source_codes):
     terms = _query_terms(query)
     if not terms:
         return []
     queryset = MemorySourceObject.objects.select_related("source").filter(source__status="enabled")
+    if allowed_source_codes:
+        queryset = queryset.filter(source__code__in=allowed_source_codes)
     if allowed_sensitivities:
         queryset = queryset.filter(source__sensitivity__in=allowed_sensitivities)
     items = []
@@ -692,6 +707,11 @@ def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, t
             continue
         if not object_tokens and not getattr(actor, "is_superuser", False):
             _bump(trace, "source_data_missing_scope")
+            continue
+        from .services import can_access_source_object_via_adapter
+
+        if not can_access_source_object_via_adapter(actor, source_object):
+            _bump(trace, "source_data_adapter_denied")
             continue
         document = _source_object_document(source_object)
         items.append(

@@ -1,0 +1,46 @@
+{% load static %}
+<div class="sidebar-chat-surface" data-sidebar-chat>
+  <div class="sidebar-chat-model">
+    <label for="sidebar-ai-model-select">ИИ-помощник</label>
+    <select id="sidebar-ai-model-select" data-sidebar-model-select data-model-update-url="{% url 'ai:chat_update_model' sidebar_chat_session.external_id %}">
+      {% for model in sidebar_ai_models %}
+        <option value="{{ model.id }}" {% if model.id == sidebar_current_model_id %}selected{% elif model.default and not sidebar_current_model_id %}selected{% endif %}>{{ model.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="sidebar-chat-messages" id="sidebar-ai-message-list">
+    {% for message in sidebar_chat_messages %}
+      <div class="sidebar-chat-message {% if message.role == 'user' %}is-user{% else %}is-assistant{% endif %}">
+        <div class="sidebar-chat-message-meta">
+          <span>{% if message.role == 'user' %}Вы{% else %}Ассистент{% endif %}</span>
+          <time>{{ message.created_at|date:"H:i" }}</time>
+        </div>
+        <div class="sidebar-chat-bubble">{{ message.content|linebreaksbr }}</div>
+      </div>
+    {% empty %}
+      <div class="sidebar-chat-empty">Задайте вопрос по текущей странице или открытой карточке.</div>
+    {% endfor %}
+  </div>
+
+  <a class="sidebar-chat-full-link" href="{% url 'ai:chat_detail' sidebar_chat_session.external_id %}">Открыть полный чат</a>
+
+  <form
+    method="post"
+    class="sidebar-chat-form"
+    id="sidebar-ai-chat-form"
+    action="{% url 'ai:chat_send' sidebar_chat_session.external_id %}"
+    data-stream-url="{% url 'ai:chat_stream' sidebar_chat_session.external_id %}"
+    data-csrf-token="{{ csrf_token }}"
+    data-current-model-id="{{ sidebar_current_model_id }}"
+  >
+    {% csrf_token %}
+    <input type="hidden" name="surface" value="sidebar">
+    <input type="hidden" name="model_id" id="sidebar-ai-model-id-input" value="{{ sidebar_current_model_id }}">
+    <input type="hidden" name="window_id" id="sidebar-ai-window-id">
+    <input type="hidden" name="context_version" id="sidebar-ai-context-version">
+    <input type="hidden" name="context_hint" id="sidebar-ai-context-hint">
+    <textarea name="prompt" id="sidebar-ai-prompt-input" rows="2" placeholder="Спросить по текущему окну..." required></textarea>
+    <button type="submit" id="sidebar-ai-send-button" title="Отправить">↑</button>
+  </form>
+</div>

@@ -25,6 +25,7 @@ class AgentRuntimeClient:
         origin_channel: str = "",
         actor_version: str = "",
         model_id: str = "",
+        page_context: dict | None = None,
     ):
         """
         Send a chat message to the LangGraph agent runtime.
@@ -51,7 +52,7 @@ class AgentRuntimeClient:
                 "username": user.username,
                 "roles": list(user.groups.values_list("name", flat=True)),
                 "is_superuser": user.is_superuser,
-                "channel": "internal",
+                "channel": origin_channel or "internal",
                 "source": "django-chat",
                 "conversation_id": conversation_id,
                 "request_id": request_id,
@@ -59,6 +60,10 @@ class AgentRuntimeClient:
                 "actor_version": actor_version,
             },
         }
+        if page_context:
+            payload["actor"]["page_context"] = page_context
+            payload["actor"]["context_snapshot_id"] = page_context.get("context_snapshot_id")
+            payload["actor"]["context_hint"] = page_context.get("context_hint", "")
         try:
             response = httpx.post(
                 f"{self.base_url}/chat",
@@ -88,6 +93,7 @@ class AgentRuntimeClient:
         origin_channel: str = "",
         actor_version: str = "",
         model_id: str = "",
+        page_context: dict | None = None,
     ):
         """
         Stream chat messages from the LangGraph agent runtime.
@@ -110,7 +116,7 @@ class AgentRuntimeClient:
                 "username": user.username,
                 "roles": list(user.groups.values_list("name", flat=True)),
                 "is_superuser": user.is_superuser,
-                "channel": "internal",
+                "channel": origin_channel or "internal",
                 "source": "django-chat",
                 "conversation_id": conversation_id,
                 "request_id": request_id,
@@ -118,6 +124,10 @@ class AgentRuntimeClient:
                 "actor_version": actor_version,
             },
         }
+        if page_context:
+            payload["actor"]["page_context"] = page_context
+            payload["actor"]["context_snapshot_id"] = page_context.get("context_snapshot_id")
+            payload["actor"]["context_hint"] = page_context.get("context_hint", "")
         
         with httpx.stream(
             "POST",

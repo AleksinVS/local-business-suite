@@ -20,7 +20,7 @@
   "security.py": "DLP-guard для блокировки credential material перед попаданием в memory pipeline",
   "secret_backends.py": "Provider-neutral secret handle backend with Vaultwarden-compatible external link MVP",
   "selectors.py": "QuerySet-селекторы источников, search documents и jobs",
-  "services.py": "Сервисы синхронизации sources, lifecycle jobs и audit записи",
+  "services.py": "Сервисы синхронизации sources, lifecycle jobs, audit записи и memory projection из SourceObjectEnvelope",
   "review_safety.py": "Безопасная сериализация текста и metadata для UI ревью памяти без raw secrets/PII",
   "review_selectors.py": "Selectors и read-only ReviewQueueItem projection для очереди ревью и состояния индекса",
   "review_services.py": "Сервисный слой действий ревью, MemoryReviewAction и reindex/delete stale операций",
@@ -50,5 +50,6 @@
   "management/commands/memory_external_worker.py": "Worker для обработки external connector queue и handoff в memory ingestion",
   "management/commands/memory_external_queue_status.py": "Статус standalone external connector queue backend",
   "management/commands/memory_external_cleanup.py": "Retention cleanup для expired external connector landing-zone artifacts",
+  "management/commands/source_adapter_reconcile.py": "Snapshot reconcile универсальных SourceAdapter envelopes в memory/analytics projections",
   "migrations/": "Миграции приложения памяти"
 }

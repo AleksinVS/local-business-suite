@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
+    validate_ai_chat_settings_payload,
     validate_ai_registry_payload,
     validate_ai_task_types_payload,
     validate_ai_tools_payload,
@@ -35,6 +36,7 @@ VALIDATORS = {
     "validate_ai_registry_payload": validate_ai_registry_payload,
     "validate_ai_tools_payload": validate_ai_tools_payload,
     "validate_ai_task_types_payload": validate_ai_task_types_payload,
+    "validate_ai_chat_settings_payload": validate_ai_chat_settings_payload,
     "validate_memory_profiles_payload": validate_memory_profiles_payload,
     "validate_memory_routing_payload": validate_memory_routing_payload,
     "validate_memory_ingestion_profiles_payload": validate_memory_ingestion_profiles_payload,

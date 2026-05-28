@@ -1,0 +1,40 @@
+{
+  "task_id": "02-global-drawer-host-and-browser-bridge",
+  "status": "proposed",
+  "title": "Global right drawer host and browser bridge",
+  "goal": "Add a shared right drawer container and a browser API that can execute safe panel open commands.",
+  "read_scope": [
+    "templates/base.html",
+    "templates/workorders/board.html",
+    "templates/waiting_list/dashboard.html",
+    "static/src/js/page_context.js",
+    "static/src/css/app.css"
+  ],
+  "write_scope": [
+    "templates/base.html",
+    "static/src/js/right_panel.js",
+    "static/src/css/app.css",
+    "templates/.desc.json",
+    "static/src/.desc.json"
+  ],
+  "requirements": [
+    "Add one global drawer host to base.html with stable overlay, panel and content ids.",
+    "Add window.LocalBusinessRightPanel.open(command) and close().",
+    "Load command.htmx_url into the configured target through HTMX or a safe fetch+swap fallback.",
+    "Do not execute arbitrary script from command payload.",
+    "After successful content load, open the drawer and refresh LocalBusinessPageContext.",
+    "Keep existing module open/close functions working or wrap them over the new API.",
+    "Keep AI chat page layout usable with the global drawer."
+  ],
+  "acceptance": [
+    "The global drawer can open and close on a blank/non-module page.",
+    "Kanban and waiting-list pages still open panels by user click.",
+    "Escape/overlay close behavior is preserved.",
+    "Page context refresh runs after panel open and close."
+  ],
+  "verification": [
+    "python manage.py check",
+    "npm run test:e2e -- --project=chromium"
+  ]
+}
+

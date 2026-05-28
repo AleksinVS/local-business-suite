@@ -12,6 +12,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}">
 <div class="toolbar">
   <form method="get" class="filters">
     <input type="hidden" name="view" value="board">
@@ -141,6 +142,7 @@
     {% include "workorders/partials/detail_panel_empty.html" %}
   </div>
 </aside>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -151,6 +153,7 @@
       const overlay = document.getElementById('drawerOverlay');
       if (panel) panel.classList.add('active');
       if (overlay) overlay.classList.add('active');
+      if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
     }
 
     function closeKanbanDrawer() {
@@ -158,6 +161,7 @@
       const overlay = document.getElementById('drawerOverlay');
       if (panel) panel.classList.remove('active');
       if (overlay) overlay.classList.remove('active');
+      if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
     }
 
     function toggleColumn(column) {

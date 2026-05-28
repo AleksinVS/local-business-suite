@@ -110,6 +110,17 @@ python manage.py memory_sync_source --dry-run
 python manage.py memory_sync_source
 ```
 
+Синхронизировать внутренние модули через универсальные source adapters:
+
+```bash
+python manage.py source_adapter_reconcile --source-code workorders --target all --backend fulltext --dry-run
+python manage.py source_adapter_reconcile --source-code workorders --target all --backend all
+python manage.py source_adapter_reconcile --source-code waiting_list --target all --backend fulltext --dry-run
+python manage.py source_adapter_reconcile --source-code waiting_list --target all --backend all
+```
+
+`workorders` и `waiting_list` являются `source_data`: результат поиска должен показывать предупреждение, что это исходный объект, а не принятое знание. Для заявок AI может использовать wrapper `workorders.search`; он внутри вызывает `memory.search` в режиме `source_explicit` и сохраняет доменную проверку доступа.
+
 Проверить состояние индексирования без Celery и без raw PII indexing:
 
 ```bash

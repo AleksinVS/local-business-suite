@@ -67,4 +67,21 @@ def get_settings_descriptors():
             write_policy="read_only",
             metadata={"settings_path": "LOCAL_BUSINESS_AI_MODELS_FILE"},
         ),
+        SettingDescriptor(
+            setting_id="ai.contract.chat_settings",
+            domain="ai",
+            section="Chat",
+            title="AI chat settings",
+            description="Shared runtime settings for full-page and sidebar AI chat surfaces.",
+            help_topic_id="settings.ai.contract.chat_settings",
+            storage_kind="runtime_contract",
+            value_type="json",
+            widget="json_editor",
+            write_policy="editable",
+            metadata={
+                "settings_path": "LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE",
+                "settings_payload_attr": "LOCAL_BUSINESS_AI_CHAT_SETTINGS",
+                "validator": "validate_ai_chat_settings_payload",
+            },
+        ),
     ]

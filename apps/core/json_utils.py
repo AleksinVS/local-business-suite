@@ -166,7 +166,7 @@ REQUIRED_ANALYTICS_RETENTION_PROFILE_KEYS = {
     "audit_retention_days",
 }
 
-ANALYTICS_SOURCE_KIND_VALUES = {"memory", "email_imap", "file_share", "dms", "external_api"}
+ANALYTICS_SOURCE_KIND_VALUES = {"memory", "django_model", "email_imap", "file_share", "dms", "external_api"}
 ANALYTICS_SYNC_MODE_VALUES = {"scheduled", "manual", "event", "hybrid"}
 ANALYTICS_SENSITIVITY_VALUES = {"public", "internal", "confidential", "pii_redacted", "pii_original", "secret"}
 ANALYTICS_AGGREGATION_VALUES = {"count", "sum", "avg", "min", "max"}
@@ -247,6 +247,15 @@ REQUIRED_AI_TASK_TYPE_KEYS = {
     "example_requests",
 }
 
+REQUIRED_AI_CHAT_SETTINGS_ROOT_KEYS = {
+    "schema_version",
+    "defaults",
+    "surfaces",
+}
+
+AI_CHAT_SURFACE_VALUES = {"full_page", "sidebar"}
+AI_CHAT_SESSION_MODE_VALUES = {"default", "dedicated"}
+
 REQUIRED_MEMORY_SOURCE_KEYS = {
     "code",
     "title",
@@ -277,6 +286,12 @@ OPTIONAL_MEMORY_SOURCE_TRUST_KEYS = {
     "review_owner",
     "trusted_context_kinds",
     "untrusted_handling",
+}
+
+OPTIONAL_MEMORY_SOURCE_POLICY_KEYS = {
+    "source_origin",
+    "privacy_profile",
+    "access_policy",
 }
 
 REQUIRED_MEMORY_TRUST_POLICY_ROOT_KEYS = {
@@ -459,6 +474,27 @@ MEMORY_PII_POLICY_VALUES = {
     "reject_pii",
     "deidentify_before_index",
     "allow_redacted_only",
+    "pii_off",
+    "pii_guarded",
+    "pii_strict",
+}
+
+MEMORY_PRIVACY_PROFILE_VALUES = {
+    "pii_off",
+    "pii_guarded",
+    "pii_strict",
+}
+
+MEMORY_SOURCE_ORIGIN_VALUES = {
+    "internal",
+    "external",
+}
+
+MEMORY_ACCESS_POLICY_MODE_VALUES = {
+    "scope_tokens",
+    "acl_inherited",
+    "manual_mapping",
+    "adapter_check",
 }
 
 MEMORY_VERSIONING_MODE_VALUES = {
@@ -1024,6 +1060,73 @@ def validate_ai_task_types_payload(payload):
                 raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")
 
 
+def validate_ai_chat_settings_payload(payload):
+    _ensure_non_empty_mapping(payload, "AI chat settings")
+    missing = REQUIRED_AI_CHAT_SETTINGS_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"AI chat settings не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    if str(payload.get("schema_version")) != "1":
+        raise ValidationError("AI chat settings поддерживает только schema_version='1'.")
+    defaults = payload.get("defaults")
+    surfaces = payload.get("surfaces")
+    if not isinstance(defaults, dict) or not defaults:
+        raise ValidationError("AI chat settings.defaults должен быть непустым JSON-объектом.")
+    if not isinstance(surfaces, dict) or not surfaces:
+        raise ValidationError("AI chat settings.surfaces должен быть непустым JSON-объектом.")
+    _validate_ai_chat_settings_block(defaults, "defaults", require_common=True)
+    for surface, config in surfaces.items():
+        if surface not in AI_CHAT_SURFACE_VALUES:
+            raise ValidationError(f"AI chat settings содержит неизвестную поверхность: {surface}.")
+        if not isinstance(config, dict):
+            raise ValidationError(f"AI chat settings.surfaces.{surface} должен быть JSON-объектом.")
+        _validate_ai_chat_settings_block(config, f"surfaces.{surface}", require_common=False)
+
+
+def _validate_ai_chat_settings_block(config, label, *, require_common):
+    common_keys = {
+        "recent_message_limit",
+        "summary_enabled",
+        "summary_trigger_messages",
+        "max_prompt_chars",
+        "context_tool_enabled",
+    }
+    if require_common:
+        missing = common_keys - set(config.keys())
+        if missing:
+            raise ValidationError(f"AI chat settings.{label} не содержит поля: {', '.join(sorted(missing))}.")
+    allowed_keys = common_keys | {"session_mode", "session_switcher"}
+    unknown = set(config.keys()) - allowed_keys
+    if unknown:
+        raise ValidationError(f"AI chat settings.{label} содержит неизвестные поля: {', '.join(sorted(unknown))}.")
+
+    if "recent_message_limit" in config:
+        value = config["recent_message_limit"]
+        if type(value) is not int or value < 4 or value > 50:
+            raise ValidationError(f"AI chat settings.{label}.recent_message_limit должен быть integer в диапазоне 4..50.")
+    if "summary_enabled" in config and type(config["summary_enabled"]) is not bool:
+        raise ValidationError(f"AI chat settings.{label}.summary_enabled должен быть boolean.")
+    if "summary_trigger_messages" in config:
+        value = config["summary_trigger_messages"]
+        if type(value) is not int or value < 4 or value > 200:
+            raise ValidationError(
+                f"AI chat settings.{label}.summary_trigger_messages должен быть integer в диапазоне 4..200."
+            )
+    if "max_prompt_chars" in config:
+        value = config["max_prompt_chars"]
+        if type(value) is not int or value < 1000 or value > 100000:
+            raise ValidationError(f"AI chat settings.{label}.max_prompt_chars должен быть integer в диапазоне 1000..100000.")
+    if "context_tool_enabled" in config and type(config["context_tool_enabled"]) is not bool:
+        raise ValidationError(f"AI chat settings.{label}.context_tool_enabled должен быть boolean.")
+    if "session_mode" in config and config["session_mode"] not in AI_CHAT_SESSION_MODE_VALUES:
+        raise ValidationError(
+            f"AI chat settings.{label}.session_mode должен быть одним из: {', '.join(sorted(AI_CHAT_SESSION_MODE_VALUES))}."
+        )
+    if "session_switcher" in config and type(config["session_switcher"]) is not bool:
+        raise ValidationError(f"AI chat settings.{label}.session_switcher должен быть boolean.")
+
+
 def validate_memory_sources_payload(payload, profiles_payload=None, routing_payload=None, ingestion_profiles_payload=None):
     if not isinstance(payload, list):
         raise ValidationError("Memory sources должен быть JSON-массивом.")
@@ -1123,6 +1226,7 @@ def validate_memory_sources_payload(payload, profiles_payload=None, routing_payl
             if scope_mapping != "manual":
                 raise ValidationError(f"Memory source '{code}' должен использовать external_connector.scope_mapping 'manual'.")
         _validate_memory_source_trust_fields(item, source_code=code)
+        _validate_memory_source_policy_fields(item, source_code=code)
         if chunking_profiles and item["chunking_profile"] not in chunking_profiles:
             raise ValidationError(
                 f"Memory source '{code}' ссылается на неизвестный chunking_profile "
@@ -1287,6 +1391,33 @@ def _validate_memory_source_trust_fields(item, *, source_code: str) -> None:
                 + ", ".join(sorted(unknown_kinds))
                 + "."
             )
+
+
+def _validate_memory_source_policy_fields(item, *, source_code: str) -> None:
+    unknown_keys = set(item.keys()) & OPTIONAL_MEMORY_SOURCE_POLICY_KEYS
+    if not unknown_keys:
+        return
+    source_origin = item.get("source_origin")
+    if source_origin is not None and source_origin not in MEMORY_SOURCE_ORIGIN_VALUES:
+        raise ValidationError(f"Memory source '{source_code}' содержит недопустимый source_origin.")
+    privacy_profile = item.get("privacy_profile")
+    if privacy_profile is not None and privacy_profile not in MEMORY_PRIVACY_PROFILE_VALUES:
+        raise ValidationError(f"Memory source '{source_code}' содержит недопустимый privacy_profile.")
+    access_policy = item.get("access_policy")
+    if access_policy is not None:
+        if not isinstance(access_policy, dict):
+            raise ValidationError(f"Поле access_policy у memory source '{source_code}' должно быть JSON-объектом.")
+        mode = access_policy.get("mode")
+        if mode not in MEMORY_ACCESS_POLICY_MODE_VALUES:
+            raise ValidationError(f"Memory source '{source_code}' содержит недопустимый access_policy.mode.")
+        scope_tokens = access_policy.get("scope_tokens", [])
+        if scope_tokens is not None and (
+            not isinstance(scope_tokens, list) or not all(isinstance(token, str) and token for token in scope_tokens)
+        ):
+            raise ValidationError(f"Поле access_policy.scope_tokens у memory source '{source_code}' должно быть списком строк.")
+        policy_ref = access_policy.get("policy_ref", "")
+        if policy_ref is not None and not isinstance(policy_ref, str):
+            raise ValidationError(f"Поле access_policy.policy_ref у memory source '{source_code}' должно быть строкой.")
 
 
 def _validate_trust_rule(rule, *, context: str) -> None:

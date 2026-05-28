@@ -8,7 +8,7 @@
 
 ## Change workflow transitions
 
-1. Update `contracts/workflow_rules.json` for defaults or `data/contracts/workflow_rules.json` for runtime changes.
+1. For runtime changes, open `/settings/workflow/transitions/` and edit the transition matrix. For baseline defaults, update `contracts/workflow_rules.json`.
 2. Validate role targets against workflow states.
 3. Update tests for allowed and rejected transitions.
 

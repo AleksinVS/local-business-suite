@@ -1,0 +1,10 @@
+{
+  ".": "Task packets для универсальных источников памяти и аналитики",
+  "01-adr-contracts-and-privacy-policy.json": "ADR, source policy fields, privacy defaults и contract validation",
+  "02-core-adapter-envelope-registry.json": "Общий SourceAdapter protocol, SourceObjectEnvelope и adapter registry",
+  "03-memory-projection-and-access-check.json": "Memory projection из envelope, индексирование и adapter_check перед выдачей",
+  "04-analytics-projection-and-facts.json": "Analytics projection из envelope, extraction packets и business facts",
+  "05-workorders-source-adapter.json": "Адаптер канбан-заявок как внутреннего источника",
+  "06-waiting-list-source-adapter.json": "Адаптер листа ожидания с PII defaults и аналитическими фактами",
+  "07-reconcile-e2e-docs-and-handoff.json": "Reconcile, e2e, документация и handoff"
+}

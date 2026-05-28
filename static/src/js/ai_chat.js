@@ -73,6 +73,7 @@
     var chatDeleteByIdSuffix = config.chatDeleteByIdSuffix;
     var chatIndexUrl = config.chatIndexUrl;
     var csrfToken = config.csrfToken;
+    var surface = config.surface || 'full_page';
     var predefinedCommands = JSON.parse(document.getElementById('predefined-commands-data')?.textContent || '[]');
     var customCommands = JSON.parse(document.getElementById('custom-commands-data')?.textContent || '[]');
 
@@ -353,6 +354,13 @@
 
       isSubmitting = true;
       var formData = new FormData(chatForm);
+      var pageContext = window.LocalBusinessPageContext && window.LocalBusinessPageContext.getCurrent
+        ? window.LocalBusinessPageContext.getCurrent()
+        : { window_id: "", context_version: "", context_hint: "" };
+      formData.set('surface', surface);
+      formData.set('window_id', pageContext.window_id || '');
+      formData.set('context_version', pageContext.context_version || '');
+      formData.set('context_hint', pageContext.context_hint || '');
 
       promptInput.disabled = true;
       sendButton.disabled = true;
@@ -443,6 +451,9 @@
     }
 
     function startSSE(promptText, messageId, pendingUserMsgId) {
+      var streamContext = window.LocalBusinessPageContext && window.LocalBusinessPageContext.getCurrent
+        ? window.LocalBusinessPageContext.getCurrent()
+        : { window_id: "", context_version: "", context_hint: "" };
       var assistantMsgId = 'assistant-msg-' + Date.now();
       var assistantMsgHtml = '<div class="flex justify-start" id="' + assistantMsgId + '">'
         + '<div class="flex flex-col items-start gap-1 max-w-[85%] md:max-w-[70%]">'
@@ -484,6 +495,10 @@
           msg_id: messageId,
           prompt: promptText,
           model_id: currentModelId,
+          surface: surface,
+          window_id: streamContext.window_id || '',
+          context_version: streamContext.context_version || '',
+          context_hint: streamContext.context_hint || '',
         }),
         signal: controller.signal,
       })

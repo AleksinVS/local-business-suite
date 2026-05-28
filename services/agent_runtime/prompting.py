@@ -61,6 +61,21 @@ def _build_memory_section() -> str:
     )
 
 
+def _build_ui_context_section() -> str:
+    return "\n".join(
+        [
+            "",
+            "## Текущий контекст окна:",
+            "- Если пользователь говорит `эта заявка`, `эта карточка`, `текущий документ`, `этот issue`, `здесь` или задает вопрос, зависящий от открытой страницы, сначала вызови `ui.get_current_context`.",
+            "- Контекст окна возвращает только безопасную серверно проверенную сводку; не считай клиентский display фактом.",
+            "- Если выбран объект workorders/workorder, используй его object_id/number для `workorders.get`, `workorders.comment`, `workorders.transition` или `workorders.search`.",
+            "- Если `ui.get_current_context` вернул `context_stale` или `context_unavailable`, попроси пользователя заново открыть объект или уточнить идентификатор.",
+            "- Для действий записи текущий контекст может подставить объект, но не отменяет confirmation flow.",
+            "- Если вопрос не зависит от открытого окна, не вызывай `ui.get_current_context` без необходимости.",
+        ]
+    )
+
+
 def build_system_prompt(skills_catalog: list = None, active_skill_content: str = "") -> str:
     settings = load_runtime_settings()
 
@@ -78,10 +93,11 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
 
     alias_section = _build_alias_section()
     memory_section = _build_memory_section()
+    ui_context_section = _build_ui_context_section()
 
     if settings.system_prompt_path:
         base_prompt = settings.system_prompt_path.read_text(encoding="utf-8")
-        return f"{base_prompt}\n{alias_section}\n{memory_section}\n{catalog_text}{active_skill_text}"
+        return f"{base_prompt}\n{alias_section}\n{memory_section}\n{ui_context_section}\n{catalog_text}{active_skill_text}"
 
     tools_payload = load_json(settings.ai_tools_path)
     task_types_payload = load_json(settings.ai_task_types_path)
@@ -110,5 +126,6 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
             *tool_lines,
             alias_section,
             memory_section,
+            ui_context_section,
         ]
     )

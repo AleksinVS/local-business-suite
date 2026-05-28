@@ -12,7 +12,7 @@ def get_settings_descriptors():
             help_topic_id="settings.core.contract.role_rules",
             storage_kind="runtime_contract",
             value_type="json",
-            widget="json_editor",
+            widget="workflow_transition_matrix",
             write_policy="editable",
             required_permission="settings_center.manage",
             metadata={

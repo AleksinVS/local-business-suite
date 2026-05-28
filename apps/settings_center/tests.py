@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase, override_settings
@@ -83,6 +84,41 @@ class SettingsCenterContractTests(TestCase):
             self.assertEqual(change.status, SettingsChange.Status.APPLIED)
             self.assertTrue(change.masked_diff["changed"])
             self.assertEqual(load_json_file(role_file)[first_role]["display_name"], "Changed role name")
+
+    def test_workflow_transition_matrix_view_can_allow_all_transitions(self):
+        actor = User.objects.create_user(username="workflow-admin", password="pass", is_staff=True)
+        payload = {
+            "statuses": ["new", "accepted", "closed"],
+            "transitions": {
+                "new": ["accepted"],
+                "accepted": [],
+                "closed": [],
+            },
+        }
+        with TemporaryDirectory() as tmpdir:
+            workflow_file = Path(tmpdir) / "workflow_rules.json"
+            workflow_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with override_settings(
+                LOCAL_BUSINESS_WORKFLOW_RULES_FILE=workflow_file,
+                LOCAL_BUSINESS_WORKFLOW_RULES=payload,
+            ):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("settings_center:workflow_transitions"))
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Переходы статусов")
+
+                response = self.client.post(
+                    reverse("settings_center:workflow_transitions"),
+                    {"action": "allow_all", "confirm": "on"},
+                )
+
+                self.assertEqual(response.status_code, 302)
+                saved = load_json_file(workflow_file)
+                self.assertEqual(set(saved["transitions"]["new"]), {"accepted", "closed"})
+                self.assertEqual(set(saved["transitions"]["accepted"]), {"new", "closed"})
+                self.assertEqual(set(saved["transitions"]["closed"]), {"new", "accepted"})
+                self.assertEqual(settings.LOCAL_BUSINESS_WORKFLOW_RULES, saved)
+                self.assertEqual(SettingsChange.objects.filter(setting_id="core.contract.workflow_rules").count(), 1)
 
 
 class SettingsCenterEnvAndHelpTests(TestCase):

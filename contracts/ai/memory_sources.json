@@ -71,6 +71,92 @@
     ]
   },
   {
+    "code": "workorders",
+    "title": "Work orders source data",
+    "description": "Internal kanban work orders exposed through the universal source adapter for source_data search and analytics.",
+    "source_kind": "django_model",
+    "source_origin": "internal",
+    "domain": "workorders",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "django:apps.workorders.WorkOrder",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "pii_off",
+    "privacy_profile": "pii_off",
+    "access_policy": {
+      "mode": "adapter_check",
+      "policy_ref": "workorders.visible",
+      "scope_tokens": [
+        "org:default"
+      ]
+    },
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "operations",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "vector_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "waiting_list",
+    "title": "Waiting list source data",
+    "description": "Internal waiting list entries exposed through the universal source adapter for source_data search and analytics.",
+    "source_kind": "django_model",
+    "source_origin": "internal",
+    "domain": "waiting_list",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "django:apps.waiting_list.WaitingListEntry",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "pii_off",
+    "privacy_profile": "pii_off",
+    "access_policy": {
+      "mode": "adapter_check",
+      "policy_ref": "waiting_list.visible",
+      "scope_tokens": [
+        "org:default"
+      ]
+    },
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "operations",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "vector_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
     "code": "synthetic_workorder_timeline",
     "title": "Synthetic work order timeline",
     "description": "Synthetic non-patient maintenance events for retrieval and RBAC evaluation fixtures.",

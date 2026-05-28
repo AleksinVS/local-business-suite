@@ -19,6 +19,27 @@ def build_tools(
     """
     current_session_id = session_id
 
+    @tool("ui.get_current_context")
+    def get_current_context() -> dict:
+        """
+        Return the safe server-resolved context for the current browser window.
+
+        Use this when the user says "эта заявка", "текущая карточка",
+        "здесь", "этот документ" or asks a question that depends on the
+        current page, selected drawer object or active module.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="ui.get_current_context",
+            actor=actor,
+            payload={},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("workorders.list")
     def list_workorders(status: str = "", limit: int = 20) -> dict:
         """List work orders visible to the current user, optionally filtered by status."""
@@ -329,6 +350,7 @@ def build_tools(
         }
 
     return [
+        get_current_context,
         list_workorders,
         get_workorder,
         create_workorder,

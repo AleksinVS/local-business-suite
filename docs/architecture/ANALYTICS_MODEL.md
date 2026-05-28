@@ -10,6 +10,9 @@ Current implementation:
 - `apps.analytics` is an operational dashboard over the Django OLTP database.
 - Dataset defaults are declared in `contracts/analytics/datasets.json`; runtime copies live in `data/contracts/analytics/`.
 - This layer is intended for lightweight operational summaries, not heavy BI/reporting workloads.
+- Universal source adapters can now feed analytics without direct reads from domain tables. `workorders` and `waiting_list` render `SourceObjectEnvelope`; analytics stores `AnalyticsSource`, `AnalyticsContentObject`, `AnalyticsExtractionPacket`, `AnalyticsEvidenceRef` and `AnalyticsFact` projections from that envelope.
+- The MVP remains snapshot/reconcile based: `python manage.py source_adapter_reconcile --target analytics` refreshes normalized objects and facts. A mandatory event bus/outbox is intentionally not part of this stage.
+- Analytics source contracts for `workorders` and `waiting_list` use `source_kind=django_model`, `source_origin=internal`, `privacy_profile=pii_off` and `access_policy.mode=adapter_check`.
 
 Future target stack:
 

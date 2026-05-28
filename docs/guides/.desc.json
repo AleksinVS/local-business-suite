@@ -1,5 +1,6 @@
 {
   ".": "Руководства разработчика",
+  "AI_SIDEBAR_CHAT.md": "Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings",
   "CHANGE_PATTERNS.md": "Паттерны внесения изменений",
   "KNOWLEDGE_ANALYTICS_OPERATIONS.md": "Операционный guide по knowledge-driven business analytics, IMAP, DMS и дедупликации",
   "MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md": "Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний",

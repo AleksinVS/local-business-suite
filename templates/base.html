@@ -12,85 +12,115 @@
     <div class="app-layout">
       <aside class="sidebar-nav" id="sidebar">
         <div class="sidebar-header">
+          <div class="all-functions-menu">
+            <button
+              type="button"
+              class="all-functions-button"
+              id="all-functions-button"
+              aria-expanded="false"
+              aria-controls="all-functions-dropdown"
+            >
+              <span>Все функции</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            <div class="all-functions-dropdown" id="all-functions-dropdown" hidden>
+              <nav class="all-functions-list" aria-label="Все функции">
+                <a href="{% url 'workorders:board' %}">
+                  <span class="nav-icon">📋</span>
+                  <span class="nav-text">Доска</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button>
+                </a>
+                <a href="{% url 'inventory:list' %}">
+                  <span class="nav-icon">📦</span>
+                  <span class="nav-text">Медизделия</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button>
+                </a>
+                {% if show_department_nav %}
+                  <a href="{% url 'core:department_list' %}">
+                    <span class="nav-icon">🏢</span>
+                    <span class="nav-text">Подразделения</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
+                  </a>
+                  <a href="{% url 'core:role_rules' %}">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">Роли</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли', '👥', '{% url 'core:role_rules' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_ai_nav %}
+                  <a href="{% url 'ai:chat_index' %}">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-text">AI чат</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'AI чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_ai_admin_nav %}
+                  <a href="{% url 'ai:hub' %}">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">AI Hub</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'AI Hub', '⚙️', '{% url 'ai:hub' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_settings_center_nav %}
+                  <a href="{% url 'settings_center:dashboard' %}">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">Настройки</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_memory_review_nav %}
+                  <a href="{% url 'memory:review_dashboard' %}">
+                    <span class="nav-icon">MR</span>
+                    <span class="nav-text">Ревью памяти</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', 'MR', '{% url 'memory:review_dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_admin_nav %}
+                  <a href="{% url 'admin:index' %}">
+                    <span class="nav-icon">🛠️</span>
+                    <span class="nav-text">Django admin</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Django admin', '🛠️', '{% url 'admin:index' %}')">☆</button>
+                  </a>
+                {% endif %}
+                <a href="{% url 'analytics:dashboard' %}">
+                  <span class="nav-icon">📊</span>
+                  <span class="nav-text">Аналитика</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
+                </a>
+                <a href="{% url 'waiting_list:dashboard' %}">
+                  <span class="nav-icon">⏳</span>
+                  <span class="nav-text">Лист ожидания</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
+                </a>
+                {% if user.is_authenticated %}
+                  <form action="{% url 'logout' %}" method="post" class="logout-form">
+                    {% csrf_token %}
+                    <button type="submit">
+                      <span class="nav-icon">🚪</span>
+                      <span class="nav-text">Выйти</span>
+                    </button>
+                  </form>
+                {% endif %}
+              </nav>
+            </div>
+          </div>
         </div>
-        <nav class="side-nav">
-          <a href="{% url 'workorders:board' %}" data-tooltip="Доска">
-            <span class="nav-icon">📋</span>
-            <span class="nav-text">Доска</span>
-            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button>
-          </a>
-          <a href="{% url 'inventory:list' %}" data-tooltip="Медизделия">
-            <span class="nav-icon">📦</span>
-            <span class="nav-text">Медизделия</span>
-            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button>
-          </a>
-          {% if show_department_nav %}
-            <a href="{% url 'core:department_list' %}" data-tooltip="Подразделения">
-              <span class="nav-icon">🏢</span>
-              <span class="nav-text">Подразделения</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
-            </a>
-            <a href="{% url 'core:role_rules' %}" data-tooltip="Роли">
-              <span class="nav-icon">👥</span>
-              <span class="nav-text">Роли</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли', '👥', '{% url 'core:role_rules' %}')">☆</button>
-            </a>
-          {% endif %}
-          {% if show_ai_nav %}
-            <a href="{% url 'ai:chat_index' %}" data-tooltip="AI чат">
-              <span class="nav-icon">🤖</span>
-              <span class="nav-text">AI чат</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'AI чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
-            </a>
-          {% endif %}
-          {% if show_ai_admin_nav %}
-            <a href="{% url 'ai:hub' %}" data-tooltip="AI Hub">
-              <span class="nav-icon">⚙️</span>
-              <span class="nav-text">AI Hub</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'AI Hub', '⚙️', '{% url 'ai:hub' %}')">☆</button>
-            </a>
-          {% endif %}
-          {% if show_settings_center_nav %}
-            <a href="{% url 'settings_center:dashboard' %}" data-tooltip="Settings Center">
-              <span class="nav-icon">⚙️</span>
-              <span class="nav-text">Настройки</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
-            </a>
-          {% endif %}
-          {% if show_memory_review_nav %}
-            <a href="{% url 'memory:review_dashboard' %}" data-tooltip="Ревью памяти">
-              <span class="nav-icon">MR</span>
-              <span class="nav-text">Ревью памяти</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', 'MR', '{% url 'memory:review_dashboard' %}')">☆</button>
-            </a>
-          {% endif %}
-          {% if show_admin_nav %}
-            <a href="{% url 'admin:index' %}" data-tooltip="Django admin">
-              <span class="nav-icon">🛠️</span>
-              <span class="nav-text">Django admin</span>
-              <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Django admin', '🛠️', '{% url 'admin:index' %}')">☆</button>
-            </a>
-          {% endif %}
-          <a href="{% url 'analytics:dashboard' %}" data-tooltip="Аналитика">
-            <span class="nav-icon">📊</span>
-            <span class="nav-text">Аналитика</span>
-            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
-          </a>
-          <a href="{% url 'waiting_list:dashboard' %}" data-tooltip="Лист ожидания">
-            <span class="nav-icon">⏳</span>
-            <span class="nav-text">Лист ожидания</span>
-            <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
-          </a>
-          {% if user.is_authenticated %}
-            <form action="{% url 'logout' %}" method="post" class="logout-form">
-              {% csrf_token %}
-              <button type="submit" data-tooltip="Выйти">
-                <span class="nav-icon">🚪</span>
-                <span class="nav-text">Выйти</span>
-              </button>
-            </form>
-          {% endif %}
-        </nav>
+        <section class="sidebar-ai-panel" aria-label="{% block sidebar_panel_label %}Встроенный ИИ-чат{% endblock %}">
+          {% block sidebar_panel %}
+            {% if show_sidebar_ai_chat %}
+              <div
+                id="sidebar-ai-chat"
+                hx-get="{% url 'ai:sidebar_chat' %}"
+                hx-trigger="load"
+                hx-swap="innerHTML"
+              >
+                <div class="sidebar-chat-loading">Загрузка чата...</div>
+              </div>
+            {% else %}
+              <div class="sidebar-chat-loading">Войдите, чтобы открыть ИИ-чат.</div>
+            {% endif %}
+          {% endblock %}
+        </section>
       </aside>
 
       <div class="app-main">
@@ -113,8 +143,8 @@
           </section>
         {% endif %}
 
-        <main class="page-shell">
-          <div class="page-container">
+        <main class="page-shell" data-ai-context="{{ base_ai_context_json }}">
+          <div class="page-container{% block page_container_extra_class %}{% endblock %}">
             {% block content %}{% endblock %}
           </div>
         </main>
@@ -189,12 +219,54 @@
         });
       }
 
+      function closeAllFunctionsMenu() {
+        const button = document.getElementById('all-functions-button');
+        const dropdown = document.getElementById('all-functions-dropdown');
+        if (!button || !dropdown) return;
+        dropdown.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      }
+
+      function toggleAllFunctionsMenu() {
+        const button = document.getElementById('all-functions-button');
+        const dropdown = document.getElementById('all-functions-dropdown');
+        if (!button || !dropdown) return;
+        const nextOpen = dropdown.hidden;
+        dropdown.hidden = !nextOpen;
+        button.setAttribute('aria-expanded', String(nextOpen));
+      }
+
       // Initialize favorites on page load
       document.addEventListener('DOMContentLoaded', () => {
         renderFavorites();
         updateStars();
+        const button = document.getElementById('all-functions-button');
+        const dropdown = document.getElementById('all-functions-dropdown');
+        if (button && dropdown) {
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleAllFunctionsMenu();
+          });
+          document.addEventListener('click', (event) => {
+            if (!dropdown.hidden && !event.target.closest('.all-functions-menu')) {
+              closeAllFunctionsMenu();
+            }
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeAllFunctionsMenu();
+          });
+        }
       });
     </script>
+    <script>
+      window.__pageContextConfig = {
+        updateUrl: "{% url 'ai:page_context_update' %}",
+        csrfToken: "{{ csrf_token }}",
+        authenticated: {% if user.is_authenticated %}true{% else %}false{% endif %}
+      };
+    </script>
+    <script src="{% static 'src/js/page_context.js' %}"></script>
+    <script src="{% static 'src/js/sidebar_chat.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>

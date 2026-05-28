@@ -1,0 +1,40 @@
+{
+  "task_id": "07-reconcile-e2e-docs-and-handoff",
+  "title": "Add reconcile flow, e2e checks, docs and handoff",
+  "status": "completed",
+  "read_scope": [
+    "apps/core/source_adapters.py",
+    "apps/memory",
+    "apps/analytics",
+    "apps/workorders",
+    "apps/waiting_list",
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md",
+    "docs/planning/active/universal-source-adapters-memory-analytics.md"
+  ],
+  "write_scope": [
+    "apps/*/management/commands/",
+    "apps/*/tests.py",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md",
+    "docs/architecture/ANALYTICS_MODEL.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/guides/",
+    "workflow/active/universal-source-adapters-memory-analytics/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Add a management command or service path to reconcile source projections by source_code and target memory/analytics/all.",
+    "Support dry-run with clear metrics for new, changed, unchanged, deleted, denied and failed objects.",
+    "Keep temporary e2e fixtures under .local/.",
+    "Add e2e for workorder search result and dynamic access denial.",
+    "Add e2e or integration test for waiting list pii_off behavior with no PII audit.",
+    "Add external test source with pii_guarded behavior if feasible.",
+    "Update operator docs and final acceptance report."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests apps.memory.tests apps.analytics.tests apps.workorders.tests apps.waiting_list.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py analytics_recalculate_metrics --dry-run"
+  ]
+}

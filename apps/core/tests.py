@@ -19,6 +19,14 @@ from apps.core.json_utils import (
     validate_memory_sources_payload,
     validate_memory_trust_policy_payload,
 )
+from apps.core.source_adapters import (
+    ACCESS_MODE_ADAPTER_CHECK,
+    SourceObjectEnvelope,
+    get_source_adapter,
+    register_source_adapter,
+    resolve_privacy_profile,
+    unregister_source_adapter,
+)
 from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
 
@@ -89,6 +97,47 @@ class DepartmentModelTests(TestCase):
 
         self.assertEqual(str(grandchild), "Стационар / Кардиология / Палата интенсивной терапии")
         self.assertEqual(set(root.descendant_ids()), {root.id, child.id, grandchild.id})
+
+
+class SourceAdapterContractTests(TestCase):
+    def test_envelope_normalizes_privacy_and_access_policy(self):
+        envelope = SourceObjectEnvelope(
+            source_code="test_source",
+            source_origin="internal",
+            source_kind="django_model",
+            domain="tests",
+            object_type="record",
+            object_id="1",
+            title="Test record",
+            text="Searchable text",
+            content_hash="",
+            access_policy={
+                "mode": ACCESS_MODE_ADAPTER_CHECK,
+                "policy_ref": "tests.visible",
+                "scope_tokens": ["org:default", "org:default"],
+            },
+        )
+
+        self.assertEqual(envelope.privacy_profile, "pii_off")
+        self.assertEqual(envelope.access_policy["scope_tokens"], ["org:default"])
+        self.assertTrue(envelope.envelope_id)
+        self.assertTrue(envelope.content_hash.startswith("sha256:"))
+
+    def test_external_sources_default_to_guarded_pii(self):
+        profile = resolve_privacy_profile(source_origin="external", source_kind="external_api")
+
+        self.assertEqual(profile.profile_id, "pii_guarded")
+        self.assertTrue(profile.detect)
+        self.assertTrue(profile.audit)
+
+    def test_adapter_registry_is_explicit_by_source_code(self):
+        class DummyAdapter:
+            source_code = "dummy_source"
+
+        register_source_adapter(DummyAdapter(), replace=True)
+        self.addCleanup(unregister_source_adapter, "dummy_source")
+
+        self.assertIsNotNone(get_source_adapter("dummy_source"))
 
 
 class DepartmentViewTests(TestCase):

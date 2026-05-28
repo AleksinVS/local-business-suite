@@ -16,6 +16,7 @@ from apps.core.json_utils import (
     validate_analytics_sources_payload,
     validate_analytics_workflow_routes_payload,
     validate_ai_registry_payload,
+    validate_ai_chat_settings_payload,
     validate_ai_task_types_payload,
     validate_ai_tools_payload,
     load_json_file,
@@ -131,6 +132,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.core.context_processors.navigation_flags",
+                "apps.ai.context_processors.sidebar_ai_chat",
             ],
         },
     },
@@ -286,11 +288,16 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
     },
 }
 WHITENOISE_AUTOREFRESH = DEBUG
 WHITENOISE_USE_FINDERS = DEBUG
+WHITENOISE_MANIFEST_STRICT = not DEBUG
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -336,6 +343,7 @@ LOCAL_BUSINESS_AI_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSI
 LOCAL_BUSINESS_AI_TOOLS_FILE = get_contract_path("tools.json", "LOCAL_BUSINESS_AI_TOOLS_FILE", sub_dir="ai")
 LOCAL_BUSINESS_AI_TASK_TYPES_FILE = get_contract_path("task_types.json", "LOCAL_BUSINESS_AI_TASK_TYPES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_AI_MODELS_FILE = get_contract_path("models.json", "LOCAL_BUSINESS_AI_MODELS_FILE", sub_dir="ai")
+LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE = get_contract_path("chat_settings.json", "LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_SOURCES_FILE = get_contract_path("memory_sources.json", "LOCAL_BUSINESS_MEMORY_SOURCES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_PROFILES_FILE = get_contract_path("memory_profiles.json", "LOCAL_BUSINESS_MEMORY_PROFILES_FILE", sub_dir="ai")
 LOCAL_BUSINESS_MEMORY_ROUTING_FILE = get_contract_path("memory_routing.json", "LOCAL_BUSINESS_MEMORY_ROUTING_FILE", sub_dir="ai")
@@ -535,6 +543,9 @@ try:
     validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
 
     LOCAL_BUSINESS_AI_MODELS = load_json_file(LOCAL_BUSINESS_AI_MODELS_FILE)
+
+    LOCAL_BUSINESS_AI_CHAT_SETTINGS = load_json_file(LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE)
+    validate_ai_chat_settings_payload(LOCAL_BUSINESS_AI_CHAT_SETTINGS)
 
     LOCAL_BUSINESS_MEMORY_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
     validate_memory_profiles_payload(LOCAL_BUSINESS_MEMORY_PROFILES)

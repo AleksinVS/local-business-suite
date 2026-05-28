@@ -15,6 +15,7 @@ from apps.core.json_utils import (
     validate_analytics_workflow_routes_payload,
     load_json_file,
     validate_ai_identity_model_alignment,
+    validate_ai_chat_settings_payload,
     validate_ai_registry_payload,
     validate_ai_task_types_payload,
     validate_ai_task_types_slot_coverage,
@@ -77,6 +78,7 @@ class Command(BaseCommand):
         validate_ai_tools_drift(tools_payload, TOOLS)
         task_types_payload = load_json_file(settings.LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
         validate_ai_task_types_payload(task_types_payload)
+        validate_ai_chat_settings_payload(load_json_file(settings.LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE))
         # Semantic cross-cut validators — catch contract drift before runtime.
         validate_ai_task_types_tool_alignment(task_types_payload, tools_payload)
         validate_ai_write_confirmation_alignment(task_types_payload, tools_payload)

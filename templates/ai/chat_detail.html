@@ -3,29 +3,36 @@
 
 {% block title %}AI чат | {{ app_display_name }}{% endblock %}
 
-{% block content %}
-<div class="flex h-[calc(100vh-100px)] antialiased text-gray-800 bg-white rounded-lg shadow border border-gray-200 overflow-hidden" style="margin-top: -10px;">
-    <!-- Chat Sidebar -->
-    <div class="hidden md:flex flex-col w-64 bg-gray-50 border-r border-gray-200">
-        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
-            <h1 class="font-semibold text-gray-800">AI чат</h1>
-            <a href="{% url 'ai:chat_index' %}?new=1" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Новый</a>
-        </div>
-        <div class="flex-1 overflow-y-auto">
-            {% for session in chat_sessions %}
-            <div class="group relative border-b border-gray-200 {% if session.id == chat_session.id %}bg-blue-50 border-l-4 border-l-blue-600{% endif %} hover:bg-gray-100 transition-colors">
-                <a href="{% url 'ai:chat_detail' session.external_id %}" class="block p-3 pr-9">
-                    <div class="text-sm truncate text-gray-700">{{ session.title|default:"Новый чат" }}</div>
-                    <div class="text-xs text-gray-500 mt-1">{{ session.updated_at|date:"d.m.Y H:i" }}</div>
-                </a>
-                <button type="button" onclick="deleteChat('{{ session.external_id }}', this)" class="absolute top-3 right-2 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить чат">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                </button>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
+{% block sidebar_panel_label %}Список ИИ-чатов{% endblock %}
 
+{% block sidebar_panel %}
+<div class="ai-session-sidebar" aria-label="Список ИИ-чатов">
+    <div class="ai-session-sidebar-head">
+        <h2>AI чат</h2>
+        <a href="{% url 'ai:chat_index' %}?new=1">Новый</a>
+    </div>
+    <div class="ai-session-list">
+        {% for session in chat_sessions %}
+        <div class="ai-session-row group {% if session.id == chat_session.id %}is-active{% endif %}">
+            <a href="{% url 'ai:chat_detail' session.external_id %}" class="ai-session-link">
+                <span class="ai-session-title">{{ session.title|default:"Новый чат" }}</span>
+                <span class="ai-session-time">{{ session.updated_at|date:"d.m.Y H:i" }}</span>
+            </a>
+            <button type="button" onclick="deleteChat('{{ session.external_id }}', this)" class="ai-session-delete" title="Удалить чат">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+        </div>
+        {% empty %}
+        <div class="ai-session-empty">Чатов пока нет.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block page_container_extra_class %} ai-chat-page-container{% endblock %}
+
+{% block content %}
+<div class="ai-chat-main-surface flex antialiased text-gray-800 bg-white overflow-hidden">
     <!-- Chat Area -->
     <div class="flex flex-col flex-1 bg-white relative">
         <!-- Chat Header -->
@@ -215,6 +222,7 @@
 <script>
   window.__chatConfig = {
     currentSessionId: "{{ chat_session.external_id }}",
+    surface: "full_page",
     currentModelId: "{{ current_model_id }}",
     modelUpdateUrl: "{% url "ai:chat_update_model" chat_session.external_id %}",
     streamUrl: "{% url "ai:chat_stream" chat_session.external_id %}",

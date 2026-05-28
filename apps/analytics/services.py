@@ -13,6 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from apps.core.source_adapters import OPERATION_DELETE, SourceObjectEnvelope
 from apps.core.json_utils import load_json_file
 from apps.memory.security import scan_for_secrets
 
@@ -65,6 +66,89 @@ def sync_sources_from_contracts():
         )
         synced.append(source)
     return synced
+
+
+def upsert_analytics_projection_from_envelope(
+    envelope: SourceObjectEnvelope,
+    *,
+    facts=None,
+    dry_run: bool = False,
+):
+    """Create or refresh analytics normalized projection from a source envelope."""
+    if envelope.operation == OPERATION_DELETE:
+        return delete_analytics_projection_from_envelope(envelope, dry_run=dry_run)
+
+    normalized_text = normalize_text(envelope.text)
+    raw_payload = json.dumps(envelope.payload or {}, ensure_ascii=False, sort_keys=True, default=str)
+    fact_candidates = list(facts if facts is not None else (envelope.analytics or {}).get("fact_candidates", []))
+    if dry_run:
+        return {
+            "source_code": envelope.source_code,
+            "source_object_id": envelope.object_id,
+            "content_object_id": "",
+            "facts": len(fact_candidates),
+            "dry_run": True,
+        }
+
+    source = _ensure_analytics_source_from_envelope(envelope)
+    content_object, _created = AnalyticsContentObject.objects.update_or_create(
+        source=source,
+        source_object_id=envelope.object_id,
+        defaults={
+            "source_uri": f"source-adapter://{envelope.source_code}/{envelope.object_type}/{envelope.object_id}",
+            "content_kind": envelope.object_type,
+            "title": envelope.title,
+            "raw_sha256": sha256_text(raw_payload),
+            "normalized_text_sha256": sha256_text(normalized_text),
+            "near_duplicate_key": near_duplicate_key(normalized_text),
+            "business_key": str((envelope.payload or {}).get("business_key") or envelope.object_id),
+            "scope_tokens": _envelope_scope_tokens(envelope),
+            "sensitivity": envelope.sensitivity,
+            "metadata": {
+                "source_adapter": (envelope.provenance or {}).get("adapter", envelope.source_code),
+                "schema_version": envelope.schema_version,
+                "source_origin": envelope.source_origin,
+                "source_kind": envelope.source_kind,
+                "domain": envelope.domain,
+                "object_type": envelope.object_type,
+                "payload": dict(envelope.payload or {}),
+                "relations": [dict(item) for item in envelope.relations],
+                "privacy_profile": envelope.privacy_profile,
+                "access_policy": dict(envelope.access_policy or {}),
+                "safe_text": normalized_text,
+                "content_hash": envelope.content_hash,
+                "provenance": dict(envelope.provenance or {}),
+            },
+            "source_updated_at": envelope.source_updated_at,
+            "is_active": True,
+        },
+    )
+    evidence = ensure_source_adapter_evidence(content_object, envelope)
+    packet = build_source_envelope_extraction_packet(content_object, envelope, fact_candidates, evidence_id=evidence.evidence_id)
+    packet_obj = persist_extraction_packet(source, content_object, packet)
+    persist_analytics_facts(packet_obj, packet["business_facts"])
+    return {
+        "source_code": source.code,
+        "source_object_id": envelope.object_id,
+        "content_object_id": content_object.id,
+        "facts": len(packet["business_facts"]),
+        "dry_run": False,
+    }
+
+
+def delete_analytics_projection_from_envelope(envelope: SourceObjectEnvelope, *, dry_run: bool = False):
+    source = AnalyticsSource.objects.filter(code=envelope.source_code).first()
+    if source is None:
+        return {"source_code": envelope.source_code, "deactivated": 0, "dry_run": dry_run}
+    content_object = AnalyticsContentObject.objects.filter(source=source, source_object_id=envelope.object_id).first()
+    if content_object is None:
+        return {"source_code": source.code, "deactivated": 0, "dry_run": dry_run}
+    if dry_run:
+        return {"source_code": source.code, "deactivated": 1, "dry_run": True}
+    content_object.is_active = False
+    content_object.save(update_fields=["is_active", "updated_at"])
+    AnalyticsFact.objects.filter(source_packet__content_object=content_object).update(is_active=False)
+    return {"source_code": source.code, "deactivated": 1, "dry_run": False}
 
 
 def sync_analytics_source(*, source_code: str, dry_run: bool = False) -> SyncResult:
@@ -326,6 +410,96 @@ def ensure_email_evidence(content_object: AnalyticsContentObject, message: dict)
             },
         },
     )
+
+
+def ensure_source_adapter_evidence(content_object: AnalyticsContentObject, envelope: SourceObjectEnvelope):
+    evidence_id = stable_id("source-adapter-evidence", envelope.source_code, envelope.object_id)
+    evidence, _created = AnalyticsEvidenceRef.objects.update_or_create(
+        evidence_id=evidence_id,
+        defaults={
+            "content_object": content_object,
+            "ref_kind": "source_adapter",
+            "ref_value": f"{envelope.source_code}:{envelope.object_type}:{envelope.object_id}",
+            "authority_rank": 20,
+            "metadata": {
+                "source_code": envelope.source_code,
+                "source_kind": envelope.source_kind,
+                "domain": envelope.domain,
+                "content_hash": envelope.content_hash,
+            },
+        },
+    )
+    return evidence
+
+
+def build_source_envelope_extraction_packet(content_object: AnalyticsContentObject, envelope: SourceObjectEnvelope, facts, *, evidence_id: str):
+    text = normalize_text(envelope.text)
+    secret_scan = scan_for_secrets(text)
+    if secret_scan.blocked:
+        raise ValidationError("Analytics projection blocked: source envelope contains credential material.")
+    normalized_facts = [
+        normalize_source_envelope_fact(content_object=content_object, envelope=envelope, fact=fact, evidence_id=evidence_id)
+        for fact in facts
+    ]
+    return {
+        "schema_version": EXTRACTION_PACKET_SCHEMA_VERSION,
+        "source_identity": {
+            "source_code": envelope.source_code,
+            "source_kind": envelope.source_kind,
+            "external_id": envelope.object_id,
+        },
+        "fingerprints": {
+            "raw_sha256": content_object.raw_sha256,
+            "normalized_text_sha256": content_object.normalized_text_sha256,
+            "near_duplicate_key": content_object.near_duplicate_key,
+            "semantic_claim_hashes": [fact["semantic_hash"] for fact in normalized_facts],
+        },
+        "safe_text": text,
+        "entities": extract_simple_entities(text),
+        "claims": [],
+        "business_facts": normalized_facts,
+        "scope_tokens": content_object.scope_tokens,
+        "sensitivity": content_object.sensitivity,
+        "provenance": {
+            "extractor": "source-envelope-adapter-v1",
+            "content_object_id": content_object.id,
+            "envelope_id": envelope.envelope_id,
+        },
+    }
+
+
+def normalize_source_envelope_fact(*, content_object: AnalyticsContentObject, envelope: SourceObjectEnvelope, fact: dict, evidence_id: str):
+    fact_type = str(fact.get("fact_type") or "").strip()
+    if not fact_type:
+        raise ValidationError("Source adapter analytics fact must contain fact_type.")
+    dimensions = dict(fact.get("dimensions") or {})
+    measures = dict(fact.get("measures") or {})
+    semantic_hash = fact.get("semantic_hash") or sha256_text(
+        json.dumps(
+            {
+                "source_code": envelope.source_code,
+                "object_id": envelope.object_id,
+                "fact_type": fact_type,
+                "dimensions": dimensions,
+                "measures": measures,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    )
+    return {
+        "schema_version": ANALYTICS_FACT_SCHEMA_VERSION,
+        "fact_id": fact.get("fact_id") or stable_id("analytics-fact", envelope.source_code, envelope.object_id, fact_type, semantic_hash),
+        "fact_type": fact_type,
+        "event_time": fact.get("event_time") or (envelope.source_updated_at.isoformat() if envelope.source_updated_at else timezone.now().isoformat()),
+        "dimensions": dimensions,
+        "measures": measures,
+        "evidence_refs": fact.get("evidence_refs") or [evidence_id],
+        "semantic_hash": semantic_hash,
+        "scope_tokens": fact.get("scope_tokens") or content_object.scope_tokens,
+        "sensitivity": fact.get("sensitivity") or content_object.sensitivity,
+    }
 
 
 def build_extraction_packet(content_object: AnalyticsContentObject):
@@ -613,6 +787,31 @@ def _ensure_source_model(source_code):
         return _upsert_source_from_contract(contract)
 
 
+def _ensure_analytics_source_from_envelope(envelope: SourceObjectEnvelope):
+    config = {
+        "source_origin": envelope.source_origin,
+        "source_kind": envelope.source_kind,
+        "domain": envelope.domain,
+        "privacy_profile": envelope.privacy_profile,
+        "access_policy": dict(envelope.access_policy or {}),
+        "source_adapter": (envelope.provenance or {}).get("adapter", envelope.source_code),
+        "schema_version": envelope.schema_version,
+    }
+    source, _created = AnalyticsSource.objects.update_or_create(
+        code=envelope.source_code,
+        defaults={
+            "title": str((envelope.provenance or {}).get("source_title") or envelope.source_code).replace("_", " ").title(),
+            "source_kind": envelope.source_kind,
+            "owner": envelope.domain or "analytics",
+            "status": AnalyticsSource.Status.ENABLED,
+            "scope_tokens": _envelope_scope_tokens(envelope),
+            "sensitivity": envelope.sensitivity,
+            "config": config,
+        },
+    )
+    return source
+
+
 def _upsert_source_from_contract(contract):
     source, _created = AnalyticsSource.objects.update_or_create(
         code=contract["code"],
@@ -627,6 +826,10 @@ def _upsert_source_from_contract(contract):
         },
     )
     return source
+
+
+def _envelope_scope_tokens(envelope: SourceObjectEnvelope) -> list[str]:
+    return sorted({str(token) for token in (envelope.access_policy or {}).get("scope_tokens", []) if str(token).strip()})
 
 
 def get_contract_source(source_code):

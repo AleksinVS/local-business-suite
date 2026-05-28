@@ -24,6 +24,9 @@ class ActorContext(BaseModel):
     request_id: str = ""
     origin_channel: str = ""
     actor_version: str = ""
+    page_context: dict[str, Any] = Field(default_factory=dict)
+    context_snapshot_id: int | None = None
+    context_hint: str = ""
 
     def ensure_trace_context(self) -> "ActorContext":
         """Populate empty trace context fields with auto-generated values."""

@@ -15,6 +15,50 @@
     }
   },
   {
+    "code": "workorders",
+    "title": "Work orders source data",
+    "source_kind": "django_model",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "scope_tokens": ["org:default"],
+    "sensitivity": "internal",
+    "retention_profile": "normalized_default",
+    "config": {
+      "source_origin": "internal",
+      "source_adapter": "workorders",
+      "privacy_profile": "pii_off",
+      "access_policy": {
+        "mode": "adapter_check",
+        "policy_ref": "workorders.visible",
+        "scope_tokens": ["org:default"]
+      }
+    }
+  },
+  {
+    "code": "waiting_list",
+    "title": "Waiting list source data",
+    "source_kind": "django_model",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "scope_tokens": ["org:default"],
+    "sensitivity": "internal",
+    "retention_profile": "normalized_default",
+    "config": {
+      "source_origin": "internal",
+      "source_adapter": "waiting_list",
+      "privacy_profile": "pii_off",
+      "access_policy": {
+        "mode": "adapter_check",
+        "policy_ref": "waiting_list.visible",
+        "scope_tokens": ["org:default"]
+      }
+    }
+  },
+  {
     "code": "department_reports_imap",
     "title": "Department reports mailbox",
     "source_kind": "email_imap",

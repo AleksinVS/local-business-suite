@@ -4,6 +4,40 @@
 
 ## Active
 
+### Универсальные источники для памяти и аналитики
+
+MVP общего source adapter/envelope подхода реализован и ожидает приемку владельцем. Канбан, лист ожидания, файлы, внешние API и будущие модули подключаются к памяти и аналитике через адаптеры, без прямой зависимости ядра памяти от доменных моделей.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md`;
+- активный план находится в `docs/planning/active/universal-source-adapters-memory-analytics.md`;
+- workflow package находится в `workflow/active/universal-source-adapters-memory-analytics/`.
+
+Статус реализации:
+- ADR-0018 принят;
+- добавлены `SourceObjectEnvelope`, `SourceAdapter` protocol и adapter registry;
+- добавлен privacy profile resolver: PII по умолчанию выключено, для внешних источников включен guarded profile, при `pii_off` PII-аудит выключен;
+- secret scanning остается всегда включенным;
+- memory projection и analytics projection строятся из одного envelope;
+- `workorders` и `waiting_list` подключены как внутренние адаптеры с `adapter_check`;
+- добавлены `source_adapter_reconcile`, `workorders.search`, тесты и операторская документация.
+
+Оставшееся действие:
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
+### Контекстный ИИ-чат в левой боковой панели
+
+MVP реализован и ожидает приемку владельцем. Меню перенесено в `Все функции`, левая панель занята встроенным ИИ-чатом, добавлены `PageContextEnvelope`, `AIWindowContextSnapshot`, `ui.get_current_context`, общий контракт `ai.chat_settings` и e2e для контекста открытой заявки.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md`;
+- активный план находится в `docs/planning/active/context-aware-sidebar-ai-chat.md`;
+- workflow package находится в `workflow/active/context-aware-sidebar-ai-chat/`;
+- руководство находится в `docs/guides/AI_SIDEBAR_CHAT.md`.
+
+Оставшееся действие:
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Knowledge-driven business analytics
 
 MVP vertical slice реализован: контракты аналитики, контрольные модели, fixture-first IMAP/email ingestion, общий extraction packet, дедупликация, пересчет метрик, reflection-кандидаты и AI diagnostics routing. В active backlog остается production hardening и подключение реальных источников.
@@ -24,6 +58,30 @@ MVP vertical slice реализован: контракты аналитики, 
 - провести pilot tuning scope, retention, authority и dedup rules с владельцем данных.
 
 ## Next
+
+### Универсальное открытие правого сайдбара ИИ-ботом
+
+Спроектировать и реализовать общий механизм, через который ИИ-бот сможет открыть справа объект любого подключенного модуля: заявку, запись листа ожидания или будущий доменный объект. Решение должно использовать модульные `RightPanelProvider`, а не прямые зависимости AI-ядра от шаблонов конкретных модулей.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md`;
+- активный план находится в `docs/planning/active/universal-right-drawer-ai-navigation.md`;
+- workflow package находится в `workflow/active/universal-right-drawer-ai-navigation/`.
+
+Предварительный scope:
+- добавить общий right drawer host в базовый шаблон;
+- добавить `RightPanelProvider` registry в `apps.core`;
+- подключить providers для `workorders` и `waiting_list`;
+- добавить AI tool `ui.open_right_panel`;
+- научить full-page и sidebar chat исполнять безопасные UI-команды;
+- обновлять `PageContextEnvelope` после открытия панели;
+- покрыть e2e сценарии со страницы `AI чат`.
+
+Критерии готовности к старту:
+- владелец принимает ADR-0020 или явно правит границы MVP;
+- подтверждено, что MVP поддерживает только `mode=view`;
+- подтверждено, что `SourceAdapter` не расширяется UI-обязанностями;
+- подтверждено, что event bus не входит в этот этап.
 
 ### Профили гибридного ранжирования памяти и подсказки ИИ-бота
 

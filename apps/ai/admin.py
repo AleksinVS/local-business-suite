@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import ChatSession, ChatMessage, PendingAction, AgentActionLog, ChatAttachment, SlashCommand
+from .models import (
+    AIWindowContextSnapshot,
+    AgentActionLog,
+    ChatAttachment,
+    ChatMessage,
+    ChatSession,
+    PendingAction,
+    SlashCommand,
+)
 
 @admin.register(ChatSession)
 class ChatSessionAdmin(admin.ModelAdmin):
@@ -37,3 +45,11 @@ class SlashCommandAdmin(admin.ModelAdmin):
     list_display = ("name", "shortcut", "user", "created_at")
     list_filter = ("created_at",)
     search_fields = ("name", "shortcut", "description", "user__username")
+
+
+@admin.register(AIWindowContextSnapshot)
+class AIWindowContextSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "window_id", "context_version", "is_current", "expires_at")
+    list_filter = ("is_current", "created_at", "expires_at")
+    search_fields = ("window_id", "context_hash", "user__username")
+    readonly_fields = ("sanitized_envelope", "resolved_summary", "context_hash", "created_at", "updated_at")

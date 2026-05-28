@@ -2,6 +2,7 @@ from django.conf import settings
 
 
 CHAT_DB_MODELS = {
+    "aiwindowcontextsnapshot",
     "agentactionlog",
     "chatattachment",
     "chatmessage",

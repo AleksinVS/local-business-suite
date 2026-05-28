@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -17,7 +18,9 @@ from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
 User = get_user_model()
 RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
 
-from .models import AgentActionLog, ChatMessage, ChatSession, PendingAction
+from .models import AIWindowContextSnapshot, AgentActionLog, ChatMessage, ChatSession, PendingAction
+from .chat_settings import get_chat_settings
+from .page_context import update_window_context_snapshot
 from .runtime_client import AgentRuntimeError
 from .services import normalize_session_external_id
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
@@ -108,6 +111,159 @@ class AIViewsTests(TestCase):
         self.assertEqual(AgentActionLog.objects.count(), 1)
         self.assertEqual(ChatSession.objects.count(), 1)
 
+    def test_workorders_search_tool_uses_memory_source_adapter_index(self):
+        self.customer_workorder.description = "Маркер ai-wrapper-workorder-gamma для поиска."
+        self.customer_workorder.save(update_fields=["description", "updated_at"])
+
+        with TemporaryDirectory() as tmpdir:
+            with self.settings(DATA_DIR=Path(tmpdir) / "data", LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled"):
+                call_command("source_adapter_reconcile", source_code="workorders", target="memory", backend="fulltext", verbosity=0)
+                response = self.client.post(
+                    reverse("ai:tool_execute", kwargs={"tool_code": "workorders.search"}),
+                    data=json.dumps(
+                        {
+                            "actor": {"user_id": self.manager.id, "channel": "internal"},
+                            "payload": {"query": "ai wrapper workorder gamma", "limit": 5},
+                        }
+                    ),
+                    content_type="application/json",
+                    HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["tool"], "workorders.search")
+        self.assertEqual(payload["result"]["items"][0]["source_code"], "workorders")
+
+    def test_page_context_update_resolves_workorder_and_recomputes_capabilities(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("ai:page_context_update"),
+            data=json.dumps(
+                {
+                    "schema_version": "1",
+                    "window_id": "window-ai-test-1",
+                    "page": {"module": "workorders", "view": "board", "path": "/workorders/"},
+                    "selection": {
+                        "object_type": "workorder",
+                        "object_id": str(self.customer_workorder.pk),
+                        "source_code": "workorders",
+                        "display": "Client supplied title",
+                    },
+                    "capabilities": {"can_transition": True},
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        snapshot = AIWindowContextSnapshot.objects.get(window_id="window-ai-test-1")
+        self.assertEqual(snapshot.resolved_summary["selection"]["object_id"], str(self.customer_workorder.pk))
+        self.assertEqual(snapshot.resolved_summary["selection"]["title"], self.customer_workorder.title)
+        self.assertIn("transition_targets", snapshot.resolved_summary["capabilities"])
+
+    def test_page_context_update_rejects_foreign_workorder(self):
+        private_group, _ = Group.objects.get_or_create(name="private-board-group")
+        private_board = Board.objects.create(title="Private Board", slug="private-board-ai")
+        private_board.allowed_groups.add(private_group)
+        foreign = WorkOrder.objects.create(
+            title="Чужая заявка",
+            description="Недоступна текущему пользователю",
+            department=self.department,
+            author=self.manager,
+            board=private_board,
+            status=WorkOrderStatus.NEW,
+        )
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("ai:page_context_update"),
+            data=json.dumps(
+                {
+                    "schema_version": "1",
+                    "window_id": "window-ai-test-foreign",
+                    "page": {"module": "workorders", "view": "board"},
+                    "selection": {
+                        "object_type": "workorder",
+                        "object_id": str(foreign.pk),
+                        "source_code": "workorders",
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_chat_message_submit_binds_immutable_page_context_snapshot(self):
+        self.client.force_login(self.manager)
+        session = ChatSession.objects.create(user=self.manager)
+        first = update_window_context_snapshot(
+            self.manager,
+            {
+                "schema_version": "1",
+                "window_id": "window-bind-test",
+                "page": {"module": "workorders", "view": "board"},
+                "selection": {
+                    "object_type": "workorder",
+                    "object_id": str(self.customer_workorder.pk),
+                    "source_code": "workorders",
+                },
+            },
+        ).snapshot
+        second_workorder = WorkOrder.objects.create(
+            title="Вторая заявка",
+            description="Для проверки гонки контекста",
+            department=self.department,
+            author=self.customer,
+            board=self.board,
+            status=WorkOrderStatus.NEW,
+        )
+        update_window_context_snapshot(
+            self.manager,
+            {
+                "schema_version": "1",
+                "window_id": "window-bind-test",
+                "page": {"module": "workorders", "view": "board"},
+                "selection": {
+                    "object_type": "workorder",
+                    "object_id": str(second_workorder.pk),
+                    "source_code": "workorders",
+                },
+            },
+        )
+
+        response = self.client.post(
+            reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
+            {
+                "prompt": "Что с этой заявкой?",
+                "window_id": "window-bind-test",
+                "context_version": first.context_version,
+                "context_hint": "workorders / first",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        message = session.messages.get(role=ChatMessage.Role.USER)
+        self.assertEqual(message.metadata["page_context_status"], "bound")
+        self.assertEqual(message.metadata["context_snapshot_id"], first.id)
+
+        result = execute_tool(
+            tool_code="ui.get_current_context",
+            actor_context={
+                "user_id": self.manager.id,
+                "page_context": {"context_snapshot_id": first.id, "page_context_present": True},
+            },
+            payload={},
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(
+            result["result"]["context"]["selection"]["object_id"],
+            str(self.customer_workorder.pk),
+        )
+
+    def test_chat_settings_surface_overrides_default_sidebar_limit(self):
+        self.assertEqual(get_chat_settings("sidebar")["recent_message_limit"], 8)
+        self.assertEqual(get_chat_settings("full_page")["recent_message_limit"], 20)
+
     def test_create_workorder_tool_creates_request_for_customer(self):
         # Step 1: request without confirmation token → returns pending envelope
         response = self.client.post(
@@ -163,6 +319,8 @@ class AIViewsTests(TestCase):
         detail_response = self.client.get(response["Location"])
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "AI чат")
+        self.assertContains(detail_response, 'class="ai-session-sidebar"')
+        self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
 
     def test_tool_gateway_accepts_non_uuid_session_id(self):
         response = self.client.post(

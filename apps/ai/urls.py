@@ -7,6 +7,8 @@ from .views import (
     AIChatIndexView,
     AIChatMessageCreateView,
     AIChatMessageStreamView,
+    AIPageContextUpdateView,
+    AISidebarChatView,
     AIChatUpdateModelView,
     AIChatUpdateTitleView,
     AIHubView,
@@ -23,6 +25,8 @@ app_name = "ai"
 
 urlpatterns = [
     path("chat/", AIChatIndexView.as_view(), name="chat_index"),
+    path("chat/sidebar/", AISidebarChatView.as_view(), name="sidebar_chat"),
+    path("context/window/", AIPageContextUpdateView.as_view(), name="page_context_update"),
     path("chat/<uuid:external_id>/", AIChatDetailView.as_view(), name="chat_detail"),
     path(
         "chat/<uuid:external_id>/send/",

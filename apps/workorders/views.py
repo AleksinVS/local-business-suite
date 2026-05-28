@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -88,6 +89,52 @@ def column_card_context(column):
     }
 
 
+def page_context_json(payload):
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def workorders_board_page_context(request, board):
+    return {
+        "schema_version": "1",
+        "page": {
+            "path": request.path,
+            "title": "Канбан заявок",
+            "module": "workorders",
+            "view": "board",
+        },
+        "selection": {},
+        "filters": {
+            "board": board.slug if board else "",
+            "q": request.GET.get("q", ""),
+            "department": request.GET.get("department", ""),
+            "status": request.GET.get("status", ""),
+            "assignee": request.GET.get("assignee", ""),
+            "device": request.GET.get("device", ""),
+        },
+        "ui_state": {"focused_region": "board"},
+    }
+
+
+def workorder_detail_page_context(request, workorder):
+    return {
+        "schema_version": "1",
+        "page": {
+            "path": request.path,
+            "title": "Карточка заявки",
+            "module": "workorders",
+            "view": "detail",
+        },
+        "selection": {
+            "object_type": "workorder",
+            "object_id": str(workorder.pk),
+            "source_code": "workorders",
+            "display": f"{workorder.number}. {workorder.title}",
+        },
+        "filters": {},
+        "ui_state": {"right_drawer": "open", "focused_region": "detail_panel"},
+    }
+
+
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
@@ -141,6 +188,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         board = self.get_board()
+        context["page_ai_context_json"] = page_context_json(
+            workorders_board_page_context(self.request, board)
+        )
         if not board:
             context["no_boards"] = True
             return context
@@ -348,6 +398,9 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
             self.request.user, self.object
         )
         context["can_comment"] = can_comment(self.request.user, self.object)
+        context["detail_ai_context_json"] = page_context_json(
+            workorder_detail_page_context(self.request, self.object)
+        )
         return context
 
 

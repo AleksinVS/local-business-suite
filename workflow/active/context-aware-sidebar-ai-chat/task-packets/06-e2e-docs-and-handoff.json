@@ -1,0 +1,46 @@
+{
+  "task_id": "06-e2e-docs-and-handoff",
+  "status": "implemented",
+  "title": "E2E, screenshots and documentation handoff",
+  "goal": "Verify the full user scenario and update operational documentation.",
+  "read_scope": [
+    "scripts/e2e/",
+    "docs/guides/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "write_scope": [
+    "scripts/e2e/tests/",
+    "docs/guides/",
+    "workflow/active/context-aware-sidebar-ai-chat/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Add or update e2e for board -> open card -> ask sidebar AI about current card.",
+    "Add e2e assertion that the request carries window_id/context_version and the runtime path can call ui.get_current_context.",
+    "Add e2e assertion for race safety: submit on card A, open card B, first response still uses card A snapshot.",
+    "Add e2e or unit coverage that sidebar compaction reads surfaces.sidebar.recent_message_limit from ai.chat_settings and defaults to 8.",
+    "Add unit coverage that full_page and sidebar resolve effective settings from the shared contract.",
+    "Add unit coverage for client capabilities being ignored as permissions.",
+    "Add unit coverage for expired snapshot cleanup.",
+    "Capture desktop and mobile screenshots under .local/ or the standard e2e artifact path.",
+    "Document operator/user behavior after implementation.",
+    "Write executor report and acceptance report.",
+    "Run make gen-struct after structure changes."
+  ],
+  "acceptance": [
+    "E2E proves the selected card context is available through ui.get_current_context.",
+    "E2E proves message-bound context does not change when UI selection changes after submit.",
+    "Screenshots show the 'Все функции' menu, sidebar chat and collapsed/pinned sidebar states.",
+    "Docs state that sidebar has no session switcher and no summary regeneration UI in the MVP.",
+    "Docs state that full_page and sidebar chat settings are resolved from the shared ai.chat_settings contract.",
+    "Docs explain how modules should expose data-ai-context.",
+    "Workflow reports are complete."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests apps.workorders.tests",
+    "npm run test:e2e",
+    "make gen-struct"
+  ]
+}

@@ -23,6 +23,12 @@
   </div>
 
   {% if is_contract %}
+    {% if is_workflow_transition_matrix %}
+      <div class="structured-setting-actions">
+        <a class="button" href="{% url 'settings_center:workflow_transitions' %}">Открыть матрицу переходов</a>
+        <span class="muted">Удобный режим для настройки переходов без ручного JSON.</span>
+      </div>
+    {% endif %}
     <form method="post" class="settings-form">
       {% csrf_token %}
       {{ form.non_field_errors }}
@@ -57,6 +63,7 @@
 
 <style>
   .settings-form textarea { width: 100%; min-height: 460px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9rem; }
+  .structured-setting-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .checkbox-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
   .json-preview { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow: auto; }
 </style>

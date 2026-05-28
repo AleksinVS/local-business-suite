@@ -53,6 +53,7 @@ class SlashCommand(models.Model):
 class ChatSession(models.Model):
     class Channel(models.TextChoices):
         INTERNAL = "internal", "Internal"
+        SIDEBAR = "sidebar", "Sidebar"
 
     class Status(models.TextChoices):
         ACTIVE = "active", "Active"
@@ -238,3 +239,40 @@ class ChatAttachment(models.Model):
 
     def __str__(self):
         return f"{self.file_name} ({self.get_file_type_display()})"
+
+
+class AIWindowContextSnapshot(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_window_context_snapshots",
+        db_constraint=False,
+    )
+    window_id = models.CharField(max_length=128)
+    context_version = models.PositiveIntegerField()
+    context_hash = models.CharField(max_length=96)
+    sanitized_envelope = models.JSONField(default=dict, blank=True)
+    resolved_summary = models.JSONField(default=dict, blank=True)
+    is_current = models.BooleanField(default=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "window_id", "context_version"],
+                name="uniq_ai_window_context_version",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "window_id", "context_version"]),
+            models.Index(fields=["user", "window_id", "is_current"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        verbose_name = "AI window context snapshot"
+        verbose_name_plural = "AI window context snapshots"
+
+    def __str__(self):
+        return f"{self.user_id}:{self.window_id}@{self.context_version}"

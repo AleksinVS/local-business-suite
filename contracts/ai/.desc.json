@@ -4,6 +4,7 @@
   "tools.json": "Каталог доступных AI tools",
   "task_types.json": "Каталог bounded task types",
   "models.json": "Каталог моделей для AI runtime",
+  "chat_settings.json": "Общий runtime contract настроек основного и встроенного AI-чата",
   "memory_sources.json": "Дефолтный каталог источников сервиса памяти СоСНА",
   "memory_profiles.json": "Дефолтные профили chunking, extraction, indexing и ranking для памяти",
   "memory_routing.json": "Дефолтные правила sensitivity routing для памяти",

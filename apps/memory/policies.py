@@ -144,6 +144,11 @@ def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
 
 
 def can_access_search_document(user, document: MemorySearchDocument) -> bool:
+    if document.source_object_id:
+        from .services import can_access_source_object_via_adapter
+
+        if not can_access_source_object_via_adapter(user, document.source_object):
+            return False
     if getattr(user, "is_superuser", False):
         return True
     return document.index_status == MemorySearchDocument.IndexStatus.READY and scope_tokens_match(

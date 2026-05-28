@@ -10,6 +10,21 @@
   },
   "tools": [
     {
+      "id": "ui.get_current_context",
+      "title": "Get current UI context",
+      "domain": "ui",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Return the server-resolved safe current window context bound to the current chat request.",
+      "inputs": [],
+      "outputs": [
+        "status",
+        "context"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "visible"
+    },
+    {
       "id": "workorders.list",
       "title": "List work orders",
       "domain": "workorders",
@@ -56,6 +71,34 @@
       ],
       "outputs": [
         "workorder"
+      ],
+      "required_role_scope": "visible"
+    },
+    {
+      "id": "workorders.search",
+      "title": "Search work orders",
+      "domain": "workorders",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Search indexed work order source data through memory with workorder access checks.",
+      "inputs": [
+        "query",
+        "limit"
+      ],
+      "input_schemas": {
+        "query": {
+          "description": "Natural-language work order search query",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum number of work order results to return",
+          "type": "integer"
+        }
+      },
+      "outputs": [
+        "items",
+        "citations",
+        "meta"
       ],
       "required_role_scope": "visible"
     },

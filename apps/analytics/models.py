@@ -6,6 +6,7 @@ from django.db.models import Q
 class AnalyticsSource(models.Model):
     class SourceKind(models.TextChoices):
         MEMORY = "memory", "Memory"
+        DJANGO_MODEL = "django_model", "Django model"
         EMAIL_IMAP = "email_imap", "Email IMAP"
         FILE_SHARE = "file_share", "File share"
         DMS = "dms", "DMS"

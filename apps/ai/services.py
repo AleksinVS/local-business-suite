@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import uuid
 
 from django.conf import settings
@@ -26,6 +27,7 @@ from apps.workorders.services import (
 )
 
 from .models import AgentActionLog, ChatMessage, ChatSession
+from .chat_settings import CHAT_SURFACE_SIDEBAR, get_chat_settings, get_recent_message_limit
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,26 @@ def get_or_create_session(
     return ChatSession.objects.create(user=user, channel=channel, title=title)
 
 
+def get_or_create_sidebar_session(user):
+    session = (
+        ChatSession.objects.filter(
+            user=user,
+            channel=ChatSession.Channel.SIDEBAR,
+            status=ChatSession.Status.ACTIVE,
+        )
+        .order_by("-updated_at", "-id")
+        .first()
+    )
+    if session:
+        return session
+    return ChatSession.objects.create(
+        user=user,
+        channel=ChatSession.Channel.SIDEBAR,
+        title="Боковой чат",
+        metadata={"surface": CHAT_SURFACE_SIDEBAR},
+    )
+
+
 def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     message = ChatMessage.objects.create(
         session=session,
@@ -156,7 +178,22 @@ def append_chat_message(*, session, role, content, tool_name="", metadata=None):
 
 def serialize_session_history(session):
     history = []
-    for message in session.messages.prefetch_related('attachments').order_by("created_at", "id"):
+    messages_qs = session.messages.prefetch_related("attachments").order_by("created_at", "id")
+    if session.channel == ChatSession.Channel.SIDEBAR:
+        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+        recent_limit = get_recent_message_limit(CHAT_SURFACE_SIDEBAR)
+        messages = list(messages_qs)
+        sidebar_summary = (session.metadata or {}).get("sidebar_summary") or {}
+        if settings_payload.get("summary_enabled", True) and sidebar_summary.get("text"):
+            history.append(
+                {
+                    "role": ChatMessage.Role.SYSTEM,
+                    "content": "Краткое резюме предыдущей части sidebar-диалога:\n" + sidebar_summary["text"],
+                    "tool_name": "",
+                }
+            )
+        messages_qs = messages[-recent_limit:]
+    for message in messages_qs:
         content = message.content
         attachments = list(message.attachments.all())
         if attachments:
@@ -169,6 +206,63 @@ def serialize_session_history(session):
             "tool_name": message.tool_name,
         })
     return history
+
+
+def compact_sidebar_session(session):
+    if session.channel != ChatSession.Channel.SIDEBAR:
+        return False
+    settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+    if not settings_payload.get("summary_enabled", True):
+        return False
+    recent_limit = get_recent_message_limit(CHAT_SURFACE_SIDEBAR)
+    trigger = int(settings_payload.get("summary_trigger_messages") or 24)
+    messages = list(session.messages.order_by("created_at", "id"))
+    if len(messages) <= recent_limit + trigger:
+        return False
+    older = messages[:-recent_limit]
+    if not older:
+        return False
+    summary_text = _build_sidebar_summary_text(older)
+    session.metadata = {
+        **(session.metadata or {}),
+        "sidebar_summary": {
+            "text": summary_text,
+            "summarized_from_message_id": older[0].id,
+            "summarized_until_message_id": older[-1].id,
+            "source_message_ids": [message.id for message in older],
+            "summary_version": "deterministic-v1",
+            "summary_updated_at": timezone.now().isoformat(),
+        },
+    }
+    session.save(update_fields=["metadata", "updated_at"])
+    return True
+
+
+def _build_sidebar_summary_text(messages):
+    lines = []
+    for message in messages[-80:]:
+        role = "Пользователь" if message.role == ChatMessage.Role.USER else "Ассистент"
+        if message.role == ChatMessage.Role.SYSTEM:
+            role = "Система"
+        if message.role == ChatMessage.Role.TOOL:
+            role = "Инструмент"
+        content = mask_chat_runtime_text(message.content)
+        if len(content) > 220:
+            content = content[:217] + "..."
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)[-6000:]
+
+
+SECRET_LIKE_RE = re.compile(
+    r"(?i)\b(password|passwd|token|api[_-]?key|secret|credential)\b\s*[:=]\s*([^\s,;]+)"
+)
+
+
+def mask_chat_runtime_text(value):
+    text = str(value or "")
+    text = SECRET_LIKE_RE.sub(lambda match: f"{match.group(1)}=<MASKED>", text)
+    return text.strip()
 
 
 def list_workorders_for_actor(*, actor, status=None, limit=20):

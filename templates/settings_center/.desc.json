@@ -2,6 +2,7 @@
   ".": "Шаблоны Settings Center: dashboard, runtime contracts, users, env proposals и contextual help",
   "dashboard.html": "Дашборд зарегистрированных settings descriptors и audit",
   "setting_detail.html": "Страница просмотра/редактирования runtime contract descriptor",
+  "workflow_transitions.html": "Матрица настройки переходов статусов заявок через workflow_rules contract",
   "env_status.html": "Статус bootstrap .env настроек",
   "env_proposal.html": "Форма создания .env proposal в data/",
   "user_list.html": "Локальное управление пользователями портала",

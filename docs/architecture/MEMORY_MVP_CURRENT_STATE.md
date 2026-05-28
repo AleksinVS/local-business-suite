@@ -40,6 +40,11 @@ memory.remember
 - Документный индекс: результат поиска возвращает документ, а не раздел/фрагмент.
 - Graph schema bootstrapping и extraction-команды как отдельный подготовительный контур.
 - Reference implementation внешнего коннектора: envelope, queue, landing zone, retention cleanup и handoff.
+- Универсальные source adapters для внутренних модулей: `workorders` и `waiting_list` отдают `SourceObjectEnvelope`.
+- `source_adapter_reconcile` строит из envelope проекции `MemorySourceObject`, `MemorySearchDocument`, FTS/vector index и analytics projection.
+- Для `adapter_check` источников выдача `source_data` выполняет финальную проверку доступа через доменный адаптер; при отсутствии адаптера результат fail-closed.
+- Privacy defaults для source adapters: PII по умолчанию выключено, внешние источники могут явно включать `pii_guarded`; secret scanning всегда включен.
+- AI-инструмент `workorders.search` ищет по индексированным заявкам через `memory.search` в режиме `source_explicit`.
 
 ## Что не работает как runtime MVP
 
@@ -86,6 +91,8 @@ python manage.py memory_file_backed_e2e
 python manage.py memory_file_content_search_e2e
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
+python manage.py source_adapter_reconcile --source-code workorders --target all --backend fulltext --dry-run
+python manage.py source_adapter_reconcile --source-code waiting_list --target all --backend fulltext --dry-run
 ```
 
 Документация, backlog и workflow должны отличать эту рабочую границу от будущих этапов fragment search, graph runtime search, OCR, claim/belief и MLflow.

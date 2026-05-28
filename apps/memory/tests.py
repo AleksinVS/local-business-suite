@@ -17,6 +17,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.analytics.models import AnalyticsContentObject, AnalyticsFact
+from apps.core.models import Department
+from apps.inventory.models import MedicalDevice
+from apps.waiting_list.models import WaitingListEntry
+from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
+from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER, ROLE_TECHNICIAN
+
 from .admin import (
     MemoryAccessAuditAdmin,
     MemoryEvalCaseAdmin,
@@ -973,6 +980,109 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(audit.allowed_scope_tokens, sorted({"org:default", f"user:{user.id}", "role:operators"}))
         self.assertNotIn("query", {field.name for field in MemoryAccessAudit._meta.fields})
         self.assertEqual(str(audit), "req-audit-1:allowed")
+
+
+class MemorySourceAdapterProjectionTests(TestCase):
+    databases = RUNTIME_DATABASES
+
+    def setUp(self):
+        self.department = Department.objects.create(name="Диагностика")
+        self.device = MedicalDevice.objects.create(
+            name="УЗИ аппарат",
+            serial_number="USA-ADAPTER-001",
+            department=self.department,
+        )
+        self.customer = User.objects.create_user(username="adapter-customer", password="pass")
+        self.technician = User.objects.create_user(username="adapter-tech", password="pass")
+        self.manager = User.objects.create_user(username="adapter-manager", password="pass")
+        self.outsider = User.objects.create_user(username="adapter-outsider", password="pass")
+        for role, user in (
+            (ROLE_CUSTOMER, self.customer),
+            (ROLE_TECHNICIAN, self.technician),
+            (ROLE_MANAGER, self.manager),
+        ):
+            group, _created = Group.objects.get_or_create(name=role)
+            user.groups.add(group)
+        self.board = Board.objects.create(title="Adapter Board", slug="adapter-board")
+        self.board.allowed_groups.set(Group.objects.filter(name__in=[ROLE_CUSTOMER, ROLE_TECHNICIAN, ROLE_MANAGER]))
+
+    def test_workorder_adapter_reconcile_indexes_search_and_analytics_with_access_check(self):
+        workorder = WorkOrder.objects.create(
+            title="Проверить адаптер памяти",
+            description="Уникальный маркер universal-workorder-alpha для поиска.",
+            department=self.department,
+            author=self.customer,
+            assignee=self.technician,
+            board=self.board,
+            device=self.device,
+            status=WorkOrderStatus.NEW,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            with self.settings(DATA_DIR=Path(tmpdir) / "data", LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled"):
+                call_command("source_adapter_reconcile", source_code="workorders", target="all", backend="fulltext", verbosity=0)
+                from .retrieval import memory_search
+
+                visible = memory_search(
+                    actor=self.manager,
+                    query="universal workorder alpha",
+                    search_mode="source_explicit",
+                    include_source_data=True,
+                    ranking_profile="source_content",
+                    limit=5,
+                    source_codes=["workorders"],
+                )
+                hidden = memory_search(
+                    actor=self.outsider,
+                    query="universal workorder alpha",
+                    search_mode="source_explicit",
+                    include_source_data=True,
+                    ranking_profile="source_content",
+                    limit=5,
+                    source_codes=["workorders"],
+                )
+
+        self.assertTrue(MemorySearchDocument.objects.filter(source_object__source__code="workorders").exists())
+        self.assertEqual(visible["items"][0]["source_object_id"], str(workorder.pk))
+        self.assertEqual(visible["items"][0]["kind"], "source_data")
+        self.assertEqual(hidden["items"], [])
+        self.assertTrue(AnalyticsContentObject.objects.filter(source__code="workorders", source_object_id=str(workorder.pk)).exists())
+        self.assertTrue(AnalyticsFact.objects.filter(fact_type="workorder_created").exists())
+
+    def test_waiting_list_adapter_uses_pii_off_without_pii_audit(self):
+        entry = WaitingListEntry.objects.create(
+            author=self.customer,
+            patient_name="Скрытый Пациент",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+            comment="Контрольный маркер waiting-list-beta для поиска.",
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            with self.settings(DATA_DIR=Path(tmpdir) / "data", LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled"):
+                call_command("source_adapter_reconcile", source_code="waiting_list", target="all", backend="fulltext", verbosity=0)
+                from .retrieval import memory_search
+
+                result = memory_search(
+                    actor=self.manager,
+                    query="waiting list beta",
+                    search_mode="source_explicit",
+                    include_source_data=True,
+                    ranking_profile="source_content",
+                    limit=5,
+                    source_codes=["waiting_list"],
+                )
+
+        self.assertEqual(result["items"][0]["source_object_id"], str(entry.pk))
+        self.assertFalse(
+            MemoryIngestionIssue.objects.filter(
+                source__code="waiting_list",
+                issue_kind=MemoryIngestionIssue.IssueKind.PII_AUDIT,
+            ).exists()
+        )
+        source_object = MemorySourceObject.objects.get(source__code="waiting_list", object_id=str(entry.pk))
+        self.assertNotIn("Скрытый Пациент", (source_object.metadata or {}).get("safe_text", ""))
+        self.assertTrue(AnalyticsFact.objects.filter(fact_type="waiting_list_entry_created").exists())
 
 
 class MemoryPrivacyPipelineTests(MemoryModelFactoryMixin, TestCase):

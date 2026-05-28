@@ -206,6 +206,18 @@ class TestPromptMemorySection(unittest.TestCase):
         self.assertIn("MEMORY_DEPLOYMENT.md", prompt)
 
 
+class TestPromptUiContextSection(unittest.TestCase):
+    """Verify context-aware sidebar guidance is present."""
+
+    def test_build_system_prompt_includes_ui_context_tool(self):
+        from services.agent_runtime.prompting import build_system_prompt
+
+        prompt = build_system_prompt()
+
+        self.assertIn("ui.get_current_context", prompt)
+        self.assertIn("эта заявка", prompt)
+
+
 class TestRuntimeMemoryTool(unittest.TestCase):
     """Verify the LangGraph runtime exposes memory tools to the model."""
 
@@ -227,6 +239,7 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         )
 
         tool_names = {tool.name for tool in tools}
+        self.assertIn("ui.get_current_context", tool_names)
         self.assertIn("memory.search", tool_names)
         self.assertIn("memory.remember", tool_names)
         self.assertIn("memory.update_personal", tool_names)
@@ -310,6 +323,40 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         self.assertEqual(gateway.calls[0]["session_id"], "session-1")
         self.assertEqual(gateway.calls[0]["payload"]["session_id"], "session-1")
         self.assertEqual(gateway.calls[0]["payload"]["target_scope"], "personal")
+
+    def test_ui_context_tool_forwards_actor_context(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "result": {"status": "ok"}}
+
+        gateway = FakeGatewayClient()
+        actor = {
+            "user_id": 1,
+            "channel": "sidebar",
+            "page_context": {"context_snapshot_id": 17, "page_context_present": True},
+        }
+        tools = build_tools(
+            actor=actor,
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="sidebar",
+            actor_version="v1",
+        )
+        context_tool = next(tool for tool in tools if tool.name == "ui.get_current_context")
+
+        result = context_tool.invoke({})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "ui.get_current_context")
+        self.assertEqual(gateway.calls[0]["actor"]["page_context"]["context_snapshot_id"], 17)
 
 
 if __name__ == "__main__":

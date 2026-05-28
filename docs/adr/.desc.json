@@ -16,5 +16,8 @@
   "ADR-0014-mlflow-memory-evaluation-and-tracing.md": "ADR: MLflow для оценки качества и трассировки системы памяти",
   "ADR-0015-file-content-fts-vector-search.md": "ADR: FTS и векторный поиск по содержимому файлов",
   "ADR-0016-memory-hybrid-ranking-profiles.md": "ADR: Профили гибридного ранжирования памяти",
-  "ADR-0017-memory-audit-review-ui.md": "ADR: UI аудита и ревью проблем памяти и поискового индекса"
+  "ADR-0017-memory-audit-review-ui.md": "ADR: UI аудита и ревью проблем памяти и поискового индекса",
+  "ADR-0018-universal-source-adapters-memory-analytics.md": "ADR: Универсальные источники для памяти и аналитики",
+  "ADR-0019-context-aware-sidebar-ai-chat.md": "ADR: Контекстный ИИ-чат в левой боковой панели",
+  "ADR-0020-universal-right-drawer-ai-navigation.md": "ADR: Универсальное открытие правого сайдбара ИИ-ботом"
 }

@@ -9,6 +9,7 @@ class MemorySource(models.Model):
     class Status(models.TextChoices):
         ENABLED = "enabled", "Enabled"
         DISABLED = "disabled", "Disabled"
+        MISSING_ADAPTER = "missing_adapter", "Missing adapter"
         ERROR = "error", "Error"
 
     class TrustStatus(models.TextChoices):

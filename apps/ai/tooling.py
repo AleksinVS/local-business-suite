@@ -5,6 +5,7 @@ from django.utils import timezone
 from apps.workorders.models import WorkOrder
 
 from .models import AgentActionLog, ChatMessage, PendingAction
+from .page_context import get_bound_page_context_for_actor
 from .services import (
     append_chat_message,
     add_comment_for_actor,
@@ -71,6 +72,8 @@ def _build_task_type_report(tool_code: str, payload: dict) -> dict:
 
 def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_message):
     """Execute the tool logic and return the result dict or raise an exception."""
+    if tool_code == "ui.get_current_context":
+        return get_bound_page_context_for_actor(actor_context)
     if tool_code == "workorders.list":
         return {
             "items": list_workorders_for_actor(
@@ -87,6 +90,20 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
                 number=payload.get("number"),
             )
         }
+    elif tool_code == "workorders.search":
+        from apps.memory.retrieval import memory_search
+
+        return memory_search(
+            actor=actor,
+            query=payload.get("query"),
+            sensitivity="internal",
+            limit=payload.get("limit", 5),
+            request_id=actor_context.get("request_id", ""),
+            search_mode="source_explicit",
+            include_source_data=True,
+            ranking_profile="source_content",
+            source_codes=["workorders"],
+        )
     elif tool_code == "workorders.create":
         return create_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.transition":
@@ -202,6 +219,10 @@ def execute_tool(
         "request_id": request_id,
         "origin_channel": origin_channel,
         "actor_version": actor_version,
+        "page_context_present": bool((actor_context.get("page_context") or {}).get("page_context_present")),
+        "context_snapshot_id": (actor_context.get("page_context") or {}).get("context_snapshot_id"),
+        "context_hint": (actor_context.get("page_context") or {}).get("context_hint", actor_context.get("context_hint", "")),
+        "context_tool_called": tool_code == "ui.get_current_context",
     }
 
     user_message = None

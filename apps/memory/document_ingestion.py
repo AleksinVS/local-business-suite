@@ -9,6 +9,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.source_adapters import resolve_privacy_profile
+
 from .acl import acl_blocks_ingestion, resolve_file_acl, scope_tokens_for_source_object
 from .models import (
     MemoryGraphEntity,
@@ -543,7 +545,8 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
                 },
             }
         partial_reason = forced_partial_reason or extracted.partial_reason
-        pii_findings = detect_pii(extracted.text, secret_key=settings.SECRET_KEY)
+        privacy_profile = _privacy_profile_for_source(source_object.source)
+        pii_findings = detect_pii(extracted.text, secret_key=settings.SECRET_KEY) if privacy_profile.detect else ()
         metadata = {
             **base["metadata"],
             "extraction": extracted.metadata,
@@ -553,7 +556,7 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
             "issue_kind": MemoryIngestionIssue.IssueKind.PII_AUDIT,
             "severity": MemoryIngestionIssue.Severity.WARNING,
             "message": "PII-like data was detected; document will be indexed and queued for audit.",
-        } if pii_findings else {}
+        } if pii_findings and privacy_profile.audit else {}
         if extracted.partial or forced_partial_reason:
             return {
                 **base,
@@ -595,7 +598,8 @@ def ingest_source_object_text(
     secret_scan = scan_for_secrets(index_body)
     if secret_scan.blocked:
         raise ValueError(secret_scan.reason or "Source object was blocked by secret scanning.")
-    pii_findings = detect_pii(index_body, secret_key=settings.SECRET_KEY)
+    privacy_profile = _privacy_profile_for_source(source)
+    pii_findings = detect_pii(index_body, secret_key=settings.SECRET_KEY) if privacy_profile.detect else ()
     document_id = _source_document_id(source_object)
     selected_backends = set(index_backends or ())
     fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
@@ -706,6 +710,15 @@ def _source_document_id(source_object: MemorySourceObject):
 
 def sha256_text(value: str):
     return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
+
+
+def _privacy_profile_for_source(source: MemorySource):
+    return resolve_privacy_profile(
+        explicit_profile=(source.config or {}).get("privacy_profile", ""),
+        pii_policy=source.pii_policy,
+        source_origin=(source.config or {}).get("source_origin", ""),
+        source_kind=source.source_kind,
+    )
 
 
 def _safe_secret_findings(findings):

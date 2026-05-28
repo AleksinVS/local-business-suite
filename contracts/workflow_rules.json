@@ -10,28 +10,60 @@
   ],
   "transitions": {
     "accepted": [
+      "new",
       "in_progress",
       "on_hold",
+      "resolved",
+      "closed",
       "cancelled"
     ],
-    "cancelled": [],
-    "closed": [],
-    "in_progress": [
+    "cancelled": [
+      "new",
+      "accepted",
+      "in_progress",
+      "on_hold",
+      "resolved",
+      "closed"
+    ],
+    "closed": [
+      "new",
+      "accepted",
+      "in_progress",
       "on_hold",
       "resolved",
       "cancelled"
     ],
+    "in_progress": [
+      "new",
+      "accepted",
+      "on_hold",
+      "resolved",
+      "closed",
+      "cancelled"
+    ],
     "new": [
       "accepted",
+      "in_progress",
+      "on_hold",
+      "resolved",
+      "closed",
       "cancelled"
     ],
     "on_hold": [
+      "new",
+      "accepted",
       "in_progress",
+      "resolved",
+      "closed",
       "cancelled"
     ],
     "resolved": [
+      "new",
+      "accepted",
+      "in_progress",
+      "on_hold",
       "closed",
-      "in_progress"
+      "cancelled"
     ]
   }
 }

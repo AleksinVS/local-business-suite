@@ -1,0 +1,47 @@
+{
+  "task_id": "03-workorders-and-waiting-list-providers",
+  "status": "proposed",
+  "title": "Workorders and waiting-list right panel providers",
+  "goal": "Register module-owned providers for workorders and waiting-list entries.",
+  "read_scope": [
+    "apps/workorders/views.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/policies.py",
+    "templates/workorders/partials/detail_panel.html",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/policies.py",
+    "templates/waiting_list/partials/entry_detail_panel.html"
+  ],
+  "write_scope": [
+    "apps/workorders/right_panel.py",
+    "apps/workorders/apps.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/right_panel.py",
+    "apps/waiting_list/apps.py",
+    "apps/waiting_list/tests.py",
+    "templates/waiting_list/partials/entry_detail_panel.html",
+    "apps/workorders/.desc.json",
+    "apps/waiting_list/.desc.json"
+  ],
+  "requirements": [
+    "Workorders provider must use source_code=workorders and object_type=workorder.",
+    "Waiting-list provider must use source_code=waiting_list and object_type=waiting_list_entry.",
+    "Both providers support only mode=view in MVP.",
+    "Both providers must check domain access before returning a descriptor.",
+    "Providers must build htmx_url through reverse(), not string concatenation where avoidable.",
+    "Waiting-list detail partial must publish safe data-ai-context selection if it does not already.",
+    "Do not duplicate detail rendering logic; reuse existing views/partials."
+  ],
+  "acceptance": [
+    "Visible workorder returns descriptor.",
+    "Foreign workorder is denied.",
+    "Visible waiting-list entry returns descriptor.",
+    "User without waiting-list access is denied.",
+    "Existing module tests still pass."
+  ],
+  "verification": [
+    "python manage.py test apps.workorders.tests apps.waiting_list.tests",
+    "python manage.py check"
+  ]
+}
+

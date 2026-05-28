@@ -3,12 +3,14 @@ import uuid
 import logging
 import hmac
 import hashlib
+import time
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpResponse
 from django.views import View
@@ -21,10 +23,19 @@ from apps.workorders.policies import can_manage_inventory
 from .commands import get_predefined_commands, resolve_command, resolve_custom_command
 from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
+from .chat_settings import CHAT_SURFACE_FULL_PAGE, CHAT_SURFACE_SIDEBAR, get_chat_settings
+from .page_context import (
+    bind_page_context_to_message,
+    build_runtime_page_context,
+    sanitize_page_context_envelope,
+    update_window_context_snapshot,
+)
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import (
     append_chat_message,
+    compact_sidebar_session,
     generate_session_title,
+    get_or_create_sidebar_session,
     normalize_session_external_id,
     serialize_session_history,
 )
@@ -36,6 +47,7 @@ CHAT_RUNTIME_ERROR_MESSAGE = (
     "Не удалось получить ответ от AI-сервиса. Причина: {reason}. "
     "Технический идентификатор: {request_id}."
 )
+PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
 
 
 def classify_chat_runtime_error(exc):
@@ -53,6 +65,18 @@ def classify_chat_runtime_error(exc):
     if isinstance(exc, AgentRuntimeError):
         return "agent_runtime_error", "AI-сервис вернул ошибку"
     return "chat_stream_error", "внутренняя ошибка обработки чата"
+
+
+def allow_page_context_update(user_id) -> bool:
+    bucket = int(time.time() // 60)
+    cache_key = f"ai:page-context-rate:{user_id}:{bucket}"
+    cache.add(cache_key, 0, timeout=90)
+    try:
+        count = cache.incr(cache_key)
+    except ValueError:
+        cache.set(cache_key, 1, timeout=90)
+        count = 1
+    return count <= PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE
 
 
 def build_chat_error_payload(*, exc, request_id, conversation_id, technical_trace_id=None):
@@ -177,6 +201,38 @@ def validate_gateway_actor(actor_context, session_id=None):
         return JsonResponse({"error": "Actor does not match session owner."}, status=403)
     return None
 
+
+def chat_surface_from_request(request, default=CHAT_SURFACE_FULL_PAGE):
+    surface = request.POST.get("surface") or default
+    return CHAT_SURFACE_SIDEBAR if surface == CHAT_SURFACE_SIDEBAR else CHAT_SURFACE_FULL_PAGE
+
+
+def bind_request_context_to_message(request, user_msg):
+    return bind_page_context_to_message(
+        user=request.user,
+        message=user_msg,
+        window_id=request.POST.get("window_id", ""),
+        context_version=request.POST.get("context_version", ""),
+        context_hint=request.POST.get("context_hint", ""),
+    )
+
+
+def context_trace_metadata(user_msg):
+    runtime_context = build_runtime_page_context(user_msg)
+    digest = runtime_context.get("digest") or {}
+    return {
+        "page_context_present": runtime_context.get("page_context_present", False),
+        "page_context_status": runtime_context.get("page_context_status", ""),
+        "context_snapshot_id": runtime_context.get("context_snapshot_id"),
+        "window_id": runtime_context.get("window_id", ""),
+        "context_version": runtime_context.get("context_version") or 0,
+        "context_hash": runtime_context.get("context_hash", ""),
+        "context_hint": runtime_context.get("context_hint", ""),
+        "module": digest.get("module", ""),
+        "object_type": digest.get("object_type", ""),
+        "object_id_hash": digest.get("object_id_hash", ""),
+    }
+
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_manage_inventory(self.request.user)
@@ -201,7 +257,11 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
         create_new = self.request.GET.get("new") == "1"
         if not create_new:
             session = (
-                ChatSession.objects.filter(user=self.request.user, status=ChatSession.Status.ACTIVE)
+                ChatSession.objects.filter(
+                    user=self.request.user,
+                    status=ChatSession.Status.ACTIVE,
+                    channel=ChatSession.Channel.INTERNAL,
+                )
                 .order_by("-updated_at", "-id")
                 .first()
             )
@@ -236,12 +296,76 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+class AISidebarChatView(LoginRequiredMixin, TemplateView):
+    template_name = "ai/partials/sidebar_chat.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = get_or_create_sidebar_session(self.request.user)
+        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+        recent_limit = int(settings_payload.get("recent_message_limit", 8))
+        messages_qs = session.messages.prefetch_related("attachments").order_by("-created_at", "-id")[:recent_limit]
+        sidebar_messages = list(messages_qs)
+        sidebar_messages.reverse()
+        context.update(
+            {
+                "sidebar_chat_session": session,
+                "sidebar_chat_messages": sidebar_messages,
+                "sidebar_ai_models": settings.LOCAL_BUSINESS_AI_MODELS,
+                "sidebar_current_model_id": session.metadata.get("model_id", ""),
+                "sidebar_chat_settings": settings_payload,
+                "sidebar_predefined_commands": get_predefined_commands(),
+                "sidebar_custom_commands": list(
+                    SlashCommand.objects.filter(user=self.request.user).values(
+                        "id", "name", "shortcut", "description", "template"
+                    )
+                ),
+            }
+        )
+        return context
+
+
+class AIPageContextUpdateView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        if not allow_page_context_update(request.user.id):
+            return JsonResponse({"error": "Too many page context updates."}, status=429)
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+        try:
+            sanitized = sanitize_page_context_envelope(payload)
+            result = update_window_context_snapshot(request.user, sanitized)
+        except ValidationError as exc:
+            return JsonResponse({"error": exc.messages[0] if hasattr(exc, "messages") else str(exc)}, status=400)
+        except PermissionDenied:
+            return JsonResponse({"error": "Context object is not available."}, status=403)
+        snapshot = result.snapshot
+        return JsonResponse(
+            {
+                "status": "ok",
+                "created": result.created,
+                "window_id": snapshot.window_id,
+                "context_version": snapshot.context_version,
+                "context_hash": snapshot.context_hash,
+                "context_hint": snapshot.resolved_summary.get("context_hint", ""),
+            }
+        )
+
+
 class AIChatMessageCreateView(LoginRequiredMixin, View):
     def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
 
         prompt = request.POST.get("prompt", "").strip()
         model_id = request.POST.get("model_id", "") or session.metadata.get("model_id", "")
+        surface = chat_surface_from_request(request, default=CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE)
+        chat_settings = get_chat_settings(surface)
+        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
+        if len(prompt) > max_prompt_chars:
+            prompt = prompt[:max_prompt_chars]
         files = request.FILES.getlist("files")
 
         # --- Slash command resolution ---
@@ -294,8 +418,10 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 "conversation_id": conversation_id,
                 "request_id": request_id,
                 "origin_channel": session.channel,
+                "surface": surface,
             },
         )
+        bind_request_context_to_message(request, user_msg)
 
         # Handle attachments
         for f in files:
@@ -317,6 +443,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             )
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            compact_sidebar_session(session)
             return JsonResponse({"status": "ok", "message_id": user_msg.id, "model_id": model_id})
 
         # Non-AJAX fallback (synchronous call)
@@ -330,6 +457,9 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 request_id=request_id,
                 origin_channel=session.channel,
                 model_id=model_id,
+                page_context=build_runtime_page_context(user_msg)
+                if chat_settings.get("context_tool_enabled", True)
+                else {},
             )
         except AgentRuntimeError as exc:
             payload = record_chat_runtime_error(
@@ -368,6 +498,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 "tool_trace": tool_trace,
                 "conversation_id": runtime_conversation_id,
                 "request_id": runtime_request_id,
+                **context_trace_metadata(user_msg),
             },
         )
 
@@ -377,6 +508,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             "request_ids": [*session.metadata.get("request_ids", []), runtime_request_id],
         }
         session.save(update_fields=["metadata", "updated_at"])
+        compact_sidebar_session(session)
 
         return redirect("ai:chat_detail", external_id=session.external_id)
 
@@ -390,8 +522,12 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON body."}, status=400)
         msg_id = body.get("msg_id")
         prompt = body.get("prompt", "")
-        if len(prompt) > 10000:
-            prompt = prompt[:10000]
+        surface = body.get("surface") or (CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE)
+        surface = CHAT_SURFACE_SIDEBAR if surface == CHAT_SURFACE_SIDEBAR else CHAT_SURFACE_FULL_PAGE
+        chat_settings = get_chat_settings(surface)
+        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
+        if len(prompt) > max_prompt_chars:
+            prompt = prompt[:max_prompt_chars]
         model_id = body.get("model_id", "") or session.metadata.get("model_id", "")
 
         conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
@@ -411,7 +547,15 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     "conversation_id": conversation_id,
                     "request_id": request_id,
                     "origin_channel": session.channel,
+                    "surface": surface,
                 },
+            )
+            bind_page_context_to_message(
+                user=request.user,
+                message=user_msg,
+                window_id=body.get("window_id", ""),
+                context_version=body.get("context_version", ""),
+                context_hint=body.get("context_hint", ""),
             )
         else:
             return JsonResponse({"error": "Prompt or msg_id is required."}, status=400)
@@ -430,6 +574,9 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     request_id=request_id,
                     origin_channel=session.channel,
                     model_id=model_id,
+                    page_context=build_runtime_page_context(user_msg)
+                    if chat_settings.get("context_tool_enabled", True)
+                    else {},
                 ):
                     yield f"{event}\n\n"
 
@@ -474,9 +621,11 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     metadata={
                         "conversation_id": conversation_id,
                         "request_id": request_id,
-                        "streamed": True
+                        "streamed": True,
+                        **context_trace_metadata(user_msg),
                     },
                 )
+                compact_sidebar_session(session)
 
         return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
 

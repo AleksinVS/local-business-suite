@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -73,6 +75,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         context["descriptor"] = self.descriptor
         context["is_contract"] = self.descriptor.storage_kind == "runtime_contract"
         context["can_edit"] = self.descriptor.is_editable
+        context["is_workflow_transition_matrix"] = self.descriptor.widget == "workflow_transition_matrix"
         return context
 
     def form_valid(self, form):
@@ -111,6 +114,99 @@ class SettingDetailView(SettingsManagementMixin, FormView):
             return self.form_invalid(form)
         messages.success(self.request, f"Настройка применена. Audit #{change.pk}.")
         return redirect("settings_center:setting_detail", setting_id=self.descriptor.setting_id)
+
+
+class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
+    template_name = "settings_center/workflow_transitions.html"
+    setting_id = "core.contract.workflow_rules"
+
+    def get_descriptor(self):
+        return get_registry().get(self.setting_id)
+
+    def get_payload(self):
+        return read_contract_value(self.get_descriptor())
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        descriptor = self.get_descriptor()
+        payload = self.get_payload()
+        statuses = payload.get("statuses", [])
+        transitions = payload.get("transitions", {})
+        rows = []
+        allowed_count = 0
+        possible_count = 0
+        for source in statuses:
+            cells = []
+            enabled_targets = set(transitions.get(source, []))
+            for target in statuses:
+                is_self = source == target
+                enabled = target in enabled_targets
+                if not is_self:
+                    possible_count += 1
+                    if enabled:
+                        allowed_count += 1
+                cells.append(
+                    {
+                        "target": target,
+                        "enabled": enabled,
+                        "is_self": is_self,
+                        "field_name": f"transition__{source}__{target}",
+                    }
+                )
+            rows.append({"source": source, "cells": cells})
+        context.update(
+            {
+                "descriptor": descriptor,
+                "statuses": statuses,
+                "rows": rows,
+                "allowed_count": allowed_count,
+                "possible_count": possible_count,
+                "raw_payload": pretty_json(payload),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        descriptor = self.get_descriptor()
+        before = self.get_payload()
+        statuses = before.get("statuses", [])
+        action = request.POST.get("action", "apply_matrix")
+        after = {
+            "statuses": statuses,
+            "transitions": self._build_transitions(
+                statuses=statuses,
+                post=request.POST,
+                mode=action,
+            ),
+        }
+        try:
+            change = apply_contract_payload(
+                actor=request.user,
+                setting_id=descriptor.setting_id,
+                raw_payload=json.dumps(after, ensure_ascii=False),
+                confirmed=request.POST.get("confirm") == "on",
+            )
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
+            return self.render_to_response(self.get_context_data())
+        messages.success(request, f"Переходы сохранены. Audit #{change.pk}.")
+        return redirect("settings_center:workflow_transitions")
+
+    @staticmethod
+    def _build_transitions(*, statuses, post, mode):
+        transitions = {}
+        for source in statuses:
+            if mode == "allow_all":
+                transitions[source] = [target for target in statuses if target != source]
+            elif mode == "deny_all":
+                transitions[source] = []
+            else:
+                transitions[source] = [
+                    target
+                    for target in statuses
+                    if target != source and post.get(f"transition__{source}__{target}") == "on"
+                ]
+        return transitions
 
 
 class EnvStatusView(SettingsManagementMixin, TemplateView):

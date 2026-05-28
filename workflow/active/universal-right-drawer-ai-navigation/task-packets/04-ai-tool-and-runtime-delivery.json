@@ -1,0 +1,54 @@
+{
+  "task_id": "04-ai-tool-and-runtime-delivery",
+  "status": "proposed",
+  "title": "AI tool and runtime UI command delivery",
+  "goal": "Expose ui.open_right_panel to the AI runtime and deliver safe UI commands to browser chat clients.",
+  "read_scope": [
+    "contracts/ai/tools.json",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/views.py",
+    "static/src/js/ai_chat.js",
+    "static/src/js/sidebar_chat.js",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/tests/test_normalization.py"
+  ],
+  "write_scope": [
+    "contracts/ai/tools.json",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/tests.py",
+    "static/src/js/ai_chat.js",
+    "static/src/js/sidebar_chat.js",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/tests/test_normalization.py"
+  ],
+  "requirements": [
+    "Add ui.open_right_panel as a read/UI-state tool, not a business write tool.",
+    "Inputs: source_code, object_type, object_id and optional mode=view.",
+    "Tool must call RightPanelProvider registry and return a ui_command descriptor.",
+    "Tool must not require confirmation.",
+    "Tool audit must store safe identifiers only.",
+    "Agent prompt must say to use the tool only when the user asks to open/show an object in the interface.",
+    "Full-page chat client must execute ui_command results.",
+    "Sidebar chat client must execute ui_command results.",
+    "Streaming and non-streaming responses must both handle UI command delivery or clearly choose one supported path for MVP."
+  ],
+  "acceptance": [
+    "Runtime tool list contains ui.open_right_panel.",
+    "Tool call for visible object returns ok and a command.",
+    "Tool call for denied object returns ok=false or safe denial without opening.",
+    "Browser executes command and opens the global drawer.",
+    "Existing write confirmation flow is unchanged."
+  ],
+  "verification": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization",
+    "node --check static/src/js/ai_chat.js",
+    "node --check static/src/js/sidebar_chat.js"
+  ]
+}
+

@@ -73,6 +73,10 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.workorder.save()
         self.assertTrue(can_transition(self.technician, self.workorder, WorkOrderStatus.IN_PROGRESS))
 
+    def test_default_workflow_allows_non_terminal_status_jumps_for_manager(self):
+        self.assertTrue(can_transition(self.manager, self.workorder, WorkOrderStatus.IN_PROGRESS))
+        self.assertTrue(can_transition(self.manager, self.workorder, WorkOrderStatus.RESOLVED))
+
     def test_customer_can_confirm_closure_only_after_resolved(self):
         self.assertFalse(can_confirm_closure(self.customer, self.workorder))
         self.workorder.status = WorkOrderStatus.RESOLVED

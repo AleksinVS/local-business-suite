@@ -14,6 +14,7 @@ from django.utils import timezone
 from apps.core.models import Department
 from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
+from apps.waiting_list.services import create_entry
 
 User = get_user_model()
 RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
@@ -111,6 +112,67 @@ class AIViewsTests(TestCase):
         self.assertEqual(AgentActionLog.objects.count(), 1)
         self.assertEqual(ChatSession.objects.count(), 1)
 
+    def test_open_right_panel_tool_returns_ui_command_for_visible_workorder(self):
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
+                    "payload": {
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": str(self.customer_workorder.pk),
+                        "mode": "view",
+                    },
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        command = payload["result"]["ui_command"]
+        self.assertEqual(command["type"], "open_right_panel")
+        self.assertEqual(command["source_code"], "workorders")
+        self.assertEqual(command["object_id"], str(self.customer_workorder.pk))
+        self.assertEqual(command["target"], "#global-right-panel-content")
+        self.assertTrue(command["htmx_url"].startswith("/"))
+
+    def test_open_right_panel_tool_denies_foreign_workorder(self):
+        private_group, _ = Group.objects.get_or_create(name="private-ai-panel")
+        private_board = Board.objects.create(title="Private Board", slug="private-ai-panel")
+        private_board.allowed_groups.add(private_group)
+        foreign = WorkOrder.objects.create(
+            title="Чужая заявка",
+            description="Недоступна",
+            department=self.department,
+            author=self.manager,
+            board=private_board,
+            status=WorkOrderStatus.NEW,
+        )
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
+                    "payload": {
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": str(foreign.pk),
+                    },
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIsNone(payload["result"])
+
     def test_workorders_search_tool_uses_memory_source_adapter_index(self):
         self.customer_workorder.description = "Маркер ai-wrapper-workorder-gamma для поиска."
         self.customer_workorder.save(update_fields=["description", "updated_at"])
@@ -192,6 +254,38 @@ class AIViewsTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_page_context_update_resolves_waiting_list_entry(self):
+        entry = create_entry(
+            author=self.customer,
+            patient_name="Контекстный Пациент",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+        )
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("ai:page_context_update"),
+            data=json.dumps(
+                {
+                    "schema_version": "1",
+                    "window_id": "window-waiting-list-test",
+                    "page": {"module": "waiting_list", "view": "detail"},
+                    "selection": {
+                        "object_type": "waiting_list_entry",
+                        "object_id": str(entry.pk),
+                        "source_code": "waiting_list",
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = AIWindowContextSnapshot.objects.get(window_id="window-waiting-list-test")
+        self.assertEqual(snapshot.resolved_summary["selection"]["object_id"], str(entry.pk))
+        self.assertEqual(snapshot.resolved_summary["selection"]["service_id"], "s1")
+        self.assertIn("can_transition", snapshot.resolved_summary["capabilities"])
 
     def test_chat_message_submit_binds_immutable_page_context_snapshot(self):
         self.client.force_login(self.manager)
@@ -321,6 +415,28 @@ class AIViewsTests(TestCase):
         self.assertContains(detail_response, "AI чат")
         self.assertContains(detail_response, 'class="ai-session-sidebar"')
         self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
+
+    def test_sidebar_chat_clear_deletes_sidebar_messages_and_summary(self):
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(
+            user=self.customer,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Боковой чат",
+            metadata={"model_id": "test-model", "sidebar_summary": {"text": "старое резюме"}},
+        )
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Старый вопрос")
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.ASSISTANT, content="Старый ответ")
+
+        response = self.client.post(reverse("ai:sidebar_chat_clear"), HTTP_HX_REQUEST="true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Задайте вопрос по текущей странице")
+        self.assertContains(response, 'aria-label="Очистить чат"')
+        self.assertEqual(ChatMessage.objects.filter(session=session).count(), 0)
+        session.refresh_from_db()
+        self.assertIsNone(session.last_message_at)
+        self.assertEqual(session.metadata.get("model_id"), "test-model")
+        self.assertNotIn("sidebar_summary", session.metadata)
 
     def test_tool_gateway_accepts_non_uuid_session_id(self):
         response = self.client.post(

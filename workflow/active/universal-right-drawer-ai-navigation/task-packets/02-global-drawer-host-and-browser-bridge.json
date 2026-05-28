@@ -1,6 +1,6 @@
 {
   "task_id": "02-global-drawer-host-and-browser-bridge",
-  "status": "proposed",
+  "status": "completed",
   "title": "Global right drawer host and browser bridge",
   "goal": "Add a shared right drawer container and a browser API that can execute safe panel open commands.",
   "read_scope": [
@@ -37,4 +37,3 @@
     "npm run test:e2e -- --project=chromium"
   ]
 }
-

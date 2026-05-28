@@ -17,6 +17,7 @@ from .policies import (
     can_transition,
     can_view,
 )
+from .right_panel import WorkOrderRightPanelProvider
 from .services import confirm_closure, transition_workorder
 
 User = get_user_model()
@@ -221,6 +222,33 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'drawer-header')
         self.assertContains(response, self.workorder.title)
+
+    def test_right_panel_provider_returns_descriptor_for_visible_workorder(self):
+        provider = WorkOrderRightPanelProvider()
+
+        descriptor = provider.build_panel(self.customer, str(self.workorder.pk))
+
+        self.assertTrue(provider.can_open(self.customer, str(self.workorder.pk)))
+        self.assertEqual(descriptor.source_code, "workorders")
+        self.assertEqual(descriptor.object_type, "workorder")
+        self.assertEqual(descriptor.object_id, str(self.workorder.pk))
+        self.assertEqual(descriptor.drawer_size, "large")
+        self.assertIn(reverse("workorders:detail", args=[self.workorder.pk]), descriptor.htmx_url)
+
+    def test_right_panel_provider_denies_foreign_workorder(self):
+        private_group, _ = Group.objects.get_or_create(name="private-right-panel")
+        private_board = Board.objects.create(title="Private Board", slug="private-right-panel")
+        private_board.allowed_groups.add(private_group)
+        foreign = WorkOrder.objects.create(
+            title="Чужая заявка",
+            description="Недоступна",
+            department=self.sub_department,
+            author=self.manager,
+            board=private_board,
+        )
+        provider = WorkOrderRightPanelProvider()
+
+        self.assertFalse(provider.can_open(self.customer, str(foreign.pk)))
 
     def test_board_can_restore_empty_detail_panel(self):
         self.client.force_login(self.customer)

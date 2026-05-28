@@ -42,6 +42,37 @@
 
 После добавления selection нужно добавить server-side resolver в `apps.ai.page_context.resolve_page_context()`. Resolver обязан проверять видимость объекта для пользователя и возвращать только безопасную сводку.
 
+## Открытие правой панели из ИИ-чата
+
+ИИ может открыть объект справа через tool `ui.open_right_panel`. Инструмент принимает только безопасные идентификаторы:
+
+```json
+{
+  "source_code": "workorders",
+  "object_type": "workorder",
+  "object_id": "123",
+  "mode": "view"
+}
+```
+
+Модель не передает URL и HTML. Django находит зарегистрированный `RightPanelProvider`, проверяет доступ, строит локальный `htmx_url` и возвращает браузеру `ui_command`. Браузерный мост `LocalBusinessRightPanel` загружает существующий partial в общий правый сайдбар и обновляет `PageContextEnvelope`.
+
+Поддержанные MVP-провайдеры:
+
+- `workorders / workorder`;
+- `waiting_list / waiting_list_entry`.
+
+Чтобы подключить новый модуль:
+
+1. Добавьте `apps/<module>/right_panel.py` с provider для своего `source_code/object_type`.
+2. В `can_open()` используйте доменные selectors/policies.
+3. В `build_panel()` верните `RightPanelDescriptor` с URL на существующий HTMX detail partial.
+4. Зарегистрируйте provider в `AppConfig.ready()`.
+5. Добавьте `data-ai-context` в detail partial и resolver в `apps.ai.page_context.resolve_page_context()`.
+6. Покройте provider unit-тестом и e2e-сценарием открытия из страницы `AI чат`.
+
+Для MVP поддерживается только `mode=view`. Редактирование, создание, комментарии и переходы статусов остаются отдельными доменными инструментами с прежними проверками прав.
+
 ## Настройки
 
 Общие настройки полной страницы и sidebar-чата лежат в контракте:
@@ -75,6 +106,8 @@ Sidebar-сессия компактируется после новых сооб
 
 UI просмотра или ручной перегенерации summary в MVP нет.
 
+Встроенный sidebar-чат можно очистить кнопкой в заголовке панели. Очистка удаляет сообщения только текущей `sidebar`-сессии и сбрасывает `sidebar_summary`; обычные full-page чаты не затрагиваются.
+
 ## Проверка
 
 Базовые команды:
@@ -82,7 +115,7 @@ UI просмотра или ручной перегенерации summary в 
 ```bash
 python manage.py check
 python manage.py validate_architecture_contracts
-python manage.py test apps.ai.tests apps.workorders.tests
+python manage.py test apps.core.tests apps.ai.tests apps.workorders.tests apps.waiting_list.tests
 python -m unittest services.agent_runtime.tests.test_normalization
 ```
 

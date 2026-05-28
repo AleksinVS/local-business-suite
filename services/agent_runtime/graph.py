@@ -15,6 +15,18 @@ from .task_types import resolve_task_type_for_tool
 from .tools import build_tools
 
 
+def _extract_ui_command(tool_result):
+    if not isinstance(tool_result, dict):
+        return None
+    result = tool_result.get("result")
+    if not isinstance(result, dict):
+        return None
+    command = result.get("ui_command")
+    if isinstance(command, dict) and command.get("type") == "open_right_panel":
+        return command
+    return None
+
+
 def _history_to_messages(history):
     messages = []
     for item in history:
@@ -83,6 +95,7 @@ def run_agent(
     # Dynamic state for instructions
     current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
     tool_trace = []
+    ui_commands = []
 
     @task
     def call_llm(messages):
@@ -120,6 +133,9 @@ def run_agent(
         if resolution:
             trace_entry.update(resolution.to_trace_dict())
         tool_trace.append(trace_entry)
+        ui_command = _extract_ui_command(result)
+        if ui_command:
+            ui_commands.append(ui_command)
         return result
 
     @entrypoint()
@@ -140,6 +156,7 @@ def run_agent(
     return {
         "assistant_message": assistant_message,
         "tool_trace": tool_trace,
+        "ui_commands": ui_commands,
         "conversation_id": conversation_id,
         "request_id": request_id,
     }
@@ -202,6 +219,7 @@ def stream_agent(
     # Dynamic state for instructions — updated when activate_skill succeeds
     current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
     tool_trace = []
+    ui_commands = []
 
     @task
     def call_llm(messages):
@@ -239,6 +257,9 @@ def stream_agent(
         if resolution:
             trace_entry.update(resolution.to_trace_dict())
         tool_trace.append(trace_entry)
+        ui_command = _extract_ui_command(result)
+        if ui_command:
+            ui_commands.append(ui_command)
         return result
 
     @entrypoint()
@@ -266,3 +287,5 @@ def stream_agent(
             if ai_yielded <= history_ai_count:
                 continue
             yield msg.content
+    for command in ui_commands:
+        yield {"ui_command": command}

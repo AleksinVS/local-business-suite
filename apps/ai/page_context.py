@@ -17,6 +17,12 @@ from apps.workorders.policies import (
 )
 from apps.workorders.selectors import visible_workorders_queryset
 from apps.workorders.models import WorkOrder, WorkOrderStatus
+from apps.waiting_list.models import WaitingListEntry, WaitingListStatus
+from apps.waiting_list.policies import (
+    can_edit_waiting_list_entry,
+    can_transition_waiting_list_entry,
+    can_view_waiting_list,
+)
 
 from .models import AIWindowContextSnapshot, ChatMessage
 
@@ -136,6 +142,40 @@ def resolve_page_context(user, envelope: dict[str, Any]) -> dict[str, Any]:
             "transition_targets": transition_targets,
         }
         summary["context_hint"] = f"workorders / {workorder.number}"
+        return summary
+
+    if source_code == "waiting_list" and object_type == "waiting_list_entry" and object_id:
+        if not can_view_waiting_list(user):
+            raise PermissionDenied("Waiting-list entry is not visible to the current user.")
+        try:
+            entry = WaitingListEntry.objects.get(pk=int(object_id))
+        except (ValueError, TypeError):
+            raise ValidationError("Invalid waiting-list entry id.")
+        except WaitingListEntry.DoesNotExist as exc:
+            raise PermissionDenied("Waiting-list entry is not visible to the current user.") from exc
+        transition_targets = [
+            status for status, _label in WaitingListStatus.choices if can_transition_waiting_list_entry(user, entry)
+        ]
+        summary["selection"] = {
+            "source_code": "waiting_list",
+            "object_type": "waiting_list_entry",
+            "object_id": str(entry.pk),
+            "service_id": entry.service_id,
+            "service_label": entry.get_service_id_display(),
+            "status": entry.status,
+            "status_label": entry.get_status_display(),
+            "priority_cito": bool(entry.priority_cito),
+            "date_tag": entry.date_tag.isoformat() if entry.date_tag else "",
+            "date_end": entry.date_end.isoformat() if entry.date_end else "",
+            "patient_name": entry.patient_name,
+            "updated_at": entry.updated_at.isoformat() if entry.updated_at else "",
+        }
+        summary["capabilities"] = {
+            "can_edit": can_edit_waiting_list_entry(user, entry),
+            "can_transition": can_transition_waiting_list_entry(user, entry),
+            "transition_targets": transition_targets,
+        }
+        summary["context_hint"] = f"waiting_list / {entry.pk}"
         return summary
 
     summary["selection"] = {

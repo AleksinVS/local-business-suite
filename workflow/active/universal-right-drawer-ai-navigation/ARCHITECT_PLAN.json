@@ -1,6 +1,6 @@
 {
   "block_id": "universal-right-drawer-ai-navigation",
-  "status": "proposed",
+  "status": "implemented_mvp",
   "created_at": "2026-05-28",
   "architecture_sources": [
     "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
@@ -56,10 +56,17 @@
     "For the first slice, return UI commands from the tool result and teach the chat browser clients to execute them.",
     "The global drawer host should not remove existing module panel semantics until e2e verifies the migration."
   ],
+  "implementation_result": {
+    "implemented_at": "2026-05-28",
+    "summary": "MVP implemented with core right panel registry, global drawer host, workorders/waiting-list providers, ui.open_right_panel, streaming UI command delivery, tests and docs.",
+    "reports": [
+      "workflow/active/universal-right-drawer-ai-navigation/EXECUTOR_REPORT.implementation.md",
+      "workflow/active/universal-right-drawer-ai-navigation/TASK_ACCEPTANCE.implementation.md"
+    ]
+  },
   "deferred_decisions": [
     "Whether edit/create modes should later be supported through the same provider interface.",
     "Whether UI commands should later be persisted as events in a dedicated event platform.",
     "Whether providers should expose human-readable search/open aliases beyond source_code/object_type/object_id."
   ]
 }
-

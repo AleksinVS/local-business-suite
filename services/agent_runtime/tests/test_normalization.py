@@ -215,6 +215,7 @@ class TestPromptUiContextSection(unittest.TestCase):
         prompt = build_system_prompt()
 
         self.assertIn("ui.get_current_context", prompt)
+        self.assertIn("ui.open_right_panel", prompt)
         self.assertIn("эта заявка", prompt)
 
 
@@ -240,6 +241,7 @@ class TestRuntimeMemoryTool(unittest.TestCase):
 
         tool_names = {tool.name for tool in tools}
         self.assertIn("ui.get_current_context", tool_names)
+        self.assertIn("ui.open_right_panel", tool_names)
         self.assertIn("memory.search", tool_names)
         self.assertIn("memory.remember", tool_names)
         self.assertIn("memory.update_personal", tool_names)
@@ -357,6 +359,50 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(gateway.calls[0]["tool_code"], "ui.get_current_context")
         self.assertEqual(gateway.calls[0]["actor"]["page_context"]["context_snapshot_id"], 17)
+
+    def test_open_right_panel_tool_forwards_safe_identifiers(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "result": {"ui_command": {"type": "open_right_panel"}}}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        open_tool = next(tool for tool in tools if tool.name == "ui.open_right_panel")
+
+        result = open_tool.invoke(
+            {
+                "source_code": "workorders",
+                "object_type": "workorder",
+                "object_id": "42",
+                "mode": "view",
+            }
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "ui.open_right_panel")
+        self.assertEqual(
+            gateway.calls[0]["payload"],
+            {
+                "source_code": "workorders",
+                "object_type": "workorder",
+                "object_id": "42",
+                "mode": "view",
+            },
+        )
 
 
 if __name__ == "__main__":

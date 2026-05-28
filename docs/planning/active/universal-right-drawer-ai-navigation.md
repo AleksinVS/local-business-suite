@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed; готово к реализации после приемки владельцем.
+Implemented MVP.
 
 Архитектурное решение: `docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md`.
 
@@ -108,6 +108,8 @@ class RightPanelProvider(Protocol):
 
 ### Этап 1. Контракт provider и registry
 
+Статус: выполнено.
+
 Задачи:
 
 - добавить `RightPanelDescriptor`;
@@ -124,6 +126,8 @@ python manage.py check
 ```
 
 ### Этап 2. Общий drawer-host и browser bridge
+
+Статус: выполнено.
 
 Задачи:
 
@@ -142,6 +146,8 @@ npm run test:e2e -- --project=chromium
 ```
 
 ### Этап 3. Провайдеры `workorders` и `waiting_list`
+
+Статус: выполнено.
 
 Задачи:
 
@@ -168,6 +174,8 @@ python manage.py test apps.ai.tests
 
 ### Этап 4. AI tool `ui.open_right_panel`
 
+Статус: выполнено.
+
 Задачи:
 
 - добавить tool в `contracts/ai/tools.json` и `apps/ai/tool_definitions.py`;
@@ -186,6 +194,8 @@ python -m unittest services.agent_runtime.tests.test_normalization
 ```
 
 ### Этап 5. E2E и документация
+
+Статус: выполнено в коде и документации; e2e-сценарии добавлены в постоянный набор.
 
 Задачи:
 
@@ -223,3 +233,18 @@ make gen-struct
 - `PageContextEnvelope` после открытия содержит корректный `selection`.
 - Tool registry и архитектурные контракты валидны.
 
+## Итог реализации
+
+Реализованы:
+
+- общий `RightPanelProvider` registry в `apps.core.right_panels`;
+- модульные providers для заявок и листа ожидания;
+- общий правый сайдбар на всех страницах;
+- browser bridge для безопасных команд `open_right_panel`;
+- AI tool `ui.open_right_panel`;
+- доставка `ui_command` через потоковый full-page и sidebar чат;
+- server-side resolver контекста для `waiting_list/waiting_list_entry`;
+- unit-тесты provider registry, модульных providers, gateway tool и runtime wrapper;
+- e2e-сценарии открытия заявки и записи листа ожидания из страницы `AI чат`.
+
+Ограничение MVP остается прежним: общий инструмент только открывает просмотр объекта (`mode=view`). Запись бизнес-данных выполняется отдельными доменными инструментами и views.

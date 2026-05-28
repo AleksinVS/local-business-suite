@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed
+Accepted
 
 ## Дата
 
@@ -282,3 +282,18 @@ AI tool / UI click
 - поддержка источников без UI-provider;
 - автоматическое создание provider из `SourceAdapter`.
 
+## Реализация MVP
+
+Реализовано:
+
+- `apps.core.right_panels`: `RightPanelDescriptor`, `RightPanelProvider` и registry;
+- глобальный drawer-host в `templates/base.html`;
+- browser bridge `static/src/js/right_panel.js`;
+- provider `workorders/workorder`;
+- provider `waiting_list/waiting_list_entry`;
+- AI tool `ui.open_right_panel` в Django gateway, contracts и agent runtime;
+- доставка `ui_command` в full-page и sidebar чатах;
+- обновление `PageContextEnvelope` после открытия объекта;
+- e2e-сценарии для открытия заявки и записи листа ожидания из страницы `AI чат`.
+
+MVP поддерживает только `mode=view`. Редактирование, создание, переходы статусов и комментарии остаются отдельными доменными tools и views с существующими проверками прав.

@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -21,6 +23,30 @@ from .services import (
     transition_entry,
     update_entry,
 )
+
+
+def page_context_json(payload):
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def waiting_list_detail_page_context(request, entry):
+    return {
+        "schema_version": "1",
+        "page": {
+            "path": request.path,
+            "title": "Запись листа ожидания",
+            "module": "waiting_list",
+            "view": "detail",
+        },
+        "selection": {
+            "object_type": "waiting_list_entry",
+            "object_id": str(entry.pk),
+            "source_code": "waiting_list",
+            "display": f"{entry.pk}. {entry.get_service_id_display()}",
+        },
+        "filters": {},
+        "ui_state": {"right_drawer": "open", "focused_region": "detail_panel"},
+    }
 
 
 class WaitingListAccessMixin(LoginRequiredMixin):
@@ -154,6 +180,9 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
         context["status_choices"] = WaitingListStatus.choices
         context["can_edit"] = can_edit_waiting_list_entry(self.request.user, self.object)
         context["can_transition"] = can_transition_waiting_list_entry(self.request.user, self.object)
+        context["detail_ai_context_json"] = page_context_json(
+            waiting_list_detail_page_context(self.request, self.object)
+        )
         return context
 
 
@@ -244,6 +273,9 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                         "status_choices": WaitingListStatus.choices,
                         "can_edit": can_edit_waiting_list_entry(request.user, entry),
                         "can_transition": can_transition_waiting_list_entry(request.user, entry),
+                        "detail_ai_context_json": page_context_json(
+                            waiting_list_detail_page_context(request, entry)
+                        ),
                     },
                 )
             messages.success(request, "Статус обновлен.")
@@ -259,6 +291,9 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                         "status_choices": WaitingListStatus.choices,
                         "can_edit": can_edit_waiting_list_entry(request.user, entry),
                         "can_transition": can_transition_waiting_list_entry(request.user, entry),
+                        "detail_ai_context_json": page_context_json(
+                            waiting_list_detail_page_context(request, entry)
+                        ),
                         "error": str(e),
                     },
                     status=400,

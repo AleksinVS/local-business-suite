@@ -151,6 +151,15 @@
       </div>
     </div>
 
+    <div class="drawer-overlay global-right-panel-overlay" id="globalRightPanelOverlay" onclick="closeGlobalRightPanel()"></div>
+    <aside class="drawer global-right-panel" id="global-right-panel" aria-label="Правая панель" aria-hidden="true">
+      <div id="global-right-panel-content" class="global-right-panel-content">
+        <div class="drawer-content">
+          <div class="text-muted">Панель не открыта.</div>
+        </div>
+      </div>
+    </aside>
+
     <script>
       function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
@@ -266,6 +275,7 @@
       };
     </script>
     <script src="{% static 'src/js/page_context.js' %}"></script>
+    <script src="{% static 'src/js/right_panel.js' %}"></script>
     <script src="{% static 'src/js/sidebar_chat.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
   </body>

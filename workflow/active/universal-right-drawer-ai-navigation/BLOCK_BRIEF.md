@@ -1,6 +1,6 @@
 # Workflow Brief: universal-right-drawer-ai-navigation
 
-Статус: proposed, ready for implementation after owner acceptance.
+Статус: implemented MVP, ready for owner verification.
 
 Дата: 2026-05-28.
 
@@ -88,4 +88,3 @@ python -m unittest services.agent_runtime.tests.test_normalization
 npm run test:e2e -- --project=chromium
 make gen-struct
 ```
-

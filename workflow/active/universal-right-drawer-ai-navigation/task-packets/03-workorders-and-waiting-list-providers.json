@@ -1,6 +1,6 @@
 {
   "task_id": "03-workorders-and-waiting-list-providers",
-  "status": "proposed",
+  "status": "completed",
   "title": "Workorders and waiting-list right panel providers",
   "goal": "Register module-owned providers for workorders and waiting-list entries.",
   "read_scope": [
@@ -44,4 +44,3 @@
     "python manage.py check"
   ]
 }
-

@@ -1,6 +1,6 @@
 {
   "task_id": "05-e2e-docs-and-handoff",
-  "status": "proposed",
+  "status": "completed",
   "title": "E2E, documentation and handoff",
   "goal": "Verify the universal right drawer flow end to end and update operator/user documentation.",
   "read_scope": [
@@ -41,4 +41,3 @@
     "git diff --check"
   ]
 }
-

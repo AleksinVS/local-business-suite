@@ -57,7 +57,10 @@ async def chat_stream(payload: ChatRequest):
                 history=payload.history,
                 model_id=payload.model_id,
             ):
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+                if isinstance(chunk, dict):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'content': chunk})}\n\n"
             
             yield "data: [DONE]\n\n"
         except Exception as exc:
@@ -92,4 +95,5 @@ def chat(payload: ChatRequest):
         session_id=payload.session_id,
         assistant_message=result["assistant_message"],
         tool_trace=result["tool_trace"],
+        ui_commands=result.get("ui_commands", []),
     )

@@ -1,6 +1,6 @@
 {
   ".": "HTML-шаблоны Django (server-rendered frontend, HTMX)",
-  "base.html": "Базовый шаблон (navbar, sidebar, HTMX скрипты)",
+  "base.html": "Базовый шаблон (navbar, sidebar, общий правый сайдбар, HTMX скрипты)",
   "400.html": "Страница ошибки 400",
   "403.html": "Страница ошибки 403 (Forbidden)",
   "404.html": "Страница ошибки 404",

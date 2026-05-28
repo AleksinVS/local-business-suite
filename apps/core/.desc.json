@@ -9,6 +9,7 @@
   "health_views.py": "Health-check endpoint (/health/)",
   "json_utils.py": "Утилиты валидации JSON-контрактов",
   "source_adapters.py": "Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников",
+  "right_panels.py": "Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре",
   "db_routers.py": "Маршрутизатор Django-баз для разнесения чатов, памяти и аналитики по отдельным SQLite-файлам",
   "middleware.py": "Middleware (PATH_INFO fix для IIS, debug logging)",
   "templatetags/core_tags.py": "Пользовательские теги шаблонов",

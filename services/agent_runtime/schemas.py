@@ -99,6 +99,7 @@ class ChatResponse(BaseModel):
     session_id: str
     assistant_message: str
     tool_trace: list[dict[str, Any]] = Field(default_factory=list)
+    ui_commands: list[dict[str, Any]] = Field(default_factory=list)
     conversation_id: str = ""
     request_id: str = ""
     task_type_report: TaskTypeReport = Field(default_factory=TaskTypeReport)

@@ -77,6 +77,19 @@
     var predefinedCommands = JSON.parse(document.getElementById('predefined-commands-data')?.textContent || '[]');
     var customCommands = JSON.parse(document.getElementById('custom-commands-data')?.textContent || '[]');
 
+    function executeUiCommand(command) {
+      if (!command || !window.LocalBusinessRightPanel || typeof window.LocalBusinessRightPanel.open !== "function") return;
+      window.LocalBusinessRightPanel.open(command).catch(function() {});
+    }
+
+    function executeUiCommands(payload) {
+      if (!payload) return;
+      if (payload.ui_command) executeUiCommand(payload.ui_command);
+      if (Array.isArray(payload.ui_commands)) {
+        payload.ui_commands.forEach(executeUiCommand);
+      }
+    }
+
     function commandName(command) {
       return String(command.name || command.shortcut || '').replace(/^\/+/, '');
     }
@@ -531,6 +544,7 @@
                     assistantContentDiv.textContent = accumulatedContent;
                     messageList.scrollTop = messageList.scrollHeight;
                   }
+                  executeUiCommands(data);
                   if (data.error) {
                     finishWithError(data.message || data.error || 'AI-сервис вернул ошибку.', data);
                   }

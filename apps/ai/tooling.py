@@ -74,6 +74,21 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
     """Execute the tool logic and return the result dict or raise an exception."""
     if tool_code == "ui.get_current_context":
         return get_bound_page_context_for_actor(actor_context)
+    if tool_code == "ui.open_right_panel":
+        from apps.core.right_panels import build_right_panel_descriptor
+
+        descriptor = build_right_panel_descriptor(
+            user=actor,
+            source_code=payload.get("source_code", ""),
+            object_type=payload.get("object_type", ""),
+            object_id=payload.get("object_id", ""),
+            mode=payload.get("mode", "view") or "view",
+        )
+        return {
+            "status": "ok",
+            "message": "Right panel command is ready.",
+            "ui_command": descriptor.as_dict(),
+        }
     if tool_code == "workorders.list":
         return {
             "items": list_workorders_for_actor(

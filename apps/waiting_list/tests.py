@@ -16,6 +16,7 @@ from .policies import (
     can_transition_waiting_list_entry,
     can_view_waiting_list,
 )
+from .right_panel import WaitingListRightPanelProvider
 from .services import (
     WaitingListValidationError,
     create_entry,
@@ -226,6 +227,28 @@ class WaitingListRouteTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.entry.patient_name)
+
+    def test_detail_htmx_partial_publishes_ai_context(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("waiting_list:detail", kwargs={"pk": self.entry.pk}),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-ai-context="')
+        self.assertContains(response, "waiting_list_entry")
+
+    def test_right_panel_provider_returns_descriptor_for_visible_entry(self):
+        provider = WaitingListRightPanelProvider()
+
+        descriptor = provider.build_panel(self.user, str(self.entry.pk))
+
+        self.assertTrue(provider.can_open(self.user, str(self.entry.pk)))
+        self.assertEqual(descriptor.source_code, "waiting_list")
+        self.assertEqual(descriptor.object_type, "waiting_list_entry")
+        self.assertEqual(descriptor.object_id, str(self.entry.pk))
+        self.assertEqual(descriptor.drawer_size, "waiting_list")
+        self.assertIn(reverse("waiting_list:detail", kwargs={"pk": self.entry.pk}), descriptor.htmx_url)
 
     def test_transition_changes_status(self):
         self.client.force_login(self.user)

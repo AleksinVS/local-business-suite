@@ -6,6 +6,7 @@ class WorkordersConfig(AppConfig):
     name = 'apps.workorders'
 
     def ready(self):
-        from . import source_adapter
+        from . import right_panel, source_adapter
 
+        right_panel.register()
         source_adapter.register()

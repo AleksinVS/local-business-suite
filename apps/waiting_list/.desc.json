@@ -6,6 +6,7 @@
   "services.py": "Сервисы листа ожидания",
   "policies.py": "Политики доступа",
   "source_adapter.py": "SourceAdapter листа ожидания для memory source_data search и analytics projection",
+  "right_panel.py": "RightPanelProvider листа ожидания для безопасного открытия записи в общем правом сайдбаре",
   "urls.py": "URL-маршруты",
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",

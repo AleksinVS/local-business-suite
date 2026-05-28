@@ -40,6 +40,31 @@ def build_tools(
         )
         return result
 
+    @tool("ui.open_right_panel")
+    def open_right_panel(source_code: str, object_type: str, object_id: str, mode: str = "view") -> dict:
+        """
+        Open a visible module object in the shared right panel.
+
+        Use this only when the user asks to open or show an object in the
+        interface. Do not use it for write operations.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="ui.open_right_panel",
+            actor=actor,
+            payload={
+                "source_code": source_code,
+                "object_type": object_type,
+                "object_id": object_id,
+                "mode": mode or "view",
+            },
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("workorders.list")
     def list_workorders(status: str = "", limit: int = 20) -> dict:
         """List work orders visible to the current user, optionally filtered by status."""
@@ -351,6 +376,7 @@ def build_tools(
 
     return [
         get_current_context,
+        open_right_panel,
         list_workorders,
         get_workorder,
         create_workorder,

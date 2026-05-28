@@ -14,6 +14,19 @@
     return { window_id: "", context_version: 0, context_hint: "" };
   }
 
+  function executeUiCommand(command) {
+    if (!command || !window.LocalBusinessRightPanel || typeof window.LocalBusinessRightPanel.open !== "function") return;
+    window.LocalBusinessRightPanel.open(command).catch(function () {});
+  }
+
+  function executeUiCommands(payload) {
+    if (!payload) return;
+    if (payload.ui_command) executeUiCommand(payload.ui_command);
+    if (Array.isArray(payload.ui_commands)) {
+      payload.ui_commands.forEach(executeUiCommand);
+    }
+  }
+
   function initSidebarChat(root) {
     if (!root || root.dataset.sidebarChatReady === "1") return;
     root.dataset.sidebarChatReady = "1";
@@ -125,6 +138,7 @@
                   pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = buffer;
                   scrollMessagesToBottom();
                 }
+                executeUiCommands(payload);
                 if (payload.error) {
                   pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = payload.message || "AI-сервис вернул ошибку.";
                 }

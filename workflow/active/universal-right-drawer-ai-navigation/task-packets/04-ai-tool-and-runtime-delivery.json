@@ -1,6 +1,6 @@
 {
   "task_id": "04-ai-tool-and-runtime-delivery",
-  "status": "proposed",
+  "status": "completed",
   "title": "AI tool and runtime UI command delivery",
   "goal": "Expose ui.open_right_panel to the AI runtime and deliver safe UI commands to browser chat clients.",
   "read_scope": [
@@ -51,4 +51,3 @@
     "node --check static/src/js/sidebar_chat.js"
   ]
 }
-

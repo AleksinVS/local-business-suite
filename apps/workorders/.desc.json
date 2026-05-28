@@ -7,6 +7,7 @@
   "policies.py": "Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory",
   "selectors.py": "Запросы для получения видимых нарядов",
   "source_adapter.py": "SourceAdapter заявок для memory source_data search и analytics projection",
+  "right_panel.py": "RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре",
   "urls.py": "URL-маршруты нарядов",
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",

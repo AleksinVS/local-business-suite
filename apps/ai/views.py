@@ -325,6 +325,44 @@ class AISidebarChatView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class AISidebarChatClearView(LoginRequiredMixin, TemplateView):
+    template_name = "ai/partials/sidebar_chat.html"
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        session = get_or_create_sidebar_session(request.user)
+        session.messages.all().delete()
+        session.metadata = {
+            key: value
+            for key, value in (session.metadata or {}).items()
+            if key != "sidebar_summary"
+        }
+        session.last_message_at = None
+        session.save(update_fields=["metadata", "last_message_at", "updated_at"])
+        return self.render_to_response(self.get_context_data())
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = get_or_create_sidebar_session(self.request.user)
+        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+        context.update(
+            {
+                "sidebar_chat_session": session,
+                "sidebar_chat_messages": [],
+                "sidebar_ai_models": settings.LOCAL_BUSINESS_AI_MODELS,
+                "sidebar_current_model_id": session.metadata.get("model_id", ""),
+                "sidebar_chat_settings": settings_payload,
+                "sidebar_predefined_commands": get_predefined_commands(),
+                "sidebar_custom_commands": list(
+                    SlashCommand.objects.filter(user=self.request.user).values(
+                        "id", "name", "shortcut", "description", "template"
+                    )
+                ),
+            }
+        )
+        return context
+
+
 class AIPageContextUpdateView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
@@ -496,6 +534,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             content=response["assistant_message"],
             metadata={
                 "tool_trace": tool_trace,
+                "ui_commands": response.get("ui_commands", []),
                 "conversation_id": runtime_conversation_id,
                 "request_id": runtime_request_id,
                 **context_trace_metadata(user_msg),
@@ -563,6 +602,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
         def stream_generator():
             client = AgentRuntimeClient()
             full_content = []
+            ui_commands = []
 
             try:
                 for event in client.chat_stream(
@@ -587,6 +627,8 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                                 data_json = json.loads(data_str)
                                 if "content" in data_json:
                                     full_content.append(data_json["content"])
+                                if isinstance(data_json.get("ui_command"), dict):
+                                    ui_commands.append(data_json["ui_command"])
                             except (json.JSONDecodeError, TypeError):
                                 pass
             except Exception as exc:
@@ -622,6 +664,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                         "conversation_id": conversation_id,
                         "request_id": request_id,
                         "streamed": True,
+                        "ui_commands": ui_commands,
                         **context_trace_metadata(user_msg),
                     },
                 )

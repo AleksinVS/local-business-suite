@@ -5,7 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -26,6 +26,13 @@ from apps.core.source_adapters import (
     register_source_adapter,
     resolve_privacy_profile,
     unregister_source_adapter,
+)
+from apps.core.right_panels import (
+    RightPanelDescriptor,
+    build_right_panel_descriptor,
+    clear_right_panel_providers,
+    register_right_panel_provider,
+    registered_right_panel_providers,
 )
 from apps.workorders.policies import ROLE_MANAGER
 from .models import Department
@@ -138,6 +145,98 @@ class SourceAdapterContractTests(TestCase):
         self.addCleanup(unregister_source_adapter, "dummy_source")
 
         self.assertIsNotNone(get_source_adapter("dummy_source"))
+
+
+class RightPanelContractTests(TestCase):
+    def setUp(self):
+        self.original_providers = registered_right_panel_providers()
+        clear_right_panel_providers()
+
+    def tearDown(self):
+        clear_right_panel_providers()
+        for provider in self.original_providers.values():
+            register_right_panel_provider(provider, replace=True)
+        super().tearDown()
+
+    def test_descriptor_serializes_safe_command_without_html(self):
+        descriptor = RightPanelDescriptor(
+            source_code="demo",
+            object_type="record",
+            object_id="42",
+            title="Demo record",
+            htmx_url="/demo/42/",
+            drawer_size="large",
+            context_hint="demo / record#42",
+        )
+
+        payload = descriptor.as_dict()
+
+        self.assertEqual(payload["type"], "open_right_panel")
+        self.assertEqual(payload["target"], "#global-right-panel-content")
+        self.assertNotIn("html", payload)
+
+    def test_provider_registry_rejects_duplicates_and_unknown_provider(self):
+        class DummyProvider:
+            source_code = "demo"
+            object_type = "record"
+            supported_modes = ("view",)
+
+            def can_open(self, user, object_id, mode="view"):
+                return True
+
+            def build_panel(self, user, object_id, mode="view"):
+                return RightPanelDescriptor(
+                    source_code=self.source_code,
+                    object_type=self.object_type,
+                    object_id=object_id,
+                    title="Demo",
+                    htmx_url=f"/demo/{object_id}/",
+                    mode=mode,
+                )
+
+        provider = DummyProvider()
+        register_right_panel_provider(provider)
+
+        self.assertIn(("demo", "record"), registered_right_panel_providers())
+        with self.assertRaises(ValidationError):
+            register_right_panel_provider(provider)
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=None,
+                source_code="missing",
+                object_type="record",
+                object_id="42",
+            )
+
+    def test_unsupported_mode_and_denied_object_fail_closed(self):
+        class DenyingProvider:
+            source_code = "demo"
+            object_type = "record"
+            supported_modes = ("view",)
+
+            def can_open(self, user, object_id, mode="view"):
+                return False
+
+            def build_panel(self, user, object_id, mode="view"):
+                raise AssertionError("build_panel must not run when access is denied")
+
+        register_right_panel_provider(DenyingProvider())
+
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=None,
+                source_code="demo",
+                object_type="record",
+                object_id="42",
+                mode="edit",
+            )
+        with self.assertRaises(PermissionDenied):
+            build_right_panel_descriptor(
+                user=None,
+                source_code="demo",
+                object_type="record",
+                object_id="42",
+            )
 
 
 class DepartmentViewTests(TestCase):

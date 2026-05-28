@@ -27,6 +27,32 @@ TOOLS = [
         "required_role_scope": "visible",
     },
     {
+        "id": "ui.open_right_panel",
+        "title": "Open object in right panel",
+        "domain": "ui",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Return a safe browser command to open a visible module object in the shared right panel.",
+        "inputs": [
+            "source_code",
+            "object_type",
+            "object_id",
+            "mode",
+        ],
+        "input_schemas": {
+            "mode": {
+                "description": "Right panel mode. MVP supports view only.",
+                "enum": ["view"],
+            },
+        },
+        "outputs": [
+            "status",
+            "ui_command",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
         "id": "workorders.list",
         "title": "List work orders",
         "domain": "workorders",

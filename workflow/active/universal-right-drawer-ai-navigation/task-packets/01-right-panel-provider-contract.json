@@ -1,6 +1,6 @@
 {
   "task_id": "01-right-panel-provider-contract",
-  "status": "proposed",
+  "status": "completed",
   "title": "Right panel provider contract and registry",
   "goal": "Add a narrow provider registry for module-owned right drawer panels.",
   "read_scope": [
@@ -35,4 +35,3 @@
     "python manage.py check"
   ]
 }
-

@@ -1,0 +1,35 @@
+{
+  "task_id": "01-core-agent-skill-registry",
+  "status": "implemented",
+  "title": "Core AgentSkill provider registry",
+  "goal": "Add a small registry for module-owned AI skills, following existing source adapter and right panel provider patterns.",
+  "read_scope": [
+    "apps/core/source_adapters.py",
+    "apps/core/right_panels.py",
+    "apps/core/tests.py",
+    "docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md"
+  ],
+  "write_scope": [
+    "apps/core/ai_skills.py",
+    "apps/core/tests.py",
+    "apps/core/.desc.json"
+  ],
+  "requirements": [
+    "Define AgentSkillDescriptor or equivalent dataclass with id, name, description, source_code, object_types, required_tools and trigger_examples.",
+    "Define AgentSkillProvider protocol with catalog_entry(), load_body() and optional is_available_for_user().",
+    "Add register_agent_skill(), unregister_agent_skill(), get_agent_skill() and registered_agent_skills().",
+    "Validate skill ids with a strict stable identifier pattern.",
+    "Reject duplicate ids unless replace=True is explicitly passed.",
+    "Do not import domain modules in apps.core."
+  ],
+  "acceptance": [
+    "Registration, duplicate rejection, replacement and unregister behavior are unit-tested.",
+    "Descriptor serialization is deterministic.",
+    "Invalid skill ids fail closed.",
+    "apps.core remains independent of workorders and waiting_list."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.core.tests",
+    ".venv/bin/python manage.py check"
+  ]
+}

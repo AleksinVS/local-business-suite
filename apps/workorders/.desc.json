@@ -8,6 +8,7 @@
   "selectors.py": "Запросы для получения видимых нарядов",
   "source_adapter.py": "SourceAdapter заявок для memory source_data search и analytics projection",
   "right_panel.py": "RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре",
+  "ai_skills.py": "Модульные AI skills заявок для открытия карточек и workflow-инструкций",
   "urls.py": "URL-маршруты нарядов",
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",

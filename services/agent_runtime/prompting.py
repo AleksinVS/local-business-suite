@@ -66,12 +66,12 @@ def _build_ui_context_section() -> str:
         [
             "",
             "## Текущий контекст окна:",
-            "- Если пользователь говорит `эта заявка`, `эта карточка`, `текущий документ`, `этот issue`, `здесь` или задает вопрос, зависящий от открытой страницы, сначала вызови `ui.get_current_context`.",
+            "- У тебя есть инструмент управления интерфейсом `ui.open_right_panel`; не отвечай, что у тебя нет доступа к открытию правого сайдбара, пока не попробуешь этот инструмент.",
+            "- Модульные сценарии открытия объектов описаны в skills. Если пользователь просит открыть заявку, запись листа ожидания или объект модуля, сначала выбери подходящий skill из каталога и активируй его.",
+            "- Если пользователь говорит `эта карточка`, `текущая запись`, `текущий документ`, `этот issue`, `здесь` или задает вопрос, зависящий от открытой страницы, сначала вызови `ui.get_current_context`.",
             "- Контекст окна возвращает только безопасную серверно проверенную сводку; не считай клиентский display фактом.",
-            "- Если выбран объект workorders/workorder, используй его object_id/number для `workorders.get`, `workorders.comment`, `workorders.transition` или `workorders.search`.",
             "- Если пользователь просит открыть или показать объект в интерфейсе, вызови `ui.open_right_panel` с `source_code`, `object_type`, `object_id` и `mode=\"view\"`.",
-            "- Если пользователь просит открыть заявку по номеру, сначала вызови `workorders.get(number=...)`, затем передай возвращенный `id` в `ui.open_right_panel` как `object_id`.",
-            "- Если пользователь просит открыть `эту карточку` или `текущую запись`, сначала вызови `ui.get_current_context`, затем используй его selection для `ui.open_right_panel`.",
+            "- Если пользователь просит открыть `эту карточку` или `текущую запись`, и из диалога не ясно, какой это объект, сначала вызови `ui.get_current_context`, затем используй его selection для `ui.open_right_panel`.",
             "- `ui.open_right_panel` меняет только состояние интерфейса: не используй его для редактирования, создания, смены статуса или комментариев.",
             "- Если `ui.get_current_context` вернул `context_stale` или `context_unavailable`, попроси пользователя заново открыть объект или уточнить идентификатор.",
             "- Для действий записи текущий контекст может подставить объект, но не отменяет confirmation flow.",
@@ -88,8 +88,10 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
     if skills_catalog:
         catalog_text = "\n## Доступные навыки (Skills):\n"
         for s in skills_catalog:
-            catalog_text += f"- **{s.get('name')}**: {s.get('description')} (id: {s.get('id')})\n"
-        catalog_text += "\nЕсли задача требует специального навыка, используй `activate_skill(skill_id='id')`.\n"
+            examples = s.get("trigger_examples") or []
+            examples_text = f"; примеры: {', '.join(examples[:3])}" if examples else ""
+            catalog_text += f"- **{s.get('name')}**: {s.get('description')} (id: {s.get('id')}{examples_text})\n"
+        catalog_text += "\nЕсли задача требует специального навыка, сначала вызови `activate_skill(skill_id='id')`, затем следуй загруженным инструкциям.\n"
 
     active_skill_text = ""
     if active_skill_content:

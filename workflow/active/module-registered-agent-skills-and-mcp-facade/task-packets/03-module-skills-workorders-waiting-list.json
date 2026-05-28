@@ -1,0 +1,42 @@
+{
+  "task_id": "03-module-skills-workorders-waiting-list",
+  "status": "implemented",
+  "title": "Module skills for workorders and waiting list",
+  "goal": "Register the first module-owned skills for opening workorders and waiting-list entries in the right drawer.",
+  "read_scope": [
+    "apps/workorders/apps.py",
+    "apps/workorders/right_panel.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/apps.py",
+    "apps/waiting_list/right_panel.py",
+    "apps/waiting_list/tests.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/prompting.py"
+  ],
+  "write_scope": [
+    "apps/workorders/ai_skills.py",
+    "apps/workorders/apps.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/ai_skills.py",
+    "apps/waiting_list/apps.py",
+    "apps/waiting_list/tests.py"
+  ],
+  "requirements": [
+    "Add workorders.open_right_panel skill provider.",
+    "Add waiting_list.open_right_panel skill provider.",
+    "Register providers from AppConfig.ready().",
+    "Skill descriptions must include realistic trigger phrases.",
+    "Skill body must include when to use, when not to use, tool sequence, ambiguity handling and expected short success response.",
+    "Skill body must instruct the agent not to invent object ids or bypass access checks.",
+    "Required tools must include ui.open_right_panel and any module get/search tools used by the skill."
+  ],
+  "acceptance": [
+    "Both module skills appear in the catalog.",
+    "Both module skill bodies load successfully.",
+    "Module tests prove registration happens without importing from agent runtime.",
+    "Skill bodies do not contain raw secrets, deployment details or user data."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.workorders.tests apps.waiting_list.tests apps.ai.tests"
+  ]
+}

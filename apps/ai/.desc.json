@@ -14,6 +14,8 @@
   "urls.py": "URL-маршруты AI-чата",
   "admin.py": "Регистрация моделей в Django Admin",
   "forms.py": "Формы ввода чата",
-  "skills_service.py": "Сервис каталога навыков AI",
+  "skills_service.py": "Сервис каталога AI skills из модульного registry и contract-файлов",
+  "skill_authoring.py": "Валидация и атомарная запись runtime AI skills",
+  "ai_skills.py": "Системные AI skills приложения AI, включая ai.skill_creator",
   "tests.py": "Тесты AI-приложения"
 }

@@ -46,7 +46,8 @@ def build_tools(
         Open a visible module object in the shared right panel.
 
         Use this only when the user asks to open or show an object in the
-        interface. Do not use it for write operations.
+        interface, including phrases like "открой заявку", "открой ее",
+        "покажи в правом сайдбаре". Do not use it for write operations.
         """
         result = gateway_client.execute_tool(
             tool_code="ui.open_right_panel",
@@ -89,6 +90,21 @@ def build_tools(
             tool_code="workorders.get",
             actor=actor,
             payload={"workorder_id": workorder_id, "number": number},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("waiting_list.get")
+    def get_waiting_list_entry(entry_id: int) -> dict:
+        """Get safe metadata for one visible waiting-list entry by id."""
+        result = gateway_client.execute_tool(
+            tool_code="waiting_list.get",
+            actor=actor,
+            payload={"entry_id": entry_id},
             session_id=session_id,
             conversation_id=conversation_id,
             request_id=request_id,
@@ -277,6 +293,45 @@ def build_tools(
         )
         return result
 
+    @tool("ai.skills.create_or_update")
+    def create_or_update_ai_skill(
+        skill_id: str,
+        name: str,
+        description: str,
+        body: str,
+        source_code: str = "",
+        object_types: list[str] | None = None,
+        required_tools: list[str] | None = None,
+        trigger_examples: list[str] | None = None,
+    ) -> dict:
+        """
+        Create or update an instruction-only runtime AI skill.
+
+        Use this only after activating ai.skill_creator, validating a narrow
+        workflow, and receiving administrator confirmation. Django checks
+        ai.manage_skills, writes atomically and audits the action.
+        """
+        result = gateway_client.execute_tool(
+            tool_code="ai.skills.create_or_update",
+            actor=actor,
+            payload={
+                "skill_id": skill_id,
+                "name": name,
+                "description": description,
+                "source_code": source_code,
+                "object_types": object_types or [],
+                "required_tools": required_tools or [],
+                "trigger_examples": trigger_examples or [],
+                "body": body,
+            },
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("access.update_role_permissions")
     def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
         """Updates permissions for a specific role. Requires administrator privileges."""
@@ -379,6 +434,7 @@ def build_tools(
         open_right_panel,
         list_workorders,
         get_workorder,
+        get_waiting_list_entry,
         create_workorder,
         transition_workorder,
         comment_workorder,
@@ -387,6 +443,7 @@ def build_tools(
         search_memory,
         remember_memory,
         update_personal_memory,
+        create_or_update_ai_skill,
         update_role_permissions,
         get_role_rules,
         list_users,

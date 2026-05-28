@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -172,6 +173,131 @@ class AIViewsTests(TestCase):
         payload = response.json()
         self.assertFalse(payload["ok"])
         self.assertIsNone(payload["result"])
+
+    def test_skill_catalog_includes_module_skills(self):
+        response = self.client.get(
+            reverse("ai:skill_catalog"),
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        skill_ids = {item["id"] for item in response.json()["skills"]}
+        self.assertIn("ai.skill_creator", skill_ids)
+        self.assertIn("workorders.open_right_panel", skill_ids)
+        self.assertIn("waiting_list.open_right_panel", skill_ids)
+
+    def test_runtime_contract_skill_is_discovered_without_restart(self):
+        from .skills_service import clear_skill_catalog_cache, discover_skills, load_skill_content
+
+        with TemporaryDirectory() as tmpdir:
+            runtime_contracts = Path(tmpdir) / "contracts"
+            skill_dir = runtime_contracts / "ai" / "skills" / "demo.runtime_skill"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "name: demo-runtime-skill",
+                        "description: Runtime skill for tests.",
+                        "source_code: demo",
+                        "object_types: record",
+                        "required_tools: ui.open_right_panel",
+                        "trigger_examples: Open demo",
+                        "---",
+                        "Use ui.open_right_panel for demo records.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_contracts):
+                clear_skill_catalog_cache()
+                skill_ids = {item["id"] for item in discover_skills(use_cache=False)}
+                body = load_skill_content("demo.runtime_skill")
+
+        self.assertIn("demo.runtime_skill", skill_ids)
+        self.assertIn("ui.open_right_panel", body)
+
+    def test_admin_can_create_runtime_skill_after_confirmation(self):
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+
+        with TemporaryDirectory() as tmpdir:
+            runtime_contracts = Path(tmpdir) / "contracts"
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_contracts):
+                result = execute_tool(
+                    tool_code="ai.skills.create_or_update",
+                    actor_context={"user_id": self.manager.id, "channel": "internal"},
+                    payload={
+                        "skill_id": "demo.created_skill",
+                        "name": "demo-created-skill",
+                        "description": "Creates a narrow demo skill.",
+                        "source_code": "demo",
+                        "object_types": ["record"],
+                        "required_tools": ["ui.open_right_panel"],
+                        "trigger_examples": ["Open demo"],
+                        "body": "Use ui.open_right_panel only for visible demo records.",
+                    },
+                    request_id="req-skill-create",
+                )
+                self.assertTrue(result["ok"], result)
+                self.assertTrue(result["meta"]["awaiting_confirmation"])
+                confirm = execute_pending_action(
+                    token=result["meta"]["pending_action_token"],
+                    confirmed=True,
+                    actor_context={"user_id": self.manager.id, "channel": "internal"},
+                    request_id="req-skill-create-confirm",
+                )
+
+                target = runtime_contracts / "ai" / "skills" / "demo.created_skill" / "SKILL.md"
+                self.assertTrue(confirm["ok"], confirm)
+                self.assertTrue(target.exists())
+                self.assertIn("demo-created-skill", target.read_text(encoding="utf-8"))
+
+        action = AgentActionLog.objects.filter(tool_code="ai.skills.create_or_update", status=AgentActionLog.Status.PENDING).first()
+        self.assertIsNotNone(action)
+        self.assertIn("<SKILL_BODY_REDACTED", json.dumps(action.request_payload))
+        self.assertNotIn("visible demo records", json.dumps(action.request_payload))
+
+    def test_non_admin_cannot_confirm_runtime_skill_creation(self):
+        with TemporaryDirectory() as tmpdir:
+            runtime_contracts = Path(tmpdir) / "contracts"
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_contracts):
+                result = execute_tool(
+                    tool_code="ai.skills.create_or_update",
+                    actor_context={"user_id": self.customer.id, "channel": "internal"},
+                    payload={
+                        "skill_id": "demo.denied_skill",
+                        "name": "demo-denied-skill",
+                        "description": "Denied demo skill.",
+                        "required_tools": ["ui.open_right_panel"],
+                        "body": "Use ui.open_right_panel.",
+                    },
+                )
+                confirm = execute_pending_action(
+                    token=result["meta"]["pending_action_token"],
+                    confirmed=True,
+                    actor_context={"user_id": self.customer.id, "channel": "internal"},
+                )
+
+                target = runtime_contracts / "ai" / "skills" / "demo.denied_skill" / "SKILL.md"
+                self.assertFalse(confirm["ok"])
+                self.assertFalse(target.exists())
+                self.assertIn("not allowed", confirm["errors"][0])
+
+    def test_runtime_skill_authoring_rejects_unknown_required_tool(self):
+        from .skill_authoring import build_runtime_skill_document
+
+        with self.assertRaises(ValidationError):
+            build_runtime_skill_document(
+                {
+                    "skill_id": "demo.bad_tool",
+                    "name": "demo-bad-tool",
+                    "description": "Bad tool demo.",
+                    "required_tools": ["missing.tool"],
+                    "body": "Use a missing tool.",
+                }
+            )
 
     def test_workorders_search_tool_uses_memory_source_adapter_index(self):
         self.customer_workorder.description = "Маркер ai-wrapper-workorder-gamma для поиска."

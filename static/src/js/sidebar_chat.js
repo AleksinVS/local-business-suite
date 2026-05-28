@@ -186,13 +186,13 @@
       applyContext();
       var prompt = input.value.trim();
       if (!prompt) return;
+      var formData = new FormData(form);
       submitting = true;
       input.disabled = true;
       send.disabled = true;
       appendMessage("user", prompt, true).classList.remove("is-pending");
       var assistant = appendMessage("assistant", "Печатает...", true);
 
-      var formData = new FormData(form);
       fetch(form.action, {
         method: "POST",
         credentials: "same-origin",

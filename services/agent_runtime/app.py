@@ -44,6 +44,7 @@ def list_models():
 @app.post("/chat/stream")
 async def chat_stream(payload: ChatRequest):
     logger = logging.getLogger(__name__)
+    actor_context = payload.actor.ensure_trace_context()
     
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
@@ -51,10 +52,14 @@ async def chat_stream(payload: ChatRequest):
     async def event_generator():
         try:
             for chunk in stream_agent(
-                actor=payload.actor.model_dump(),
+                actor=actor_context.model_dump(),
                 session_id=payload.session_id,
                 prompt=payload.prompt,
                 history=payload.history,
+                conversation_id=actor_context.conversation_id,
+                request_id=actor_context.request_id,
+                origin_channel=actor_context.origin_channel,
+                actor_version=actor_context.actor_version,
                 model_id=payload.model_id,
             ):
                 if isinstance(chunk, dict):
@@ -73,19 +78,24 @@ async def chat_stream(payload: ChatRequest):
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest):
     logger = logging.getLogger(__name__)
+    actor_context = payload.actor.ensure_trace_context()
     logger.info(
         f"Received chat request: session_id={payload.session_id}, prompt={payload.prompt[:100]}"
     )
-    logger.info(f"Actor: {payload.actor}")
+    logger.info(f"Actor: {actor_context}")
 
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
     try:
         result = run_agent(
-            actor=payload.actor.model_dump(),
+            actor=actor_context.model_dump(),
             session_id=payload.session_id,
             prompt=payload.prompt,
             history=payload.history,
+            conversation_id=actor_context.conversation_id,
+            request_id=actor_context.request_id,
+            origin_channel=actor_context.origin_channel,
+            actor_version=actor_context.actor_version,
             model_id=payload.model_id,
         )
     except Exception as exc:

@@ -7,5 +7,6 @@
   "memory-audit-review-ui": "Workflow: UI аудита и ревью проблем памяти и поискового индекса",
   "universal-source-adapters-memory-analytics": "Workflow: универсальные источники для памяти и аналитики",
   "context-aware-sidebar-ai-chat": "Workflow: контекстный ИИ-чат в левой боковой панели",
-  "universal-right-drawer-ai-navigation": "Workflow: универсальное открытие правого сайдбара ИИ-ботом"
+  "universal-right-drawer-ai-navigation": "Workflow: универсальное открытие правого сайдбара ИИ-ботом",
+  "module-registered-agent-skills-and-mcp-facade": "Workflow: модульные AI skills и registry-driven MCP-фасад"
 }

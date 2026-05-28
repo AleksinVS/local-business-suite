@@ -24,6 +24,7 @@ from .services import (
     transition_workorder_for_actor,
     update_device_for_actor,
     get_analytics_summary_for_actor,
+    get_waiting_list_entry_for_actor,
 )
 from .tool_definitions import get_tool_registry
 
@@ -119,6 +120,13 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
             ranking_profile="source_content",
             source_codes=["workorders"],
         )
+    elif tool_code == "waiting_list.get":
+        return {
+            "entry": get_waiting_list_entry_for_actor(
+                actor=actor,
+                entry_id=payload.get("entry_id"),
+            )
+        }
     elif tool_code == "workorders.create":
         return create_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.transition":
@@ -174,6 +182,10 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         from apps.memory.services import update_personal_memory_for_actor
 
         return update_personal_memory_for_actor(actor=actor, payload=payload)
+    elif tool_code == "ai.skills.create_or_update":
+        from .skill_authoring import create_or_update_runtime_skill_for_actor
+
+        return create_or_update_runtime_skill_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.update_role_permissions":
         from .services import update_role_permissions_for_actor
         return update_role_permissions_for_actor(actor=actor, payload=payload)
@@ -683,6 +695,17 @@ def _build_audit_request_payload(*, tool_code, payload, trace_context):
         for key in ("user_note", "new_text"):
             if key in safe_payload:
                 safe_payload[key] = _redact_secret_like_text(str(safe_payload.get(key) or ""))
+    if tool_code == "ai.skills.create_or_update":
+        if "body" in safe_payload:
+            safe_payload["body"] = f"<SKILL_BODY_REDACTED:length={len(str(payload.get('body') or ''))}>"
+        if "instructions" in safe_payload:
+            safe_payload["instructions"] = f"<SKILL_BODY_REDACTED:length={len(str(payload.get('instructions') or ''))}>"
+        if "frontmatter" in safe_payload and isinstance(safe_payload["frontmatter"], dict):
+            safe_payload["frontmatter"] = {
+                key: value
+                for key, value in safe_payload["frontmatter"].items()
+                if key in {"name", "description", "source_code", "object_types", "required_tools", "trigger_examples"}
+            }
     return {**trace_context, **safe_payload}
 
 

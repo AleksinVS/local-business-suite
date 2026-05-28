@@ -1,6 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 
-from .config import load_runtime_settings
+from .config import load_json, load_runtime_settings
 from .gateway_client import DjangoGatewayClient
 from .task_types import normalize_status, normalize_priority
 
@@ -19,6 +19,93 @@ def build_mcp_server() -> FastMCP:
             base_url=settings.django_gateway_url,
             token=settings.django_gateway_token,
         )
+
+    def tool_catalog() -> dict:
+        settings = load_runtime_settings()
+        return load_json(settings.ai_tools_path)
+
+    def skills_catalog() -> list[dict]:
+        return gateway_client().get_skills_catalog().get("skills", [])
+
+    @mcp.resource(
+        "local-business://skills/{skill_id}",
+        name="AI skill metadata",
+        description="Safe metadata for a module or runtime AI skill.",
+        mime_type="application/json",
+    )
+    def skill_resource(skill_id: str):
+        for item in skills_catalog():
+            if item.get("id") == skill_id:
+                return {
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "name",
+                        "description",
+                        "source_code",
+                        "object_types",
+                        "required_tools",
+                        "trigger_examples",
+                        "registration_source",
+                    )
+                }
+        return {"error": "skill_not_found", "skill_id": skill_id}
+
+    @mcp.resource(
+        "local-business://tools/{tool_code}",
+        name="AI tool metadata",
+        description="Safe metadata for a declared AI gateway tool.",
+        mime_type="application/json",
+    )
+    def tool_resource(tool_code: str):
+        for item in tool_catalog().get("tools", []):
+            if item.get("id") == tool_code:
+                return {
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "title",
+                        "domain",
+                        "mode",
+                        "execution_mode",
+                        "description",
+                        "inputs",
+                        "outputs",
+                        "requires_confirmation",
+                        "required_role_scope",
+                    )
+                }
+        return {"error": "tool_not_found", "tool_code": tool_code}
+
+    @mcp.resource(
+        "local-business://modules/{source_code}/capabilities",
+        name="Module capabilities",
+        description="Safe module capability summary derived from AI tools and skills.",
+        mime_type="application/json",
+    )
+    def module_capabilities_resource(source_code: str):
+        tools = [
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "mode": item.get("mode"),
+                "requires_confirmation": item.get("requires_confirmation", False),
+            }
+            for item in tool_catalog().get("tools", [])
+            if item.get("domain") == source_code or str(item.get("id", "")).startswith(f"{source_code}.")
+        ]
+        skills = [
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "description": item.get("description"),
+                "object_types": item.get("object_types", []),
+                "required_tools": item.get("required_tools", []),
+            }
+            for item in skills_catalog()
+            if item.get("source_code") == source_code
+        ]
+        return {"source_code": source_code, "tools": tools, "skills": skills}
 
     @mcp.tool()
     def workorders_list(

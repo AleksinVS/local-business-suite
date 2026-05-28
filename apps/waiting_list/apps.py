@@ -7,7 +7,8 @@ class WaitingListConfig(AppConfig):
     verbose_name = "Лист ожидания"
 
     def ready(self):
-        from . import right_panel, source_adapter
+        from . import ai_skills, right_panel, source_adapter
 
+        ai_skills.register()
         right_panel.register()
         source_adapter.register()

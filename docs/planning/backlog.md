@@ -4,6 +4,27 @@
 
 ## Active
 
+### Модульные AI skills и registry-driven MCP-фасад
+
+MVP реализован и ожидает приемку владельцем. Доменные AI workflow вынесены из общего agent runtime в skills, которые регистрируют сами модули. Существующий MCP-сервер стал внешним фасадом для безопасных resources поверх тех же реестров, но не стал обязательной внутренней прослойкой sidebar chat.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md`;
+- активный план находится в `docs/planning/active/module-registered-agent-skills-and-mcp-facade.md`;
+- workflow package находится в `workflow/active/module-registered-agent-skills-and-mcp-facade/`.
+
+Статус реализации:
+- добавлен `apps.core.ai_skills` registry;
+- `apps.ai.skills_service` собирает module и runtime contract skills;
+- зарегистрированы skills для `workorders`, `waiting_list` и `ai.skill_creator`;
+- временный hard-coded shortcut по заявкам удален из agent runtime;
+- добавлено управляемое создание instruction-only runtime skills через `ai.skills.create_or_update`;
+- добавлены MCP resources для skills/tools/module capabilities;
+- обновлены unit/integration/e2e проверки и операторская документация.
+
+Оставшееся действие:
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Универсальные источники для памяти и аналитики
 
 MVP общего source adapter/envelope подхода реализован и ожидает приемку владельцем. Канбан, лист ожидания, файлы, внешние API и будущие модули подключаются к памяти и аналитике через адаптеры, без прямой зависимости ядра памяти от доменных моделей.

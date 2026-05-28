@@ -29,6 +29,7 @@
         "view_analytics": { "type": "boolean" },
         "manage_departments": { "type": "boolean" },
         "manage_roles": { "type": "boolean" },
+        "manage_ai_skills": { "type": "boolean" },
         "memory_organization_write": { "type": "boolean" },
         "memory_organization_review": { "type": "boolean" }
       },

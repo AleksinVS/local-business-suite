@@ -51,6 +51,7 @@ def superuser_rules():
         "view_analytics": True,
         "manage_departments": True,
         "manage_roles": True,
+        "manage_ai_skills": True,
     }
 
 

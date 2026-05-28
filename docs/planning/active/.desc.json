@@ -8,5 +8,6 @@
   "memory-audit-review-ui.md": "Активный план UI аудита и ревью проблем памяти и поискового индекса",
   "universal-source-adapters-memory-analytics.md": "Активный план универсальных источников для памяти и аналитики",
   "context-aware-sidebar-ai-chat.md": "Активный план контекстного ИИ-чата в левой боковой панели",
-  "universal-right-drawer-ai-navigation.md": "Активный план универсального открытия правого сайдбара ИИ-ботом"
+  "universal-right-drawer-ai-navigation.md": "Активный план универсального открытия правого сайдбара ИИ-ботом",
+  "module-registered-agent-skills-and-mcp-facade.md": "Активный план модульных AI skills и registry-driven MCP-фасада"
 }

@@ -4,7 +4,10 @@ Run with: python -m pytest services/agent_runtime/tests/test_normalization.py -v
 Or: python -m unittest services.agent_runtime.tests.test_normalization -v
 """
 
+import asyncio
+import json
 import unittest
+from unittest.mock import patch
 
 
 class TestNormalizeStatus(unittest.TestCase):
@@ -216,7 +219,26 @@ class TestPromptUiContextSection(unittest.TestCase):
 
         self.assertIn("ui.get_current_context", prompt)
         self.assertIn("ui.open_right_panel", prompt)
-        self.assertIn("эта заявка", prompt)
+        self.assertIn("не отвечай, что у тебя нет доступа", prompt)
+        self.assertIn("Модульные сценарии открытия объектов описаны в skills", prompt)
+        self.assertIn("текущая запись", prompt)
+
+    def test_build_system_prompt_includes_skill_trigger_examples(self):
+        from services.agent_runtime.prompting import build_system_prompt
+
+        prompt = build_system_prompt(
+            skills_catalog=[
+                {
+                    "id": "workorders.open_right_panel",
+                    "name": "workorders-open-right-panel",
+                    "description": "Открывает заявку справа.",
+                    "trigger_examples": ["Открой заявку №17"],
+                }
+            ]
+        )
+
+        self.assertIn("workorders.open_right_panel", prompt)
+        self.assertIn("Открой заявку №17", prompt)
 
 
 class TestRuntimeMemoryTool(unittest.TestCase):
@@ -242,9 +264,11 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         tool_names = {tool.name for tool in tools}
         self.assertIn("ui.get_current_context", tool_names)
         self.assertIn("ui.open_right_panel", tool_names)
+        self.assertIn("waiting_list.get", tool_names)
         self.assertIn("memory.search", tool_names)
         self.assertIn("memory.remember", tool_names)
         self.assertIn("memory.update_personal", tool_names)
+        self.assertIn("ai.skills.create_or_update", tool_names)
 
     def test_memory_search_tool_forwards_search_options(self):
         from services.agent_runtime.tools import build_tools
@@ -403,6 +427,112 @@ class TestRuntimeMemoryTool(unittest.TestCase):
                 "mode": "view",
             },
         )
+
+    def test_waiting_list_get_tool_forwards_entry_id(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "result": {"entry": {"id": 12}}}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        entry_tool = next(tool for tool in tools if tool.name == "waiting_list.get")
+
+        result = entry_tool.invoke({"entry_id": 12})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "waiting_list.get")
+        self.assertEqual(gateway.calls[0]["payload"], {"entry_id": 12})
+
+    def test_ai_skill_create_tool_forwards_instruction_only_payload(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "result": {"skill_id": "demo.skill"}}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        skill_tool = next(tool for tool in tools if tool.name == "ai.skills.create_or_update")
+
+        result = skill_tool.invoke(
+            {
+                "skill_id": "demo.skill",
+                "name": "demo-skill",
+                "description": "Demo skill.",
+                "required_tools": ["ui.open_right_panel"],
+                "body": "Use a tool.",
+            }
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "ai.skills.create_or_update")
+        self.assertEqual(gateway.calls[0]["payload"]["skill_id"], "demo.skill")
+        self.assertEqual(gateway.calls[0]["payload"]["required_tools"], ["ui.open_right_panel"])
+
+
+class TestMCPResources(unittest.TestCase):
+    """Verify safe registry-backed MCP resources."""
+
+    def test_skill_and_tool_resources_return_safe_json(self):
+        class FakeGatewayClient:
+            def __init__(self, **kwargs):
+                pass
+
+            def get_skills_catalog(self):
+                return {
+                    "skills": [
+                        {
+                            "id": "workorders.open_right_panel",
+                            "name": "workorders-open-right-panel",
+                            "description": "Открывает заявку справа.",
+                            "source_code": "workorders",
+                            "object_types": ["workorder"],
+                            "required_tools": ["ui.open_right_panel"],
+                            "trigger_examples": ["Открой заявку №17"],
+                            "registration_source": "module",
+                        }
+                    ]
+                }
+
+        with patch("services.agent_runtime.mcp_server.DjangoGatewayClient", FakeGatewayClient):
+            from services.agent_runtime.mcp_server import build_mcp_server
+
+            server = build_mcp_server()
+            skill_contents = asyncio.run(server.read_resource("local-business://skills/workorders.open_right_panel"))
+            tool_contents = asyncio.run(server.read_resource("local-business://tools/ui.open_right_panel"))
+
+        skill_payload = json.loads(skill_contents[0].content)
+        tool_payload = json.loads(tool_contents[0].content)
+        self.assertEqual(skill_payload["id"], "workorders.open_right_panel")
+        self.assertNotIn("body", skill_payload)
+        self.assertEqual(tool_payload["id"], "ui.open_right_panel")
+        self.assertNotIn("headers", tool_payload)
 
 
 if __name__ == "__main__":

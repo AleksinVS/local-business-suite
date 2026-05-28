@@ -62,6 +62,17 @@
 - `workorders / workorder`;
 - `waiting_list / waiting_list_entry`.
 
+## Module AI skills
+
+Открытие объектов из ИИ-чата больше не зашито в `services/agent_runtime/graph.py`.
+Модули регистрируют workflow-инструкции через `apps.core.ai_skills`:
+
+- `workorders.open_right_panel` описывает, как открыть заявку по номеру или текущему контексту;
+- `waiting_list.open_right_panel` описывает, как открыть запись листа ожидания;
+- `ai.skill_creator` помогает администратору создать runtime skill.
+
+Agent runtime получает каталог skills через Django gateway, выбирает подходящий skill по `description` и `trigger_examples`, вызывает `activate_skill`, а затем работает обычными tools. Для открытия справа skill всегда заканчивается вызовом `ui.open_right_panel`; права и URL по-прежнему проверяет Django.
+
 Чтобы подключить новый модуль:
 
 1. Добавьте `apps/<module>/right_panel.py` с provider для своего `source_code/object_type`.
@@ -69,9 +80,12 @@
 3. В `build_panel()` верните `RightPanelDescriptor` с URL на существующий HTMX detail partial.
 4. Зарегистрируйте provider в `AppConfig.ready()`.
 5. Добавьте `data-ai-context` в detail partial и resolver в `apps.ai.page_context.resolve_page_context()`.
-6. Покройте provider unit-тестом и e2e-сценарием открытия из страницы `AI чат`.
+6. Добавьте `apps/<module>/ai_skills.py` и зарегистрируйте module skill в `AppConfig.ready()`.
+7. Покройте provider и skill unit-тестом и e2e-сценарием открытия из sidebar-чата.
 
 Для MVP поддерживается только `mode=view`. Редактирование, создание, комментарии и переходы статусов остаются отдельными доменными инструментами с прежними проверками прав.
+
+Операторские правила создания runtime skills описаны в `docs/guides/AI_SKILLS_OPERATIONS.md`.
 
 ## Настройки
 

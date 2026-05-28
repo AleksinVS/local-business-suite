@@ -27,6 +27,13 @@ from apps.core.source_adapters import (
     resolve_privacy_profile,
     unregister_source_adapter,
 )
+from apps.core.ai_skills import (
+    AgentSkillDescriptor,
+    clear_agent_skills,
+    get_agent_skill,
+    register_agent_skill,
+    registered_agent_skills,
+)
 from apps.core.right_panels import (
     RightPanelDescriptor,
     build_right_panel_descriptor,
@@ -145,6 +152,56 @@ class SourceAdapterContractTests(TestCase):
         self.addCleanup(unregister_source_adapter, "dummy_source")
 
         self.assertIsNotNone(get_source_adapter("dummy_source"))
+
+
+class AgentSkillContractTests(TestCase):
+    def setUp(self):
+        self.original_skills = registered_agent_skills()
+        clear_agent_skills()
+
+    def tearDown(self):
+        clear_agent_skills()
+        for provider in self.original_skills.values():
+            register_agent_skill(provider, replace=True)
+        super().tearDown()
+
+    def test_descriptor_catalog_entry_is_safe_metadata(self):
+        descriptor = AgentSkillDescriptor(
+            skill_id="demo.open_panel",
+            name="demo-open-panel",
+            description="Открывает demo объект справа.",
+            source_code="demo",
+            object_types=("record",),
+            required_tools=("ui.open_right_panel",),
+            trigger_examples=("Открой demo 42",),
+            body="Workflow instructions",
+        )
+        register_agent_skill(descriptor)
+
+        entry = get_agent_skill("demo.open_panel").catalog_entry()
+
+        self.assertEqual(entry["id"], "demo.open_panel")
+        self.assertEqual(entry["source_code"], "demo")
+        self.assertEqual(entry["required_tools"], ["ui.open_right_panel"])
+        self.assertNotIn("body", entry)
+
+    def test_registry_rejects_duplicate_and_invalid_id(self):
+        descriptor = AgentSkillDescriptor(
+            skill_id="demo.open_panel",
+            name="demo-open-panel",
+            description="Открывает demo объект справа.",
+            body="Workflow instructions",
+        )
+        register_agent_skill(descriptor)
+        with self.assertRaises(ValidationError):
+            register_agent_skill(descriptor)
+        with self.assertRaises(ValidationError):
+            AgentSkillDescriptor(
+                skill_id="../bad",
+                name="bad",
+                description="bad",
+                body="bad",
+            )
 
 
 class RightPanelContractTests(TestCase):

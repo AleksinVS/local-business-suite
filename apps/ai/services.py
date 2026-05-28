@@ -309,6 +309,26 @@ def get_workorder_for_actor(*, actor, workorder_id=None, number=None):
     }
 
 
+def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
+    from apps.waiting_list.models import WaitingListEntry
+    from apps.waiting_list.policies import can_view_waiting_list
+
+    if not can_view_waiting_list(actor):
+        raise PermissionDenied("Waiting-list access is not allowed for this user.")
+    if not entry_id:
+        raise ValidationError("entry_id is required.")
+    entry = WaitingListEntry.objects.get(pk=entry_id)
+    return {
+        "id": entry.id,
+        "status": entry.status,
+        "service_id": entry.service_id,
+        "service": entry.get_service_id_display(),
+        "priority_cito": entry.priority_cito,
+        "created_at": entry.created_at.isoformat(),
+        "updated_at": entry.updated_at.isoformat(),
+    }
+
+
 def create_workorder_for_actor(*, actor, payload):
     if not can_create(actor):
         raise PermissionDenied("Work order creation is not allowed for this user.")

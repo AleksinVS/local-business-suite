@@ -123,6 +123,28 @@ TOOLS = [
         "required_role_scope": "visible",
     },
     {
+        "id": "waiting_list.get",
+        "title": "Get waiting-list entry",
+        "domain": "waiting_list",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Return safe metadata for one visible waiting-list entry by id.",
+        "inputs": [
+            "entry_id",
+        ],
+        "input_schemas": {
+            "entry_id": {
+                "description": "Internal waiting-list entry id.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "entry",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
         "id": "workorders.create",
         "title": "Create work order",
         "domain": "workorders",
@@ -470,6 +492,47 @@ TOOLS = [
         ],
         "requires_confirmation": False,
         "required_role_scope": "visible",
+    },
+    {
+        "id": "ai.skills.create_or_update",
+        "title": "Create or update runtime AI skill",
+        "domain": "ai",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Atomically create or update an instruction-only runtime AI skill under data/contracts/ai/skills. Requires ai.manage_skills.",
+        "inputs": [
+            "skill_id",
+            "name",
+            "description",
+            "source_code",
+            "object_types",
+            "required_tools",
+            "trigger_examples",
+            "body",
+        ],
+        "input_schemas": {
+            "skill_id": {
+                "description": "Normalized skill id, e.g. module.workflow.",
+                "type": "string",
+            },
+            "required_tools": {
+                "description": "Existing tool ids required by the skill.",
+                "type": "array",
+            },
+            "body": {
+                "description": "Instruction-only SKILL.md body. No scripts, assets or arbitrary files.",
+                "type": "string",
+            },
+        },
+        "outputs": [
+            "status",
+            "skill_id",
+            "path",
+            "required_tools",
+            "message",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "ai.manage_skills",
     },
     {
         "id": "access.update_role_permissions",

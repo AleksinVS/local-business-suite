@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: модульные AI skills и registry-driven MCP-фасад",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки module skills и MCP-фасада",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для module skills и MCP-фасада",
+  "EXECUTOR_REPORT.implementation.md": "Отчет исполнения реализации module skills, admin skill creator и MCP resources",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка реализации module skills, runtime skill authoring и e2e-документации",
+  "RETROSPECTIVE.md": "Ретроспектива реализации module skills и MCP-фасада",
+  "task-packets": "Task packets для core registry, skills service, module skills, runtime cleanup, MCP, admin skill creator и e2e"
+}

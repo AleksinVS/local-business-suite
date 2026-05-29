@@ -90,9 +90,33 @@ class WorkOrderRoleMatrixTests(TestCase):
         confirm_closure(workorder=self.workorder, user=self.customer)
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.CLOSED)
+        self.assertIsNotNone(self.workorder.resolved_at)
+        self.assertIsNotNone(self.workorder.closed_at)
         self.assertTrue(self.workorder.closure_confirmed)
         self.assertIsNotNone(self.workorder.closure_confirmed_at)
         self.assertTrue(can_rate(self.customer, self.workorder))
+
+    def test_save_sets_terminal_dates_when_created_closed(self):
+        workorder = WorkOrder.objects.create(
+            title="Закрытая заявка",
+            description="Создана сразу закрытой.",
+            department=self.department,
+            author=self.customer,
+            board=self.board,
+            status=WorkOrderStatus.CLOSED,
+        )
+
+        self.assertIsNotNone(workorder.resolved_at)
+        self.assertIsNotNone(workorder.closed_at)
+
+    def test_save_update_fields_persists_generated_terminal_dates(self):
+        self.workorder.status = WorkOrderStatus.CLOSED
+        self.workorder.save(update_fields=["status"])
+
+        self.workorder.refresh_from_db()
+        self.assertEqual(self.workorder.status, WorkOrderStatus.CLOSED)
+        self.assertIsNotNone(self.workorder.resolved_at)
+        self.assertIsNotNone(self.workorder.closed_at)
 
     def test_transition_service_creates_audit_log(self):
         transition_workorder(

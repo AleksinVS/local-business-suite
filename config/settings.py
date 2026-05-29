@@ -266,7 +266,7 @@ else:
 if DJANGO_AUTH_MODE in {"remote_user", "hybrid"}:
     MIDDLEWARE.insert(
         MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
-        "django.contrib.auth.middleware.PersistentRemoteUserMiddleware",
+        "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware",
     )
 
 LANGUAGE_CODE = "ru-ru"

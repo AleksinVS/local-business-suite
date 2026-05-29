@@ -4,10 +4,12 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from .ldap_backend import LDAPConfig, normalize_username, sync_user_groups
 from .models import ExternalIdentity
 from .services import scope_tokens_for_principal, upsert_ad_identity_from_attributes
+from .views import MANUAL_AUTH_SESSION_KEY
 
 
 class LDAPAuthConfigTests(TestCase):
@@ -83,3 +85,38 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(identity.sync_status, ExternalIdentity.SyncStatus.VERIFIED)
         self.assertNotIn("unicodePwd", identity.attributes)
         self.assertEqual(scope_tokens_for_principal(sid="S-1-5-21-linked"), {f"user:{user.id}"})
+
+
+class PortalAuthViewTests(TestCase):
+    def test_logout_keeps_remote_user_from_immediate_relogin(self):
+        response = self.client.get(reverse("core:dashboard"), REMOTE_USER="DOMAIN\\remote-user")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+        self.assertEqual(response.wsgi_request.user.username, "remote-user")
+
+        response = self.client.post(reverse("logout"), REMOTE_USER="DOMAIN\\remote-user")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self.client.session[MANUAL_AUTH_SESSION_KEY])
+
+        response = self.client.get(reverse("core:dashboard"), REMOTE_USER="DOMAIN\\remote-user")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response["Location"])
+
+    def test_manual_login_takes_precedence_over_remote_user(self):
+        User = get_user_model()
+        local_user = User.objects.create_user(username="local-user", password="local-pass")
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": "local-user", "password": "local-pass"},
+            REMOTE_USER="DOMAIN\\remote-user",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), local_user.pk)
+        self.assertTrue(self.client.session[MANUAL_AUTH_SESSION_KEY])
+
+        response = self.client.get(reverse("core:dashboard"), REMOTE_USER="DOMAIN\\remote-user")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.wsgi_request.user.username, "local-user")

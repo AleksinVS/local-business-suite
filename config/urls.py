@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
+
+from apps.accounts.views import PortalLoginView, PortalLogoutView
 
 from . import views as config_views
 
@@ -17,8 +18,8 @@ handler500 = config_views.handler500
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
-    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("accounts/login/", PortalLoginView.as_view(), name="login"),
+    path("accounts/logout/", PortalLogoutView.as_view(), name="logout"),
     path("", include("apps.core.urls")),
     path("ai/", include("apps.ai.urls")),
     path("analytics/", include("apps.analytics.urls")),

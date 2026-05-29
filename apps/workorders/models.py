@@ -210,12 +210,27 @@ class WorkOrder(models.Model):
         return str(pk)
 
     def save(self, *args, **kwargs):
-        if self.status == WorkOrderStatus.RESOLVED and not self.resolved_at:
-            self.resolved_at = timezone.now()
+        update_fields = kwargs.get("update_fields")
+        generated_fields = set()
+        now = timezone.now()
+
+        if self.status in {WorkOrderStatus.RESOLVED, WorkOrderStatus.CLOSED} and not self.resolved_at:
+            self.resolved_at = self.closed_at or now
+            generated_fields.add("resolved_at")
         if self.status == WorkOrderStatus.CLOSED and not self.closed_at:
-            self.closed_at = timezone.now()
-        if self.status != WorkOrderStatus.CLOSED:
+            self.closed_at = self.resolved_at or now
+            generated_fields.add("closed_at")
+        if self.status != WorkOrderStatus.CLOSED and self.closed_at:
             self.closed_at = None
+            generated_fields.add("closed_at")
+
+        if update_fields is not None and generated_fields:
+            update_field_names = list(update_fields)
+            for field_name in ("resolved_at", "closed_at"):
+                if field_name in generated_fields and field_name not in update_field_names:
+                    update_field_names.append(field_name)
+            kwargs["update_fields"] = update_field_names
+
         creating = self.pk is None
         super().save(*args, **kwargs)
         if creating and not self.number:

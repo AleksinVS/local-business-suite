@@ -2,6 +2,7 @@
   ".": "Аутентификация, хелперы и сидирование ролей",
   "models.py": "Расширенная модель пользователя (CustomUser)",
   "views.py": "Представления аутентификации",
+  "middleware.py": "Middleware для согласования ручного входа с REMOTE_USER",
   "ldap_backend.py": "LDAP-бэкенд аутентификации",
   "services.py": "Сервисы локального управления пользователями и AD identity link",
   "settings_descriptors.py": "Доменные descriptors для Settings Center по пользователям и AD link",

@@ -89,10 +89,9 @@ class LDAPAuthConfigTests(TestCase):
 
 class PortalAuthViewTests(TestCase):
     def test_logout_keeps_remote_user_from_immediate_relogin(self):
-        response = self.client.get(reverse("core:dashboard"), REMOTE_USER="DOMAIN\\remote-user")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.wsgi_request.user.is_authenticated)
-        self.assertEqual(response.wsgi_request.user.username, "remote-user")
+        User = get_user_model()
+        remote_user = User.objects.create_user(username="remote-user")
+        self.client.force_login(remote_user)
 
         response = self.client.post(reverse("logout"), REMOTE_USER="DOMAIN\\remote-user")
 

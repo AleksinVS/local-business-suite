@@ -66,11 +66,11 @@ class MemorySourceAdmin(admin.ModelAdmin):
             )
         )
 
-    @admin.display(ordering="_search_document_count", description="Search docs")
+    @admin.display(ordering="_search_document_count", description="Поисковые документы")
     def search_document_count(self, obj):
         return obj._search_document_count
 
-    @admin.display(ordering="_job_count", description="Jobs")
+    @admin.display(ordering="_job_count", description="Задания")
     def job_count(self, obj):
         return obj._job_count
 
@@ -91,14 +91,14 @@ class MemorySearchDocumentAdmin(admin.ModelAdmin):
     autocomplete_fields = ("source_object", "knowledge_item")
     fieldsets = (
         (None, {"fields": ("document_id", "corpus_type", "object_kind", "knowledge_item", "source_object")}),
-        ("Index", {"fields": ("body_hash", "index_status", "indexed_at")}),
-        ("Metadata", {"fields": ("metadata", "created_at", "updated_at")}),
+        ("Индекс", {"fields": ("body_hash", "index_status", "indexed_at")}),
+        ("Метаданные", {"fields": ("metadata", "created_at", "updated_at")}),
     )
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("source_object", "knowledge_item")
 
-    @admin.display(description="Target")
+    @admin.display(description="Цель")
     def target_display(self, obj):
         if obj.knowledge_item_id:
             return obj.knowledge_item.memory_id
@@ -127,7 +127,7 @@ class MemorySourceObjectAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("source")
 
-    @admin.display(ordering="content_hash", description="Content hash")
+    @admin.display(ordering="content_hash", description="Хэш содержимого")
     def short_content_hash(self, obj):
         return (obj.content_hash or "")[:12]
 
@@ -143,7 +143,7 @@ class MemoryIngestionRunAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("source").annotate(_issue_count=Count("issues"))
 
-    @admin.display(ordering="_issue_count", description="Issues")
+    @admin.display(ordering="_issue_count", description="Проблемы")
     def issue_count(self, obj):
         return obj._issue_count
 
@@ -169,29 +169,29 @@ class MemoryIngestionIssueAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("source", "source_object", "run")
 
-    @admin.display(description="Object")
+    @admin.display(description="Объект")
     def source_object_display(self, obj):
         return obj.source_object.relative_path if obj.source_object_id else ""
 
-    @admin.display(description="Message")
+    @admin.display(description="Сообщение")
     def message_short(self, obj):
         return obj.message[:120]
 
-    @admin.action(description="Acknowledge selected issues")
+    @admin.action(description="Взять выбранные проблемы в работу")
     def acknowledge_selected(self, request, queryset):
         updated = queryset.update(status=MemoryIngestionIssue.Status.ACKNOWLEDGED, updated_at=timezone.now())
-        self.message_user(request, f"Acknowledged {updated} memory ingestion issue(s).")
+        self.message_user(request, f"Взято в работу проблем памяти: {updated}.")
 
-    @admin.action(description="Resolve selected issues")
+    @admin.action(description="Закрыть выбранные проблемы")
     def resolve_selected(self, request, queryset):
         now = timezone.now()
         updated = queryset.update(status=MemoryIngestionIssue.Status.RESOLVED, resolved_at=now, updated_at=now)
-        self.message_user(request, f"Resolved {updated} memory ingestion issue(s).")
+        self.message_user(request, f"Закрыто проблем памяти: {updated}.")
 
-    @admin.action(description="Ignore selected issues")
+    @admin.action(description="Игнорировать выбранные проблемы")
     def ignore_selected(self, request, queryset):
         updated = queryset.update(status=MemoryIngestionIssue.Status.IGNORED, updated_at=timezone.now())
-        self.message_user(request, f"Ignored {updated} memory ingestion issue(s).")
+        self.message_user(request, f"Проигнорировано проблем памяти: {updated}.")
 
 
 @admin.register(MemoryReviewAction)
@@ -357,18 +357,18 @@ class MemoryIndexJobAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("source")
 
-    @admin.display(description="Attempts")
+    @admin.display(description="Попытки")
     def attempts_display(self, obj):
         return f"{obj.attempts}/{obj.max_attempts}"
 
-    @admin.display(description="Duration")
+    @admin.display(description="Длительность")
     def duration(self, obj):
         if not obj.started_at:
             return ""
         finished_at = obj.finished_at or timezone.now()
         return finished_at - obj.started_at
 
-    @admin.action(description="Cancel selected pending/running jobs")
+    @admin.action(description="Отменить выбранные ожидающие или выполняемые задания")
     def cancel_selected_jobs(self, request, queryset):
         now = timezone.now()
         updated = queryset.filter(status__in=[MemoryIndexJob.Status.PENDING, MemoryIndexJob.Status.RUNNING]).update(
@@ -376,7 +376,7 @@ class MemoryIndexJobAdmin(admin.ModelAdmin):
             finished_at=now,
             updated_at=now,
         )
-        self.message_user(request, f"Cancelled {updated} pending/running memory job(s).")
+        self.message_user(request, f"Отменено заданий памяти: {updated}.")
 
 
 @admin.register(MemoryAccessAudit)
@@ -410,11 +410,11 @@ class MemoryAccessAuditAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("actor", "request_id", "tool_name", "policy_decision", "query_hash")}),
         (
-            "Retrieval",
+            "Поиск",
             {"fields": ("returned_document_ids", "returned_fact_ids", "allowed_scope_tokens", "retrieval_trace")},
         ),
-        ("Denied access", {"fields": ("denied_reason",)}),
-        ("Timestamps", {"fields": ("created_at",)}),
+        ("Отказ доступа", {"fields": ("denied_reason",)}),
+        ("Время", {"fields": ("created_at",)}),
     )
 
     def get_queryset(self, request):
@@ -423,15 +423,15 @@ class MemoryAccessAuditAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    @admin.display(description="Documents")
+    @admin.display(description="Документы")
     def returned_documents_count(self, obj):
         return len(obj.returned_document_ids or [])
 
-    @admin.display(description="Facts")
+    @admin.display(description="Факты")
     def returned_facts_count(self, obj):
         return len(obj.returned_fact_ids or [])
 
-    @admin.display(description="Denied reason")
+    @admin.display(description="Причина отказа")
     def denied_reason_short(self, obj):
         if not obj.denied_reason:
             return ""

@@ -436,7 +436,7 @@ def build_source_envelope_extraction_packet(content_object: AnalyticsContentObje
     text = normalize_text(envelope.text)
     secret_scan = scan_for_secrets(text)
     if secret_scan.blocked:
-        raise ValidationError("Analytics projection blocked: source envelope contains credential material.")
+        raise ValidationError("Проекция аналитики заблокирована: пакет источника содержит учетные данные или секрет.")
     normalized_facts = [
         normalize_source_envelope_fact(content_object=content_object, envelope=envelope, fact=fact, evidence_id=evidence_id)
         for fact in facts
@@ -471,7 +471,7 @@ def build_source_envelope_extraction_packet(content_object: AnalyticsContentObje
 def normalize_source_envelope_fact(*, content_object: AnalyticsContentObject, envelope: SourceObjectEnvelope, fact: dict, evidence_id: str):
     fact_type = str(fact.get("fact_type") or "").strip()
     if not fact_type:
-        raise ValidationError("Source adapter analytics fact must contain fact_type.")
+        raise ValidationError("Факт аналитики из адаптера источника должен содержать fact_type.")
     dimensions = dict(fact.get("dimensions") or {})
     measures = dict(fact.get("measures") or {})
     semantic_hash = fact.get("semantic_hash") or sha256_text(
@@ -506,7 +506,7 @@ def build_extraction_packet(content_object: AnalyticsContentObject):
     text = content_object.metadata.get("body", "")
     secret_scan = scan_for_secrets(text)
     if secret_scan.blocked:
-        raise ValidationError("Analytics extraction blocked: source content contains credential material.")
+        raise ValidationError("Извлечение аналитики заблокировано: содержимое источника содержит учетные данные или секрет.")
     facts = extract_business_facts(content_object, text)
     packet = {
         "schema_version": EXTRACTION_PACKET_SCHEMA_VERSION,
@@ -836,7 +836,7 @@ def get_contract_source(source_code):
     for source in analytics_sources_contract():
         if source["code"] == source_code:
             return source
-    raise ValidationError(f"Analytics source '{source_code}' is not declared.")
+    raise ValidationError(f"Источник аналитики '{source_code}' не объявлен.")
 
 
 def analytics_sources_contract():

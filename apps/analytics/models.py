@@ -5,17 +5,17 @@ from django.db.models import Q
 
 class AnalyticsSource(models.Model):
     class SourceKind(models.TextChoices):
-        MEMORY = "memory", "Memory"
-        DJANGO_MODEL = "django_model", "Django model"
-        EMAIL_IMAP = "email_imap", "Email IMAP"
-        FILE_SHARE = "file_share", "File share"
+        MEMORY = "memory", "Память"
+        DJANGO_MODEL = "django_model", "Модель Django"
+        EMAIL_IMAP = "email_imap", "Почта IMAP"
+        FILE_SHARE = "file_share", "Файловый ресурс"
         DMS = "dms", "DMS"
-        EXTERNAL_API = "external_api", "External API"
+        EXTERNAL_API = "external_api", "Внешний API"
 
     class Status(models.TextChoices):
-        ENABLED = "enabled", "Enabled"
-        DISABLED = "disabled", "Disabled"
-        ERROR = "error", "Error"
+        ENABLED = "enabled", "Включен"
+        DISABLED = "disabled", "Отключен"
+        ERROR = "error", "Ошибка"
 
     code = models.CharField(max_length=120, unique=True)
     title = models.CharField(max_length=255)
@@ -38,8 +38,8 @@ class AnalyticsSource(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["sensitivity"]),
         ]
-        verbose_name = "Analytics source"
-        verbose_name_plural = "Analytics sources"
+        verbose_name = "Источник аналитики"
+        verbose_name_plural = "Источники аналитики"
 
     def __str__(self):
         return self.code
@@ -47,11 +47,11 @@ class AnalyticsSource(models.Model):
 
 class AnalyticsExtractionRun(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Завершен"
+        FAILED = "failed", "Ошибка"
+        CANCELLED = "cancelled", "Отменен"
 
     source = models.ForeignKey(AnalyticsSource, on_delete=models.PROTECT, related_name="extraction_runs")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
@@ -84,8 +84,8 @@ class AnalyticsExtractionRun(models.Model):
                 name="analytics_extraction_run_time_range",
             ),
         ]
-        verbose_name = "Analytics extraction run"
-        verbose_name_plural = "Analytics extraction runs"
+        verbose_name = "Запуск извлечения аналитики"
+        verbose_name_plural = "Запуски извлечения аналитики"
 
     def __str__(self):
         return f"{self.source.code}:{self.status}:{self.pk}"
@@ -122,8 +122,8 @@ class AnalyticsContentObject(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["source", "source_object_id"], name="analytics_content_source_object_uniq"),
         ]
-        verbose_name = "Analytics content object"
-        verbose_name_plural = "Analytics content objects"
+        verbose_name = "Объект содержимого аналитики"
+        verbose_name_plural = "Объекты содержимого аналитики"
 
     def __str__(self):
         return f"{self.source.code}:{self.source_object_id}"
@@ -151,8 +151,8 @@ class AnalyticsExtractionPacket(models.Model):
             models.Index(fields=["packet_id"]),
             models.Index(fields=["sensitivity"]),
         ]
-        verbose_name = "Analytics extraction packet"
-        verbose_name_plural = "Analytics extraction packets"
+        verbose_name = "Пакет извлечения аналитики"
+        verbose_name_plural = "Пакеты извлечения аналитики"
 
     def __str__(self):
         return self.packet_id
@@ -173,8 +173,8 @@ class AnalyticsEvidenceRef(models.Model):
             models.Index(fields=["ref_kind"]),
             models.Index(fields=["authority_rank"]),
         ]
-        verbose_name = "Analytics evidence ref"
-        verbose_name_plural = "Analytics evidence refs"
+        verbose_name = "Ссылка на доказательство аналитики"
+        verbose_name_plural = "Ссылки на доказательства аналитики"
 
     def __str__(self):
         return self.evidence_id
@@ -182,10 +182,10 @@ class AnalyticsEvidenceRef(models.Model):
 
 class AnalyticsDuplicateCandidate(models.Model):
     class Status(models.TextChoices):
-        PROPOSED = "proposed", "Proposed"
-        MERGED = "merged", "Merged"
-        VERSIONED = "versioned", "Versioned"
-        REJECTED = "rejected", "Rejected"
+        PROPOSED = "proposed", "Предложен"
+        MERGED = "merged", "Объединен"
+        VERSIONED = "versioned", "Версионирован"
+        REJECTED = "rejected", "Отклонен"
 
     canonical_object = models.ForeignKey(
         AnalyticsContentObject,
@@ -230,8 +230,8 @@ class AnalyticsDuplicateCandidate(models.Model):
                 name="analytics_duplicate_score_0_1",
             ),
         ]
-        verbose_name = "Analytics duplicate candidate"
-        verbose_name_plural = "Analytics duplicate candidates"
+        verbose_name = "Кандидат-дубликат аналитики"
+        verbose_name_plural = "Кандидаты-дубликаты аналитики"
 
     def __str__(self):
         return f"{self.match_kind}:{self.status}:{self.pk}"
@@ -267,8 +267,8 @@ class AnalyticsFact(models.Model):
             models.Index(fields=["is_active"]),
             models.Index(fields=["sensitivity"]),
         ]
-        verbose_name = "Analytics fact"
-        verbose_name_plural = "Analytics facts"
+        verbose_name = "Факт аналитики"
+        verbose_name_plural = "Факты аналитики"
 
     def __str__(self):
         return self.fact_id
@@ -299,8 +299,8 @@ class AnalyticsMetricSnapshot(models.Model):
                 name="analytics_metric_snapshot_time_range",
             ),
         ]
-        verbose_name = "Analytics metric snapshot"
-        verbose_name_plural = "Analytics metric snapshots"
+        verbose_name = "Снимок метрики аналитики"
+        verbose_name_plural = "Снимки метрик аналитики"
 
     def __str__(self):
         return f"{self.metric_code}:{self.value}"
@@ -308,17 +308,17 @@ class AnalyticsMetricSnapshot(models.Model):
 
 class AnalyticsSignal(models.Model):
     class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        DIAGNOSING = "diagnosing", "Diagnosing"
-        ROUTED = "routed", "Routed"
-        RESOLVED = "resolved", "Resolved"
-        IGNORED = "ignored", "Ignored"
+        OPEN = "open", "Открыт"
+        DIAGNOSING = "diagnosing", "Диагностика"
+        ROUTED = "routed", "Маршрутизирован"
+        RESOLVED = "resolved", "Закрыт"
+        IGNORED = "ignored", "Игнорируется"
 
     class Severity(models.TextChoices):
-        INFO = "info", "Info"
-        WARNING = "warning", "Warning"
-        HIGH = "high", "High"
-        CRITICAL = "critical", "Critical"
+        INFO = "info", "Информация"
+        WARNING = "warning", "Предупреждение"
+        HIGH = "high", "Высокая"
+        CRITICAL = "critical", "Критическая"
 
     signal_id = models.CharField(max_length=160, unique=True)
     monitor_code = models.CharField(max_length=120)
@@ -345,8 +345,8 @@ class AnalyticsSignal(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["severity"]),
         ]
-        verbose_name = "Analytics signal"
-        verbose_name_plural = "Analytics signals"
+        verbose_name = "Сигнал аналитики"
+        verbose_name_plural = "Сигналы аналитики"
 
     def __str__(self):
         return self.signal_id
@@ -354,10 +354,10 @@ class AnalyticsSignal(models.Model):
 
 class AnalyticsDiagnosticRun(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Завершен"
+        FAILED = "failed", "Ошибка"
 
     signal = models.ForeignKey(AnalyticsSignal, on_delete=models.PROTECT, related_name="diagnostic_runs")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
@@ -384,8 +384,8 @@ class AnalyticsDiagnosticRun(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["dry_run"]),
         ]
-        verbose_name = "Analytics diagnostic run"
-        verbose_name_plural = "Analytics diagnostic runs"
+        verbose_name = "Запуск диагностики аналитики"
+        verbose_name_plural = "Запуски диагностики аналитики"
 
     def __str__(self):
         return f"{self.signal_id}:{self.status}:{self.pk}"
@@ -393,11 +393,11 @@ class AnalyticsDiagnosticRun(models.Model):
 
 class AnalyticsCase(models.Model):
     class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        ROUTED = "routed", "Routed"
-        IN_PROGRESS = "in_progress", "In progress"
-        RESOLVED = "resolved", "Resolved"
-        CANCELLED = "cancelled", "Cancelled"
+        DRAFT = "draft", "Черновик"
+        ROUTED = "routed", "Маршрутизирован"
+        IN_PROGRESS = "in_progress", "В работе"
+        RESOLVED = "resolved", "Закрыт"
+        CANCELLED = "cancelled", "Отменен"
 
     case_id = models.CharField(max_length=160, unique=True)
     signal = models.ForeignKey(AnalyticsSignal, on_delete=models.PROTECT, related_name="cases")
@@ -414,8 +414,8 @@ class AnalyticsCase(models.Model):
             models.Index(fields=["route_code"]),
             models.Index(fields=["status"]),
         ]
-        verbose_name = "Analytics case"
-        verbose_name_plural = "Analytics cases"
+        verbose_name = "Случай аналитики"
+        verbose_name_plural = "Случаи аналитики"
 
     def __str__(self):
         return self.case_id
@@ -423,10 +423,10 @@ class AnalyticsCase(models.Model):
 
 class AnalyticsMetricCandidate(models.Model):
     class Status(models.TextChoices):
-        PROPOSED = "proposed", "Proposed"
-        NEEDS_REVIEW = "needs_review", "Needs review"
-        ACCEPTED = "accepted", "Accepted"
-        REJECTED = "rejected", "Rejected"
+        PROPOSED = "proposed", "Предложен"
+        NEEDS_REVIEW = "needs_review", "Требует проверки"
+        ACCEPTED = "accepted", "Принят"
+        REJECTED = "rejected", "Отклонен"
 
     candidate_id = models.CharField(max_length=160, unique=True)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.PROPOSED)
@@ -452,8 +452,8 @@ class AnalyticsMetricCandidate(models.Model):
             models.Index(fields=["candidate_id"]),
             models.Index(fields=["status"]),
         ]
-        verbose_name = "Analytics metric candidate"
-        verbose_name_plural = "Analytics metric candidates"
+        verbose_name = "Кандидат метрики аналитики"
+        verbose_name_plural = "Кандидаты метрик аналитики"
 
     def __str__(self):
         return self.candidate_id
@@ -475,8 +475,8 @@ class AnalyticsSampleManifest(models.Model):
             models.Index(fields=["scope_rule_code"]),
             models.Index(fields=["sampling_strategy"]),
         ]
-        verbose_name = "Analytics sample manifest"
-        verbose_name_plural = "Analytics sample manifests"
+        verbose_name = "Манифест выборки аналитики"
+        verbose_name_plural = "Манифесты выборок аналитики"
 
     def __str__(self):
         return self.manifest_id
@@ -501,8 +501,8 @@ class AnalyticsAccessAudit(models.Model):
             models.Index(fields=["actor", "-created_at"]),
             models.Index(fields=["action", "decision"]),
         ]
-        verbose_name = "Analytics access audit"
-        verbose_name_plural = "Analytics access audits"
+        verbose_name = "Аудит доступа к аналитике"
+        verbose_name_plural = "Аудит доступа к аналитике"
 
     def __str__(self):
         return f"{self.action}:{self.decision}:{self.pk}"

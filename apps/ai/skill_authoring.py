@@ -34,7 +34,7 @@ def can_manage_ai_skills(user: Any) -> bool:
 
 def create_or_update_runtime_skill_for_actor(*, actor: Any, payload: dict[str, Any]) -> dict[str, Any]:
     if not can_manage_ai_skills(actor):
-        raise PermissionDenied("AI skill management is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно управление навыками ИИ.")
     document = build_runtime_skill_document(payload)
     skill_id = document["skill_id"]
     target_dir = _runtime_skill_dir(skill_id)
@@ -50,7 +50,7 @@ def create_or_update_runtime_skill_for_actor(*, actor: Any, payload: dict[str, A
         "skill_id": skill_id,
         "path": str(target_path.relative_to(settings.RUNTIME_CONTRACTS_DIR)),
         "required_tools": document["required_tools"],
-        "message": "Runtime skill saved.",
+        "message": "Рабочий навык сохранен.",
     }
 
 
@@ -67,13 +67,13 @@ def build_runtime_skill_document(payload: dict[str, Any]) -> dict[str, Any]:
     body = str(payload.get("body") or payload.get("instructions") or "").strip()
 
     if not name:
-        raise ValidationError("Skill name is required.")
+        raise ValidationError("Нужно указать название навыка.")
     if not description:
-        raise ValidationError("Skill description is required.")
+        raise ValidationError("Нужно указать описание навыка.")
     if not body:
-        raise ValidationError("Skill body is required.")
+        raise ValidationError("Нужно указать инструкции навыка.")
     if payload.get("scripts") or payload.get("assets") or payload.get("files"):
-        raise ValidationError("Runtime skills are instruction-only in this MVP.")
+        raise ValidationError("В MVP рабочие навыки могут содержать только инструкции.")
 
     descriptor = build_file_skill_descriptor(
         skill_id,
@@ -110,9 +110,9 @@ def validate_runtime_skill_file(path: Path) -> dict[str, Any]:
     path = Path(path)
     skill_id = normalize_skill_id(path.parent.name)
     if path.name != "SKILL.md":
-        raise ValidationError("Runtime skill file must be named SKILL.md.")
+        raise ValidationError("Файл рабочего навыка должен называться SKILL.md.")
     if not _is_within_root(path, settings.RUNTIME_CONTRACTS_DIR / "ai" / "skills"):
-        raise ValidationError("Runtime skill file is outside the skills directory.")
+        raise ValidationError("Файл рабочего навыка находится вне директории навыков.")
     metadata, body = parse_skill_md(path)
     descriptor = build_file_skill_descriptor(skill_id, metadata, body)
     return descriptor.catalog_entry()
@@ -135,7 +135,7 @@ def _ensure_instruction_only_dir(path: Path) -> None:
         return
     extra = [child.name for child in path.iterdir() if child.name not in {"SKILL.md", ".SKILL.md.tmp"}]
     if extra:
-        raise ValidationError("Runtime skill directory contains unsupported files.")
+        raise ValidationError("Директория рабочего навыка содержит неподдерживаемые файлы.")
 
 
 def _normalize_list(value: Any) -> list[str]:

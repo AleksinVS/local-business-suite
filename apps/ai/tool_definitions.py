@@ -1,7 +1,7 @@
 TOOL_REGISTRY_ROOT = {
     "version": "1.0",
     "name": "chat_agent_tool_registry",
-    "description": "Declared tools available to the chat and agent block.",
+    "description": "Заявленные инструменты, доступные чату и агентному блоку.",
     "default_policies": {
         "authentication_required": True,
         "policy_enforced": True,
@@ -13,11 +13,11 @@ TOOL_REGISTRY_ROOT = {
 TOOLS = [
     {
         "id": "ui.get_current_context",
-        "title": "Get current UI context",
+        "title": "Получить текущий контекст UI",
         "domain": "ui",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return the server-resolved safe current window context bound to the current chat request.",
+        "description": "Вернуть безопасный контекст текущего окна, связанный с текущим запросом чата.",
         "inputs": [],
         "outputs": [
             "status",
@@ -28,11 +28,11 @@ TOOLS = [
     },
     {
         "id": "ui.open_right_panel",
-        "title": "Open object in right panel",
+        "title": "Открыть объект в правой панели",
         "domain": "ui",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return a safe browser command to open a visible module object in the shared right panel.",
+        "description": "Вернуть безопасную команду браузера для открытия видимого объекта модуля в общей правой панели.",
         "inputs": [
             "source_code",
             "object_type",
@@ -41,7 +41,7 @@ TOOLS = [
         ],
         "input_schemas": {
             "mode": {
-                "description": "Right panel mode. MVP supports view only.",
+                "description": "Режим правой панели. В MVP поддерживается только просмотр.",
                 "enum": ["view"],
             },
         },
@@ -54,22 +54,22 @@ TOOLS = [
     },
     {
         "id": "workorders.list",
-        "title": "List work orders",
+        "title": "Список заявок",
         "domain": "workorders",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return work orders filtered by status and limit.",
+        "description": "Вернуть заявки с фильтром по статусу и ограничением количества.",
         "inputs": [
             "status",
             "limit",
         ],
         "input_schemas": {
             "status": {
-                "description": "Filter by work order status",
+                "description": "Фильтр по статусу заявки.",
                 "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
             },
             "limit": {
-                "description": "Maximum number of results to return",
+                "description": "Максимальное количество результатов.",
                 "type": "integer",
             },
         },
@@ -80,11 +80,11 @@ TOOLS = [
     },
     {
         "id": "workorders.get",
-        "title": "Get work order",
+        "title": "Получить заявку",
         "domain": "workorders",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return a single work order by id or human-readable number.",
+        "description": "Вернуть одну заявку по внутреннему id или человекочитаемому номеру.",
         "inputs": [
             "workorder_id",
             "number",
@@ -96,22 +96,22 @@ TOOLS = [
     },
     {
         "id": "workorders.search",
-        "title": "Search work orders",
+        "title": "Поиск заявок",
         "domain": "workorders",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Search indexed work order source data through memory with workorder access checks.",
+        "description": "Искать индексированные данные заявок через память с проверкой доступа к заявкам.",
         "inputs": [
             "query",
             "limit",
         ],
         "input_schemas": {
             "query": {
-                "description": "Natural-language work order search query",
+                "description": "Поисковый запрос по заявкам на естественном языке.",
                 "type": "string",
             },
             "limit": {
-                "description": "Maximum number of work order results to return",
+                "description": "Максимальное количество найденных заявок.",
                 "type": "integer",
             },
         },
@@ -124,17 +124,17 @@ TOOLS = [
     },
     {
         "id": "waiting_list.get",
-        "title": "Get waiting-list entry",
+        "title": "Получить запись листа ожидания",
         "domain": "waiting_list",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return safe metadata for one visible waiting-list entry by id.",
+        "description": "Вернуть безопасные метаданные одной видимой записи листа ожидания по id.",
         "inputs": [
             "entry_id",
         ],
         "input_schemas": {
             "entry_id": {
-                "description": "Internal waiting-list entry id.",
+                "description": "Внутренний id записи листа ожидания.",
                 "type": "integer",
             },
         },
@@ -146,11 +146,11 @@ TOOLS = [
     },
     {
         "id": "workorders.create",
-        "title": "Create work order",
+        "title": "Создать заявку",
         "domain": "workorders",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Create a work order with department, subject (title), description, optional device, and priority.",
+        "description": "Создать заявку с подразделением, темой, описанием, необязательным изделием и приоритетом.",
         "inputs": [
             "department_id",
             "subject",
@@ -160,7 +160,7 @@ TOOLS = [
         ],
         "input_schemas": {
             "priority": {
-                "description": "Priority level for the work order",
+                "description": "Уровень приоритета заявки.",
                 "enum": ["low", "medium", "high", "critical"],
             },
         },
@@ -172,18 +172,18 @@ TOOLS = [
     },
     {
         "id": "workorders.transition",
-        "title": "Transition work order",
+        "title": "Изменить статус заявки",
         "domain": "workorders",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Move a work order to an allowed next status.",
+        "description": "Перевести заявку в разрешенный следующий статус.",
         "inputs": [
             "workorder_id",
             "target_status",
         ],
         "input_schemas": {
             "target_status": {
-                "description": "The target status to transition to. Must be an allowed next status per workflow rules.",
+                "description": "Целевой статус перехода. Должен быть разрешен правилами процесса.",
                 "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
             },
         },
@@ -195,11 +195,11 @@ TOOLS = [
     },
     {
         "id": "workorders.comment",
-        "title": "Add work order comment",
+        "title": "Добавить комментарий к заявке",
         "domain": "workorders",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Append a comment to a work order timeline.",
+        "description": "Добавить комментарий в историю заявки.",
         "inputs": [
             "workorder_id",
             "text",
@@ -212,11 +212,11 @@ TOOLS = [
     },
     {
         "id": "workorders.confirm_closure",
-        "title": "Confirm work order closure",
+        "title": "Подтвердить закрытие заявки",
         "domain": "workorders",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Confirm the closure of a resolved work order.",
+        "description": "Подтвердить закрытие выполненной заявки.",
         "inputs": [
             "workorder_id",
         ],
@@ -228,11 +228,11 @@ TOOLS = [
     },
     {
         "id": "workorders.rate",
-        "title": "Rate work order",
+        "title": "Оценить заявку",
         "domain": "workorders",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Rate a closed work order.",
+        "description": "Поставить оценку закрытой заявке.",
         "inputs": [
             "workorder_id",
             "rating",
@@ -245,11 +245,11 @@ TOOLS = [
     },
     {
         "id": "departments.list",
-        "title": "List departments",
+        "title": "Список подразделений",
         "domain": "core",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return the hierarchical department tree or a filtered subset.",
+        "description": "Вернуть иерархическое дерево подразделений или отфильтрованную часть.",
         "inputs": [
             "query",
             "parent_id",
@@ -261,11 +261,11 @@ TOOLS = [
     },
     {
         "id": "devices.list",
-        "title": "List devices",
+        "title": "Список изделий",
         "domain": "inventory",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return devices for selection and lookup.",
+        "description": "Вернуть изделия для выбора и поиска.",
         "inputs": [
             "query",
             "department_id",
@@ -278,11 +278,11 @@ TOOLS = [
     },
     {
         "id": "inventory.devices.create",
-        "title": "Create device",
+        "title": "Создать изделие",
         "domain": "inventory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Create a new medical device in the inventory.",
+        "description": "Создать новое медицинское изделие в инвентаре.",
         "inputs": [
             "name",
             "department_id",
@@ -297,11 +297,11 @@ TOOLS = [
     },
     {
         "id": "inventory.devices.update",
-        "title": "Update device",
+        "title": "Обновить изделие",
         "domain": "inventory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Update an existing medical device.",
+        "description": "Обновить существующее медицинское изделие.",
         "inputs": [
             "device_id",
             "name",
@@ -317,11 +317,11 @@ TOOLS = [
     },
     {
         "id": "inventory.devices.archive",
-        "title": "Archive device",
+        "title": "Архивировать изделие",
         "domain": "inventory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Archive a medical device so it can no longer be assigned.",
+        "description": "Архивировать медицинское изделие, чтобы его больше нельзя было назначать.",
         "inputs": [
             "device_id",
         ],
@@ -333,11 +333,11 @@ TOOLS = [
     },
     {
         "id": "analytics.summary",
-        "title": "Analytics summary",
+        "title": "Сводка аналитики",
         "domain": "analytics",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return read-only analytics summaries for status, departments, or assignees.",
+        "description": "Вернуть аналитические сводки только для чтения по статусам, подразделениям или исполнителям.",
         "inputs": [
             "summary_type",
         ],
@@ -348,11 +348,11 @@ TOOLS = [
     },
     {
         "id": "memory.search",
-        "title": "Search memory",
+        "title": "Поиск в памяти",
         "domain": "memory",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Search accepted memory knowledge and optional source-data references with citations and routing metadata.",
+        "description": "Искать принятые знания памяти и необязательные ссылки на исходные данные с цитатами и служебными метаданными маршрутизации.",
         "inputs": [
             "query",
             "limit",
@@ -363,15 +363,15 @@ TOOLS = [
         ],
         "input_schemas": {
             "query": {
-                "description": "Natural-language search query",
+                "description": "Поисковый запрос на естественном языке.",
                 "type": "string",
             },
             "limit": {
-                "description": "Maximum number of memory items to return",
+                "description": "Максимальное количество элементов памяти.",
                 "type": "integer",
             },
             "sensitivity": {
-                "description": "Maximum sensitivity level allowed for retrieved memory context",
+                "description": "Максимальный допустимый уровень чувствительности для найденного контекста памяти.",
                 "enum": [
                     "public",
                     "internal",
@@ -382,7 +382,7 @@ TOOLS = [
                 ],
             },
             "search_mode": {
-                "description": "Simple deterministic search mode. Defaults to knowledge_default. knowledge_graph is accepted for compatibility but graph runtime search is not_ready in the current MVP.",
+                "description": "Простой детерминированный режим поиска. По умолчанию knowledge_default. knowledge_graph принимается для совместимости, но графовый поиск в текущем MVP еще не готов.",
                 "enum": [
                     "knowledge_default",
                     "knowledge_precise",
@@ -393,7 +393,7 @@ TOOLS = [
                 ],
             },
             "ranking_profile": {
-                "description": "Named server-side ranking profile. Defaults from search_mode; raw channel weights are not accepted.",
+                "description": "Именованный серверный профиль ранжирования. По умолчанию выбирается из search_mode; сырые веса каналов не принимаются.",
                 "enum": [
                     "precise",
                     "balanced",
@@ -404,7 +404,7 @@ TOOLS = [
                 ],
             },
             "include_source_data": {
-                "description": "Allow source-data fallback when knowledge search returns nothing.",
+                "description": "Разрешить fallback к исходным данным, если поиск по знаниям ничего не вернул.",
                 "type": "boolean",
             },
         },
@@ -418,11 +418,11 @@ TOOLS = [
     },
     {
         "id": "memory.remember",
-        "title": "Remember chat knowledge",
+        "title": "Запомнить знание из чата",
         "domain": "memory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Queue selected AI chat messages for later ingestion as personal or organization memory.",
+        "description": "Поставить выбранные сообщения ИИ-чата в очередь на последующую загрузку как личную или организационную память.",
         "inputs": [
             "session_id",
             "message_ids",
@@ -432,19 +432,19 @@ TOOLS = [
         ],
         "input_schemas": {
             "target_scope": {
-                "description": "Memory target scope. Defaults to personal.",
+                "description": "Целевая область памяти. По умолчанию personal.",
                 "enum": ["personal", "organization"],
             },
             "message_ids": {
-                "description": "ChatMessage ids to use as provenance.",
+                "description": "ID сообщений чата, которые используются как источник происхождения.",
                 "type": "array",
             },
             "user_note": {
-                "description": "Optional user note describing what should be remembered.",
+                "description": "Необязательная заметка пользователя о том, что нужно запомнить.",
                 "type": "string",
             },
             "importance": {
-                "description": "Optional importance hint, e.g. high or organization_candidate.",
+                "description": "Необязательная подсказка важности, например high или organization_candidate.",
                 "type": "string",
             },
         },
@@ -461,11 +461,11 @@ TOOLS = [
     },
     {
         "id": "memory.update_personal",
-        "title": "Update personal memory",
+        "title": "Обновить личную память",
         "domain": "memory",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Edit or delete one personal memory item owned by the actor.",
+        "description": "Изменить или удалить один элемент личной памяти, принадлежащий пользователю.",
         "inputs": [
             "memory_id",
             "operation",
@@ -473,15 +473,15 @@ TOOLS = [
         ],
         "input_schemas": {
             "operation": {
-                "description": "Personal memory operation.",
+                "description": "Операция с личной памятью.",
                 "enum": ["edit", "delete"],
             },
             "memory_id": {
-                "description": "Stable memory item id.",
+                "description": "Стабильный id элемента памяти.",
                 "type": "string",
             },
             "new_text": {
-                "description": "Replacement memory text for edit operations.",
+                "description": "Новый текст памяти для операции изменения.",
                 "type": "string",
             },
         },
@@ -495,11 +495,11 @@ TOOLS = [
     },
     {
         "id": "ai.skills.create_or_update",
-        "title": "Create or update runtime AI skill",
+        "title": "Создать или обновить рабочий навык ИИ",
         "domain": "ai",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Atomically create or update an instruction-only runtime AI skill under data/contracts/ai/skills. Requires ai.manage_skills.",
+        "description": "Атомарно создать или обновить рабочий навык ИИ с инструкциями в data/contracts/ai/skills. Требуется ai.manage_skills.",
         "inputs": [
             "skill_id",
             "name",
@@ -512,15 +512,15 @@ TOOLS = [
         ],
         "input_schemas": {
             "skill_id": {
-                "description": "Normalized skill id, e.g. module.workflow.",
+                "description": "Нормализованный id навыка, например module.workflow.",
                 "type": "string",
             },
             "required_tools": {
-                "description": "Existing tool ids required by the skill.",
+                "description": "ID существующих инструментов, которые нужны навыку.",
                 "type": "array",
             },
             "body": {
-                "description": "Instruction-only SKILL.md body. No scripts, assets or arbitrary files.",
+                "description": "Тело SKILL.md только с инструкциями. Без скриптов, assets и произвольных файлов.",
                 "type": "string",
             },
         },
@@ -536,11 +536,11 @@ TOOLS = [
     },
     {
         "id": "access.update_role_permissions",
-        "title": "Update role permissions",
+        "title": "Обновить права роли",
         "domain": "access",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Update permissions for a specific role in the role rules configuration.",
+        "description": "Обновить права конкретной роли в конфигурации правил ролей.",
         "inputs": [
             "role_name",
             "permissions_map",
@@ -554,11 +554,11 @@ TOOLS = [
     },
     {
         "id": "access.get_role_rules",
-        "title": "Get role rules",
+        "title": "Получить правила ролей",
         "domain": "access",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return the current role configuration from role_rules.json.",
+        "description": "Вернуть текущую конфигурацию ролей из role_rules.json.",
         "inputs": [],
         "outputs": [
             "rules",
@@ -567,11 +567,11 @@ TOOLS = [
     },
     {
         "id": "access.users.list",
-        "title": "List users",
+        "title": "Список пользователей",
         "domain": "access",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return users with their roles and departments. Administrators only.",
+        "description": "Вернуть пользователей с ролями и подразделениями. Только для администраторов.",
         "inputs": [
             "query",
         ],
@@ -582,11 +582,11 @@ TOOLS = [
     },
     {
         "id": "access.users.update",
-        "title": "Update user",
+        "title": "Обновить пользователя",
         "domain": "access",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Update user details such as active status, department, and groups. Administrators only.",
+        "description": "Обновить данные пользователя: активность, подразделение и группы. Только для администраторов.",
         "inputs": [
             "user_id",
             "is_active",
@@ -601,11 +601,11 @@ TOOLS = [
     },
     {
         "id": "access.groups.list",
-        "title": "List groups",
+        "title": "Список групп",
         "domain": "access",
         "mode": "read",
         "execution_mode": "service_or_read_only_query",
-        "description": "Return all available Django groups. Administrators only.",
+        "description": "Вернуть все доступные группы Django. Только для администраторов.",
         "inputs": [],
         "outputs": [
             "items",

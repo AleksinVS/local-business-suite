@@ -88,12 +88,12 @@ def register_right_panel_provider(provider: RightPanelProvider, *, replace: bool
     object_type = _normalize_identifier(getattr(provider, "object_type", ""), "object_type")
     supported_modes = tuple(getattr(provider, "supported_modes", ()) or ())
     if not supported_modes:
-        raise ValidationError("Right panel provider must declare supported_modes.")
+        raise ValidationError("Поставщик правой панели должен объявить supported_modes.")
     for mode in supported_modes:
         _normalize_identifier(mode, "mode")
     key = (source_code, object_type)
     if key in _PROVIDERS and not replace:
-        raise ValidationError(f"Right panel provider '{source_code}/{object_type}' is already registered.")
+        raise ValidationError(f"Поставщик правой панели '{source_code}/{object_type}' уже зарегистрирован.")
     _PROVIDERS[key] = provider
     return provider
 
@@ -128,65 +128,65 @@ def build_right_panel_descriptor(
     normalized_object_id = _normalize_object_id(object_id)
     provider = get_right_panel_provider(normalized_source, normalized_type)
     if provider is None:
-        raise ValidationError("Object cannot be opened in the right panel.")
+        raise ValidationError("Объект нельзя открыть в правой панели.")
     supported_modes = tuple(getattr(provider, "supported_modes", ()) or ())
     if normalized_mode not in supported_modes:
-        raise ValidationError("Right panel mode is not supported.")
+        raise ValidationError("Режим правой панели не поддерживается.")
     if not provider.can_open(user, normalized_object_id, normalized_mode):
-        raise PermissionDenied("Object is not available for the right panel.")
+        raise PermissionDenied("Объект недоступен для правой панели.")
     descriptor = provider.build_panel(user, normalized_object_id, normalized_mode)
     if descriptor.source_code != normalized_source or descriptor.object_type != normalized_type:
-        raise ValidationError("Right panel provider returned mismatched descriptor.")
+        raise ValidationError("Поставщик правой панели вернул несогласованный дескриптор.")
     if descriptor.object_id != normalized_object_id:
-        raise ValidationError("Right panel provider returned mismatched object id.")
+        raise ValidationError("Поставщик правой панели вернул несогласованный object_id.")
     if descriptor.mode != normalized_mode:
-        raise ValidationError("Right panel provider returned mismatched mode.")
+        raise ValidationError("Поставщик правой панели вернул несогласованный режим.")
     return descriptor
 
 
 def _normalize_identifier(value: Any, field_name: str) -> str:
     normalized = str(value or "").strip()
     if not normalized:
-        raise ValidationError(f"Right panel {field_name} must not be empty.")
+        raise ValidationError(f"Поле правой панели {field_name} не должно быть пустым.")
     if len(normalized) > 80 or not _IDENTIFIER_RE.match(normalized):
-        raise ValidationError(f"Right panel {field_name} is invalid.")
+        raise ValidationError(f"Поле правой панели {field_name} некорректно.")
     return normalized
 
 
 def _normalize_object_id(value: Any) -> str:
     normalized = str(value or "").strip()
     if not normalized:
-        raise ValidationError("Right panel object_id must not be empty.")
+        raise ValidationError("object_id правой панели не должен быть пустым.")
     if len(normalized) > 120 or any(ord(ch) < 32 for ch in normalized):
-        raise ValidationError("Right panel object_id is invalid.")
+        raise ValidationError("object_id правой панели некорректен.")
     return normalized
 
 
 def _normalize_local_path(value: Any) -> str:
     normalized = str(value or "").strip()
     if not normalized.startswith("/") or normalized.startswith("//"):
-        raise ValidationError("Right panel htmx_url must be a local path.")
+        raise ValidationError("htmx_url правой панели должен быть локальным путем.")
     if any(ord(ch) < 32 for ch in normalized):
-        raise ValidationError("Right panel htmx_url is invalid.")
+        raise ValidationError("htmx_url правой панели некорректен.")
     return normalized
 
 
 def _normalize_target(value: Any) -> str:
     normalized = str(value or DEFAULT_RIGHT_PANEL_TARGET).strip()
     if normalized != DEFAULT_RIGHT_PANEL_TARGET:
-        raise ValidationError("Right panel target is not supported.")
+        raise ValidationError("Цель правой панели не поддерживается.")
     return normalized
 
 
 def _normalize_swap(value: Any) -> str:
     normalized = str(value or DEFAULT_RIGHT_PANEL_SWAP).strip()
     if normalized not in _SUPPORTED_SWAPS:
-        raise ValidationError("Right panel swap is not supported.")
+        raise ValidationError("Режим замены правой панели не поддерживается.")
     return normalized
 
 
 def _normalize_drawer_size(value: Any) -> str:
     normalized = str(value or "default").strip()
     if normalized not in _SUPPORTED_DRAWER_SIZES:
-        raise ValidationError("Right panel drawer_size is not supported.")
+        raise ValidationError("Размер правой панели не поддерживается.")
     return normalized

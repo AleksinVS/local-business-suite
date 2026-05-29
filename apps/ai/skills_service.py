@@ -118,7 +118,7 @@ def validate_required_tools_exist(required_tools: tuple[str, ...] | list[str]) -
     registry = get_tool_registry()
     missing = [tool_code for tool_code in required_tools if tool_code not in registry]
     if missing:
-        raise ValidationError(f"Unknown required_tools: {', '.join(sorted(missing))}.")
+        raise ValidationError(f"Неизвестные required_tools: {', '.join(sorted(missing))}.")
 
 
 def _provider_available(provider: Any, user: Any | None) -> bool:

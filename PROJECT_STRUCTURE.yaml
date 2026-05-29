@@ -226,6 +226,7 @@ docs: # Документация проекта
     ADR-0019-context-aware-sidebar-ai-chat.md: file # ADR: Контекстный ИИ-чат в левой боковой панели
     ADR-0020-universal-right-drawer-ai-navigation.md: file # ADR: Универсальное открытие правого сайдбара ИИ-ботом
     ADR-0021-module-registered-agent-skills-and-mcp-facade.md: file # ADR: Модульные AI skills и registry-driven MCP-фасад
+    ADR-0022-interface-russification-and-localization-roadmap.md: file # ADR: Русскоязычный интерфейс портала и путь к локализации
   architecture: # Архитектурные документы проекта
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
@@ -257,6 +258,7 @@ docs: # Документация проекта
     AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     CHANGE_PATTERNS.md: file # Паттерны внесения изменений
+    INTERFACE_RUSSIFICATION.md: file # Правила русскоязычных UI-строк до внедрения полноценной локализации
     KNOWLEDGE_ANALYTICS_OPERATIONS.md: file # Операционный guide по knowledge-driven business analytics, IMAP, DMS и дедупликации
     MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md: file # Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний
     MEMORY_INGESTION_OPERATIONS.md: file # Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти
@@ -271,6 +273,7 @@ docs: # Документация проекта
     active: # Активные планы крупных направлений
       context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
+      interface-russification-and-localization.md: file # Активный план русификации интерфейса портала и подготовки к локализации
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-audit-review-ui.md: file # Активный план UI аудита и ревью проблем памяти и поискового индекса
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
@@ -365,6 +368,12 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки контекстного sidebar AI-чата
       EXECUTOR_REPORT.01-06.md: file # Отчет исполнения task packets 01-06
       TASK_ACCEPTANCE.01-06.md: file # Приемочный отчет реализации task packets 01-06
+    interface-russification: # Workflow: русификация интерфейса портала и подготовка к локализации
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для русификации UI
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки русификации UI
+      EXECUTOR_REPORT.implementation.md: file # Отчет реализации русификации интерфейса
+      TASK_ACCEPTANCE.implementation.md: file # Приемка реализации русификации интерфейса
     knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
       task-packets: file
       ARCHITECT_PLAN.json: file # Architect execution plan for knowledge-driven business analytics

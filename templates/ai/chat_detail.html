@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}AI чат | {{ app_display_name }}{% endblock %}
+{% block title %}ИИ-чат | {{ app_display_name }}{% endblock %}
 
 {% block sidebar_panel_label %}Список ИИ-чатов{% endblock %}
 
 {% block sidebar_panel %}
 <div class="ai-session-sidebar" aria-label="Список ИИ-чатов">
     <div class="ai-session-sidebar-head">
-        <h2>AI чат</h2>
+        <h2>ИИ-чат</h2>
         <a href="{% url 'ai:chat_index' %}?new=1">Новый</a>
     </div>
     <div class="ai-session-list">
@@ -33,9 +33,9 @@
 
 {% block content %}
 <div class="ai-chat-main-surface flex antialiased text-gray-800 bg-white overflow-hidden">
-    <!-- Chat Area -->
+    <!-- Область чата -->
     <div class="flex flex-col flex-1 bg-white relative">
-        <!-- Chat Header -->
+        <!-- Заголовок чата -->
         <div class="p-4 bg-white border-b border-gray-200 flex justify-between items-center shadow-sm z-10">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
@@ -55,7 +55,7 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                         </button>
                     </div>
-                    <p class="text-xs text-green-500 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Online</p>
+                    <p class="text-xs text-green-500 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> В сети</p>
                 </div>
             </div>
             <div class="flex items-center gap-3">
@@ -73,9 +73,9 @@
             </div>
         </div>
 
-        <!-- Messages -->
+        <!-- Сообщения -->
         <div class="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50 relative" id="ai-message-list">
-            <!-- Drop overlay for drag-and-drop -->
+            <!-- Зона перетаскивания файлов -->
             <div id="drop-overlay" class="hidden absolute inset-0 z-20 bg-blue-50/80 border-2 border-dashed border-blue-400 rounded-lg items-center justify-center flex-col pointer-events-none">
                 <svg class="w-12 h-12 text-blue-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
                 <p class="text-blue-500 font-medium text-sm">Перетащите файлы сюда</p>
@@ -83,7 +83,7 @@
 
             {% for message in chat_session.messages.all %}
                 {% if message.role == 'user' %}
-                    <!-- User Message -->
+                    <!-- Сообщение пользователя -->
                     <div class="flex justify-end">
                         <div class="flex flex-col items-end gap-1 max-w-[85%] md:max-w-[70%]">
                             <div class="flex items-center space-x-2 rtl:space-x-reverse mb-1">
@@ -91,7 +91,7 @@
                                 <span class="text-xs font-normal text-gray-500">{{ message.created_at|date:"H:i" }}</span>
                             </div>
 
-                            <!-- Attachments Preview inside User Message -->
+                            <!-- Просмотр вложений в сообщении пользователя -->
                             {% if message.attachments.all %}
                             <div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-2 w-full">
                                 {% for att in message.attachments.all %}
@@ -120,7 +120,7 @@
                         </div>
                     </div>
                 {% else %}
-                    <!-- Assistant Message -->
+                    <!-- Сообщение ассистента -->
                     <div class="flex justify-start">
                         <div class="flex flex-col items-start gap-1 max-w-[85%] md:max-w-[70%]">
                             <div class="flex items-center space-x-2 mb-1">
@@ -150,9 +150,9 @@
             {% endfor %}
         </div>
 
-        <!-- Input Area -->
+        <!-- Область ввода -->
         <div class="p-4 bg-white border-t border-gray-200">
-            <!-- Attachment Preview Area (Dynamic via JS) -->
+            <!-- Предпросмотр вложений -->
             <div id="attachment-preview-container" class="hidden mb-3 flex gap-2 overflow-x-auto pb-2"></div>
 
             <form method="post" id="ai-chat-form" action="{% url 'ai:chat_send' chat_session.external_id %}" enctype="multipart/form-data" class="flex items-end gap-2 bg-gray-50 p-2 rounded-2xl border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
@@ -206,16 +206,16 @@
     }
   };
 </script>
-<!-- Tailwind CSS via CDN; temporary until the chat bundle owns utility CSS. -->
+<!-- Tailwind CSS через CDN; временно до выделения стилей чата в свой пакет. -->
 <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-<!-- Flowbite via CDN -->
+<!-- Flowbite через CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
-<!-- DOMPurify for HTML sanitization -->
+<!-- DOMPurify для очистки HTML -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.6/purify.min.js"></script>
-<!-- Marked.js for Markdown rendering -->
+<!-- Marked.js для отображения Markdown -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
 
-<!-- Command data for autocomplete -->
+<!-- Данные команд для автодополнения -->
 {{ predefined_commands|json_script:"predefined-commands-data" }}
 {{ custom_commands|json_script:"custom-commands-data" }}
 

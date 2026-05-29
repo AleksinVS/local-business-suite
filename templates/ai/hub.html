@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}AI | {{ app_display_name }}{% endblock %}
+{% block title %}ИИ | {{ app_display_name }}{% endblock %}
 
 {% block content %}
   <section class="page-intro">
-    <h1>AI Hub</h1>
-    <p>Внутренний control plane для чата, агентных tools и аудита действий.</p>
+    <h1>ИИ-центр</h1>
+    <p>Внутренний контур управления чатом, инструментами агента и аудитом действий.</p>
   </section>
 
   <section class="panel-stack">
     <article class="panel">
-      <h2>Tool Registry</h2>
+      <h2>Реестр инструментов</h2>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -26,8 +26,8 @@
               <tr>
                 <td><code>{{ tool.code }}</code></td>
                 <td>{{ tool.description }}</td>
-                <td>{{ tool.mode }}</td>
-                <td>{{ tool.confirmation_policy }}</td>
+                <td>{{ tool.mode_label }}</td>
+                <td>{{ tool.confirmation_label }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -36,7 +36,7 @@
     </article>
 
     <article class="panel">
-      <h2>Task Types</h2>
+      <h2>Типы задач</h2>
       <ul class="compact-list">
         {% for task in task_types %}
           <li><strong>{{ task.code }}</strong> — {{ task.description }}</li>
@@ -45,10 +45,10 @@
     </article>
 
     <article class="panel">
-      <h2>Последние AI-сессии</h2>
+      <h2>Последние ИИ-сессии</h2>
       <ul class="compact-list">
         {% for session in recent_sessions %}
-          <li>{{ session.user.username }} · {{ session.channel }} · {{ session.status }} · {{ session.external_id }}</li>
+          <li>{{ session.user.username }} · {{ session.get_channel_display }} · {{ session.get_status_display }} · {{ session.external_id }}</li>
         {% empty %}
           <li>Сессий пока нет.</li>
         {% endfor %}
@@ -59,7 +59,7 @@
       <h2>Последние действия агента</h2>
       <ul class="compact-list">
         {% for action in recent_actions %}
-          <li>{{ action.created_at|date:"d.m.Y H:i" }} · {{ action.actor.username }} · {{ action.tool_code }} · {{ action.status }}</li>
+          <li>{{ action.created_at|date:"d.m.Y H:i" }} · {{ action.actor.username }} · {{ action.tool_code }} · {{ action.get_status_display }}</li>
         {% empty %}
           <li>Действий пока нет.</li>
         {% endfor %}

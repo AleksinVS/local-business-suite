@@ -320,7 +320,7 @@
           var textDiv = document.createElement('div');
           textDiv.className = "overflow-hidden";
           textDiv.innerHTML = '<div class="text-xs font-medium text-gray-700 truncate">' + escapeHtml(file.name) + '</div>'
-            + '<div class="text-[10px] text-gray-400">' + (file.size / 1024 / 1024).toFixed(2) + ' MB</div>';
+            + '<div class="text-[10px] text-gray-400">' + (file.size / 1024 / 1024).toFixed(2) + ' МБ</div>';
 
           card.appendChild(textDiv);
           card.appendChild(removeBtn);
@@ -546,7 +546,7 @@
                   }
                   executeUiCommands(data);
                   if (data.error) {
-                    finishWithError(data.message || data.error || 'AI-сервис вернул ошибку.', data);
+                    finishWithError(data.message || data.error || 'ИИ-сервис вернул ошибку.', data);
                   }
                 } catch (err) {
                   // Ignore non-JSON lines
@@ -556,14 +556,14 @@
             }).catch(function(err) {
               if (err.name !== 'AbortError') console.error('Stream read error:', err);
               if (err.name === 'AbortError') return;
-              finishWithError('Соединение с AI-сервисом было прервано.', {});
+          finishWithError('Соединение с ИИ-сервисом было прервано.', {});
             });
           }
           read();
         }).catch(function(err) {
           if (err.name !== 'AbortError') console.error('Fetch error:', err);
           if (err.name === 'AbortError') return;
-          finishWithError('Не удалось получить ответ от AI-сервиса. Причина: ошибка соединения с сервером чата.', {});
+          finishWithError('Не удалось получить ответ от ИИ-сервиса. Причина: ошибка соединения с сервером чата.', {});
         });
 
       function finishWithError(message, payload) {

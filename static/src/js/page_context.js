@@ -158,7 +158,7 @@
       body: JSON.stringify(envelope),
     })
       .then(function (response) {
-        if (!response.ok) throw new Error("context update failed");
+        if (!response.ok) throw new Error("Не удалось обновить контекст.");
         return response.json();
       })
       .then(function (payload) {
@@ -169,7 +169,7 @@
         emitUpdate();
       })
       .catch(function () {
-        // Context is an optional helper; chat still works without it.
+        // Контекст необязателен; чат продолжает работать без него.
       });
   }
 

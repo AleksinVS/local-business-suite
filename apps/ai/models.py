@@ -11,7 +11,7 @@ def default_pending_action_expires_at():
 
 
 class SlashCommand(models.Model):
-    """User-created custom slash command (prompt template)."""
+    """Пользовательская слэш-команда с шаблоном промта."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -21,16 +21,16 @@ class SlashCommand(models.Model):
     )
     name = models.CharField(
         max_length=64,
-        help_text="Command name without the leading slash, e.g. 'summary'",
+        help_text="Имя команды без начального слэша, например 'summary'.",
     )
     shortcut = models.CharField(
         max_length=16,
         blank=True,
-        help_text="Optional short alias, e.g. 'sum'",
+        help_text="Необязательное короткое сокращение, например 'sum'.",
     )
     description = models.CharField(max_length=255, blank=True)
     template = models.TextField(
-        help_text="Prompt template. Use {input} as placeholder for user text after the command.",
+        help_text="Шаблон промта. Используйте {input} как место для текста пользователя после команды.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,12 +52,12 @@ class SlashCommand(models.Model):
 
 class ChatSession(models.Model):
     class Channel(models.TextChoices):
-        INTERNAL = "internal", "Internal"
-        SIDEBAR = "sidebar", "Sidebar"
+        INTERNAL = "internal", "Основной чат"
+        SIDEBAR = "sidebar", "Боковая панель"
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        ARCHIVED = "archived", "Archived"
+        ACTIVE = "active", "Активна"
+        ARCHIVED = "archived", "В архиве"
 
     external_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     user = models.ForeignKey(
@@ -82,19 +82,19 @@ class ChatSession(models.Model):
             models.Index(fields=["channel"]),
             models.Index(fields=["last_message_at"]),
         ]
-        verbose_name = "AI chat session"
-        verbose_name_plural = "AI chat sessions"
+        verbose_name = "Сессия ИИ-чата"
+        verbose_name_plural = "Сессии ИИ-чата"
 
     def __str__(self):
-        return self.title or f"Chat {self.external_id}"
+        return self.title or f"Чат {self.external_id}"
 
 
 class ChatMessage(models.Model):
     class Role(models.TextChoices):
-        USER = "user", "User"
-        ASSISTANT = "assistant", "Assistant"
-        SYSTEM = "system", "System"
-        TOOL = "tool", "Tool"
+        USER = "user", "Пользователь"
+        ASSISTANT = "assistant", "Ассистент"
+        SYSTEM = "system", "Система"
+        TOOL = "tool", "Инструмент"
 
     session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name="messages")
     role = models.CharField(max_length=16, choices=Role.choices)
@@ -109,16 +109,16 @@ class ChatMessage(models.Model):
             models.Index(fields=["created_at", "id"]),
             models.Index(fields=["role"]),
         ]
-        verbose_name = "AI chat message"
-        verbose_name_plural = "AI chat messages"
+        verbose_name = "Сообщение ИИ-чата"
+        verbose_name_plural = "Сообщения ИИ-чата"
 
 
 class PendingAction(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        CONFIRMED = "confirmed", "Confirmed"
-        CANCELLED = "cancelled", "Cancelled"
-        EXPIRED = "expired", "Expired"
+        PENDING = "pending", "Ожидает"
+        CONFIRMED = "confirmed", "Подтверждено"
+        CANCELLED = "cancelled", "Отменено"
+        EXPIRED = "expired", "Истекло"
 
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     tool_code = models.CharField(max_length=120)
@@ -150,24 +150,24 @@ class PendingAction(models.Model):
             models.Index(fields=["tool_code"]),
             models.Index(fields=["expires_at"], name="ai_pendinga_expires_77ce4c_idx"),
         ]
-        verbose_name = "AI pending action"
-        verbose_name_plural = "AI pending actions"
+        verbose_name = "Ожидающее действие ИИ"
+        verbose_name_plural = "Ожидающие действия ИИ"
 
     def __str__(self):
-        return f"Pending {self.tool_code} ({self.token})"
+        return f"Ожидает {self.tool_code} ({self.token})"
 
 
 class AgentActionLog(models.Model):
     class ActionKind(models.TextChoices):
-        READ = "read", "Read"
-        WRITE = "write", "Write"
-        ADMIN = "admin", "Admin"
+        READ = "read", "Чтение"
+        WRITE = "write", "Запись"
+        ADMIN = "admin", "Администрирование"
 
     class Status(models.TextChoices):
-        SUCCEEDED = "succeeded", "Succeeded"
-        DENIED = "denied", "Denied"
-        FAILED = "failed", "Failed"
-        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Успешно"
+        DENIED = "denied", "Отклонено"
+        FAILED = "failed", "Ошибка"
+        PENDING = "pending", "Ожидает"
 
     session = models.ForeignKey(
         ChatSession,
@@ -205,16 +205,16 @@ class AgentActionLog(models.Model):
             models.Index(fields=["action_kind"]),
             models.Index(fields=["tool_code"]),
         ]
-        verbose_name = "AI action log"
-        verbose_name_plural = "AI action logs"
+        verbose_name = "Журнал действий ИИ"
+        verbose_name_plural = "Журнал действий ИИ"
 
 
 class ChatAttachment(models.Model):
     class FileType(models.TextChoices):
-        IMAGE = "image", "Image"
-        DOCUMENT = "document", "Document"
-        AUDIO = "audio", "Audio"
-        OTHER = "other", "Other"
+        IMAGE = "image", "Изображение"
+        DOCUMENT = "document", "Документ"
+        AUDIO = "audio", "Аудио"
+        OTHER = "other", "Другое"
 
     message = models.ForeignKey(
         ChatMessage,
@@ -226,7 +226,7 @@ class ChatAttachment(models.Model):
     file = models.FileField(upload_to="chat_attachments/%Y/%m/%d/")
     file_type = models.CharField(max_length=32, choices=FileType.choices, default=FileType.OTHER)
     file_name = models.CharField(max_length=255)
-    file_size = models.PositiveIntegerField(help_text="File size in bytes", default=0)
+    file_size = models.PositiveIntegerField(help_text="Размер файла в байтах", default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -234,8 +234,8 @@ class ChatAttachment(models.Model):
         indexes = [
             models.Index(fields=["file_type"]),
         ]
-        verbose_name = "Chat attachment"
-        verbose_name_plural = "Chat attachments"
+        verbose_name = "Вложение чата"
+        verbose_name_plural = "Вложения чата"
 
     def __str__(self):
         return f"{self.file_name} ({self.get_file_type_display()})"
@@ -271,8 +271,8 @@ class AIWindowContextSnapshot(models.Model):
             models.Index(fields=["user", "window_id", "is_current"]),
             models.Index(fields=["expires_at"]),
         ]
-        verbose_name = "AI window context snapshot"
-        verbose_name_plural = "AI window context snapshots"
+        verbose_name = "Снимок контекста окна ИИ"
+        verbose_name_plural = "Снимки контекста окна ИИ"
 
     def __str__(self):
         return f"{self.user_id}:{self.window_id}@{self.context_version}"

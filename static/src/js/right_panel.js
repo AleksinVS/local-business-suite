@@ -110,7 +110,7 @@
   function open(command) {
     var safe = safeCommand(command);
     var target = contentTarget();
-    if (!safe || !target) return Promise.reject(new Error("Invalid right panel command."));
+    if (!safe || !target) return Promise.reject(new Error("Некорректная команда правой панели."));
     showLoading(safe.title);
     openShell(safe.drawer_size);
     return fetch(safe.htmx_url, {
@@ -121,7 +121,7 @@
         "X-Requested-With": "XMLHttpRequest",
       },
     }).then(function (response) {
-      if (!response.ok) throw new Error("Right panel load failed.");
+      if (!response.ok) throw new Error("Не удалось загрузить правую панель.");
       return response.text();
     }).then(function (html) {
       target.innerHTML = html;

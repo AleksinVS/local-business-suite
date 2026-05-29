@@ -58,8 +58,11 @@ class ReviewQueueItem:
     status: str
     title: str
     safe_summary: str
+    severity_label: str = ""
+    status_label: str = ""
     source: str = ""
     target_type: str = ""
+    target_type_label: str = ""
     target_id: str = ""
     assigned_to: str = ""
     created_at: Any = None
@@ -78,8 +81,8 @@ def review_dashboard_context(user) -> dict[str, Any]:
         "blocker_issue_count": issue_queryset.filter(severity=MemoryIngestionIssue.Severity.BLOCKER, status__in=OPEN_ISSUE_STATUSES).count(),
         "privacy_issue_count": issue_queryset.filter(issue_kind__in=PRIVACY_ISSUE_KINDS, status__in=OPEN_ISSUE_STATUSES).count(),
         "index_problem_count": _index_problem_count(document_queryset),
-        "issue_counts_by_severity": list(issue_queryset.values("severity").annotate(total=Count("id")).order_by("severity")),
-        "document_counts_by_status": list(document_queryset.values("index_status").annotate(total=Count("id")).order_by("index_status")),
+        "issue_counts_by_severity": _issue_severity_counts(issue_queryset),
+        "document_counts_by_status": _document_status_counts(document_queryset),
         "recent_issues": [issue_to_review_queue_item(issue, user=user) for issue in issue_queryset[:8]],
         "recent_jobs": list(_scoped_index_job_queryset(user)[:8]),
     }
@@ -142,8 +145,11 @@ def issue_to_review_queue_item(issue: MemoryIngestionIssue, *, user) -> ReviewQu
         status=issue.status,
         title=issue.get_issue_kind_display(),
         safe_summary=safe_review_text(issue.message, max_length=220),
+        severity_label=issue.get_severity_display(),
+        status_label=issue.get_status_display(),
         source=issue.source.code if issue.source_id else "",
         target_type="source_object" if source_object is not None else "source",
+        target_type_label="Объект источника" if source_object is not None else "Источник",
         target_id=source_object.relative_path if source_object is not None else issue.source.code,
         assigned_to=str(issue.assigned_to) if issue.assigned_to_id else "",
         created_at=issue.created_at,
@@ -232,9 +238,12 @@ def search_document_to_review_queue_item(document: MemorySearchDocument, *, user
         severity=diagnostics["severity"],
         status=document.index_status,
         title=document.document_id,
-        safe_summary=", ".join(diagnostics["stale_reasons"] or ["index metadata current enough for MVP"]),
+        safe_summary=", ".join(diagnostics["stale_reasons"] or ["Метаданные индекса актуальны для MVP"]),
+        severity_label=diagnostics["severity_label"],
+        status_label=document.get_index_status_display(),
         source=document_source_code(document),
         target_type=document.object_kind,
+        target_type_label=document.get_object_kind_display(),
         target_id=target,
         created_at=document.created_at,
         updated_at=document.updated_at,
@@ -289,28 +298,41 @@ def index_diagnostics(document: MemorySearchDocument) -> dict[str, Any]:
     metadata = document.metadata or {}
     versions = metadata.get("index_versions") or {}
     stale_reasons = []
+    stale_reason_codes = []
     if document.index_status == MemorySearchDocument.IndexStatus.FAILED:
-        stale_reasons.append("index status failed")
+        stale_reasons.append("Статус индекса: ошибка")
+        stale_reason_codes.append("index_status_failed")
     if document.index_status == MemorySearchDocument.IndexStatus.DELETED:
-        stale_reasons.append("document marked deleted")
+        stale_reasons.append("Документ помечен удаленным")
+        stale_reason_codes.append("document_marked_deleted")
     if "fulltext" not in versions:
-        stale_reasons.append("FTS version missing")
+        stale_reasons.append("Нет версии FTS")
+        stale_reason_codes.append("fts_version_missing")
     if "vector" not in versions:
-        stale_reasons.append("vector version missing")
+        stale_reasons.append("Нет версии вектора")
+        stale_reason_codes.append("vector_version_missing")
     if document.source_object_id:
         source_object = document.source_object
         if metadata.get("content_hash") and metadata.get("content_hash") != source_object.content_hash:
-            stale_reasons.append("content hash changed")
+            stale_reasons.append("Хеш содержимого изменился")
+            stale_reason_codes.append("content_hash_changed")
         if source_object.discovery_status == source_object.DiscoveryStatus.MISSING and document.index_status != MemorySearchDocument.IndexStatus.DELETED:
-            stale_reasons.append("source object missing while index is live")
+            stale_reasons.append("Объект источника отсутствует, но индекс активен")
+            stale_reason_codes.append("source_object_missing_index_live")
     severity = "warning" if stale_reasons else "info"
     if document.index_status == MemorySearchDocument.IndexStatus.FAILED:
         severity = "error"
+    fulltext_status = "ready" if versions.get("fulltext") else "missing"
+    vector_status = "ready" if versions.get("vector") else "missing"
     return {
-        "fulltext_status": "ready" if versions.get("fulltext") else "missing",
-        "vector_status": "ready" if versions.get("vector") else "missing",
+        "fulltext_status": fulltext_status,
+        "fulltext_status_label": "Готов" if fulltext_status == "ready" else "Отсутствует",
+        "vector_status": vector_status,
+        "vector_status_label": "Готов" if vector_status == "ready" else "Отсутствует",
         "stale_reasons": stale_reasons,
+        "stale_reason_codes": stale_reason_codes,
         "severity": severity,
+        "severity_label": _severity_label(severity),
         "index_versions": versions,
     }
 
@@ -326,7 +348,7 @@ def index_gap_flags(document: MemorySearchDocument) -> set[str]:
         flags.add("failed")
     if document.index_status == MemorySearchDocument.IndexStatus.DELETED:
         flags.add("deleted")
-    if any("source object missing" in reason for reason in diagnostics["stale_reasons"]):
+    if "source_object_missing_index_live" in diagnostics["stale_reason_codes"]:
         flags.add("source_deleted_index_left")
     return flags
 
@@ -386,6 +408,27 @@ def _empty_dashboard() -> dict[str, Any]:
         "recent_issues": [],
         "recent_jobs": [],
     }
+
+
+def _issue_severity_counts(queryset):
+    rows = list(queryset.values("severity").annotate(total=Count("id")).order_by("severity"))
+    labels = dict(MemoryIngestionIssue.Severity.choices)
+    return [{**row, "label": labels.get(row["severity"], row["severity"])} for row in rows]
+
+
+def _document_status_counts(queryset):
+    rows = list(queryset.values("index_status").annotate(total=Count("id")).order_by("index_status"))
+    labels = dict(MemorySearchDocument.IndexStatus.choices)
+    return [{**row, "label": labels.get(row["index_status"], row["index_status"])} for row in rows]
+
+
+def _severity_label(severity: str) -> str:
+    return {
+        "info": "Информация",
+        "warning": "Предупреждение",
+        "error": "Ошибка",
+        "blocker": "Блокер",
+    }.get(severity, severity)
 
 
 def _base_issue_queryset():

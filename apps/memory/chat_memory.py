@@ -564,7 +564,7 @@ def _source_refs_for_request(request: MemoryWriteRequest) -> list[dict[str, str]
 
 def _chat_memory_source(scope: str) -> MemorySource:
     code = CHAT_MEMORY_ORG_SOURCE if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else CHAT_MEMORY_PERSONAL_SOURCE
-    title = "AI chat organization memory" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "AI chat personal memory"
+    title = "Память организации из ИИ-чата" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "Личная память из ИИ-чата"
     source, _ = MemorySource.objects.update_or_create(
         code=code,
         defaults={

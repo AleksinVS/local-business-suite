@@ -93,7 +93,7 @@ class KanbanColumnConfig(models.Model):
     title = models.CharField("Название", max_length=120)
     position = models.PositiveIntegerField("Позиция", default=0)
     statuses = models.JSONField("Статусы", default=list)
-    wip_limit = models.PositiveIntegerField("WIP Лимит", default=0, help_text="0 - без лимита")
+    wip_limit = models.PositiveIntegerField("Лимит в работе", default=0, help_text="0 - без лимита")
 
     class Meta:
         ordering = ["position", "id"]
@@ -147,11 +147,13 @@ class WorkOrder(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="created_workorders",
+        verbose_name="Автор",
     )
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="assigned_workorders",
+        verbose_name="Исполнитель",
         blank=True,
         null=True,
     )
@@ -159,13 +161,14 @@ class WorkOrder(models.Model):
         "inventory.MedicalDevice",
         on_delete=models.PROTECT,
         related_name="workorders",
+        verbose_name="Медицинское изделие",
         blank=True,
         null=True,
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    resolved_at = models.DateTimeField(blank=True, null=True)
-    closed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+    resolved_at = models.DateTimeField("Выполнено", blank=True, null=True)
+    closed_at = models.DateTimeField("Закрыто", blank=True, null=True)
 
     class Meta:
         ordering = ["-updated_at", "-created_at"]
@@ -228,10 +231,11 @@ class WorkOrderComment(models.Model):
         WorkOrder,
         on_delete=models.CASCADE,
         related_name="comments",
+        verbose_name="Заявка",
     )
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Автор")
     body = models.TextField("Комментарий")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
 
     class Meta:
         ordering = ["created_at"]
@@ -247,11 +251,12 @@ class WorkOrderAttachment(models.Model):
         WorkOrder,
         on_delete=models.CASCADE,
         related_name="attachments",
+        verbose_name="Заявка",
     )
-    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
-    file = models.FileField(upload_to="workorders/%Y/%m/%d/")
-    content_type = models.CharField(max_length=128, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Загрузил")
+    file = models.FileField("Файл", upload_to="workorders/%Y/%m/%d/")
+    content_type = models.CharField("Тип содержимого", max_length=128, blank=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -275,11 +280,12 @@ class WorkOrderTransitionLog(models.Model):
         WorkOrder,
         on_delete=models.CASCADE,
         related_name="transitions",
+        verbose_name="Заявка",
     )
-    from_status = models.CharField(max_length=24, choices=WorkOrderStatus.choices)
-    to_status = models.CharField(max_length=24, choices=WorkOrderStatus.choices)
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
-    created_at = models.DateTimeField(auto_now_add=True)
+    from_status = models.CharField("Из статуса", max_length=24, choices=WorkOrderStatus.choices)
+    to_status = models.CharField("В статус", max_length=24, choices=WorkOrderStatus.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Пользователь")
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]

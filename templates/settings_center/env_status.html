@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}.env status{% endblock %}
+{% block title %}Статус .env{% endblock %}
 
 {% block content %}
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Deployment bootstrap</p>
-      <h1>.env status</h1>
-      <p class="description">Значения показываются как эффективный статус. Production по умолчанию создает proposal, а не меняет .env напрямую.</p>
+      <p class="eyebrow">Первичная настройка развертывания</p>
+      <h1>Статус .env</h1>
+      <p class="description">Значения показываются как эффективный статус. Рабочий контур по умолчанию создает заявку, а не меняет .env напрямую.</p>
     </div>
     <div class="header-actions">
       <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
-      <a class="button" href="{% url 'settings_center:env_propose' %}">Создать proposal</a>
+      <a class="button" href="{% url 'settings_center:env_propose' %}">Создать заявку</a>
     </div>
   </div>
   <div class="table-container">
@@ -21,9 +21,9 @@
         <tr>
           <th>Ключ</th>
           <th>Раздел</th>
-          <th>Effective value</th>
+          <th>Эффективное значение</th>
           <th>Режим</th>
-          <th>Restart</th>
+          <th>Перезапуск</th>
         </tr>
       </thead>
       <tbody>
@@ -32,7 +32,7 @@
             <td>{{ row.descriptor.metadata.env_key }}</td>
             <td>{{ row.descriptor.section }}</td>
             <td>{{ row.effective_value|default:"" }}</td>
-            <td>{{ row.apply_mode }}</td>
+            <td>{{ row.apply_mode_label }}</td>
             <td>{% if row.descriptor.requires_restart %}да{% else %}нет{% endif %}</td>
           </tr>
         {% endfor %}

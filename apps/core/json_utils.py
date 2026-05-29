@@ -991,96 +991,96 @@ def validate_change_plan_payload(payload):
 
 
 def validate_ai_registry_payload(payload):
-    _ensure_non_empty_mapping(payload, "AI registry")
+    _ensure_non_empty_mapping(payload, "Реестр ИИ")
     missing = REQUIRED_AI_REGISTRY_KEYS - set(payload.keys())
     if missing:
         raise ValidationError(
-            f"AI registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+            f"Реестр ИИ не содержит обязательные поля: {', '.join(sorted(missing))}."
         )
 
 
 def validate_ai_tools_payload(payload):
-    _ensure_non_empty_mapping(payload, "AI tools")
+    _ensure_non_empty_mapping(payload, "Инструменты ИИ")
     missing = REQUIRED_AI_TOOLS_ROOT_KEYS - set(payload.keys())
     if missing:
         raise ValidationError(
-            f"AI tools registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+            f"Реестр инструментов ИИ не содержит обязательные поля: {', '.join(sorted(missing))}."
         )
     tools = payload.get("tools")
     if not isinstance(tools, list) or not tools:
-        raise ValidationError("AI tools registry должен содержать непустой список tools.")
+        raise ValidationError("Реестр инструментов ИИ должен содержать непустой список tools.")
     for item in tools:
         if not isinstance(item, dict):
-            raise ValidationError("Каждый AI tool должен быть JSON-объектом.")
+            raise ValidationError("Каждый инструмент ИИ должен быть JSON-объектом.")
         missing_item_keys = REQUIRED_AI_TOOL_KEYS - set(item.keys())
         if missing_item_keys:
             raise ValidationError(
-                f"AI tool '{item.get('id', 'unknown')}' не содержит обязательные поля: "
+                f"Инструмент ИИ '{item.get('id', 'unknown')}' не содержит обязательные поля: "
                 f"{', '.join(sorted(missing_item_keys))}."
             )
         for key in ("inputs", "outputs"):
             if not isinstance(item.get(key), list):
-                raise ValidationError(f"Поле '{key}' у AI tool '{item['id']}' должно быть списком.")
+                raise ValidationError(f"Поле '{key}' у инструмента ИИ '{item['id']}' должно быть списком.")
         input_schemas = item.get("input_schemas")
         if input_schemas:
             if not isinstance(input_schemas, dict):
                 raise ValidationError(
-                    f"AI tool '{item['id']}' field 'input_schemas' must be a JSON object."
+                    f"Поле input_schemas у инструмента ИИ '{item['id']}' должно быть JSON-объектом."
                 )
             input_names = set(item.get("inputs", []))
             for schema_key in input_schemas:
                 if schema_key not in input_names:
                     raise ValidationError(
-                        f"AI tool '{item['id']}' has input_schema key '{schema_key}' "
-                        f"that is not in its inputs list."
+                        f"Инструмент ИИ '{item['id']}' содержит input_schema '{schema_key}', "
+                        f"которого нет в списке inputs."
                     )
 
 
 def validate_ai_task_types_payload(payload):
-    _ensure_non_empty_mapping(payload, "AI task types")
+    _ensure_non_empty_mapping(payload, "Типы задач ИИ")
     missing = REQUIRED_AI_TASK_TYPES_ROOT_KEYS - set(payload.keys())
     if missing:
         raise ValidationError(
-            f"AI task type registry не содержит обязательные поля: {', '.join(sorted(missing))}."
+            f"Реестр типов задач ИИ не содержит обязательные поля: {', '.join(sorted(missing))}."
         )
     task_types = payload.get("task_types")
     if not isinstance(task_types, list) or not task_types:
-        raise ValidationError("AI task type registry должен содержать непустой список task_types.")
+        raise ValidationError("Реестр типов задач ИИ должен содержать непустой список task_types.")
     for item in task_types:
         if not isinstance(item, dict):
-            raise ValidationError("Каждый AI task type должен быть JSON-объектом.")
+            raise ValidationError("Каждый тип задачи ИИ должен быть JSON-объектом.")
         missing_item_keys = REQUIRED_AI_TASK_TYPE_KEYS - set(item.keys())
         if missing_item_keys:
             raise ValidationError(
-                f"AI task type '{item.get('id', 'unknown')}' не содержит обязательные поля: "
+                f"Тип задачи ИИ '{item.get('id', 'unknown')}' не содержит обязательные поля: "
                 f"{', '.join(sorted(missing_item_keys))}."
             )
         for key in ("allowed_tools", "example_requests"):
             if not isinstance(item.get(key), list):
-                raise ValidationError(f"Поле '{key}' у AI task type '{item['id']}' должно быть списком.")
+                raise ValidationError(f"Поле '{key}' у типа задачи ИИ '{item['id']}' должно быть списком.")
 
 
 def validate_ai_chat_settings_payload(payload):
-    _ensure_non_empty_mapping(payload, "AI chat settings")
+    _ensure_non_empty_mapping(payload, "Настройки ИИ-чата")
     missing = REQUIRED_AI_CHAT_SETTINGS_ROOT_KEYS - set(payload.keys())
     if missing:
         raise ValidationError(
-            f"AI chat settings не содержит обязательные поля: {', '.join(sorted(missing))}."
+            f"Настройки ИИ-чата не содержат обязательные поля: {', '.join(sorted(missing))}."
         )
     if str(payload.get("schema_version")) != "1":
-        raise ValidationError("AI chat settings поддерживает только schema_version='1'.")
+        raise ValidationError("Настройки ИИ-чата поддерживают только schema_version='1'.")
     defaults = payload.get("defaults")
     surfaces = payload.get("surfaces")
     if not isinstance(defaults, dict) or not defaults:
-        raise ValidationError("AI chat settings.defaults должен быть непустым JSON-объектом.")
+        raise ValidationError("Настройки ИИ-чата.defaults должны быть непустым JSON-объектом.")
     if not isinstance(surfaces, dict) or not surfaces:
-        raise ValidationError("AI chat settings.surfaces должен быть непустым JSON-объектом.")
+        raise ValidationError("Настройки ИИ-чата.surfaces должны быть непустым JSON-объектом.")
     _validate_ai_chat_settings_block(defaults, "defaults", require_common=True)
     for surface, config in surfaces.items():
         if surface not in AI_CHAT_SURFACE_VALUES:
-            raise ValidationError(f"AI chat settings содержит неизвестную поверхность: {surface}.")
+            raise ValidationError(f"Настройки ИИ-чата содержат неизвестную поверхность: {surface}.")
         if not isinstance(config, dict):
-            raise ValidationError(f"AI chat settings.surfaces.{surface} должен быть JSON-объектом.")
+            raise ValidationError(f"Настройки ИИ-чата.surfaces.{surface} должны быть JSON-объектом.")
         _validate_ai_chat_settings_block(config, f"surfaces.{surface}", require_common=False)
 
 
@@ -1095,36 +1095,36 @@ def _validate_ai_chat_settings_block(config, label, *, require_common):
     if require_common:
         missing = common_keys - set(config.keys())
         if missing:
-            raise ValidationError(f"AI chat settings.{label} не содержит поля: {', '.join(sorted(missing))}.")
+            raise ValidationError(f"Настройки ИИ-чата.{label} не содержат поля: {', '.join(sorted(missing))}.")
     allowed_keys = common_keys | {"session_mode", "session_switcher"}
     unknown = set(config.keys()) - allowed_keys
     if unknown:
-        raise ValidationError(f"AI chat settings.{label} содержит неизвестные поля: {', '.join(sorted(unknown))}.")
+        raise ValidationError(f"Настройки ИИ-чата.{label} содержат неизвестные поля: {', '.join(sorted(unknown))}.")
 
     if "recent_message_limit" in config:
         value = config["recent_message_limit"]
         if type(value) is not int or value < 4 or value > 50:
-            raise ValidationError(f"AI chat settings.{label}.recent_message_limit должен быть integer в диапазоне 4..50.")
+            raise ValidationError(f"Настройки ИИ-чата.{label}.recent_message_limit должен быть целым числом в диапазоне 4..50.")
     if "summary_enabled" in config and type(config["summary_enabled"]) is not bool:
-        raise ValidationError(f"AI chat settings.{label}.summary_enabled должен быть boolean.")
+        raise ValidationError(f"Настройки ИИ-чата.{label}.summary_enabled должен быть boolean.")
     if "summary_trigger_messages" in config:
         value = config["summary_trigger_messages"]
         if type(value) is not int or value < 4 or value > 200:
             raise ValidationError(
-                f"AI chat settings.{label}.summary_trigger_messages должен быть integer в диапазоне 4..200."
+                f"Настройки ИИ-чата.{label}.summary_trigger_messages должен быть целым числом в диапазоне 4..200."
             )
     if "max_prompt_chars" in config:
         value = config["max_prompt_chars"]
         if type(value) is not int or value < 1000 or value > 100000:
-            raise ValidationError(f"AI chat settings.{label}.max_prompt_chars должен быть integer в диапазоне 1000..100000.")
+            raise ValidationError(f"Настройки ИИ-чата.{label}.max_prompt_chars должен быть целым числом в диапазоне 1000..100000.")
     if "context_tool_enabled" in config and type(config["context_tool_enabled"]) is not bool:
-        raise ValidationError(f"AI chat settings.{label}.context_tool_enabled должен быть boolean.")
+        raise ValidationError(f"Настройки ИИ-чата.{label}.context_tool_enabled должен быть boolean.")
     if "session_mode" in config and config["session_mode"] not in AI_CHAT_SESSION_MODE_VALUES:
         raise ValidationError(
-            f"AI chat settings.{label}.session_mode должен быть одним из: {', '.join(sorted(AI_CHAT_SESSION_MODE_VALUES))}."
+            f"Настройки ИИ-чата.{label}.session_mode должен быть одним из: {', '.join(sorted(AI_CHAT_SESSION_MODE_VALUES))}."
         )
     if "session_switcher" in config and type(config["session_switcher"]) is not bool:
-        raise ValidationError(f"AI chat settings.{label}.session_switcher должен быть boolean.")
+        raise ValidationError(f"Настройки ИИ-чата.{label}.session_switcher должен быть boolean.")
 
 
 def validate_memory_sources_payload(payload, profiles_payload=None, routing_payload=None, ingestion_profiles_payload=None):

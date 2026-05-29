@@ -41,7 +41,7 @@ class SettingsCenterRegistryTests(TestCase):
         self.client.force_login(staff)
         response = self.client.get(reverse("settings_center:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Settings Center")
+        self.assertContains(response, "Центр настроек")
 
     def test_help_ask_route_uses_setting_context(self):
         staff = User.objects.create_user(username="settings-help-staff", password="pass", is_staff=True)

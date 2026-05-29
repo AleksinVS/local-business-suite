@@ -1,13 +1,13 @@
 {
   "version": "1.0",
   "name": "chat_agent_task_types",
-  "description": "Intent catalog for the chat and agent block.",
+  "description": "Каталог намерений для чата и агентного блока.",
   "task_types": [
     {
       "id": "workorders.list",
-      "title": "List work orders",
+      "title": "Список заявок",
       "mode": "read",
-      "description": "Show work orders filtered by status or scope.",
+      "description": "Показать заявки с фильтром по статусу или области видимости.",
       "allowed_tools": [
         "workorders.list"
       ],
@@ -17,13 +17,34 @@
       "requires_confirmation": false,
       "output_mode": "structured_list",
       "status_aliases": {
-        "new": ["Новая", "new"],
-        "accepted": ["Принята", "accepted"],
-        "in_progress": ["В работе", "in_progress"],
-        "on_hold": ["Ожидание", "on_hold"],
-        "resolved": ["Выполнена", "resolved"],
-        "closed": ["Закрыта", "closed"],
-        "cancelled": ["Отменена", "cancelled"]
+        "new": [
+          "Новая",
+          "new"
+        ],
+        "accepted": [
+          "Принята",
+          "accepted"
+        ],
+        "in_progress": [
+          "В работе",
+          "in_progress"
+        ],
+        "on_hold": [
+          "Ожидание",
+          "on_hold"
+        ],
+        "resolved": [
+          "Выполнена",
+          "resolved"
+        ],
+        "closed": [
+          "Закрыта",
+          "closed"
+        ],
+        "cancelled": [
+          "Отменена",
+          "cancelled"
+        ]
       },
       "example_requests": [
         "Покажи новые заявки",
@@ -32,9 +53,9 @@
     },
     {
       "id": "workorders.get.detail",
-      "title": "Get work order details",
+      "title": "Подробности заявки",
       "mode": "read",
-      "description": "Read one work order in detail by ID or number.",
+      "description": "Показать одну заявку подробно по ID или номеру.",
       "allowed_tools": [
         "workorders.get"
       ],
@@ -52,9 +73,9 @@
     },
     {
       "id": "workorders.create",
-      "title": "Create work order",
+      "title": "Создать заявку",
       "mode": "write",
-      "description": "Create a new work order from a conversational request.",
+      "description": "Создать новую заявку из запроса в диалоге.",
       "allowed_tools": [
         "workorders.create",
         "departments.list",
@@ -72,10 +93,22 @@
       "requires_confirmation": true,
       "output_mode": "confirmation_then_result",
       "priority_aliases": {
-        "low": ["Низкий", "low"],
-        "medium": ["Средний", "medium"],
-        "high": ["Высокий", "high"],
-        "critical": ["Критичный", "critical"]
+        "low": [
+          "Низкий",
+          "low"
+        ],
+        "medium": [
+          "Средний",
+          "medium"
+        ],
+        "high": [
+          "Высокий",
+          "high"
+        ],
+        "critical": [
+          "Критичный",
+          "critical"
+        ]
       },
       "example_requests": [
         "Создай заявку на починку раковины в стационаре",
@@ -84,9 +117,9 @@
     },
     {
       "id": "workorders.transition",
-      "title": "Transition work order",
+      "title": "Изменить статус заявки",
       "mode": "write",
-      "description": "Move a request to the next allowed status.",
+      "description": "Перевести заявку в следующий разрешенный статус.",
       "allowed_tools": [
         "workorders.get",
         "workorders.transition"
@@ -99,13 +132,34 @@
       "requires_confirmation": true,
       "output_mode": "confirmation_then_result",
       "status_aliases": {
-        "new": ["Новая", "new"],
-        "accepted": ["Принята", "accepted"],
-        "in_progress": ["В работе", "in_progress"],
-        "on_hold": ["Ожидание", "on_hold"],
-        "resolved": ["Выполнена", "resolved"],
-        "closed": ["Закрыта", "closed"],
-        "cancelled": ["Отменена", "cancelled"]
+        "new": [
+          "Новая",
+          "new"
+        ],
+        "accepted": [
+          "Принята",
+          "accepted"
+        ],
+        "in_progress": [
+          "В работе",
+          "in_progress"
+        ],
+        "on_hold": [
+          "Ожидание",
+          "on_hold"
+        ],
+        "resolved": [
+          "Выполнена",
+          "resolved"
+        ],
+        "closed": [
+          "Закрыта",
+          "closed"
+        ],
+        "cancelled": [
+          "Отменена",
+          "cancelled"
+        ]
       },
       "example_requests": [
         "Переведи заявку 12 в работу",
@@ -114,9 +168,9 @@
     },
     {
       "id": "workorders.comment",
-      "title": "Comment on work order",
+      "title": "Комментарий к заявке",
       "mode": "write",
-      "description": "Add a comment to a work order timeline.",
+      "description": "Добавить комментарий в историю заявки.",
       "allowed_tools": [
         "workorders.comment"
       ],
@@ -132,9 +186,9 @@
     },
     {
       "id": "workorders.confirm_closure",
-      "title": "Confirm work order closure",
+      "title": "Подтвердить закрытие заявки",
       "mode": "write",
-      "description": "Confirm the closure of a resolved work order.",
+      "description": "Подтвердить закрытие выполненной заявки.",
       "allowed_tools": [
         "workorders.confirm_closure"
       ],
@@ -150,9 +204,9 @@
     },
     {
       "id": "workorders.rate",
-      "title": "Rate work order",
+      "title": "Оценить заявку",
       "mode": "write",
-      "description": "Rate a closed work order.",
+      "description": "Поставить оценку закрытой заявке.",
       "allowed_tools": [
         "workorders.rate"
       ],
@@ -169,9 +223,9 @@
     },
     {
       "id": "lookup.departments",
-      "title": "Lookup departments",
+      "title": "Поиск подразделений",
       "mode": "read",
-      "description": "Resolve a department name or tree branch.",
+      "description": "Найти подразделение по названию или ветке дерева.",
       "allowed_tools": [
         "departments.list"
       ],
@@ -185,9 +239,9 @@
     },
     {
       "id": "lookup.devices",
-      "title": "Lookup devices",
+      "title": "Поиск медизделий",
       "mode": "read",
-      "description": "Resolve a device name or device list.",
+      "description": "Найти медизделие по названию или показать список.",
       "allowed_tools": [
         "devices.list"
       ],
@@ -201,9 +255,9 @@
     },
     {
       "id": "inventory.devices.create",
-      "title": "Create device",
+      "title": "Создать медизделие",
       "mode": "write",
-      "description": "Create a new medical device.",
+      "description": "Создать новое медицинское изделие.",
       "allowed_tools": [
         "inventory.devices.create",
         "departments.list"
@@ -224,9 +278,9 @@
     },
     {
       "id": "inventory.devices.update",
-      "title": "Update device",
+      "title": "Обновить медизделие",
       "mode": "write",
-      "description": "Update an existing medical device.",
+      "description": "Обновить существующее медицинское изделие.",
       "allowed_tools": [
         "inventory.devices.update",
         "departments.list",
@@ -249,9 +303,9 @@
     },
     {
       "id": "inventory.devices.archive",
-      "title": "Archive device",
+      "title": "Архивировать медизделие",
       "mode": "write",
-      "description": "Archive a medical device.",
+      "description": "Перенести медицинское изделие в архив.",
       "allowed_tools": [
         "inventory.devices.archive",
         "devices.list"
@@ -268,9 +322,9 @@
     },
     {
       "id": "analytics.summary.status",
-      "title": "Status analytics summary",
+      "title": "Аналитика по статусам",
       "mode": "read",
-      "description": "Return a summary of work orders grouped by status.",
+      "description": "Показать сводку заявок с группировкой по статусам.",
       "allowed_tools": [
         "analytics.summary"
       ],
@@ -286,9 +340,9 @@
     },
     {
       "id": "analytics.summary.departments",
-      "title": "Departments analytics summary",
+      "title": "Аналитика по подразделениям",
       "mode": "read",
-      "description": "Return a summary of work orders grouped by department.",
+      "description": "Показать сводку заявок с группировкой по подразделениям.",
       "allowed_tools": [
         "analytics.summary"
       ],
@@ -304,9 +358,9 @@
     },
     {
       "id": "analytics.summary.assignees",
-      "title": "Assignees analytics summary",
+      "title": "Аналитика по исполнителям",
       "mode": "read",
-      "description": "Return a summary of work orders grouped by assignee.",
+      "description": "Показать сводку заявок с группировкой по исполнителям.",
       "allowed_tools": [
         "analytics.summary"
       ],
@@ -322,9 +376,9 @@
     },
     {
       "id": "memory.search",
-      "title": "Search memory",
+      "title": "Поиск в памяти",
       "mode": "read",
-      "description": "Search indexed memory context with citations.",
+      "description": "Искать в индексированном контексте памяти с источниками.",
       "allowed_tools": [
         "memory.search"
       ],
@@ -347,9 +401,9 @@
     },
     {
       "id": "memory.remember",
-      "title": "Remember chat knowledge",
+      "title": "Запомнить из чата",
       "mode": "write",
-      "description": "Queue selected chat messages for personal or organization memory ingestion.",
+      "description": "Поставить выбранные сообщения чата в очередь сохранения в личную или общую память.",
       "allowed_tools": [
         "memory.remember"
       ],
@@ -370,9 +424,9 @@
     },
     {
       "id": "memory.update_personal",
-      "title": "Update personal memory",
+      "title": "Обновить личную память",
       "mode": "write",
-      "description": "Edit or delete one personal memory item owned by the actor.",
+      "description": "Изменить или удалить одну запись личной памяти пользователя.",
       "allowed_tools": [
         "memory.update_personal"
       ],

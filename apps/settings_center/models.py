@@ -5,18 +5,18 @@ from django.utils import timezone
 
 class SettingsChange(models.Model):
     class Action(models.TextChoices):
-        PREVIEW = "preview", "Preview"
-        APPLY = "apply", "Apply"
-        USER_CREATE = "user_create", "User create"
-        USER_UPDATE = "user_update", "User update"
-        USER_DISABLE = "user_disable", "User disable"
-        AD_LINK = "ad_link", "AD link"
+        PREVIEW = "preview", "Предпросмотр"
+        APPLY = "apply", "Применение"
+        USER_CREATE = "user_create", "Создание пользователя"
+        USER_UPDATE = "user_update", "Обновление пользователя"
+        USER_DISABLE = "user_disable", "Отключение пользователя"
+        AD_LINK = "ad_link", "Связь с AD"
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        APPLIED = "applied", "Applied"
-        REJECTED = "rejected", "Rejected"
-        FAILED = "failed", "Failed"
+        PENDING = "pending", "Ожидает"
+        APPLIED = "applied", "Применено"
+        REJECTED = "rejected", "Отклонено"
+        FAILED = "failed", "Ошибка"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -68,10 +68,10 @@ class SettingsChangeComment(models.Model):
 
 class SettingsEnvProposal(models.Model):
     class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        EXPORTED = "exported", "Exported"
-        APPLIED_EXTERNALLY = "applied_externally", "Applied externally"
-        REJECTED = "rejected", "Rejected"
+        DRAFT = "draft", "Черновик"
+        EXPORTED = "exported", "Экспортировано"
+        APPLIED_EXTERNALLY = "applied_externally", "Применено вне портала"
+        REJECTED = "rejected", "Отклонено"
 
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="settings_env_proposals")
     target_label = models.CharField(max_length=120)

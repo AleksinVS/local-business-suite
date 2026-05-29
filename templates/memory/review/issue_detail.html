@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Issue #{{ issue.pk }} | {{ app_display_name }}{% endblock %}
+{% block title %}Проблема #{{ issue.pk }} | {{ app_display_name }}{% endblock %}
 
 {% block content %}
 {% include "memory/review/_nav.html" %}
@@ -8,12 +8,12 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Issue #{{ issue.pk }}</p>
+      <p class="eyebrow">Проблема #{{ issue.pk }}</p>
       <h1>{{ issue.get_issue_kind_display }}</h1>
       <p class="description">{{ queue_item.safe_summary }}</p>
     </div>
     <div class="memory-review-status">
-      <span class="badge memory-badge-{{ issue.severity }}">{{ issue.severity }}</span>
+      <span class="badge memory-badge-{{ issue.severity }}">{{ issue.get_severity_display }}</span>
       <span class="badge">{{ issue.get_status_display }}</span>
     </div>
   </div>
@@ -24,7 +24,7 @@
       <dl class="memory-review-dl">
         <dt>Источник</dt><dd><code>{{ issue.source.code }}</code></dd>
         <dt>Объект</dt><dd>{{ issue.source_object.relative_path|default:"" }}</dd>
-        <dt>Run</dt><dd>{{ issue.run_id|default:"" }}</dd>
+        <dt>Запуск</dt><dd>{{ issue.run_id|default:"" }}</dd>
         <dt>Назначено</dt><dd>{{ issue.assigned_to|default:"" }}</dd>
         <dt>Резолюция</dt><dd>{{ issue.resolution_code|default:"" }}</dd>
       </dl>
@@ -33,11 +33,11 @@
       <h2>Связанный индекс</h2>
       {% if search_document %}
         <dl class="memory-review-dl">
-          <dt>Document ID</dt>
+          <dt>ID документа</dt>
           <dd><a href="{% url 'memory:review_index_detail' search_document.document_id %}"><code>{{ search_document.document_id }}</code></a></dd>
-          <dt>Corpus</dt><dd>{{ search_document.corpus_type }}</dd>
-          <dt>Статус</dt><dd>{{ search_document.index_status }}</dd>
-          <dt>Indexed at</dt><dd>{{ search_document.indexed_at|default:"" }}</dd>
+          <dt>Корпус</dt><dd>{{ search_document.get_corpus_type_display }}</dd>
+          <dt>Статус</dt><dd>{{ search_document.get_index_status_display }}</dd>
+          <dt>Проиндексировано</dt><dd>{{ search_document.indexed_at|default:"" }}</dd>
         </dl>
       {% else %}
         <p class="muted">Связанный поисковый документ не найден.</p>
@@ -50,28 +50,28 @@
   <div class="section-head"><h2>Действия</h2></div>
   <div class="memory-review-actions">
     {% if "acknowledge" in available_actions %}
-      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="acknowledge"><button type="submit">Acknowledge</button></form>
+      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="acknowledge"><button type="submit">Принять к сведению</button></form>
     {% endif %}
     {% if "request_expert_review" in available_actions %}
-      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="request_expert_review"><button type="submit">Expert review</button></form>
+      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="request_expert_review"><button type="submit">Запросить эксперта</button></form>
     {% endif %}
     {% if "resolve" in available_actions %}
       <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}" class="memory-review-inline-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="resolve">
         <input type="text" name="resolution_code" value="resolved" aria-label="Код резолюции">
-        <input type="text" name="comment" placeholder="Комментарий без секретов и PII" aria-label="Комментарий">
-        <button type="submit">Resolve</button>
+        <input type="text" name="comment" placeholder="Комментарий без секретов и персональных данных" aria-label="Комментарий">
+        <button type="submit">Закрыть</button>
       </form>
     {% endif %}
     {% if "ignore" in available_actions %}
-      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="ignore"><button type="submit">Ignore</button></form>
+      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="ignore"><button type="submit">Игнорировать</button></form>
     {% endif %}
     {% if "reopen" in available_actions %}
-      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="reopen"><button type="submit">Reopen</button></form>
+      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="reopen"><button type="submit">Открыть снова</button></form>
     {% endif %}
     {% if "enqueue_reindex" in available_actions %}
-      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="enqueue_reindex"><button type="submit">Reindex</button></form>
+      <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}">{% csrf_token %}<input type="hidden" name="action" value="enqueue_reindex"><button type="submit">Переиндексировать</button></form>
     {% endif %}
   </div>
 
@@ -93,7 +93,7 @@
     <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}" class="memory-review-comment-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="comment">
-      <textarea name="comment" rows="3" placeholder="Комментарий без секретов, PII и полного текста документа"></textarea>
+      <textarea name="comment" rows="3" placeholder="Комментарий без секретов, персональных данных и полного текста документа"></textarea>
       <button type="submit">Добавить комментарий</button>
     </form>
   {% endif %}
@@ -101,11 +101,11 @@
 
 <section class="memory-review-grid">
   <article class="panel">
-    <h2>Безопасные metadata</h2>
+    <h2>Безопасные метаданные</h2>
     <pre class="memory-review-pre">{{ safe_metadata }}</pre>
   </article>
   <article class="panel">
-    <h2>Access audit</h2>
+    <h2>Аудит доступа</h2>
     <ul class="compact-list">
       {% for audit in access_audits %}
         <li><code>{{ audit.request_id }}</code> · {{ audit.actor }} · {{ audit.policy_decision }} · {{ audit.created_at }}</li>
@@ -120,10 +120,10 @@
   <h2>Журнал действий</h2>
   <div class="table-container">
     <table>
-      <thead><tr><th>Время</th><th>Actor</th><th>Action</th><th>Decision</th><th>Комментарий</th></tr></thead>
+      <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Решение</th><th>Комментарий</th></tr></thead>
       <tbody>
         {% for item in review_actions %}
-          <tr><td>{{ item.created_at }}</td><td>{{ item.actor }}</td><td>{{ item.action }}</td><td>{{ item.decision }}</td><td>{{ item.comment }}</td></tr>
+          <tr><td>{{ item.created_at }}</td><td>{{ item.actor }}</td><td>{{ item.get_action_display }}</td><td>{{ item.get_decision_display }}</td><td>{{ item.comment }}</td></tr>
         {% empty %}
           <tr><td colspan="5" class="muted">Действий пока нет.</td></tr>
         {% endfor %}

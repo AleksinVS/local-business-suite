@@ -13,7 +13,7 @@
     </div>
   </div>
   
-  <p class="description">Управление глобальными правами для ролей. Изменения сохраняются в <code>config/role_rules.json</code>.</p>
+  <p class="description">Управление глобальными правами для ролей. Изменения сохраняются в рабочем контракте ролей.</p>
 
   <form method="post" class="role-rules-form">
     {% csrf_token %}
@@ -22,7 +22,7 @@
         <thead>
           <tr>
             <th>Роль</th>
-            <th>Область видимости (View Scope)</th>
+            <th>Область видимости</th>
             {% for flag, label in available_flags %}
               <th>{{ label }}</th>
             {% endfor %}

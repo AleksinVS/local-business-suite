@@ -13,6 +13,30 @@ SENSITIVE_KEY_PARTS = (
     "credential",
 )
 
+DOMAIN_LABELS = {
+    "core": "Ядро",
+    "env": "Окружение",
+    "memory": "Память",
+    "ai": "ИИ",
+    "accounts": "Учетные записи",
+    "settings_center": "Центр настроек",
+}
+
+STORAGE_KIND_LABELS = {
+    "runtime_contract": "рабочий контракт",
+    "env_var": "переменная окружения",
+    "django_model": "модель Django",
+    "secret_handle": "ссылка на секрет",
+}
+
+WRITE_POLICY_LABELS = {
+    "editable": "редактируется",
+    "read_only": "только чтение",
+    "proposal_only": "через заявку",
+    "requires_domain_workflow": "через доменный процесс",
+    "secret_handle_only": "только ссылка на секрет",
+}
+
 
 @dataclass(frozen=True)
 class SettingDescriptor:
@@ -42,6 +66,18 @@ class SettingDescriptor:
     @property
     def is_proposal_only(self) -> bool:
         return self.write_policy == "proposal_only"
+
+    @property
+    def domain_label(self) -> str:
+        return DOMAIN_LABELS.get(self.domain, self.domain)
+
+    @property
+    def storage_kind_label(self) -> str:
+        return STORAGE_KIND_LABELS.get(self.storage_kind, self.storage_kind)
+
+    @property
+    def write_policy_label(self) -> str:
+        return WRITE_POLICY_LABELS.get(self.write_policy, self.write_policy)
 
     def safe_context(self, current_value: Any = None) -> dict[str, Any]:
         context = {

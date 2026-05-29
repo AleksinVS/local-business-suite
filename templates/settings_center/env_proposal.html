@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}.env proposal{% endblock %}
+{% block title %}Заявка на изменение .env{% endblock %}
 
 {% block content %}
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Proposal workflow</p>
-      <h1>.env proposal</h1>
+      <p class="eyebrow">Процесс согласования</p>
+      <h1>Заявка на изменение .env</h1>
     </div>
   </div>
   <form method="post" class="settings-small-form">
     {% csrf_token %}
     {{ form.as_p }}
     <div class="table-actions">
-      <button type="submit" class="button">Создать proposal</button>
+      <button type="submit" class="button">Создать заявку</button>
     </div>
   </form>
 </section>

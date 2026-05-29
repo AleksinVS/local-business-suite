@@ -112,7 +112,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         except ValidationError as exc:
             form.add_error(None, exc)
             return self.form_invalid(form)
-        messages.success(self.request, f"Настройка применена. Audit #{change.pk}.")
+        messages.success(self.request, f"Настройка применена. Аудит #{change.pk}.")
         return redirect("settings_center:setting_detail", setting_id=self.descriptor.setting_id)
 
 
@@ -189,7 +189,7 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
             return self.render_to_response(self.get_context_data())
-        messages.success(request, f"Переходы сохранены. Audit #{change.pk}.")
+        messages.success(request, f"Переходы сохранены. Аудит #{change.pk}.")
         return redirect("settings_center:workflow_transitions")
 
     @staticmethod
@@ -233,7 +233,7 @@ class EnvProposalView(SettingsManagementMixin, FormView):
         except ValidationError as exc:
             form.add_error(None, exc)
             return self.form_invalid(form)
-        messages.success(self.request, f".env proposal создан: {proposal.file_path}")
+        messages.success(self.request, f"Заявка на изменение .env создана: {proposal.file_path}")
         return super().form_valid(form)
 
 

@@ -8,21 +8,21 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Search index</p>
+      <p class="eyebrow">Поисковый индекс</p>
       <h1>Состояние поискового индекса</h1>
     </div>
   </div>
 
   <form method="get" class="memory-review-filters">
-    <input type="search" name="q" value="{{ filters.q }}" placeholder="Document ID, путь, объект">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="ID документа, путь, объект">
     <select name="corpus_type">
-      <option value="">Все corpus</option>
+      <option value="">Все корпуса</option>
       {% for value, label in corpus_types %}
         <option value="{{ value }}" {% if filters.corpus_type == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
     <select name="object_kind">
-      <option value="">Все object kind</option>
+      <option value="">Все типы объектов</option>
       {% for value, label in object_kinds %}
         <option value="{{ value }}" {% if filters.object_kind == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -34,10 +34,10 @@
       {% endfor %}
     </select>
     <select name="gap">
-      <option value="">Все diagnostics</option>
-      <option value="missing_fts" {% if filters.gap == "missing_fts" %}selected{% endif %}>FTS missing</option>
-      <option value="missing_vector" {% if filters.gap == "missing_vector" %}selected{% endif %}>Vector missing</option>
-      <option value="failed" {% if filters.gap == "failed" %}selected{% endif %}>Failed</option>
+      <option value="">Любая диагностика</option>
+      <option value="missing_fts" {% if filters.gap == "missing_fts" %}selected{% endif %}>Нет FTS</option>
+      <option value="missing_vector" {% if filters.gap == "missing_vector" %}selected{% endif %}>Нет вектора</option>
+      <option value="failed" {% if filters.gap == "failed" %}selected{% endif %}>Ошибка</option>
     </select>
     <button type="submit">Фильтр</button>
     <a class="button-link-muted" href="{% url 'memory:review_index_list' %}">Сбросить</a>
@@ -52,23 +52,23 @@
     <table>
       <thead>
         <tr>
-          <th>Severity</th>
-          <th>Document ID</th>
-          <th>Corpus</th>
+          <th>Критичность</th>
+          <th>ID документа</th>
+          <th>Корпус</th>
           <th>Статус</th>
           <th>Источник</th>
-          <th>Target</th>
-          <th>Diagnostics</th>
+          <th>Цель</th>
+          <th>Диагностика</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for item in documents %}
           <tr>
-            <td><span class="badge memory-badge-{{ item.severity }}">{{ item.severity }}</span></td>
+            <td><span class="badge memory-badge-{{ item.severity }}">{{ item.severity_label }}</span></td>
             <td><code>{{ item.title }}</code></td>
-            <td>{{ item.target_type }}</td>
-            <td>{{ item.status }}</td>
+            <td>{{ item.target_type_label }}</td>
+            <td>{{ item.status_label }}</td>
             <td><code>{{ item.source }}</code></td>
             <td>{{ item.target_id }}</td>
             <td>{{ item.safe_summary }}</td>

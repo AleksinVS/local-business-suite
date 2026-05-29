@@ -8,7 +8,7 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Audit</p>
+      <p class="eyebrow">Аудит</p>
       <h1>Журнал действий ревью</h1>
     </div>
   </div>
@@ -36,12 +36,12 @@
       <thead>
         <tr>
           <th>Время</th>
-          <th>Actor</th>
-          <th>Action</th>
-          <th>Decision</th>
-          <th>Issue</th>
-          <th>Document</th>
-          <th>Job</th>
+          <th>Пользователь</th>
+          <th>Действие</th>
+          <th>Решение</th>
+          <th>Проблема</th>
+          <th>Документ</th>
+          <th>Задание</th>
           <th>Комментарий</th>
         </tr>
       </thead>
@@ -50,8 +50,8 @@
           <tr>
             <td>{{ item.created_at }}</td>
             <td>{{ item.actor }}</td>
-            <td>{{ item.action }}</td>
-            <td>{{ item.decision }}</td>
+            <td>{{ item.get_action_display }}</td>
+            <td>{{ item.get_decision_display }}</td>
             <td>{% if item.issue_id %}<a href="{% url 'memory:review_issue_detail' item.issue_id %}">#{{ item.issue_id }}</a>{% endif %}</td>
             <td>{% if item.search_document_id %}<a href="{% url 'memory:review_index_detail' item.search_document.document_id %}"><code>{{ item.search_document.document_id }}</code></a>{% endif %}</td>
             <td>{{ item.index_job_id|default:"" }}</td>

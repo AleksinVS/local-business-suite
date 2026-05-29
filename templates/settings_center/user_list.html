@@ -6,7 +6,7 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Users and access</p>
+      <p class="eyebrow">Пользователи и доступ</p>
       <h1>Пользователи портала</h1>
     </div>
     <div class="header-actions">
@@ -22,7 +22,7 @@
           <th>ФИО</th>
           <th>Подразделение</th>
           <th>Группы</th>
-          <th>AD link</th>
+          <th>Связь с AD</th>
           <th>Статус</th>
           <th></th>
         </tr>
@@ -41,7 +41,7 @@
                 <span class="muted">нет</span>
               {% endfor %}
             </td>
-            <td>{% if portal_user.is_active %}active{% else %}disabled{% endif %}</td>
+            <td>{% if portal_user.is_active %}Активен{% else %}Отключен{% endif %}</td>
             <td class="row-actions">
               <a href="{% url 'settings_center:user_edit' portal_user.pk %}">Изменить</a>
               <a href="{% url 'settings_center:user_ad_link' portal_user.pk %}">AD</a>

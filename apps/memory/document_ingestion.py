@@ -573,7 +573,7 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
     return {
         **base,
         "issue_kind": MemoryIngestionIssue.IssueKind.UNSUPPORTED_FORMAT,
-        "message": f"Parser/OCR backend for {extension} is not enabled in this MVP runtime.",
+        "message": f"Парсер или OCR для {extension} не включен в текущем MVP.",
         "metric": "skipped",
         "status": MemorySourceObject.IngestionStatus.SKIPPED,
         "metadata": {**base["metadata"], "requires_external_parser_or_ocr": True},

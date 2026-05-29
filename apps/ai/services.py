@@ -114,8 +114,8 @@ def resolve_actor(*, user_id=None, username=None):
         if username:
             return User.objects.get(username=username)
     except User.DoesNotExist:
-        raise ValidationError("Actor identity not found.")
-    raise ValidationError("Actor identity is required.")
+        raise ValidationError("Учетная запись исполнителя не найдена.")
+    raise ValidationError("Учетная запись исполнителя обязательна.")
 
 
 def normalize_session_external_id(session_external_id):
@@ -293,7 +293,7 @@ def get_workorder_for_actor(*, actor, workorder_id=None, number=None):
     elif number:
         workorder = queryset.get(number=number)
     else:
-        raise ValidationError("workorder_id or number is required.")
+        raise ValidationError("Нужно указать workorder_id или number.")
     return {
         "id": workorder.id,
         "number": workorder.number,
@@ -314,9 +314,9 @@ def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
     from apps.waiting_list.policies import can_view_waiting_list
 
     if not can_view_waiting_list(actor):
-        raise PermissionDenied("Waiting-list access is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступен лист ожидания.")
     if not entry_id:
-        raise ValidationError("entry_id is required.")
+        raise ValidationError("Нужно указать entry_id.")
     entry = WaitingListEntry.objects.get(pk=entry_id)
     return {
         "id": entry.id,
@@ -331,11 +331,11 @@ def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
 
 def create_workorder_for_actor(*, actor, payload):
     if not can_create(actor):
-        raise PermissionDenied("Work order creation is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно создание заявок.")
     department = Department.objects.get(pk=payload["department_id"])
     board = Board.objects.filter(slug="main").first()
     if not board:
-        raise ValidationError("Default board 'main' does not exist. Contact administrator.")
+        raise ValidationError("Доска по умолчанию 'main' не существует. Обратитесь к администратору.")
     workorder = create_workorder(
         author=actor,
         title=payload.get("title") or payload["subject"],
@@ -357,7 +357,7 @@ def transition_workorder_for_actor(*, actor, payload):
     workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
     target_status = payload["target_status"]
     if not can_transition(actor, workorder, target_status):
-        raise PermissionDenied("Status transition is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступен этот переход статуса.")
     workorder = transition_workorder(
         workorder=workorder, user=actor, to_status=target_status
     )
@@ -372,7 +372,7 @@ def transition_workorder_for_actor(*, actor, payload):
 def add_comment_for_actor(*, actor, payload):
     workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
     if not can_comment(actor, workorder):
-        raise PermissionDenied("Commenting is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно комментирование.")
     comment = workorder.comments.create(author=actor, body=payload["text"])
     workorder.updated_at = timezone.now()
     workorder.save(update_fields=["updated_at"])
@@ -387,7 +387,7 @@ def add_comment_for_actor(*, actor, payload):
 
 def list_departments_for_actor(*, actor, query="", parent_id=None):
     if not actor.is_authenticated:
-        raise PermissionDenied("Authentication required.")
+        raise PermissionDenied("Требуется вход в систему.")
     queryset = Department.objects.select_related("parent").order_by(
         "parent_id", "name", "id"
     )
@@ -408,7 +408,7 @@ def list_departments_for_actor(*, actor, query="", parent_id=None):
 
 def list_devices_for_actor(*, actor, query="", department_id=None, archived=False):
     if not actor.is_authenticated:
-        raise PermissionDenied("Authentication required.")
+        raise PermissionDenied("Требуется вход в систему.")
     queryset = MedicalDevice.objects.select_related("department").order_by("name", "id")
     if not archived:
         queryset = queryset.filter(is_archived=False)
@@ -456,7 +456,7 @@ def record_action(
 def confirm_closure_for_actor(*, actor, payload):
     workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
     if not can_confirm_closure(actor, workorder):
-        raise PermissionDenied("Closure confirmation is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно подтверждение закрытия.")
     workorder = confirm_closure(workorder=workorder, user=actor)
     return {
         "id": workorder.id,
@@ -470,10 +470,10 @@ def confirm_closure_for_actor(*, actor, payload):
 def rate_workorder_for_actor(*, actor, payload):
     workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
     if not can_rate(actor, workorder):
-        raise PermissionDenied("Rating is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступна оценка заявки.")
     rating = payload.get("rating")
     if not isinstance(rating, int) or rating < 1 or rating > 5:
-        raise ValidationError("Rating must be an integer between 1 and 5.")
+        raise ValidationError("Оценка должна быть целым числом от 1 до 5.")
     workorder = rate_workorder(
         workorder=workorder, user=actor, rating=rating
     )
@@ -489,7 +489,7 @@ def create_device_for_actor(*, actor, payload):
     from apps.workorders.policies import can_manage_inventory
 
     if not can_manage_inventory(actor):
-        raise PermissionDenied("Inventory management is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
     department = Department.objects.get(pk=payload["department_id"])
     device = MedicalDevice.objects.create(
         name=payload["name"],
@@ -508,7 +508,7 @@ def update_device_for_actor(*, actor, payload):
     from apps.workorders.policies import can_manage_inventory
 
     if not can_manage_inventory(actor):
-        raise PermissionDenied("Inventory management is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
     device = MedicalDevice.objects.get(pk=payload["device_id"])
     if "name" in payload:
         device.name = payload["name"]
@@ -530,7 +530,7 @@ def archive_device_for_actor(*, actor, payload):
     from apps.workorders.policies import can_manage_inventory
 
     if not can_manage_inventory(actor):
-        raise PermissionDenied("Inventory management is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
     device = MedicalDevice.objects.get(pk=payload["device_id"])
     device.archive()
     return {
@@ -544,7 +544,7 @@ def get_analytics_summary_for_actor(*, actor, payload):
     from django.db.models import Count
 
     if not can_view_analytics(actor):
-        raise PermissionDenied("Analytics access is not allowed for this user.")
+        raise PermissionDenied("Пользователю недоступна аналитика.")
 
     summary_type = payload.get("summary_type")
     base_qs = visible_workorders_queryset(actor).select_related(
@@ -586,7 +586,7 @@ def get_analytics_summary_for_actor(*, actor, payload):
             )
         }
     else:
-        raise ValidationError(f"Invalid summary_type: {summary_type}")
+        raise ValidationError(f"Некорректный summary_type: {summary_type}")
 
 def update_role_permissions_for_actor(*, actor, payload):
     """
@@ -594,7 +594,7 @@ def update_role_permissions_for_actor(*, actor, payload):
     STRICT SECURITY GATE: Only superusers can perform this action.
     """
     if not actor.is_superuser:
-        raise PermissionDenied("CRITICAL: Only administrators with full rights can modify role permissions.")
+        raise PermissionDenied("Критичное действие: менять права ролей могут только администраторы с полными правами.")
 
     from django.conf import settings
     import json
@@ -604,11 +604,11 @@ def update_role_permissions_for_actor(*, actor, payload):
     permissions_map = payload.get("permissions_map", {})
 
     if not role_name:
-        raise ValidationError("role_name is required.")
+        raise ValidationError("Нужно указать role_name.")
 
     current_rules = settings.LOCAL_BUSINESS_ROLE_RULES.copy()
     if role_name not in current_rules:
-        raise ValidationError(f"Role '{role_name}' does not exist.")
+        raise ValidationError(f"Роль '{role_name}' не существует.")
 
     # Update permissions
     for key, value in permissions_map.items():
@@ -621,7 +621,7 @@ def update_role_permissions_for_actor(*, actor, payload):
 
     return {
         "ok": True,
-        "message": f"Permissions for role '{role_name}' updated successfully.",
+        "message": f"Права роли '{role_name}' успешно обновлены.",
         "role_name": role_name,
         "updated_keys": list(permissions_map.keys())
     }
@@ -629,14 +629,14 @@ def update_role_permissions_for_actor(*, actor, payload):
 def get_role_rules_for_actor(*, actor, payload):
     """Returns the current role configuration from role_rules.json."""
     if not actor.is_authenticated:
-        raise PermissionDenied("Authentication required.")
+        raise PermissionDenied("Требуется вход в систему.")
     from django.conf import settings
     return {"rules": settings.LOCAL_BUSINESS_ROLE_RULES}
 
 def list_users_for_actor(*, actor, payload):
     """Lists users with their roles and departments. Only for superusers."""
     if not actor.is_superuser:
-        raise PermissionDenied("Only administrators can list all users.")
+        raise PermissionDenied("Список всех пользователей доступен только администраторам.")
 
     User = get_user_model()
     query = payload.get("query", "")
@@ -664,12 +664,12 @@ def list_users_for_actor(*, actor, payload):
 def update_user_for_actor(*, actor, payload):
     """Updates user details. Only for superusers."""
     if not actor.is_superuser:
-        raise PermissionDenied("Only administrators can update user data.")
+        raise PermissionDenied("Данные пользователей могут изменять только администраторы.")
 
     User = get_user_model()
     user_id = payload.get("user_id")
     if not user_id:
-        raise ValidationError("user_id is required.")
+        raise ValidationError("Нужно указать user_id.")
 
     target_user = User.objects.get(pk=user_id)
 
@@ -699,6 +699,6 @@ def update_user_for_actor(*, actor, payload):
 def list_groups_for_actor(*, actor, payload):
     """Lists all available Django groups. Only for superusers."""
     if not actor.is_superuser:
-        raise PermissionDenied("Only administrators can list groups.")
+        raise PermissionDenied("Список групп доступен только администраторам.")
     from django.contrib.auth.models import Group
     return {"items": list(Group.objects.values_list("name", flat=True))}

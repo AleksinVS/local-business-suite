@@ -20,6 +20,15 @@ def env_apply_mode() -> str:
     return mode
 
 
+def env_apply_mode_label(mode: str | None = None) -> str:
+    labels = {
+        "read_only": "только чтение",
+        "proposal": "через заявку",
+        "local_file": "локальный файл",
+    }
+    return labels.get(mode or env_apply_mode(), "через заявку")
+
+
 def effective_env_value(descriptor):
     key = descriptor.metadata.get("env_key")
     if not key:
@@ -38,6 +47,7 @@ def env_status_rows():
                     "descriptor": descriptor,
                     "effective_value": mask_sensitive({"value": effective_env_value(descriptor)})["value"],
                     "apply_mode": env_apply_mode(),
+                    "apply_mode_label": env_apply_mode_label(),
                 }
             )
     return rows
@@ -46,7 +56,7 @@ def env_status_rows():
 def create_env_proposal(*, actor, changes: dict[str, str], target_label="default"):
     mode = env_apply_mode()
     if mode == "read_only":
-        raise ValidationError("Environment settings are read-only in this deployment.")
+        raise ValidationError("Настройки окружения доступны только для чтения в этом развертывании.")
 
     allowed_keys = {
         descriptor.metadata.get("env_key")
@@ -55,7 +65,7 @@ def create_env_proposal(*, actor, changes: dict[str, str], target_label="default
     }
     normalized = {str(key): str(value) for key, value in changes.items() if str(key) in allowed_keys}
     if not normalized:
-        raise ValidationError("No supported environment keys were provided.")
+        raise ValidationError("Не указан ни один поддерживаемый ключ окружения.")
 
     proposal_dir = Path(getattr(settings, "SETTINGS_CENTER_ENV_PROPOSAL_DIR", settings.DATA_DIR / "settings_center" / "env_proposals"))
     proposal_dir.mkdir(parents=True, exist_ok=True)
@@ -65,10 +75,10 @@ def create_env_proposal(*, actor, changes: dict[str, str], target_label="default
         "restart_required": True,
         "changes": mask_sensitive(normalized),
         "operator_checklist": [
-            "Review values in the private deployment silo.",
-            "Apply changes to the host-specific .env file.",
-            "Restart affected web and worker processes.",
-            "Open Settings Center and verify effective values.",
+            "Проверить значения в приватном контуре развертывания.",
+            "Применить изменения в host-specific .env файле.",
+            "Перезапустить затронутые web- и worker-процессы.",
+            "Открыть центр настроек и проверить эффективные значения.",
         ],
     }
     path = proposal_dir / f"env_proposal_{timezone.now().strftime('%Y%m%d_%H%M%S_%f')}.json"

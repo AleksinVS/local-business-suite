@@ -4,6 +4,25 @@
 
 ## Active
 
+### Русификация интерфейса портала
+
+MVP реализован и ожидает приемку владельцем. Видимые элементы UI переведены на русский, путь к будущей архитектуре локализации зафиксирован без внедрения полноценного многоязычного runtime в текущем срезе.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0022-interface-russification-and-localization-roadmap.md`;
+- активный план находится в `docs/planning/active/interface-russification-and-localization.md`;
+- workflow package находится в `workflow/active/interface-russification/`;
+- правила UI-строк находятся в `docs/guides/INTERFACE_RUSSIFICATION.md`.
+
+Статус реализации:
+- переведены шаблоны, JS-сообщения, Django labels, формы, настройки и описания ИИ-инструментов;
+- переведены дефолтные контракты `contracts/ai/tools.json` и `contracts/ai/task_types.json`, рабочие копии обновлены в `data/contracts/ai/`;
+- технические коды, JSON-ключи, tool id и общепринятые аббревиатуры оставлены без перевода;
+- проверки Django, контрактов, unit, e2e и визуальный проход выполнены.
+
+Оставшееся действие:
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Модульные AI skills и registry-driven MCP-фасад
 
 MVP реализован и ожидает приемку владельцем. Доменные AI workflow вынесены из общего agent runtime в skills, которые регистрируют сами модули. Существующий MCP-сервер стал внешним фасадом для безопасных resources поверх тех же реестров, но не стал обязательной внутренней прослойкой sidebar chat.

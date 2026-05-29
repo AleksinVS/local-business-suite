@@ -54,7 +54,7 @@ class AIViewsTests(TestCase):
         self.client.force_login(self.manager)
         response = self.client.get(reverse("ai:hub"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "AI Hub")
+        self.assertContains(response, "ИИ-центр")
 
     def test_customer_cannot_open_ai_hub(self):
         self.client.force_login(self.customer)
@@ -283,7 +283,7 @@ class AIViewsTests(TestCase):
                 target = runtime_contracts / "ai" / "skills" / "demo.denied_skill" / "SKILL.md"
                 self.assertFalse(confirm["ok"])
                 self.assertFalse(target.exists())
-                self.assertIn("not allowed", confirm["errors"][0])
+                self.assertIn("недоступно управление навыками ИИ", confirm["errors"][0])
 
     def test_runtime_skill_authoring_rejects_unknown_required_tool(self):
         from .skill_authoring import build_runtime_skill_document
@@ -538,7 +538,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         detail_response = self.client.get(response["Location"])
         self.assertEqual(detail_response.status_code, 200)
-        self.assertContains(detail_response, "AI чат")
+        self.assertContains(detail_response, "ИИ-чат")
         self.assertContains(detail_response, 'class="ai-session-sidebar"')
         self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
 
@@ -643,7 +643,7 @@ class AIViewsTests(TestCase):
         body = b"".join(response.streaming_content).decode("utf-8")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Не удалось получить ответ от AI-сервиса", body)
+        self.assertIn("Не удалось получить ответ от ИИ-сервиса", body)
         self.assertIn("request_id", body)
         self.assertNotIn("runtime stream exploded", body)
         action = AgentActionLog.objects.get(tool_code="agent_runtime.chat_stream")
@@ -816,7 +816,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.json()
         self.assertFalse(payload["ok"])
-        self.assertIn("not found", payload["errors"][0])
+        self.assertIn("не найдено", payload["errors"][0])
 
     def test_pending_action_already_confirmed_returns_error(self):
         # Create and confirm a pending action
@@ -840,7 +840,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.json()
         self.assertFalse(payload["ok"])
-        self.assertIn("already confirmed", payload["errors"][0])
+        self.assertIn("уже имеет статус", payload["errors"][0])
 
     def test_pending_action_expired_does_not_execute(self):
         pending = PendingAction.objects.create(
@@ -864,7 +864,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.json()
         self.assertFalse(payload["ok"])
-        self.assertIn("expired", payload["errors"][0])
+        self.assertIn("истек", payload["errors"][0])
         self.assertFalse(WorkOrder.objects.filter(title="Expired action").exists())
 
     def test_pending_action_rejects_actor_mismatch(self):

@@ -93,7 +93,7 @@ def upsert_memory_projection_from_envelope(
                         {
                             "issue_kind": MemoryIngestionIssue.IssueKind.PII_AUDIT,
                             "severity": MemoryIngestionIssue.Severity.WARNING,
-                            "message": "PII-like data would be audited.",
+                            "message": "Похожий на персональные данные контент будет отправлен на аудит.",
                         }
                     ]
                     if pii_findings and privacy_profile.audit
@@ -355,7 +355,7 @@ def update_personal_memory_for_actor(*, actor, payload):
         return delete_personal_memory(actor=actor, memory_id=memory_id)
     from django.core.exceptions import ValidationError
 
-    raise ValidationError("operation must be 'edit' or 'delete'.")
+    raise ValidationError("operation должен быть 'edit' или 'delete'.")
 
 
 def _ensure_memory_source_from_envelope(envelope: SourceObjectEnvelope) -> MemorySource:
@@ -454,7 +454,7 @@ def _prepare_source_text_for_index(
         issue = {
             "issue_kind": MemoryIngestionIssue.IssueKind.SECRET_BLOCKED,
             "severity": MemoryIngestionIssue.Severity.BLOCKER,
-            "message": secret_scan.reason or "Sensitive credential material was detected.",
+            "message": secret_scan.reason or "Обнаружены чувствительные учетные данные.",
             "metadata": {
                 "source_adapter": True,
                 "secret_findings": [
@@ -481,7 +481,7 @@ def _prepare_source_text_for_index(
             issue = {
                 "issue_kind": MemoryIngestionIssue.IssueKind.PII_BLOCKED,
                 "severity": MemoryIngestionIssue.Severity.BLOCKER,
-                "message": "PII-like data was detected and blocked by source privacy profile.",
+                "message": "Обнаружены данные, похожие на персональные; профиль приватности источника заблокировал обработку.",
                 "metadata": {"source_adapter": True, "pii_finding_count": len(pii_findings)},
             }
             if not dry_run:
@@ -494,7 +494,7 @@ def _prepare_source_text_for_index(
             issue = {
                 "issue_kind": MemoryIngestionIssue.IssueKind.PII_AUDIT,
                 "severity": MemoryIngestionIssue.Severity.WARNING,
-                "message": "PII-like data was detected; source object was indexed according to privacy profile.",
+                "message": "Обнаружены данные, похожие на персональные; объект источника проиндексирован согласно профилю приватности.",
                 "metadata": {"source_adapter": True, "pii_finding_count": len(pii_findings)},
             }
             issues.append(issue)

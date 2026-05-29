@@ -30,7 +30,7 @@ class WaitingListEntry(models.Model):
         unique=True,
         editable=False,
         verbose_name="Внешний идентификатор",
-        help_text="Не guessable UUID для внешних интеграций",
+        help_text="UUID, который нельзя угадать, для внешних интеграций",
     )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,

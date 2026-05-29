@@ -140,13 +140,13 @@
                 }
                 executeUiCommands(payload);
                 if (payload.error) {
-                  pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = payload.message || "AI-сервис вернул ошибку.";
+                  pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = payload.message || "ИИ-сервис вернул ошибку.";
                 }
               } catch (error) {}
             });
             read();
           }).catch(function () {
-            pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = "Не удалось получить ответ от AI-сервиса.";
+            pendingAssistant.querySelector(".sidebar-chat-bubble").textContent = "Не удалось получить ответ от ИИ-сервиса.";
             finish();
           });
         }

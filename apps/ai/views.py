@@ -44,7 +44,7 @@ from .tooling import UnknownToolError, execute_pending_action, execute_tool
 logger = logging.getLogger(__name__)
 
 CHAT_RUNTIME_ERROR_MESSAGE = (
-    "Не удалось получить ответ от AI-сервиса. Причина: {reason}. "
+    "Не удалось получить ответ от ИИ-сервиса. Причина: {reason}. "
     "Технический идентификатор: {request_id}."
 )
 PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
@@ -59,11 +59,11 @@ def classify_chat_runtime_error(exc):
     if "timeout" in combined or "timed out" in combined:
         return "agent_runtime_timeout", "превышено время ожидания"
     if "connect" in combined or "connection" in combined or "network" in combined:
-        return "agent_runtime_unavailable", "AI-сервис недоступен"
+        return "agent_runtime_unavailable", "ИИ-сервис недоступен"
     if "status" in combined or "http" in combined:
-        return "agent_runtime_http_error", "AI-сервис вернул ошибку"
+        return "agent_runtime_http_error", "ИИ-сервис вернул ошибку"
     if isinstance(exc, AgentRuntimeError):
-        return "agent_runtime_error", "AI-сервис вернул ошибку"
+        return "agent_runtime_error", "ИИ-сервис вернул ошибку"
     return "chat_stream_error", "внутренняя ошибка обработки чата"
 
 
@@ -179,7 +179,7 @@ def gateway_token_is_valid(request):
 
 def reject_invalid_gateway_token(request):
     if not gateway_token_is_valid(request):
-        return HttpResponseForbidden("AI gateway token is invalid.")
+        return HttpResponseForbidden("Токен шлюза ИИ недействителен.")
     return None
 
 
@@ -198,7 +198,7 @@ def validate_gateway_actor(actor_context, session_id=None):
             session.user_id,
             actor_user_id,
         )
-        return JsonResponse({"error": "Actor does not match session owner."}, status=403)
+        return JsonResponse({"error": "Исполнитель не совпадает с владельцем сессии."}, status=403)
     return None
 
 
@@ -243,7 +243,18 @@ class AIHubView(AIManagementMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["tool_registry"] = settings.LOCAL_BUSINESS_AI_TOOLS["tools"]
+        mode_labels = {"read": "Чтение", "write": "Запись", "admin": "Администрирование"}
+        tool_registry = []
+        for tool in settings.LOCAL_BUSINESS_AI_TOOLS["tools"]:
+            tool_registry.append(
+                {
+                    **tool,
+                    "code": tool.get("id") or tool.get("code", ""),
+                    "mode_label": mode_labels.get(tool.get("mode", ""), tool.get("mode", "")),
+                    "confirmation_label": "Требуется" if tool.get("requires_confirmation") else "Не требуется",
+                }
+            )
+        context["tool_registry"] = tool_registry
         context["task_types"] = settings.LOCAL_BUSINESS_AI_TASK_TYPES["task_types"]
         context["recent_sessions"] = ChatSession.objects.all()[:10]
         context["recent_actions"] = AgentActionLog.objects.select_related("session")[:20]
@@ -368,18 +379,18 @@ class AIPageContextUpdateView(LoginRequiredMixin, View):
 
     def post(self, request):
         if not allow_page_context_update(request.user.id):
-            return JsonResponse({"error": "Too many page context updates."}, status=429)
+            return JsonResponse({"error": "Слишком много обновлений контекста страницы."}, status=429)
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
         except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
         try:
             sanitized = sanitize_page_context_envelope(payload)
             result = update_window_context_snapshot(request.user, sanitized)
         except ValidationError as exc:
             return JsonResponse({"error": exc.messages[0] if hasattr(exc, "messages") else str(exc)}, status=400)
         except PermissionDenied:
-            return JsonResponse({"error": "Context object is not available."}, status=403)
+            return JsonResponse({"error": "Объект контекста недоступен."}, status=403)
         snapshot = result.snapshot
         return JsonResponse(
             {
@@ -441,7 +452,7 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
 
         if not prompt and not files:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                return JsonResponse({"error": "Empty message"}, status=400)
+                return JsonResponse({"error": "Пустое сообщение"}, status=400)
             messages.error(request, "Сообщение пустое.")
             return redirect("ai:chat_detail", external_id=session.external_id)
 
@@ -558,7 +569,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
         msg_id = body.get("msg_id")
         prompt = body.get("prompt", "")
         surface = body.get("surface") or (CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE)
@@ -597,7 +608,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                 context_hint=body.get("context_hint", ""),
             )
         else:
-            return JsonResponse({"error": "Prompt or msg_id is required."}, status=400)
+            return JsonResponse({"error": "Нужно указать prompt или msg_id."}, status=400)
 
         def stream_generator():
             client = AgentRuntimeClient()
@@ -679,11 +690,11 @@ class AIChatUpdateModelView(LoginRequiredMixin, View):
         try:
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
         model_id = body.get("model_id", "")
         valid_ids = {m["id"] for m in settings.LOCAL_BUSINESS_AI_MODELS}
         if model_id and model_id not in valid_ids:
-            return JsonResponse({"error": "Invalid model_id."}, status=400)
+            return JsonResponse({"error": "Некорректный model_id."}, status=400)
         session.metadata = {**session.metadata, "model_id": model_id}
         session.save(update_fields=["metadata", "updated_at"])
         return JsonResponse({"status": "ok", "model_id": model_id})
@@ -695,7 +706,7 @@ class AIChatUpdateTitleView(LoginRequiredMixin, View):
         try:
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
         title = body.get("title", "").strip()[:50]
         if not title:
             return JsonResponse({"error": "Заголовок не может быть пустым."}, status=400)
@@ -747,7 +758,7 @@ class AIToolExecuteView(View):
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
 
         actor_context = body.get("actor", {})
         payload = body.get("payload", {})
@@ -772,7 +783,7 @@ class AIToolExecuteView(View):
                 actor_version=actor_version,
             )
         except UnknownToolError:
-            return JsonResponse({"error": "Unknown tool."}, status=404)
+            return JsonResponse({"error": "Неизвестный инструмент."}, status=404)
 
         if result.get("ok"):
             return JsonResponse(result, status=200)
@@ -793,7 +804,7 @@ class AIToolConfirmView(View):
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
 
         confirmed = body.get("confirmed", False)
         actor_context = body.get("actor", {})
@@ -842,7 +853,7 @@ class AISkillLoadView(View):
         content = load_skill_content(skill_id)
         if content:
             return JsonResponse({"id": skill_id, "instructions": content})
-        return JsonResponse({"error": "Skill not found"}, status=404)
+        return JsonResponse({"error": "Навык не найден."}, status=404)
 
 
 class SlashCommandListView(LoginRequiredMixin, View):
@@ -886,7 +897,7 @@ class SlashCommandCreateView(LoginRequiredMixin, View):
         try:
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
 
         name = body.get("name", "").strip().lstrip("/").lower()
         shortcut = body.get("shortcut", "").strip().lstrip("/").lower()

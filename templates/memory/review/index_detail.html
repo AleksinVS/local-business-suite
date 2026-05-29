@@ -8,13 +8,13 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Search document</p>
+      <p class="eyebrow">Поисковый документ</p>
       <h1><code>{{ document.document_id }}</code></h1>
       <p class="description">{{ queue_item.safe_summary }}</p>
     </div>
     <div class="memory-review-status">
-      <span class="badge memory-badge-{{ diagnostics.severity }}">{{ diagnostics.severity }}</span>
-      <span class="badge">{{ document.index_status }}</span>
+      <span class="badge memory-badge-{{ diagnostics.severity }}">{{ diagnostics.severity_label }}</span>
+      <span class="badge">{{ document.get_index_status_display }}</span>
     </div>
   </div>
 
@@ -22,19 +22,19 @@
     <div>
       <h2>Техническая карточка</h2>
       <dl class="memory-review-dl">
-        <dt>Corpus</dt><dd>{{ document.corpus_type }}</dd>
-        <dt>Object kind</dt><dd>{{ document.object_kind }}</dd>
-        <dt>Target</dt><dd>{{ queue_item.target_id }}</dd>
-        <dt>Body hash</dt><dd><code>{{ document.body_hash }}</code></dd>
-        <dt>Indexed at</dt><dd>{{ document.indexed_at|default:"" }}</dd>
+        <dt>Корпус</dt><dd>{{ document.get_corpus_type_display }}</dd>
+        <dt>Тип объекта</dt><dd>{{ document.get_object_kind_display }}</dd>
+        <dt>Цель</dt><dd>{{ queue_item.target_id }}</dd>
+        <dt>Хеш содержимого</dt><dd><code>{{ document.body_hash }}</code></dd>
+        <dt>Проиндексировано</dt><dd>{{ document.indexed_at|default:"" }}</dd>
       </dl>
     </div>
     <div>
-      <h2>Diagnostics</h2>
+      <h2>Диагностика</h2>
       <dl class="memory-review-dl">
-        <dt>FTS</dt><dd>{{ diagnostics.fulltext_status }}</dd>
-        <dt>Vector</dt><dd>{{ diagnostics.vector_status }}</dd>
-        <dt>Versions</dt><dd><code>{{ diagnostics.index_versions }}</code></dd>
+        <dt>FTS</dt><dd>{{ diagnostics.fulltext_status_label }}</dd>
+        <dt>Вектор</dt><dd>{{ diagnostics.vector_status_label }}</dd>
+        <dt>Версии</dt><dd><code>{{ diagnostics.index_versions }}</code></dd>
         <dt>Причины</dt><dd>{{ diagnostics.stale_reasons|join:", " }}</dd>
       </dl>
     </div>
@@ -45,32 +45,32 @@
   <div class="section-head"><h2>Действия с индексом</h2></div>
   <div class="memory-review-actions">
     {% if "dry_run_reindex" in available_actions %}
-      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="dry_run_reindex"><button type="submit">Dry-run</button></form>
+      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="dry_run_reindex"><button type="submit">Пробный запуск</button></form>
     {% endif %}
     {% if "enqueue_reindex" in available_actions %}
-      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="enqueue_reindex"><button type="submit">Reindex</button></form>
+      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="enqueue_reindex"><button type="submit">Переиндексировать</button></form>
     {% endif %}
     {% if "retry_index" in available_actions %}
-      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="retry_index"><button type="submit">Retry</button></form>
+      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="retry_index"><button type="submit">Повторить</button></form>
     {% endif %}
     {% if "delete_stale_index" in available_actions %}
-      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="delete_stale_index"><button type="submit">Delete stale</button></form>
+      <form method="post" action="{% url 'memory:review_index_action' document.document_id %}">{% csrf_token %}<input type="hidden" name="action" value="delete_stale_index"><button type="submit">Удалить устаревший индекс</button></form>
     {% endif %}
   </div>
 </section>
 
 <section class="memory-review-grid">
   <article class="panel">
-    <h2>Безопасные metadata</h2>
+    <h2>Безопасные метаданные</h2>
     <pre class="memory-review-pre">{{ safe_metadata }}</pre>
   </article>
   <article class="panel">
-    <h2>Связанные issues</h2>
+    <h2>Связанные проблемы</h2>
     <ul class="compact-list">
       {% for issue in related_issues %}
-        <li><a href="{% url 'memory:review_issue_detail' issue.pk %}">#{{ issue.pk }} {{ issue.get_issue_kind_display }}</a> · {{ issue.status }}</li>
+        <li><a href="{% url 'memory:review_issue_detail' issue.pk %}">#{{ issue.pk }} {{ issue.get_issue_kind_display }}</a> · {{ issue.get_status_display }}</li>
       {% empty %}
-        <li class="muted">Связанных issues нет.</li>
+        <li class="muted">Связанных проблем нет.</li>
       {% endfor %}
     </ul>
   </article>
@@ -88,7 +88,7 @@
     </ul>
   </article>
   <article class="panel">
-    <h2>Access audit</h2>
+    <h2>Аудит доступа</h2>
     <ul class="compact-list">
       {% for audit in access_audits %}
         <li><code>{{ audit.request_id }}</code> · {{ audit.actor }} · {{ audit.policy_decision }} · {{ audit.created_at }}</li>
@@ -103,14 +103,14 @@
   <h2>Журнал действий</h2>
   <div class="table-container">
     <table>
-      <thead><tr><th>Время</th><th>Actor</th><th>Action</th><th>Decision</th><th>Job</th><th>Комментарий</th></tr></thead>
+      <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Решение</th><th>Задание</th><th>Комментарий</th></tr></thead>
       <tbody>
         {% for item in review_actions %}
           <tr>
             <td>{{ item.created_at }}</td>
             <td>{{ item.actor }}</td>
-            <td>{{ item.action }}</td>
-            <td>{{ item.decision }}</td>
+            <td>{{ item.get_action_display }}</td>
+            <td>{{ item.get_decision_display }}</td>
             <td>{{ item.index_job_id|default:"" }}</td>
             <td>{{ item.comment }}</td>
           </tr>

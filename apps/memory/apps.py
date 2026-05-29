@@ -4,4 +4,4 @@ from django.apps import AppConfig
 class MemoryConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.memory"
-    verbose_name = "AI Memory"
+    verbose_name = "Память ИИ"

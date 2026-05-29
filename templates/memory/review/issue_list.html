@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Issues памяти | {{ app_display_name }}{% endblock %}
+{% block title %}Проблемы памяти | {{ app_display_name }}{% endblock %}
 
 {% block content %}
 {% include "memory/review/_nav.html" %}
@@ -8,8 +8,8 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Review queue</p>
-      <h1>Issues памяти</h1>
+      <p class="eyebrow">Очередь ревью</p>
+      <h1>Проблемы памяти</h1>
     </div>
   </div>
 
@@ -22,7 +22,7 @@
       {% endfor %}
     </select>
     <select name="severity">
-      <option value="">Все severity</option>
+      <option value="">Любая критичность</option>
       {% for value, label in issue_severities %}
         <option value="{{ value }}" {% if filters.severity == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -41,8 +41,8 @@
     </select>
     <select name="flag">
       <option value="">Все группы</option>
-      <option value="privacy" {% if filters.flag == "privacy" %}selected{% endif %}>Privacy</option>
-      <option value="blocker" {% if filters.flag == "blocker" %}selected{% endif %}>Blocker</option>
+      <option value="privacy" {% if filters.flag == "privacy" %}selected{% endif %}>Персональные данные</option>
+      <option value="blocker" {% if filters.flag == "blocker" %}selected{% endif %}>Блокирующие</option>
       <option value="index" {% if filters.flag == "index" %}selected{% endif %}>Индекс</option>
     </select>
     <button type="submit">Фильтр</button>
@@ -55,7 +55,7 @@
     <table>
       <thead>
         <tr>
-          <th>Severity</th>
+          <th>Критичность</th>
           <th>Тип</th>
           <th>Статус</th>
           <th>Источник</th>
@@ -68,7 +68,7 @@
       <tbody>
         {% for issue in issues %}
           <tr>
-            <td><span class="badge memory-badge-{{ issue.severity }}">{{ issue.severity }}</span></td>
+            <td><span class="badge memory-badge-{{ issue.severity }}">{{ issue.get_severity_display }}</span></td>
             <td>{{ issue.get_issue_kind_display }}</td>
             <td>{{ issue.get_status_display }}</td>
             <td><code>{{ issue.source.code }}</code></td>
@@ -78,7 +78,7 @@
             <td><a class="button-link-muted" href="{% url 'memory:review_issue_detail' issue.pk %}">Открыть</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="8" class="muted">Issues не найдены.</td></tr>
+          <tr><td colspan="8" class="muted">Проблемы не найдены.</td></tr>
         {% endfor %}
       </tbody>
     </table>

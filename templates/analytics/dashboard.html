@@ -3,14 +3,14 @@
 {% block content %}
 <section class="hero">
   <div class="hero-card">
-    <p class="eyebrow">Analytics</p>
+    <p class="eyebrow">Аналитика</p>
     <h1>Сводка по заявкам</h1>
     <p>Базовые агрегаты первой поставки: статусы, подразделения, нагрузка исполнителей и среднее время до выполнения.</p>
   </div>
   <div class="metrics">
     <article class="metric"><span>{{ resolved_count }}</span><small>выполнено</small></article>
     <article class="metric"><span>{{ closed_count }}</span><small>закрыто</small></article>
-    <article class="metric"><span>{% if avg_resolution_time %}{{ avg_resolution_time }}{% else %}n/a{% endif %}</span><small>среднее время решения</small></article>
+    <article class="metric"><span>{% if avg_resolution_time %}{{ avg_resolution_time }}{% else %}нет данных{% endif %}</span><small>среднее время решения</small></article>
   </div>
 </section>
 

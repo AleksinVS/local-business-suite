@@ -48,11 +48,11 @@ class AgentSkillDescriptor:
         normalized_description = str(self.description or "").strip()
         normalized_body = str(self.body or "").strip()
         if not normalized_name:
-            raise ValidationError("Agent skill name must not be empty.")
+            raise ValidationError("Название навыка агента не должно быть пустым.")
         if not normalized_description:
-            raise ValidationError("Agent skill description must not be empty.")
+            raise ValidationError("Описание навыка агента не должно быть пустым.")
         if not normalized_body:
-            raise ValidationError("Agent skill body must not be empty.")
+            raise ValidationError("Инструкции навыка агента не должны быть пустыми.")
         object.__setattr__(self, "skill_id", normalized_id)
         object.__setattr__(self, "name", normalized_name[:120])
         object.__setattr__(self, "description", normalized_description[:1000])
@@ -98,7 +98,7 @@ _SKILLS: dict[str, AgentSkillProvider] = {}
 def register_agent_skill(provider: AgentSkillProvider, *, replace: bool = False) -> AgentSkillProvider:
     skill_id = normalize_skill_id(getattr(provider, "skill_id", ""))
     if skill_id in _SKILLS and not replace:
-        raise ValidationError(f"Agent skill '{skill_id}' is already registered.")
+        raise ValidationError(f"Навык агента '{skill_id}' уже зарегистрирован.")
     _validate_provider(provider)
     _SKILLS[skill_id] = provider
     return provider
@@ -123,16 +123,16 @@ def clear_agent_skills() -> None:
 def normalize_skill_id(value: Any) -> str:
     normalized = str(value or "").strip()
     if not normalized or not _SKILL_ID_RE.match(normalized):
-        raise ValidationError("Agent skill id is invalid.")
+        raise ValidationError("Идентификатор навыка агента некорректен.")
     if ".." in normalized or "/" in normalized or "\\" in normalized:
-        raise ValidationError("Agent skill id is invalid.")
+        raise ValidationError("Идентификатор навыка агента некорректен.")
     return normalized
 
 
 def normalize_tool_code(value: Any) -> str:
     normalized = normalize_optional_identifier(value, "tool_code")
     if not normalized:
-        raise ValidationError("Agent skill tool_code must not be empty.")
+        raise ValidationError("tool_code навыка агента не должен быть пустым.")
     return normalized
 
 
@@ -141,13 +141,13 @@ def normalize_optional_identifier(value: Any, field_name: str) -> str:
     if not normalized:
         return ""
     if len(normalized) > 120 or not _IDENTIFIER_RE.match(normalized):
-        raise ValidationError(f"Agent skill {field_name} is invalid.")
+        raise ValidationError(f"Поле навыка агента {field_name} некорректно.")
     return normalized
 
 
 def _validate_provider(provider: AgentSkillProvider) -> None:
     entry = provider.catalog_entry()
     if normalize_skill_id(entry.get("id")) != normalize_skill_id(getattr(provider, "skill_id", "")):
-        raise ValidationError("Agent skill provider returned mismatched id.")
+        raise ValidationError("Поставщик навыка агента вернул несогласованный id.")
     if not str(provider.load_body() or "").strip():
-        raise ValidationError("Agent skill provider returned empty body.")
+        raise ValidationError("Поставщик навыка агента вернул пустые инструкции.")

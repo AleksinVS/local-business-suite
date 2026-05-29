@@ -8,20 +8,20 @@
 <section class="panel">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Memory review</p>
+      <p class="eyebrow">Ревью памяти</p>
       <h1>Сводка аудита памяти</h1>
-      <p class="description">Очередь проблем загрузки, privacy-аудита и состояния поискового индекса.</p>
+      <p class="description">Очередь проблем загрузки, аудита персональных данных и состояния поискового индекса.</p>
     </div>
     <div class="header-actions">
-      <a class="button-link" href="{% url 'memory:review_issue_list' %}?status=open">Открытые issues</a>
+      <a class="button-link" href="{% url 'memory:review_issue_list' %}?status=open">Открытые проблемы</a>
       <a class="button-link" href="{% url 'memory:review_index_list' %}?gap=missing_fts">Проблемы индекса</a>
     </div>
   </div>
 
   <div class="memory-review-metrics">
-    <article class="metric"><span>{{ open_issue_count }}</span><small>открытые issues</small></article>
-    <article class="metric"><span>{{ blocker_issue_count }}</span><small>blocker</small></article>
-    <article class="metric"><span>{{ privacy_issue_count }}</span><small>privacy audit</small></article>
+    <article class="metric"><span>{{ open_issue_count }}</span><small>открытые проблемы</small></article>
+    <article class="metric"><span>{{ blocker_issue_count }}</span><small>блокирующие</small></article>
+    <article class="metric"><span>{{ privacy_issue_count }}</span><small>аудит персональных данных</small></article>
     <article class="metric"><span>{{ index_problem_count }}</span><small>состояние индекса</small></article>
   </div>
 </section>
@@ -29,16 +29,16 @@
 <section class="memory-review-grid">
   <article class="panel">
     <div class="section-head">
-      <h2>Issues по severity</h2>
+      <h2>Проблемы по критичности</h2>
     </div>
     <div class="table-container">
       <table>
-        <thead><tr><th>Severity</th><th>Количество</th></tr></thead>
+        <thead><tr><th>Критичность</th><th>Количество</th></tr></thead>
         <tbody>
           {% for row in issue_counts_by_severity %}
-            <tr><td><span class="badge memory-badge-{{ row.severity }}">{{ row.severity }}</span></td><td>{{ row.total }}</td></tr>
+            <tr><td><span class="badge memory-badge-{{ row.severity }}">{{ row.label }}</span></td><td>{{ row.total }}</td></tr>
           {% empty %}
-            <tr><td colspan="2" class="muted">Issues пока нет.</td></tr>
+            <tr><td colspan="2" class="muted">Проблем пока нет.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -54,7 +54,7 @@
         <thead><tr><th>Статус</th><th>Количество</th></tr></thead>
         <tbody>
           {% for row in document_counts_by_status %}
-            <tr><td><span class="badge">{{ row.index_status }}</span></td><td>{{ row.total }}</td></tr>
+            <tr><td><span class="badge">{{ row.label }}</span></td><td>{{ row.total }}</td></tr>
           {% empty %}
             <tr><td colspan="2" class="muted">Документов пока нет.</td></tr>
           {% endfor %}
@@ -66,14 +66,14 @@
 
 <section class="panel">
   <div class="section-head">
-    <h2>Последние issues</h2>
-    <a class="button-link-muted" href="{% url 'memory:review_issue_list' %}">Все issues</a>
+    <h2>Последние проблемы</h2>
+    <a class="button-link-muted" href="{% url 'memory:review_issue_list' %}">Все проблемы</a>
   </div>
   <div class="table-container">
     <table>
       <thead>
         <tr>
-          <th>Severity</th>
+          <th>Критичность</th>
           <th>Тип</th>
           <th>Источник</th>
           <th>Объект</th>
@@ -84,15 +84,15 @@
       <tbody>
         {% for item in recent_issues %}
           <tr>
-            <td><span class="badge memory-badge-{{ item.severity }}">{{ item.severity }}</span></td>
+            <td><span class="badge memory-badge-{{ item.severity }}">{{ item.severity_label }}</span></td>
             <td>{{ item.title }}</td>
             <td><code>{{ item.source }}</code></td>
             <td>{{ item.target_id }}</td>
-            <td>{{ item.status }}</td>
+            <td>{{ item.status_label }}</td>
             <td><a class="button-link-muted" href="{{ item.links.detail }}">Открыть</a></td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="muted">Нет issues для ревью.</td></tr>
+          <tr><td colspan="6" class="muted">Нет проблем для ревью.</td></tr>
         {% endfor %}
       </tbody>
     </table>

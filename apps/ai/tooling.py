@@ -459,7 +459,7 @@ def execute_pending_action(
                     "ok": False,
                     "tool": None,
                     "result": None,
-                    "errors": ["Pending action not found or already resolved."],
+                    "errors": ["Ожидающее действие не найдено или уже обработано."],
                     "meta": {},
                 }
 
@@ -468,7 +468,7 @@ def execute_pending_action(
                     "ok": False,
                     "tool": pending.tool_code,
                     "result": None,
-                    "errors": [f"Pending action is already {pending.status}."],
+                    "errors": [f"Ожидающее действие уже имеет статус {pending.get_status_display()}."],
                     "meta": {"pending_action_status": pending.status},
                 }
 
@@ -479,7 +479,7 @@ def execute_pending_action(
                     "ok": False,
                     "tool": pending.tool_code,
                     "result": None,
-                    "errors": ["Pending action has expired."],
+                    "errors": ["Срок ожидания действия истек."],
                     "meta": {"pending_action_status": pending.status},
                 }
 

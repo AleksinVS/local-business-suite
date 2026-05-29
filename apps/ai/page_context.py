@@ -57,10 +57,10 @@ class ContextUpdateResult:
 
 def sanitize_page_context_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(envelope, dict):
-        raise ValidationError("Page context envelope must be a JSON object.")
+        raise ValidationError("Контекст страницы должен быть JSON-объектом.")
     encoded = json.dumps(envelope, ensure_ascii=False, default=str).encode("utf-8")
     if len(encoded) > PAGE_CONTEXT_MAX_BYTES:
-        raise ValidationError("Page context envelope is too large.")
+        raise ValidationError("Контекст страницы слишком большой.")
 
     clean: dict[str, Any] = {
         "schema_version": str(envelope.get("schema_version") or PAGE_CONTEXT_SCHEMA_VERSION),
@@ -72,12 +72,12 @@ def sanitize_page_context_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         "capabilities": {},
     }
     if clean["schema_version"] != PAGE_CONTEXT_SCHEMA_VERSION:
-        raise ValidationError("Unsupported page context schema_version.")
+        raise ValidationError("Версия schema_version контекста страницы не поддерживается.")
     if not clean["window_id"]:
-        raise ValidationError("window_id is required.")
+        raise ValidationError("Нужно указать window_id.")
     module = _safe_string(clean["page"].get("module"), max_len=64).lower()
     if module not in ALLOWED_MODULES:
-        raise ValidationError("Unknown page context module.")
+        raise ValidationError("Неизвестный модуль контекста страницы.")
     clean["page"]["module"] = module
     if clean["selection"]:
         clean["selection"]["object_id"] = _safe_string(clean["selection"].get("object_id"), max_len=80)
@@ -114,9 +114,9 @@ def resolve_page_context(user, envelope: dict[str, Any]) -> dict[str, Any]:
         try:
             workorder = visible_workorders_queryset(user).get(pk=int(object_id))
         except (ValueError, TypeError):
-            raise ValidationError("Invalid workorder id.")
+            raise ValidationError("Некорректный ID заявки.")
         except WorkOrder.DoesNotExist as exc:
-            raise PermissionDenied("Workorder is not visible to the current user.") from exc
+            raise PermissionDenied("Заявка недоступна текущему пользователю.") from exc
         transition_targets = [
             status for status, _label in WorkOrderStatus.choices if can_transition(user, workorder, status)
         ]
@@ -146,13 +146,13 @@ def resolve_page_context(user, envelope: dict[str, Any]) -> dict[str, Any]:
 
     if source_code == "waiting_list" and object_type == "waiting_list_entry" and object_id:
         if not can_view_waiting_list(user):
-            raise PermissionDenied("Waiting-list entry is not visible to the current user.")
+            raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.")
         try:
             entry = WaitingListEntry.objects.get(pk=int(object_id))
         except (ValueError, TypeError):
-            raise ValidationError("Invalid waiting-list entry id.")
+            raise ValidationError("Некорректный ID записи листа ожидания.")
         except WaitingListEntry.DoesNotExist as exc:
-            raise PermissionDenied("Waiting-list entry is not visible to the current user.") from exc
+            raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.") from exc
         transition_targets = [
             status for status, _label in WaitingListStatus.choices if can_transition_waiting_list_entry(user, entry)
         ]

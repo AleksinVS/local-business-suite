@@ -69,11 +69,11 @@ def preview_contract_payload(*, descriptor, raw_payload: str):
 def apply_contract_payload(*, actor, setting_id: str, raw_payload: str, confirmed: bool):
     descriptor = get_registry().get(setting_id)
     if descriptor.storage_kind != "runtime_contract":
-        raise ValidationError("Setting is not backed by a runtime contract.")
+        raise ValidationError("Настройка не связана с рабочим контрактом.")
     if not descriptor.is_editable:
-        raise ValidationError("Setting is not editable.")
+        raise ValidationError("Настройка недоступна для редактирования.")
     if not confirmed:
-        raise ValidationError("Contract update requires explicit confirmation.")
+        raise ValidationError("Для изменения контракта нужно явное подтверждение.")
 
     before = read_contract_value(descriptor)
     after = parse_and_validate_payload(descriptor, raw_payload)
@@ -94,12 +94,12 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
     try:
         payload = json.loads(raw_payload)
     except json.JSONDecodeError as exc:
-        raise ValidationError(f"Invalid JSON: {exc.msg}.") from exc
+        raise ValidationError(f"Некорректный JSON: {exc.msg}.") from exc
     payload = copy.deepcopy(payload)
     validator_name = descriptor.metadata.get("validator")
     validator = VALIDATORS.get(validator_name)
     if validator is None:
-        raise ValidationError(f"Unknown contract validator '{validator_name}'.")
+        raise ValidationError(f"Неизвестный валидатор контракта: '{validator_name}'.")
     validator(payload)
     return payload
 
@@ -107,7 +107,7 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
 def _contract_path(descriptor):
     setting_name = descriptor.metadata.get("settings_path")
     if not setting_name:
-        raise ValidationError("Descriptor does not define settings_path.")
+        raise ValidationError("Дескриптор не задает settings_path.")
     return getattr(settings, setting_name)
 
 

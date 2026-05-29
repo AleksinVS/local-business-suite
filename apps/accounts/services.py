@@ -56,7 +56,7 @@ def update_local_user(*, actor, user, cleaned_data):
 def disable_local_user(*, actor, user):
     _require_superuser(actor)
     if user.pk == getattr(actor, "pk", None):
-        raise ValidationError("You cannot disable your own account.")
+        raise ValidationError("Нельзя отключить собственную учетную запись.")
     user.is_active = False
     user.save(update_fields=["is_active"])
     return user
@@ -69,7 +69,7 @@ def link_ad_identity(*, actor, user, cleaned_data):
     username = cleaned_data.get("username", "")
     domain = cleaned_data.get("domain", "")
     if not (subject_id or username or cleaned_data.get("upn")):
-        raise ValidationError("AD link requires SID, username or UPN.")
+        raise ValidationError("Для связи с AD нужен SID, логин или UPN.")
     identity, _created = ExternalIdentity.objects.update_or_create(
         user=user,
         provider=provider,
@@ -138,4 +138,4 @@ def scope_tokens_for_group_names(group_names):
 
 def _require_superuser(actor):
     if not getattr(actor, "is_superuser", False):
-        raise PermissionDenied("Superuser permission is required.")
+        raise PermissionDenied("Требуются права суперпользователя.")

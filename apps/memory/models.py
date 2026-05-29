@@ -7,25 +7,25 @@ from django.db.models import Q
 
 class MemorySource(models.Model):
     class Status(models.TextChoices):
-        ENABLED = "enabled", "Enabled"
-        DISABLED = "disabled", "Disabled"
-        MISSING_ADAPTER = "missing_adapter", "Missing adapter"
-        ERROR = "error", "Error"
+        ENABLED = "enabled", "Включен"
+        DISABLED = "disabled", "Отключен"
+        MISSING_ADAPTER = "missing_adapter", "Нет адаптера"
+        ERROR = "error", "Ошибка"
 
     class TrustStatus(models.TextChoices):
-        TRUSTED = "trusted", "Trusted"
-        REVIEW_REQUIRED = "review_required", "Review required"
-        CANDIDATE_ONLY = "candidate_only", "Candidate only"
-        QUARANTINED = "quarantined", "Quarantined"
-        BLOCKED = "blocked", "Blocked"
+        TRUSTED = "trusted", "Доверенный"
+        REVIEW_REQUIRED = "review_required", "Требует ревью"
+        CANDIDATE_ONLY = "candidate_only", "Только кандидат"
+        QUARANTINED = "quarantined", "Карантин"
+        BLOCKED = "blocked", "Заблокирован"
 
     class AuthorityClass(models.TextChoices):
-        SYSTEM_OF_RECORD = "system_of_record", "System of record"
-        APPROVED_CORPUS = "approved_corpus", "Approved corpus"
-        APPROVED_USER_MEMORY = "approved_user_memory", "Approved user memory"
-        REVIEWED_ORG_KNOWLEDGE = "reviewed_org_knowledge", "Reviewed organization knowledge"
-        EXTERNAL_OBSERVATION = "external_observation", "External observation"
-        CANDIDATE_INPUT = "candidate_input", "Candidate input"
+        SYSTEM_OF_RECORD = "system_of_record", "Система-источник истины"
+        APPROVED_CORPUS = "approved_corpus", "Утвержденный корпус"
+        APPROVED_USER_MEMORY = "approved_user_memory", "Утвержденная пользовательская память"
+        REVIEWED_ORG_KNOWLEDGE = "reviewed_org_knowledge", "Проверенное организационное знание"
+        EXTERNAL_OBSERVATION = "external_observation", "Внешнее наблюдение"
+        CANDIDATE_INPUT = "candidate_input", "Кандидатский ввод"
 
     code = models.CharField(max_length=120, unique=True)
     title = models.CharField(max_length=255)
@@ -65,8 +65,8 @@ class MemorySource(models.Model):
             models.Index(fields=["trust_status", "trusted_for_context"]),
             models.Index(fields=["authority_class"]),
         ]
-        verbose_name = "Memory source"
-        verbose_name_plural = "Memory sources"
+        verbose_name = "Источник памяти"
+        verbose_name_plural = "Источники памяти"
 
     def __str__(self):
         return self.code
@@ -74,18 +74,18 @@ class MemorySource(models.Model):
 
 class MemorySourceObject(models.Model):
     class DiscoveryStatus(models.TextChoices):
-        SEEN = "seen", "Seen"
-        MISSING = "missing", "Missing"
-        CHANGED = "changed", "Changed"
-        ERROR = "error", "Error"
+        SEEN = "seen", "Найден"
+        MISSING = "missing", "Отсутствует"
+        CHANGED = "changed", "Изменен"
+        ERROR = "error", "Ошибка"
 
     class IngestionStatus(models.TextChoices):
-        PENDING = "pending", "Pending"
-        READY = "ready", "Ready"
-        INGESTED = "ingested", "Ingested"
-        PARTIAL = "partial", "Partial"
-        SKIPPED = "skipped", "Skipped"
-        FAILED = "failed", "Failed"
+        PENDING = "pending", "Ожидает"
+        READY = "ready", "Готов"
+        INGESTED = "ingested", "Загружен"
+        PARTIAL = "partial", "Частично"
+        SKIPPED = "skipped", "Пропущен"
+        FAILED = "failed", "Ошибка"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="source_objects")
     object_id = models.CharField(max_length=255)
@@ -124,8 +124,8 @@ class MemorySourceObject(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["source", "object_id"], name="memory_source_object_source_object_uniq"),
         ]
-        verbose_name = "Memory source object"
-        verbose_name_plural = "Memory source objects"
+        verbose_name = "Объект источника памяти"
+        verbose_name_plural = "Объекты источников памяти"
 
     def __str__(self):
         return f"{self.source.code}:{self.relative_path}"
@@ -133,20 +133,20 @@ class MemorySourceObject(models.Model):
 
 class MemorySearchDocument(models.Model):
     class CorpusType(models.TextChoices):
-        KNOWLEDGE = "knowledge", "Knowledge"
-        SOURCE_DATA = "source_data", "Source data"
+        KNOWLEDGE = "knowledge", "Знания"
+        SOURCE_DATA = "source_data", "Исходные данные"
 
     class ObjectKind(models.TextChoices):
-        KNOWLEDGE_ITEM = "knowledge_item", "Knowledge item"
-        SOURCE_OBJECT = "source_object", "Source object"
-        SUMMARY = "summary", "Summary"
-        ANALYTICS_SLICE = "analytics_slice", "Analytics slice"
+        KNOWLEDGE_ITEM = "knowledge_item", "Элемент знания"
+        SOURCE_OBJECT = "source_object", "Объект источника"
+        SUMMARY = "summary", "Сводка"
+        ANALYTICS_SLICE = "analytics_slice", "Аналитический срез"
 
     class IndexStatus(models.TextChoices):
-        PENDING = "indexing_pending", "Indexing pending"
-        READY = "ready", "Ready"
-        DELETED = "deleted", "Deleted"
-        FAILED = "failed", "Failed"
+        PENDING = "indexing_pending", "Ожидает индексации"
+        READY = "ready", "Готов"
+        DELETED = "deleted", "Удален"
+        FAILED = "failed", "Ошибка"
 
     document_id = models.CharField(max_length=180, unique=True)
     corpus_type = models.CharField(max_length=32, choices=CorpusType.choices)
@@ -187,8 +187,8 @@ class MemorySearchDocument(models.Model):
                 name="memory_search_document_target_present",
             ),
         ]
-        verbose_name = "Memory search document"
-        verbose_name_plural = "Memory search documents"
+        verbose_name = "Поисковый документ памяти"
+        verbose_name_plural = "Поисковые документы памяти"
 
     def __str__(self):
         return self.document_id
@@ -196,11 +196,11 @@ class MemorySearchDocument(models.Model):
 
 class MemoryIngestionRun(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Успешно"
+        FAILED = "failed", "Ошибка"
+        CANCELLED = "cancelled", "Отменено"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="ingestion_runs")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
@@ -233,8 +233,8 @@ class MemoryIngestionRun(models.Model):
                 name="memory_ingestion_run_time_range",
             ),
         ]
-        verbose_name = "Memory ingestion run"
-        verbose_name_plural = "Memory ingestion runs"
+        verbose_name = "Запуск загрузки памяти"
+        verbose_name_plural = "Запуски загрузки памяти"
 
     def __str__(self):
         return f"{self.source.code}:{self.status}:{self.pk}"
@@ -242,37 +242,37 @@ class MemoryIngestionRun(models.Model):
 
 class MemoryIngestionIssue(models.Model):
     class IssueKind(models.TextChoices):
-        ENCRYPTED_FILE = "encrypted_file", "Encrypted file"
-        UNSUPPORTED_FORMAT = "unsupported_format", "Unsupported format"
-        FILE_TOO_LARGE = "file_too_large", "File too large"
-        PARTIAL_INDEXED = "partial_indexed", "Partial indexed"
-        PARSER_TIMEOUT = "parser_timeout", "Parser timeout"
-        OCR_TIMEOUT = "ocr_timeout", "OCR timeout"
-        PII_BLOCKED = "pii_blocked", "PII blocked"
-        PII_AUDIT = "pii_audit", "PII audit"
-        SECRET_BLOCKED = "secret_blocked", "Secret blocked"
-        ACL_UNRESOLVED = "acl_unresolved", "ACL unresolved"
-        SCHEMA_UNKNOWN_TYPE = "schema_unknown_type", "Schema unknown type"
-        SCHEMA_UNKNOWN_RELATION = "schema_unknown_relation", "Schema unknown relation"
-        CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Canonicalization conflict"
-        INDEX_FAILED = "index_failed", "Index failed"
-        INDEX_STALE = "index_stale", "Index stale"
-        FTS_MISSING = "fts_missing", "FTS missing"
-        VECTOR_MISSING = "vector_missing", "Vector missing"
-        SOURCE_DELETED_INDEX_LEFT = "source_deleted_index_left", "Source deleted index left"
+        ENCRYPTED_FILE = "encrypted_file", "Зашифрованный файл"
+        UNSUPPORTED_FORMAT = "unsupported_format", "Неподдерживаемый формат"
+        FILE_TOO_LARGE = "file_too_large", "Файл слишком большой"
+        PARTIAL_INDEXED = "partial_indexed", "Частично проиндексировано"
+        PARSER_TIMEOUT = "parser_timeout", "Тайм-аут парсера"
+        OCR_TIMEOUT = "ocr_timeout", "Тайм-аут OCR"
+        PII_BLOCKED = "pii_blocked", "Персональные данные заблокированы"
+        PII_AUDIT = "pii_audit", "Аудит персональных данных"
+        SECRET_BLOCKED = "secret_blocked", "Секрет заблокирован"
+        ACL_UNRESOLVED = "acl_unresolved", "ACL не разрешен"
+        SCHEMA_UNKNOWN_TYPE = "schema_unknown_type", "Неизвестный тип схемы"
+        SCHEMA_UNKNOWN_RELATION = "schema_unknown_relation", "Неизвестная связь схемы"
+        CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Конфликт каноникализации"
+        INDEX_FAILED = "index_failed", "Ошибка индекса"
+        INDEX_STALE = "index_stale", "Индекс устарел"
+        FTS_MISSING = "fts_missing", "Нет FTS"
+        VECTOR_MISSING = "vector_missing", "Нет вектора"
+        SOURCE_DELETED_INDEX_LEFT = "source_deleted_index_left", "Источник удален, индекс остался"
 
     class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        ACKNOWLEDGED = "acknowledged", "Acknowledged"
-        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Needs expert review"
-        RESOLVED = "resolved", "Resolved"
-        IGNORED = "ignored", "Ignored"
+        OPEN = "open", "Открыта"
+        ACKNOWLEDGED = "acknowledged", "Принята к сведению"
+        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Нужен эксперт"
+        RESOLVED = "resolved", "Закрыта"
+        IGNORED = "ignored", "Игнорируется"
 
     class Severity(models.TextChoices):
-        INFO = "info", "Info"
-        WARNING = "warning", "Warning"
-        ERROR = "error", "Error"
-        BLOCKER = "blocker", "Blocker"
+        INFO = "info", "Информация"
+        WARNING = "warning", "Предупреждение"
+        ERROR = "error", "Ошибка"
+        BLOCKER = "blocker", "Блокер"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="ingestion_issues")
     source_object = models.ForeignKey(
@@ -327,8 +327,8 @@ class MemoryIngestionIssue(models.Model):
             models.Index(fields=["assigned_to", "status"]),
             models.Index(fields=["review_due_at"]),
         ]
-        verbose_name = "Memory ingestion issue"
-        verbose_name_plural = "Memory ingestion issues"
+        verbose_name = "Проблема загрузки памяти"
+        verbose_name_plural = "Проблемы загрузки памяти"
 
     def __str__(self):
         return f"{self.issue_kind}:{self.status}:{self.pk}"
@@ -336,26 +336,26 @@ class MemoryIngestionIssue(models.Model):
 
 class MemoryReviewAction(models.Model):
     class Action(models.TextChoices):
-        ACKNOWLEDGE = "acknowledge", "Acknowledge"
-        ASSIGN = "assign", "Assign"
-        REQUEST_EXPERT_REVIEW = "request_expert_review", "Request expert review"
-        RESOLVE = "resolve", "Resolve"
-        IGNORE = "ignore", "Ignore"
-        REOPEN = "reopen", "Reopen"
-        COMMENT = "comment", "Comment"
-        DRY_RUN_REINDEX = "dry_run_reindex", "Dry-run reindex"
-        ENQUEUE_REINDEX = "enqueue_reindex", "Enqueue reindex"
-        RETRY_INDEX = "retry_index", "Retry index"
-        DELETE_STALE_INDEX = "delete_stale_index", "Delete stale index"
-        MARK_INDEX_CLEANED = "mark_index_cleaned", "Mark index cleaned"
-        CREATE_ISSUE = "create_issue", "Create issue"
+        ACKNOWLEDGE = "acknowledge", "Принять к сведению"
+        ASSIGN = "assign", "Назначить"
+        REQUEST_EXPERT_REVIEW = "request_expert_review", "Запросить эксперта"
+        RESOLVE = "resolve", "Закрыть"
+        IGNORE = "ignore", "Игнорировать"
+        REOPEN = "reopen", "Открыть снова"
+        COMMENT = "comment", "Комментарий"
+        DRY_RUN_REINDEX = "dry_run_reindex", "Пробная переиндексация"
+        ENQUEUE_REINDEX = "enqueue_reindex", "Поставить переиндексацию в очередь"
+        RETRY_INDEX = "retry_index", "Повторить индексацию"
+        DELETE_STALE_INDEX = "delete_stale_index", "Удалить устаревший индекс"
+        MARK_INDEX_CLEANED = "mark_index_cleaned", "Отметить индекс очищенным"
+        CREATE_ISSUE = "create_issue", "Создать проблему"
 
     class Decision(models.TextChoices):
-        APPLIED = "applied", "Applied"
-        QUEUED = "queued", "Queued"
-        REJECTED = "rejected", "Rejected"
-        FAILED = "failed", "Failed"
-        INFO = "info", "Info"
+        APPLIED = "applied", "Применено"
+        QUEUED = "queued", "В очереди"
+        REJECTED = "rejected", "Отклонено"
+        FAILED = "failed", "Ошибка"
+        INFO = "info", "Информация"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -417,14 +417,14 @@ class MemoryReviewAction(models.Model):
             models.Index(fields=["actor", "-created_at"]),
         ]
         permissions = [
-            ("view_review_queue", "Can view memory review queue"),
-            ("review_issues", "Can review memory issues"),
-            ("review_privacy_issues", "Can review memory privacy issues"),
-            ("manage_search_index", "Can manage memory search index"),
-            ("view_memory_access_audit", "Can view memory access audit"),
+            ("view_review_queue", "Может просматривать очередь ревью памяти"),
+            ("review_issues", "Может ревьюировать проблемы памяти"),
+            ("review_privacy_issues", "Может ревьюировать проблемы приватности памяти"),
+            ("manage_search_index", "Может управлять поисковым индексом памяти"),
+            ("view_memory_access_audit", "Может просматривать аудит доступа к памяти"),
         ]
-        verbose_name = "Memory review action"
-        verbose_name_plural = "Memory review actions"
+        verbose_name = "Действие ревью памяти"
+        verbose_name_plural = "Действия ревью памяти"
 
     def __str__(self):
         return f"{self.action}:{self.decision}:{self.pk}"
@@ -450,8 +450,8 @@ class MemoryGraphEntity(models.Model):
             models.Index(fields=["sensitivity"]),
             models.Index(fields=["is_active"]),
         ]
-        verbose_name = "Memory graph entity"
-        verbose_name_plural = "Memory graph entities"
+        verbose_name = "Сущность графа памяти"
+        verbose_name_plural = "Сущности графа памяти"
 
     def __str__(self):
         return self.entity_id
@@ -459,10 +459,10 @@ class MemoryGraphEntity(models.Model):
 
 class MemoryGraphExtractionRun(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Успешно"
+        FAILED = "failed", "Ошибка"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="graph_extraction_runs")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
@@ -485,8 +485,8 @@ class MemoryGraphExtractionRun(models.Model):
                 name="memory_graph_extraction_run_time_range",
             ),
         ]
-        verbose_name = "Memory graph extraction run"
-        verbose_name_plural = "Memory graph extraction runs"
+        verbose_name = "Запуск извлечения графа памяти"
+        verbose_name_plural = "Запуски извлечения графа памяти"
 
     def __str__(self):
         return f"{self.source.code}:{self.status}:{self.pk}"
@@ -494,19 +494,19 @@ class MemoryGraphExtractionRun(models.Model):
 
 class MemoryGraphSchemaProposal(models.Model):
     class ProposalKind(models.TextChoices):
-        ENTITY_TYPE = "entity_type", "Entity type"
-        RELATION_TYPE = "relation_type", "Relation type"
-        ATTRIBUTE_TYPE = "attribute_type", "Attribute type"
-        CANONICALIZATION_RULE = "canonicalization_rule", "Canonicalization rule"
-        FORBIDDEN_PATTERN = "forbidden_pattern", "Forbidden pattern"
+        ENTITY_TYPE = "entity_type", "Тип сущности"
+        RELATION_TYPE = "relation_type", "Тип связи"
+        ATTRIBUTE_TYPE = "attribute_type", "Тип атрибута"
+        CANONICALIZATION_RULE = "canonicalization_rule", "Правило каноникализации"
+        FORBIDDEN_PATTERN = "forbidden_pattern", "Запрещенный паттерн"
 
     class Status(models.TextChoices):
-        PROPOSED = "proposed", "Proposed"
-        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Needs expert review"
-        EXPERT_APPROVED = "expert_approved", "Expert approved"
-        ACCEPTED = "accepted", "Accepted"
-        REJECTED = "rejected", "Rejected"
-        SUPERSEDED = "superseded", "Superseded"
+        PROPOSED = "proposed", "Предложено"
+        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Нужен эксперт"
+        EXPERT_APPROVED = "expert_approved", "Одобрено экспертом"
+        ACCEPTED = "accepted", "Принято"
+        REJECTED = "rejected", "Отклонено"
+        SUPERSEDED = "superseded", "Заменено"
 
     proposal_kind = models.CharField(max_length=64, choices=ProposalKind.choices)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.PROPOSED)
@@ -540,8 +540,8 @@ class MemoryGraphSchemaProposal(models.Model):
                 name="memory_graph_schema_proposal_confidence_0_1",
             ),
         ]
-        verbose_name = "Memory graph schema proposal"
-        verbose_name_plural = "Memory graph schema proposals"
+        verbose_name = "Предложение схемы графа памяти"
+        verbose_name_plural = "Предложения схемы графа памяти"
 
     def __str__(self):
         return f"{self.proposal_kind}:{self.status}:{self.pk}"
@@ -549,17 +549,17 @@ class MemoryGraphSchemaProposal(models.Model):
 
 class MemoryGraphReviewItem(models.Model):
     class ItemKind(models.TextChoices):
-        UNKNOWN_TYPE = "unknown_type", "Unknown type"
-        UNKNOWN_RELATION = "unknown_relation", "Unknown relation"
-        LOW_CONFIDENCE = "low_confidence", "Low confidence"
-        CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Canonicalization conflict"
-        DLP_WARNING = "dlp_warning", "DLP warning"
+        UNKNOWN_TYPE = "unknown_type", "Неизвестный тип"
+        UNKNOWN_RELATION = "unknown_relation", "Неизвестная связь"
+        LOW_CONFIDENCE = "low_confidence", "Низкая уверенность"
+        CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Конфликт каноникализации"
+        DLP_WARNING = "dlp_warning", "Предупреждение DLP"
 
     class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Needs expert review"
-        RESOLVED = "resolved", "Resolved"
-        REJECTED = "rejected", "Rejected"
+        OPEN = "open", "Открыт"
+        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Нужен эксперт"
+        RESOLVED = "resolved", "Закрыт"
+        REJECTED = "rejected", "Отклонен"
 
     item_kind = models.CharField(max_length=64, choices=ItemKind.choices)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.OPEN)
@@ -586,8 +586,8 @@ class MemoryGraphReviewItem(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["source", "status"]),
         ]
-        verbose_name = "Memory graph review item"
-        verbose_name_plural = "Memory graph review items"
+        verbose_name = "Элемент ревью графа памяти"
+        verbose_name_plural = "Элементы ревью графа памяти"
 
     def __str__(self):
         return f"{self.item_kind}:{self.status}:{self.pk}"
@@ -595,16 +595,16 @@ class MemoryGraphReviewItem(models.Model):
 
 class MemoryWriteRequest(models.Model):
     class TargetScope(models.TextChoices):
-        PERSONAL = "personal", "Personal"
-        ORGANIZATION = "organization", "Organization"
+        PERSONAL = "personal", "Личная"
+        ORGANIZATION = "organization", "Организационная"
 
     class Status(models.TextChoices):
-        QUEUED = "queued", "Queued"
-        PROCESSING = "processing", "Processing"
-        ACCEPTED = "accepted", "Accepted"
-        CANDIDATE_CREATED = "candidate_created", "Candidate created"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
+        QUEUED = "queued", "В очереди"
+        PROCESSING = "processing", "Обрабатывается"
+        ACCEPTED = "accepted", "Принято"
+        CANDIDATE_CREATED = "candidate_created", "Кандидат создан"
+        FAILED = "failed", "Ошибка"
+        CANCELLED = "cancelled", "Отменено"
 
     request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     actor = models.ForeignKey(
@@ -640,8 +640,8 @@ class MemoryWriteRequest(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["request_id"]),
         ]
-        verbose_name = "Memory write request"
-        verbose_name_plural = "Memory write requests"
+        verbose_name = "Запрос записи памяти"
+        verbose_name_plural = "Запросы записи памяти"
 
     def __str__(self):
         return f"{self.request_id}:{self.target_scope}:{self.status}"
@@ -649,21 +649,21 @@ class MemoryWriteRequest(models.Model):
 
 class MemoryKnowledgeItem(models.Model):
     class Scope(models.TextChoices):
-        PERSONAL = "personal", "Personal"
-        ORGANIZATION = "organization", "Organization"
+        PERSONAL = "personal", "Личное"
+        ORGANIZATION = "organization", "Организационное"
 
     class Kind(models.TextChoices):
-        FACT = "fact", "Fact"
-        PREFERENCE = "preference", "Preference"
-        PROCEDURE = "procedure", "Procedure"
-        DECISION = "decision", "Decision"
-        SECRET_REFERENCE = "secret_reference", "Secret reference"
+        FACT = "fact", "Факт"
+        PREFERENCE = "preference", "Предпочтение"
+        PROCEDURE = "procedure", "Процедура"
+        DECISION = "decision", "Решение"
+        SECRET_REFERENCE = "secret_reference", "Ссылка на секрет"
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        DELETED = "deleted", "Deleted"
-        SUPERSEDED = "superseded", "Superseded"
-        QUARANTINED = "quarantined", "Quarantined"
+        ACTIVE = "active", "Активно"
+        DELETED = "deleted", "Удалено"
+        SUPERSEDED = "superseded", "Заменено"
+        QUARANTINED = "quarantined", "Карантин"
 
     memory_id = models.CharField(max_length=160, unique=True)
     scope = models.CharField(max_length=32, choices=Scope.choices)
@@ -732,8 +732,8 @@ class MemoryKnowledgeItem(models.Model):
                 name="memory_knowledge_personal_has_owner",
             ),
         ]
-        verbose_name = "Memory knowledge item"
-        verbose_name_plural = "Memory knowledge items"
+        verbose_name = "Элемент знания памяти"
+        verbose_name_plural = "Элементы знаний памяти"
 
     def __str__(self):
         return self.memory_id
@@ -741,13 +741,13 @@ class MemoryKnowledgeItem(models.Model):
 
 class MemoryKnowledgeEvent(models.Model):
     class EventType(models.TextChoices):
-        REMEMBERED = "remembered", "Remembered"
-        EDITED = "edited", "Edited"
-        DELETED = "deleted", "Deleted"
-        REFLECTED = "reflected", "Reflected"
-        PROMOTED = "promoted", "Promoted"
-        REJECTED = "rejected", "Rejected"
-        SECRET_CAPTURED = "secret_captured", "Secret captured"
+        REMEMBERED = "remembered", "Запомнено"
+        EDITED = "edited", "Изменено"
+        DELETED = "deleted", "Удалено"
+        REFLECTED = "reflected", "Отрефлексировано"
+        PROMOTED = "promoted", "Повышено"
+        REJECTED = "rejected", "Отклонено"
+        SECRET_CAPTURED = "secret_captured", "Секрет зафиксирован"
 
     event_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     event_type = models.CharField(max_length=32, choices=EventType.choices)
@@ -773,8 +773,8 @@ class MemoryKnowledgeEvent(models.Model):
             models.Index(fields=["event_type"]),
             models.Index(fields=["actor", "created_at"]),
         ]
-        verbose_name = "Memory knowledge event"
-        verbose_name_plural = "Memory knowledge events"
+        verbose_name = "Событие знания памяти"
+        verbose_name_plural = "События знаний памяти"
 
     def __str__(self):
         return f"{self.event_type}:{self.event_id}"
@@ -782,12 +782,12 @@ class MemoryKnowledgeEvent(models.Model):
 
 class MemoryKnowledgeCandidate(models.Model):
     class Status(models.TextChoices):
-        PROPOSED = "proposed", "Proposed"
-        NEEDS_REVIEW = "needs_review", "Needs review"
-        ACCEPTED = "accepted", "Accepted"
-        REJECTED = "rejected", "Rejected"
-        MERGED = "merged", "Merged"
-        SUPERSEDED = "superseded", "Superseded"
+        PROPOSED = "proposed", "Предложено"
+        NEEDS_REVIEW = "needs_review", "Нужно ревью"
+        ACCEPTED = "accepted", "Принято"
+        REJECTED = "rejected", "Отклонено"
+        MERGED = "merged", "Объединено"
+        SUPERSEDED = "superseded", "Заменено"
 
     source_item = models.ForeignKey(
         MemoryKnowledgeItem,
@@ -826,8 +826,8 @@ class MemoryKnowledgeCandidate(models.Model):
             models.Index(fields=["created_by", "-created_at"]),
             models.Index(fields=["reviewer", "reviewed_at"]),
         ]
-        verbose_name = "Memory knowledge candidate"
-        verbose_name_plural = "Memory knowledge candidates"
+        verbose_name = "Кандидат знания памяти"
+        verbose_name_plural = "Кандидаты знаний памяти"
 
     def __str__(self):
         return f"{self.status}:{self.pk}"
@@ -835,10 +835,10 @@ class MemoryKnowledgeCandidate(models.Model):
 
 class MemoryReflectionRun(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Успешно"
+        FAILED = "failed", "Ошибка"
 
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     window_start = models.DateTimeField(blank=True, null=True)
@@ -872,8 +872,8 @@ class MemoryReflectionRun(models.Model):
                 name="memory_reflection_run_time_range",
             ),
         ]
-        verbose_name = "Memory reflection run"
-        verbose_name_plural = "Memory reflection runs"
+        verbose_name = "Запуск рефлексии памяти"
+        verbose_name_plural = "Запуски рефлексии памяти"
 
     def __str__(self):
         return f"{self.status}:{self.pk}"
@@ -881,15 +881,15 @@ class MemoryReflectionRun(models.Model):
 
 class SecretHandle(models.Model):
     class Provider(models.TextChoices):
-        EXTERNAL_VAULT_LINK = "external_vault_link", "External vault link"
-        DISABLED = "disabled", "Disabled"
-        LOCAL_STUB = "local_stub", "Local stub"
+        EXTERNAL_VAULT_LINK = "external_vault_link", "Ссылка на внешнее хранилище"
+        DISABLED = "disabled", "Отключено"
+        LOCAL_STUB = "local_stub", "Локальная заглушка"
         OPENBAO = "openbao", "OpenBao"
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        REVOKED = "revoked", "Revoked"
-        UNAVAILABLE = "unavailable", "Unavailable"
+        ACTIVE = "active", "Активен"
+        REVOKED = "revoked", "Отозван"
+        UNAVAILABLE = "unavailable", "Недоступен"
 
     handle = models.CharField(max_length=160, unique=True)
     provider = models.CharField(max_length=64, choices=Provider.choices, default=Provider.EXTERNAL_VAULT_LINK)
@@ -923,8 +923,8 @@ class SecretHandle(models.Model):
             models.Index(fields=["owner_user", "status"]),
             models.Index(fields=["handle"]),
         ]
-        verbose_name = "Secret handle"
-        verbose_name_plural = "Secret handles"
+        verbose_name = "Ссылка на секрет"
+        verbose_name_plural = "Ссылки на секреты"
 
     def __str__(self):
         return self.handle
@@ -932,16 +932,16 @@ class SecretHandle(models.Model):
 
 class SecretAccessAudit(models.Model):
     class Action(models.TextChoices):
-        CREATE = "create", "Create"
-        LINK = "link", "Link"
-        ROTATE = "rotate", "Rotate"
-        REVOKE = "revoke", "Revoke"
-        SERVICE_RESOLVE = "service_resolve", "Service resolve"
+        CREATE = "create", "Создание"
+        LINK = "link", "Связь"
+        ROTATE = "rotate", "Ротация"
+        REVOKE = "revoke", "Отзыв"
+        SERVICE_RESOLVE = "service_resolve", "Сервисное разрешение"
 
     class Decision(models.TextChoices):
-        ALLOWED = "allowed", "Allowed"
-        DENIED = "denied", "Denied"
-        FAILED = "failed", "Failed"
+        ALLOWED = "allowed", "Разрешено"
+        DENIED = "denied", "Запрещено"
+        FAILED = "failed", "Ошибка"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -964,8 +964,8 @@ class SecretAccessAudit(models.Model):
             models.Index(fields=["action", "decision"]),
             models.Index(fields=["request_id"]),
         ]
-        verbose_name = "Secret access audit"
-        verbose_name_plural = "Secret access audits"
+        verbose_name = "Аудит доступа к секрету"
+        verbose_name_plural = "Аудит доступа к секретам"
 
     def __str__(self):
         return f"{self.secret_handle_id}:{self.action}:{self.decision}"
@@ -973,19 +973,19 @@ class SecretAccessAudit(models.Model):
 
 class MemoryIndexJob(models.Model):
     class JobKind(models.TextChoices):
-        DISCOVER = "discover", "Discover"
-        SYNC = "sync", "Sync"
-        REINDEX = "reindex", "Reindex"
-        EVAL = "eval", "Eval"
-        REMEMBER = "remember", "Remember"
-        REFLECT = "reflect", "Reflect"
+        DISCOVER = "discover", "Обнаружение"
+        SYNC = "sync", "Синхронизация"
+        REINDEX = "reindex", "Переиндексация"
+        EVAL = "eval", "Оценка"
+        REMEMBER = "remember", "Запоминание"
+        REFLECT = "reflect", "Рефлексия"
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        CANCELLED = "cancelled", "Cancelled"
+        PENDING = "pending", "Ожидает"
+        RUNNING = "running", "Выполняется"
+        SUCCEEDED = "succeeded", "Успешно"
+        FAILED = "failed", "Ошибка"
+        CANCELLED = "cancelled", "Отменено"
 
     source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="index_jobs", blank=True, null=True)
     job_kind = models.CharField(max_length=16, choices=JobKind.choices)
@@ -1027,8 +1027,8 @@ class MemoryIndexJob(models.Model):
                 name="memory_index_job_attempts_lte_max",
             ),
         ]
-        verbose_name = "Memory index job"
-        verbose_name_plural = "Memory index jobs"
+        verbose_name = "Задание индекса памяти"
+        verbose_name_plural = "Задания индекса памяти"
 
     def __str__(self):
         return f"{self.job_kind}:{self.status}:{self.pk}"
@@ -1060,8 +1060,8 @@ class MemoryAccessAudit(models.Model):
             models.Index(fields=["policy_decision"]),
             models.Index(fields=["tool_name"]),
         ]
-        verbose_name = "Memory access audit"
-        verbose_name_plural = "Memory access audits"
+        verbose_name = "Аудит доступа к памяти"
+        verbose_name_plural = "Аудит доступа к памяти"
 
     def __str__(self):
         return f"{self.request_id}:{self.policy_decision}"
@@ -1069,8 +1069,8 @@ class MemoryAccessAudit(models.Model):
 
 class MemoryEvalCase(models.Model):
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        DISABLED = "disabled", "Disabled"
+        ACTIVE = "active", "Активен"
+        DISABLED = "disabled", "Отключен"
 
     code = models.CharField(max_length=120, unique=True)
     title = models.CharField(max_length=255)
@@ -1091,8 +1091,8 @@ class MemoryEvalCase(models.Model):
             models.Index(fields=["suite"]),
             models.Index(fields=["status"]),
         ]
-        verbose_name = "Memory eval case"
-        verbose_name_plural = "Memory eval cases"
+        verbose_name = "Тестовый кейс памяти"
+        verbose_name_plural = "Тестовые кейсы памяти"
 
     def __str__(self):
         return self.code

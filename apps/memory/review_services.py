@@ -55,11 +55,11 @@ def apply_issue_review_action(*, actor, issue: MemoryIngestionIssue, action: str
         decision = MemoryReviewAction.Decision.INFO
     elif action == MemoryReviewAction.Action.ENQUEUE_REINDEX:
         if not can_manage_memory_search_index(actor):
-            raise PermissionDenied("Memory search index management is not allowed.")
+            raise PermissionDenied("Управление поисковым индексом памяти недоступно.")
         index_job = _create_reindex_job_for_issue(actor=actor, issue=issue, dry_run=False)
         decision = MemoryReviewAction.Decision.QUEUED
     else:
-        raise ValidationError(f"Unsupported issue review action: {action}")
+        raise ValidationError(f"Неподдерживаемое действие ревью проблемы: {action}")
 
     if action != MemoryReviewAction.Action.COMMENT:
         issue.save(
@@ -91,9 +91,9 @@ def apply_issue_review_action(*, actor, issue: MemoryIngestionIssue, action: str
 def apply_index_review_action(*, actor, document: MemorySearchDocument, action: str, payload=None) -> MemoryReviewAction:
     payload = payload or {}
     if not can_manage_memory_search_index(actor):
-        raise PermissionDenied("Memory search index management is not allowed.")
+        raise PermissionDenied("Управление поисковым индексом памяти недоступно.")
     if not can_review_scoped_search_document(actor, document):
-        raise PermissionDenied("Memory search document is outside the current review scope.")
+        raise PermissionDenied("Поисковый документ памяти вне текущей области ревью.")
     before_state = _document_state(document)
     comment = safe_review_text(payload.get("comment", ""), max_length=1000)
     decision = MemoryReviewAction.Decision.APPLIED
@@ -108,7 +108,7 @@ def apply_index_review_action(*, actor, document: MemorySearchDocument, action: 
         decision = MemoryReviewAction.Decision.QUEUED
     elif action == MemoryReviewAction.Action.DELETE_STALE_INDEX:
         if not index_stale_deletion_allowed(document):
-            raise ValidationError("Search document is not stale, failed, or deleted.")
+            raise ValidationError("Поисковый документ не устарел, не завершился ошибкой и не удален.")
         result = delete_search_document_indexes([document.document_id], index_backends=("fulltext", "vector"))
         if document.index_status != MemorySearchDocument.IndexStatus.DELETED:
             document.index_status = MemorySearchDocument.IndexStatus.DELETED
@@ -119,7 +119,7 @@ def apply_index_review_action(*, actor, document: MemorySearchDocument, action: 
             document.save(update_fields=["index_status", "metadata", "updated_at"])
         safe_metadata["delete_result"] = result
     else:
-        raise ValidationError(f"Unsupported index review action: {action}")
+        raise ValidationError(f"Неподдерживаемое действие ревью индекса: {action}")
 
     return record_review_action(
         actor=actor,
@@ -168,10 +168,10 @@ def record_review_action(
 
 def _require_issue_action(actor, issue: MemoryIngestionIssue, action: str) -> None:
     if not can_review_scoped_issue(actor, issue):
-        raise PermissionDenied("Memory issue is outside the current review scope.")
+        raise PermissionDenied("Проблема памяти вне текущей области ревью.")
     if action == MemoryReviewAction.Action.ENQUEUE_REINDEX:
         if not can_manage_memory_search_index(actor):
-            raise PermissionDenied("Memory search index management is not allowed.")
+            raise PermissionDenied("Управление поисковым индексом памяти недоступно.")
         return
     _require_issue_review(actor, issue)
 
@@ -179,10 +179,10 @@ def _require_issue_action(actor, issue: MemoryIngestionIssue, action: str) -> No
 def _require_issue_review(actor, issue: MemoryIngestionIssue) -> None:
     if issue.issue_kind in PRIVACY_ISSUE_KINDS:
         if not can_review_memory_privacy_issues(actor):
-            raise PermissionDenied("Memory privacy issue review is not allowed.")
+            raise PermissionDenied("Ревью проблем приватности памяти недоступно.")
         return
     if not can_review_memory_issues(actor):
-        raise PermissionDenied("Memory issue review is not allowed.")
+        raise PermissionDenied("Ревью проблем памяти недоступно.")
 
 
 def _resolve_assignee(value):
@@ -193,12 +193,12 @@ def _resolve_assignee(value):
     try:
         return User.objects.get(pk=int(raw_value))
     except (ValueError, User.DoesNotExist) as exc:
-        raise ValidationError("Assigned user does not exist.") from exc
+        raise ValidationError("Назначенный пользователь не существует.") from exc
 
 
 def _create_reindex_job_for_issue(*, actor, issue: MemoryIngestionIssue, dry_run: bool):
     if issue.source_object_id is None:
-        raise ValidationError("Issue has no source object for reindex.")
+        raise ValidationError("У проблемы нет объекта источника для переиндексации.")
     return create_index_job(
         job_kind=MemoryIndexJob.JobKind.REINDEX,
         source=issue.source,

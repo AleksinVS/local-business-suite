@@ -50,15 +50,15 @@
                 {% if show_ai_nav %}
                   <a href="{% url 'ai:chat_index' %}">
                     <span class="nav-icon">🤖</span>
-                    <span class="nav-text">AI чат</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'AI чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
+                    <span class="nav-text">ИИ-чат</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'ИИ-чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
                   </a>
                 {% endif %}
                 {% if show_ai_admin_nav %}
                   <a href="{% url 'ai:hub' %}">
                     <span class="nav-icon">⚙️</span>
-                    <span class="nav-text">AI Hub</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'AI Hub', '⚙️', '{% url 'ai:hub' %}')">☆</button>
+                    <span class="nav-text">ИИ-центр</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'ИИ-центр', '⚙️', '{% url 'ai:hub' %}')">☆</button>
                   </a>
                 {% endif %}
                 {% if show_settings_center_nav %}
@@ -70,16 +70,16 @@
                 {% endif %}
                 {% if show_memory_review_nav %}
                   <a href="{% url 'memory:review_dashboard' %}">
-                    <span class="nav-icon">MR</span>
+                    <span class="nav-icon">🧠</span>
                     <span class="nav-text">Ревью памяти</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', 'MR', '{% url 'memory:review_dashboard' %}')">☆</button>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', '🧠', '{% url 'memory:review_dashboard' %}')">☆</button>
                   </a>
                 {% endif %}
                 {% if show_admin_nav %}
                   <a href="{% url 'admin:index' %}">
                     <span class="nav-icon">🛠️</span>
-                    <span class="nav-text">Django admin</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Django admin', '🛠️', '{% url 'admin:index' %}')">☆</button>
+                    <span class="nav-text">Администрирование Django</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Администрирование Django', '🛠️', '{% url 'admin:index' %}')">☆</button>
                   </a>
                 {% endif %}
                 <a href="{% url 'analytics:dashboard' %}">

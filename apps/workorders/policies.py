@@ -131,6 +131,10 @@ def can_edit(user, workorder: WorkOrder) -> bool:
     return any(scope_matches(user, workorder, rule.get("edit_scope")) for rule in active_role_rules(user))
 
 
+def can_delete(user, workorder: WorkOrder) -> bool:
+    return can_edit(user, workorder)
+
+
 def can_assign(user, workorder: WorkOrder) -> bool:
     return can_manage_assignments(user) and can_view(user, workorder)
 

@@ -265,6 +265,7 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         self.assertIn("ui.get_current_context", tool_names)
         self.assertIn("ui.open_right_panel", tool_names)
         self.assertIn("waiting_list.get", tool_names)
+        self.assertIn("workorders.delete", tool_names)
         self.assertIn("memory.search", tool_names)
         self.assertIn("memory.remember", tool_names)
         self.assertIn("memory.update_personal", tool_names)
@@ -427,6 +428,35 @@ class TestRuntimeMemoryTool(unittest.TestCase):
                 "mode": "view",
             },
         )
+
+    def test_delete_workorder_tool_forwards_workorder_id(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True, "result": {"workorder": {"id": 42, "deleted": True}}}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        delete_tool = next(tool for tool in tools if tool.name == "workorders.delete")
+
+        result = delete_tool.invoke({"workorder_id": 42})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(gateway.calls[0]["tool_code"], "workorders.delete")
+        self.assertEqual(gateway.calls[0]["payload"], {"workorder_id": 42})
 
     def test_waiting_list_get_tool_forwards_entry_id(self):
         from services.agent_runtime.tools import build_tools

@@ -215,6 +215,29 @@ def build_mcp_server() -> FastMCP:
         return result
 
     @mcp.tool()
+    def workorders_delete(
+        user_id: int,
+        username: str,
+        roles: list[str],
+        session_id: str,
+        workorder_id: int,
+    ):
+        """Delete a visible work order if policy allows."""
+        result = gateway_client().execute_tool(
+            tool_code="workorders.delete",
+            actor={
+                "user_id": user_id,
+                "username": username,
+                "roles": roles,
+                "channel": "mcp",
+                "source": "mcp-client",
+            },
+            payload={"workorder_id": workorder_id},
+            session_id=session_id,
+        )
+        return result
+
+    @mcp.tool()
     def workorders_comment(
         user_id: int,
         username: str,

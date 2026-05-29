@@ -211,6 +211,28 @@ TOOLS = [
         "required_role_scope": "comment",
     },
     {
+        "id": "workorders.delete",
+        "title": "Удалить заявку",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Удалить видимую заявку, если у пользователя есть права редактирования этой заявки.",
+        "inputs": [
+            "workorder_id",
+        ],
+        "input_schemas": {
+            "workorder_id": {
+                "description": "Внутренний id заявки.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "edit",
+    },
+    {
         "id": "workorders.confirm_closure",
         "title": "Подтвердить закрытие заявки",
         "domain": "workorders",

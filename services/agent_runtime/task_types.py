@@ -169,6 +169,7 @@ BOUNDED_TASK_TYPE_IDS = frozenset({
     "workorders.get.detail",
     "workorders.create",
     "workorders.transition",
+    "workorders.delete",
     "workorders.comment",
     "workorders.confirm_closure",
     "workorders.rate",
@@ -244,6 +245,21 @@ _TASK_TYPE_CATALOG: dict[str, TaskTypeContract] = {
         example_requests=(
             "Переведи заявку 12 в работу",
             "Закрой заявку 18",
+        ),
+    ),
+    "workorders.delete": TaskTypeContract(
+        id="workorders.delete",
+        title="Удалить заявку",
+        mode=TaskMode.WRITE,
+        description="Удалить видимую заявку после подтверждения пользователя.",
+        allowed_tools=("workorders.get", "workorders.delete"),
+        required_slots=("workorder_id",),
+        optional_slots=(),
+        requires_confirmation=True,
+        output_mode=OutputMode.CONFIRMATION_THEN_RESULT,
+        example_requests=(
+            "Удали заявку 12",
+            "Удалить созданную заявку",
         ),
     ),
     "workorders.comment": TaskTypeContract(

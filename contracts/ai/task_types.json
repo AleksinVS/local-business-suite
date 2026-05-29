@@ -185,6 +185,26 @@
       ]
     },
     {
+      "id": "workorders.delete",
+      "title": "Удалить заявку",
+      "mode": "write",
+      "description": "Удалить видимую заявку после подтверждения пользователя.",
+      "allowed_tools": [
+        "workorders.get",
+        "workorders.delete"
+      ],
+      "required_slots": [
+        "workorder_id"
+      ],
+      "optional_slots": [],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Удали заявку 12",
+        "Удалить созданную заявку"
+      ]
+    },
+    {
       "id": "workorders.confirm_closure",
       "title": "Подтвердить закрытие заявки",
       "mode": "write",

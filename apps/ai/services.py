@@ -14,6 +14,7 @@ from apps.workorders.models import Board, WorkOrder, WorkOrderPriority
 from apps.workorders.policies import (
     can_comment,
     can_create,
+    can_delete,
     can_transition,
     can_confirm_closure,
     can_rate,
@@ -367,6 +368,21 @@ def transition_workorder_for_actor(*, actor, payload):
         "status": workorder.status,
         "updated_at": workorder.updated_at.isoformat(),
     }
+
+
+def delete_workorder_for_actor(*, actor, payload):
+    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
+    if not can_delete(actor, workorder):
+        raise PermissionDenied("Пользователю недоступно удаление заявки.")
+    result = {
+        "id": workorder.id,
+        "number": workorder.number,
+        "title": workorder.title,
+        "status": workorder.status,
+        "deleted": True,
+    }
+    workorder.delete()
+    return {"workorder": result}
 
 
 def add_comment_for_actor(*, actor, payload):

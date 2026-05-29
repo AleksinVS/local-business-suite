@@ -13,6 +13,7 @@ from .services import (
     confirm_closure_for_actor,
     create_device_for_actor,
     create_workorder_for_actor,
+    delete_workorder_for_actor,
     get_workorder_for_actor,
     get_or_create_session,
     list_departments_for_actor,
@@ -133,6 +134,8 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         return transition_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.comment":
         return {"comment": add_comment_for_actor(actor=actor, payload=payload)}
+    elif tool_code == "workorders.delete":
+        return delete_workorder_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.confirm_closure":
         return confirm_closure_for_actor(actor=actor, payload=payload)
     elif tool_code == "workorders.rate":

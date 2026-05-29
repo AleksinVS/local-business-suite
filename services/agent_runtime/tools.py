@@ -150,6 +150,21 @@ def build_tools(
         )
         return result
 
+    @tool("workorders.delete")
+    def delete_workorder(workorder_id: int) -> dict:
+        """Delete a visible work order if policy allows."""
+        result = gateway_client.execute_tool(
+            tool_code="workorders.delete",
+            actor=actor,
+            payload={"workorder_id": workorder_id},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("workorders.comment")
     def comment_workorder(workorder_id: int, text: str) -> dict:
         """Add a comment to a work order."""
@@ -437,6 +452,7 @@ def build_tools(
         get_waiting_list_entry,
         create_workorder,
         transition_workorder,
+        delete_workorder,
         comment_workorder,
         list_departments,
         list_devices,

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import uuid
@@ -925,7 +926,11 @@ class IdentityContextPropagationTests(TestCase):
 
     def setUp(self):
         self.manager = User.objects.create_user(username="manager-id", password="pass")
+        self.manager_group, _created = Group.objects.get_or_create(name=ROLE_MANAGER)
+        self.manager.groups.add(self.manager_group)
         self.department = Department.objects.create(name="Test Dept")
+        self.main_board, _created = Board.objects.get_or_create(slug="main", defaults={"title": "Основная доска"})
+        self.main_board.allowed_groups.add(self.manager_group)
 
     def test_execute_tool_persists_trace_context_in_session_metadata(self):
         """ChatSession.metadata should contain conversation_id after a tool call."""
@@ -1291,6 +1296,280 @@ class IdentityContextPropagationTests(TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.update_personal")
 
+    def test_ai_chat_workorder_and_personal_memory_user_journey_tools(self):
+        from apps.memory.chat_memory import process_queued_memory_requests
+        from apps.memory.models import MemoryAccessAudit, MemoryKnowledgeItem
+
+        main_board, _created = Board.objects.get_or_create(slug="main", defaults={"title": "Основная доска"})
+        main_board.allowed_groups.add(Group.objects.get(name=ROLE_MANAGER))
+        session = ChatSession.objects.create(user=self.manager, title="AI journey")
+
+        create_result = execute_tool(
+            tool_code="workorders.create",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={
+                "department_id": self.department.id,
+                "subject": "AI journey created workorder",
+                "description": "Заявка создана из ИИ-чата для сквозного теста.",
+                "priority": "medium",
+            },
+            request_id="req-ai-journey-create",
+        )
+        self.assertTrue(create_result["ok"], create_result)
+        self.assertTrue(create_result["meta"]["awaiting_confirmation"])
+        self.assertEqual(create_result["meta"]["task_type_report"]["task_type_id"], "workorders.create")
+
+        create_confirm = execute_pending_action(
+            token=create_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            request_id="req-ai-journey-create-confirm",
+        )
+        self.assertTrue(create_confirm["ok"], create_confirm)
+        workorder_id = create_confirm["result"]["id"]
+        workorder = WorkOrder.objects.get(pk=workorder_id)
+        self.assertEqual(workorder.status, WorkOrderStatus.NEW)
+
+        transition_result = execute_tool(
+            tool_code="workorders.transition",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={"workorder_id": workorder_id, "target_status": WorkOrderStatus.IN_PROGRESS},
+            request_id="req-ai-journey-transition",
+        )
+        self.assertTrue(transition_result["ok"], transition_result)
+        self.assertTrue(transition_result["meta"]["awaiting_confirmation"])
+
+        transition_confirm = execute_pending_action(
+            token=transition_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            request_id="req-ai-journey-transition-confirm",
+        )
+        self.assertTrue(transition_confirm["ok"], transition_confirm)
+        workorder.refresh_from_db()
+        self.assertEqual(workorder.status, WorkOrderStatus.IN_PROGRESS)
+
+        open_result = execute_tool(
+            tool_code="ui.open_right_panel",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={
+                "source_code": "workorders",
+                "object_type": "workorder",
+                "object_id": str(workorder_id),
+                "mode": "view",
+            },
+            request_id="req-ai-journey-open",
+        )
+        self.assertTrue(open_result["ok"], open_result)
+        self.assertEqual(open_result["result"]["ui_command"]["type"], "open_right_panel")
+        self.assertEqual(open_result["result"]["ui_command"]["object_id"], str(workorder_id))
+
+        list_result = execute_tool(
+            tool_code="workorders.list",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={"status": WorkOrderStatus.IN_PROGRESS, "limit": 20},
+            request_id="req-ai-journey-list",
+        )
+        self.assertTrue(list_result["ok"], list_result)
+        self.assertIn(workorder_id, [item["id"] for item in list_result["result"]["items"]])
+
+        delete_result = execute_tool(
+            tool_code="workorders.delete",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={"workorder_id": workorder_id},
+            request_id="req-ai-journey-delete",
+        )
+        self.assertTrue(delete_result["ok"], delete_result)
+        self.assertTrue(delete_result["meta"]["awaiting_confirmation"])
+        self.assertEqual(delete_result["meta"]["task_type_report"]["task_type_id"], "workorders.delete")
+
+        delete_confirm = execute_pending_action(
+            token=delete_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            request_id="req-ai-journey-delete-confirm",
+        )
+        self.assertTrue(delete_confirm["ok"], delete_confirm)
+        self.assertTrue(delete_confirm["result"]["workorder"]["deleted"])
+        self.assertFalse(WorkOrder.objects.filter(pk=workorder_id).exists())
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            memory_message = ChatMessage.objects.create(
+                session=session,
+                role=ChatMessage.Role.USER,
+                content="Запомни: контрольный код склада для ИИ-сценария — ai-memory-cobalt-260529.",
+            )
+            remember_result = execute_tool(
+                tool_code="memory.remember",
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+                session_external_id=session.external_id,
+                payload={"message_ids": [memory_message.id], "target_scope": "personal"},
+                request_id="req-ai-journey-remember",
+            )
+            self.assertTrue(remember_result["ok"], remember_result)
+            self.assertEqual(remember_result["result"]["status"], "queued")
+
+            processed = process_queued_memory_requests(limit=5)
+            self.assertEqual(len(processed), 1)
+            self.assertTrue(
+                MemoryKnowledgeItem.objects.filter(
+                    owner_user=self.manager,
+                    text_hash__isnull=False,
+                    scope=MemoryKnowledgeItem.Scope.PERSONAL,
+                ).exists()
+            )
+
+            search_result = execute_tool(
+                tool_code="memory.search",
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+                session_external_id=session.external_id,
+                payload={
+                    "query": "ai-memory-cobalt-260529",
+                    "limit": 5,
+                    "sensitivity": "internal",
+                    "search_mode": "knowledge_precise",
+                    "ranking_profile": "precise",
+                },
+                request_id="req-ai-journey-memory-search",
+            )
+
+        self.assertTrue(search_result["ok"], search_result)
+        self.assertEqual(search_result["result"]["items"][0]["kind"], "knowledge")
+        self.assertIn("ai-memory-cobalt-260529", search_result["result"]["items"][0]["text"])
+        self.assertEqual(
+            MemoryAccessAudit.objects.filter(request_id="req-ai-journey-memory-search", policy_decision="allowed").count(),
+            1,
+        )
+
+    def test_ai_memory_search_finds_file_content_by_fts_after_stability_window(self):
+        from apps.memory.document_ingestion import discover_source_objects, ingest_source_objects
+        from apps.memory.models import MemoryAccessAudit, MemorySearchDocument, MemorySource, MemorySourceObject
+
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir) / "data",
+            LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled",
+        ):
+            root = Path(tmpdir) / "source"
+            root.mkdir()
+            marker = "ftsfile-cobalt-260529"
+            file_path = root / "regulation.txt"
+            file_path.write_text(f"Регламент содержит контрольный маркер {marker}.", encoding="utf-8")
+            stable_timestamp = timezone.now().timestamp() - 6 * 60
+            os.utime(file_path, (stable_timestamp, stable_timestamp))
+            source = self._create_trusted_file_memory_source(root=root, code="ai_file_fts_journey")
+
+            discover_source_objects(source=source, dry_run=False)
+            source_object = MemorySourceObject.objects.get(source=source)
+            self.assertIsNotNone(source_object.last_stable_at)
+            metrics = ingest_source_objects(source=source, dry_run=False)
+            self.assertEqual(metrics["issues"], 0, metrics)
+            self.assertEqual(
+                MemorySearchDocument.objects.filter(source_object__source=source, index_status=MemorySearchDocument.IndexStatus.READY).count(),
+                1,
+            )
+
+            result = execute_tool(
+                tool_code="memory.search",
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+                payload={
+                    "query": marker,
+                    "limit": 5,
+                    "sensitivity": "internal",
+                    "search_mode": "source_explicit",
+                    "ranking_profile": "source_content",
+                    "include_source_data": True,
+                },
+                request_id="req-ai-file-fts-search",
+            )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["result"]["items"][0]["kind"], "source_data")
+        self.assertEqual(result["result"]["items"][0]["source_code"], "ai_file_fts_journey")
+        audit = MemoryAccessAudit.objects.get(request_id="req-ai-file-fts-search")
+        self.assertGreaterEqual(audit.retrieval_trace["candidate_counts"]["fulltext"], 1)
+
+    def test_ai_memory_search_finds_file_content_by_vector_index_after_stability_window(self):
+        from apps.memory.document_ingestion import discover_source_objects, ingest_source_objects
+        from apps.memory.models import MemoryAccessAudit, MemorySearchDocument, MemorySourceObject
+
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir) / "data",
+            LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="lancedb",
+            LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE="local_hash_test_v1",
+        ):
+            root = Path(tmpdir) / "source"
+            root.mkdir()
+            marker = "vectorfile-cobalt-260529"
+            file_path = root / "semantic-note.txt"
+            file_path.write_text(f"Семантическая заметка содержит маркер {marker}.", encoding="utf-8")
+            stable_timestamp = timezone.now().timestamp() - 6 * 60
+            os.utime(file_path, (stable_timestamp, stable_timestamp))
+            source = self._create_trusted_file_memory_source(root=root, code="ai_file_vector_journey")
+
+            discover_source_objects(source=source, dry_run=False)
+            source_object = MemorySourceObject.objects.get(source=source)
+            self.assertIsNotNone(source_object.last_stable_at)
+            metrics = ingest_source_objects(source=source, dry_run=False)
+            self.assertEqual(metrics["issues"], 0, metrics)
+            document = MemorySearchDocument.objects.get(source_object__source=source, index_status=MemorySearchDocument.IndexStatus.READY)
+            self.assertIn("vector", (document.metadata or {}).get("index_versions", {}))
+
+            result = execute_tool(
+                tool_code="memory.search",
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+                payload={
+                    "query": marker,
+                    "limit": 5,
+                    "sensitivity": "internal",
+                    "search_mode": "source_explicit",
+                    "ranking_profile": "source_semantic",
+                    "include_source_data": True,
+                },
+                request_id="req-ai-file-vector-search",
+            )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["result"]["items"][0]["kind"], "source_data")
+        self.assertEqual(result["result"]["items"][0]["source_code"], "ai_file_vector_journey")
+        audit = MemoryAccessAudit.objects.get(request_id="req-ai-file-vector-search")
+        self.assertTrue(audit.retrieval_trace["search_channels"]["vector"]["requested"])
+        self.assertGreaterEqual(audit.retrieval_trace["candidate_counts"]["vector"], 1)
+        self.assertIn("vector", result["result"]["items"][0]["metadata"]["channel_scores"])
+
+    def _create_trusted_file_memory_source(self, *, root, code):
+        from apps.memory.models import MemorySource
+
+        return MemorySource.objects.create(
+            code=code,
+            title=f"{code} source",
+            source_kind="local_path",
+            domain="docs",
+            owner="memory",
+            sensitivity="internal",
+            pii_policy="deidentify_before_index",
+            trust_status=MemorySource.TrustStatus.TRUSTED,
+            authority_class=MemorySource.AuthorityClass.APPROVED_CORPUS,
+            trusted_for_context=True,
+            requires_source_review=False,
+            trusted_context_kinds=["retrieved_chunk", "citation"],
+            index_profiles=["fulltext_default", "vector_default"],
+            scope_rule="authenticated_user",
+            config={
+                "source_ref": str(root),
+                "ignore_patterns": [],
+                "ingestion_profile": "corporate_docs_windows_v1",
+                "default_acl": {"allow": [{"kind": "group", "name": ROLE_MANAGER}]},
+            },
+        )
+
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
 class ChatViewTraceContextTests(TestCase):
@@ -1534,6 +1813,15 @@ class TaskTypeContractTests(TestCase):
         partial = {"workorder": 7}
         self.assertIn("text", contract.get_missing_required_slots(partial))
 
+    def test_workorders_delete_contract_requires_confirmation(self):
+        from services.agent_runtime.task_types import get_task_type_contract
+        contract = get_task_type_contract("workorders.delete")
+        self.assertIsNotNone(contract)
+        self.assertTrue(contract.requires_confirmation)
+        self.assertEqual(contract.allowed_tools, ("workorders.get", "workorders.delete"))
+        self.assertEqual(contract.get_missing_required_slots({"workorder_id": 7}), [])
+        self.assertIn("workorder_id", contract.get_missing_required_slots({}))
+
     def test_lookup_departments_contract(self):
         from services.agent_runtime.task_types import get_task_type_contract
         contract = get_task_type_contract("lookup.departments")
@@ -1608,6 +1896,7 @@ class TaskTypeContractTests(TestCase):
                 {"id": "departments.list"},
                 {"id": "devices.list"},
                 {"id": "workorders.comment"},
+                {"id": "workorders.delete"},
                 {"id": "workorders.confirm_closure"},
                 {"id": "workorders.rate"},
                 {"id": "inventory.devices.create"},

@@ -1,0 +1,43 @@
+{
+  "task_id": "01-testing-policy-docs",
+  "status": "implemented",
+  "title": "Testing policy and independent verifier documentation",
+  "goal": "Create project and execution documentation for testing policy and fast verifier subagent usage.",
+  "read_scope": [
+    "AGENTS.md",
+    "README.md",
+    "Makefile",
+    "pytest.ini",
+    "package.json",
+    "docs/guides/",
+    "workflow/active/"
+  ],
+  "write_scope": [
+    "docs/guides/TESTING_POLICY.md",
+    "docs/guides/.desc.json",
+    "AGENTS.md",
+    "README.md",
+    "workflow/active/testing-policy-and-independent-verification/",
+    "workflow/active/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Define testing levels: fast checks, unit, integration, e2e and contract checks.",
+    "Add a change-type to required-checks matrix.",
+    "Document independent verifier subagent usage as recommended for large or risky changes.",
+    "Keep the verifier read-only unless explicitly tasked to edit.",
+    "Update project navigation and structure metadata."
+  ],
+  "acceptance": [
+    "Project guide exists and is linked from README.",
+    "AGENTS.md includes the operational rule.",
+    "Workflow block records execution and acceptance.",
+    "Generated project structure includes new files."
+  ],
+  "verification": [
+    "make gen-struct",
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ]
+}

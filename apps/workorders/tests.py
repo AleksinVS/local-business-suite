@@ -276,6 +276,18 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, 'hx-trigger="change"')
         self.assertContains(response, 'data-column-code="')
 
+    def test_board_create_drawer_keeps_current_board(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            f"{reverse('workorders:create')}?board={self.board.pk}",
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="board"')
+        self.assertContains(response, f'value="{self.board.pk}"')
+
     def test_technician_can_move_card_to_other_column(self):
         self.client.force_login(self.technician)
         response = self.client.post(
@@ -315,6 +327,33 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
         self.assertIsNone(created.assignee)
+        self.assertEqual(created.author, self.customer)
+
+    def test_customer_can_create_workorder_from_board_drawer(self):
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "title": "Заявка из канбана",
+                "description": "Создана через правую панель.",
+                "department": self.sub_department.pk,
+                "priority": "medium",
+                "device": "",
+                "assignee": "",
+                "board": self.board.pk,
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response["HX-Redirect"],
+            reverse("workorders:board_specific", kwargs={"board_slug": self.board.slug}),
+        )
+        created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
+        self.assertEqual(created.title, "Заявка из канбана")
+        self.assertEqual(created.board, self.board)
         self.assertEqual(created.author, self.customer)
 
     def test_customer_can_create_workorder_without_device(self):
@@ -507,6 +546,71 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:board"), {"department": self.department.pk})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.workorder.title)
+
+    def test_board_search_matches_department_hierarchy(self):
+        other_department = Department.objects.create(name="Администрация")
+        WorkOrder.objects.create(
+            title="Проверить сетевой принтер",
+            description="Плановая проверка.",
+            department=other_department,
+            author=self.manager,
+            board=self.board,
+        )
+
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"), {"q": self.department.name}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertNotContains(response, "Проверить сетевой принтер")
+
+    def test_board_search_matches_author(self):
+        WorkOrder.objects.create(
+            title="Заявка другого заказчика",
+            description="Не должна попасть в поиск.",
+            department=self.department,
+            author=self.manager,
+            board=self.board,
+        )
+
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"), {"q": self.customer.username}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertNotContains(response, "Заявка другого заказчика")
+
+    def test_board_search_matches_assignee_full_name(self):
+        self.technician.first_name = "Илья"
+        self.technician.last_name = "Иванов"
+        self.technician.save(update_fields=["first_name", "last_name"])
+        other_technician = User.objects.create_user(
+            username="other_tech",
+            first_name="Петр",
+            last_name="Петров",
+            password="pass",
+        )
+        WorkOrder.objects.create(
+            title="Заявка другого исполнителя",
+            description="Не должна попасть в поиск.",
+            department=self.department,
+            author=self.manager,
+            assignee=other_technician,
+            board=self.board,
+        )
+
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"), {"q": "Илья Иванов"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertNotContains(response, "Заявка другого исполнителя")
 
 
 class StepperContextTests(TestCase):

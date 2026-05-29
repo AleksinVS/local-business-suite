@@ -24,7 +24,7 @@
         id="boardSearch"
         name="q"
         value="{{ filters.q }}"
-        placeholder="Номер, заголовок, изделие"
+        placeholder="Номер, заголовок, изделие, подразделение, сотрудник"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#board-columns"
         hx-swap="outerHTML"

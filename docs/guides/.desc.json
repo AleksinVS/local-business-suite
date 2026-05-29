@@ -9,6 +9,7 @@
   "MEMORY_INGESTION_OPERATIONS.md": "Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти",
   "MEMORY_USER_GUIDE.md": "Руководство пользователя и администратора по системе памяти",
   "SETTINGS_CENTER_OPERATIONS.md": "Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals",
+  "TESTING_POLICY.md": "Политика тестирования, матрица обязательных проверок и независимая проверка субагентом",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",
   "PROJECT_STRUCTURE_SYSTEM.md": "Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)"
 }

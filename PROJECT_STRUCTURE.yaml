@@ -266,6 +266,7 @@ docs: # Документация проекта
     PROJECT_REVIEW.md: file # Чек-лист ревью проекта
     PROJECT_STRUCTURE_SYSTEM.md: file # Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)
     SETTINGS_CENTER_OPERATIONS.md: file # Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals
+    TESTING_POLICY.md: file # Политика тестирования, матрица обязательных проверок и независимая проверка субагентом
   legacy: # Устаревшая документация (MVP)
     MVP_Architecture.md: file # Архитектура MVP
     MVP_Implementation_Plan.md: file # План реализации MVP
@@ -408,6 +409,13 @@ workflow: # Исполнительные workflow-пакеты для сложн
       HANDOFF_REPORT.md: file # Отчет реализации workflow-блока Settings Center GUI
       RETROSPECTIVE.md: file # Шаблон ретроспективы workflow-блока
       TASK_ACCEPTANCE.settings-center-gui.md: file # Шаблон приемки workflow-блока
+    testing-policy-and-independent-verification: # Workflow: политика тестирования и независимая проверка субагентом
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план документационного workflow-блока
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки документации по тестированию
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения по созданию политики тестирования
+      RETROSPECTIVE.md: file # Ретроспектива создания политики тестирования
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационной задачи по политике тестирования
     universal-right-drawer-ai-navigation: # Workflow: универсальное открытие правого сайдбара ИИ-ботом
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для universal right drawer AI navigation

@@ -74,8 +74,12 @@ test.describe("context-aware sidebar AI chat", () => {
       /\/ai\/chat\/[^/]+\/send\/$/.test(new URL(response.url()).pathname)
       && response.request().method() === "POST"
     ));
-    await page.locator("#sidebar-ai-prompt-input").fill("Открой заявку");
-    await page.locator("#sidebar-ai-send-button").click();
+    const promptInput = page.locator("#sidebar-ai-prompt-input");
+    await promptInput.fill("Открой");
+    await promptInput.press("Shift+Enter");
+    await expect(promptInput).toHaveValue("Открой\n");
+    await promptInput.type("заявку");
+    await promptInput.press("Enter");
 
     const response = await sendResponse;
     expect(response.status()).toBe(200);

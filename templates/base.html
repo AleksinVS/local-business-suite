@@ -132,6 +132,28 @@
             </a>
             {% block header_context %}{% endblock %}
             <div id="header-favorites" class="header-favorites"></div>
+            {% if user.is_authenticated %}
+              <div class="header-user">
+                <button
+                  type="button"
+                  class="header-user-button"
+                  id="header-user-button"
+                  aria-expanded="false"
+                  aria-controls="header-user-dropdown"
+                  aria-label="Текущий пользователь: {{ user.get_full_name|default:user.username }}"
+                  title="{{ user.get_full_name|default:user.username }}"
+                >
+                  <span class="header-user-name">{{ user.get_full_name|default:user.username }}</span>
+                  <span class="header-user-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="header-user-dropdown" id="header-user-dropdown" hidden>
+                  <form action="{% url 'logout' %}" method="post" class="header-user-logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="header-user-logout">Выйти</button>
+                  </form>
+                </div>
+              </div>
+            {% endif %}
           </div>
         </header>
 
@@ -241,6 +263,25 @@
         const dropdown = document.getElementById('all-functions-dropdown');
         if (!button || !dropdown) return;
         const nextOpen = dropdown.hidden;
+        closeHeaderUserMenu();
+        dropdown.hidden = !nextOpen;
+        button.setAttribute('aria-expanded', String(nextOpen));
+      }
+
+      function closeHeaderUserMenu() {
+        const button = document.getElementById('header-user-button');
+        const dropdown = document.getElementById('header-user-dropdown');
+        if (!button || !dropdown) return;
+        dropdown.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      }
+
+      function toggleHeaderUserMenu() {
+        const button = document.getElementById('header-user-button');
+        const dropdown = document.getElementById('header-user-dropdown');
+        if (!button || !dropdown) return;
+        const nextOpen = dropdown.hidden;
+        closeAllFunctionsMenu();
         dropdown.hidden = !nextOpen;
         button.setAttribute('aria-expanded', String(nextOpen));
       }
@@ -249,20 +290,36 @@
       document.addEventListener('DOMContentLoaded', () => {
         renderFavorites();
         updateStars();
-        const button = document.getElementById('all-functions-button');
-        const dropdown = document.getElementById('all-functions-dropdown');
-        if (button && dropdown) {
-          button.addEventListener('click', (event) => {
+        const allFunctionsButton = document.getElementById('all-functions-button');
+        const allFunctionsDropdown = document.getElementById('all-functions-dropdown');
+        if (allFunctionsButton && allFunctionsDropdown) {
+          allFunctionsButton.addEventListener('click', (event) => {
             event.stopPropagation();
             toggleAllFunctionsMenu();
           });
           document.addEventListener('click', (event) => {
-            if (!dropdown.hidden && !event.target.closest('.all-functions-menu')) {
+            if (!allFunctionsDropdown.hidden && !event.target.closest('.all-functions-menu')) {
               closeAllFunctionsMenu();
             }
           });
           document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') closeAllFunctionsMenu();
+          });
+        }
+        const headerUserButton = document.getElementById('header-user-button');
+        const headerUserDropdown = document.getElementById('header-user-dropdown');
+        if (headerUserButton && headerUserDropdown) {
+          headerUserButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleHeaderUserMenu();
+          });
+          document.addEventListener('click', (event) => {
+            if (!headerUserDropdown.hidden && !event.target.closest('.header-user')) {
+              closeHeaderUserMenu();
+            }
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeHeaderUserMenu();
           });
         }
       });

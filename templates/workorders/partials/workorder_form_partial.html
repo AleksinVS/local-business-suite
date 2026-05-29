@@ -12,6 +12,8 @@
     hx-swap="innerHTML"
   >
     {% csrf_token %}
+    <input type="hidden" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}">
+    {{ form.board.errors }}
     <div class="form-grid">
       <div class="input-group full-width">
         <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>

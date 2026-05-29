@@ -134,6 +134,8 @@ python manage.py runserver
 
 ## Проверка проекта
 
+Подробная политика тестирования: `docs/guides/TESTING_POLICY.md`.
+
 Базовые проверки:
 
 ```bash
@@ -215,6 +217,7 @@ Runtime-данные не коммитятся:
 - `docs/guides/MEMORY_USER_GUIDE.md` — руководство по системе памяти.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — опросники для владельцев данных и профильных экспертов.
+- `docs/guides/TESTING_POLICY.md` — уровни тестов, матрица обязательных проверок и независимая проверка субагентом.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.
 - `docs/deployment/DEPLOYMENT.md` — production deployment.
 - `docs/deployment/IIS_SSO.md` — IIS и Active Directory.

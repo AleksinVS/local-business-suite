@@ -9,5 +9,6 @@
   "context-aware-sidebar-ai-chat": "Workflow: контекстный ИИ-чат в левой боковой панели",
   "universal-right-drawer-ai-navigation": "Workflow: универсальное открытие правого сайдбара ИИ-ботом",
   "module-registered-agent-skills-and-mcp-facade": "Workflow: модульные AI skills и registry-driven MCP-фасад",
-  "interface-russification": "Workflow: русификация интерфейса портала и подготовка к локализации"
+  "interface-russification": "Workflow: русификация интерфейса портала и подготовка к локализации",
+  "testing-policy-and-independent-verification": "Workflow: политика тестирования и независимая проверка субагентом"
 }

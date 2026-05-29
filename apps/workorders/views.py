@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q, Count
 
 User = get_user_model()
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -93,6 +93,48 @@ def page_context_json(payload):
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _related_user_search_q(relation_name, query):
+    fields = ("username", "first_name", "last_name", "email")
+    search_query = Q()
+    for field in fields:
+        search_query |= Q(**{f"{relation_name}__{field}__icontains": query})
+
+    tokens = [token.strip() for token in query.split() if token.strip()]
+    if len(tokens) > 1:
+        token_query = Q()
+        for token in tokens:
+            per_token_query = Q()
+            for field in fields:
+                per_token_query |= Q(
+                    **{f"{relation_name}__{field}__icontains": token}
+                )
+            token_query &= per_token_query
+        search_query |= token_query
+    return search_query
+
+
+def _department_search_ids(query):
+    matched_ids = set(
+        Department.objects.filter(name__icontains=query).values_list("id", flat=True)
+    )
+    if not matched_ids:
+        return set()
+
+    children_map = {}
+    for department_id, parent_id in Department.objects.values_list("id", "parent_id"):
+        children_map.setdefault(parent_id, []).append(department_id)
+
+    department_ids = set()
+    stack = list(matched_ids)
+    while stack:
+        department_id = stack.pop()
+        if department_id in department_ids:
+            continue
+        department_ids.add(department_id)
+        stack.extend(children_map.get(department_id, []))
+    return department_ids
+
+
 def workorders_board_page_context(request, board):
     return {
         "schema_version": "1",
@@ -161,14 +203,20 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         device = self.request.GET.get("device", "").strip()
 
         if q:
-            queryset = queryset.filter(
+            matched_department_ids = _department_search_ids(q)
+            search_filter = (
                 Q(number__icontains=q)
                 | Q(title__icontains=q)
                 | Q(description__icontains=q)
                 | Q(device__name__icontains=q)
                 | Q(device__model__icontains=q)
                 | Q(device__serial_number__icontains=q)
+                | _related_user_search_q("author", q)
+                | _related_user_search_q("assignee", q)
             )
+            if matched_department_ids:
+                search_filter |= Q(department_id__in=matched_department_ids)
+            queryset = queryset.filter(search_filter)
         if department:
             selected_department = Department.objects.filter(pk=department).first()
             if selected_department:
@@ -291,6 +339,11 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         if self.request.htmx:
+            if self.object and self.object.board_id:
+                return reverse(
+                    "workorders:board_specific",
+                    kwargs={"board_slug": self.object.board.slug},
+                )
             return reverse("workorders:board")
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
@@ -303,10 +356,12 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         form.instance.author = self.request.user
         if not can_manage_assignments(self.request.user):
             form.instance.assignee = None
-        response = super().form_valid(form)
         if self.request.htmx:
-            # Full page redirect to board to show new card
+            self.object = form.save()
+            response = HttpResponse(status=204)
             response["HX-Redirect"] = self.get_success_url()
+            return response
+        response = super().form_valid(form)
         return response
 
     def get_form(self, form_class=None):

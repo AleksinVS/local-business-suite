@@ -91,6 +91,17 @@
       input.focus();
     }
 
+    function submitFromKeyboard(event) {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      if (submitting || !input.value.trim()) return;
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit(send);
+      } else {
+        send.click();
+      }
+    }
+
     function startStream(prompt, messageId, pendingAssistant) {
       var buffer = "";
       fetch(form.dataset.streamUrl, {
@@ -180,6 +191,7 @@
     }
 
     input.addEventListener("input", resizeInput);
+    input.addEventListener("keydown", submitFromKeyboard);
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       if (submitting) return;

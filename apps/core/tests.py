@@ -335,6 +335,33 @@ class DepartmentViewTests(TestCase):
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, "БУЗ ВО ВОБ №3")
 
+    def test_header_renders_current_user_name(self):
+        self.manager.first_name = "Иван"
+        self.manager.last_name = "Петров"
+        self.manager.save(update_fields=["first_name", "last_name"])
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:dashboard"))
+
+        self.assertContains(response, "Иван Петров")
+
+    def test_header_falls_back_to_username_when_full_name_is_empty(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:dashboard"))
+
+        self.assertContains(response, "manager-ui")
+
+    def test_header_user_menu_contains_logout_action(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:dashboard"))
+
+        self.assertContains(response, 'id="header-user-button"')
+        self.assertContains(response, 'id="header-user-dropdown"')
+        self.assertContains(response, f'action="{reverse("logout")}"')
+        self.assertContains(response, "Выйти")
+
     @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
     def test_manager_can_open_role_rules_editor(self):
         Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")

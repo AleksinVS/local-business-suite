@@ -8,7 +8,7 @@
       "properties": {
         "display_name": { "type": "string" },
         "view_scope": {
-          "enum": ["all", "assigned_or_unassigned_or_authored", "authored", "none"]
+          "enum": ["all", "department_branch", "assigned_or_unassigned_or_authored", "authored", "none"]
         },
         "create_workorder": { "type": "boolean" },
         "edit_scope": { "type": "string" },

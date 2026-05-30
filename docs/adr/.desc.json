@@ -21,5 +21,6 @@
   "ADR-0019-context-aware-sidebar-ai-chat.md": "ADR: Контекстный ИИ-чат в левой боковой панели",
   "ADR-0020-universal-right-drawer-ai-navigation.md": "ADR: Универсальное открытие правого сайдбара ИИ-ботом",
   "ADR-0021-module-registered-agent-skills-and-mcp-facade.md": "ADR: Модульные AI skills и registry-driven MCP-фасад",
-  "ADR-0022-interface-russification-and-localization-roadmap.md": "ADR: Русскоязычный интерфейс портала и путь к локализации"
+  "ADR-0022-interface-russification-and-localization-roadmap.md": "ADR: Русскоязычный интерфейс портала и путь к локализации",
+  "ADR-0023-workorder-tree-view-and-customer-branch-access.md": "ADR: Дерево заявок и доступ заказчика по ветке отделения"
 }

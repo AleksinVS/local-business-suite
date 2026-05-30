@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import json
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -14,7 +15,6 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
 from apps.core.models import Department
-from apps.inventory.models import MedicalDevice
 
 from .forms import (
     KanbanColumnTitleForm,
@@ -43,8 +43,19 @@ from .policies import (
     can_transition,
     can_upload_attachment,
 )
-from .selectors import visible_boards_queryset, visible_workorders_queryset
+from .selectors import (
+    visible_boards_queryset,
+    visible_departments_queryset,
+    visible_devices_queryset,
+    visible_workorders_queryset,
+)
 from .services import confirm_closure, transition_workorder
+from .tree import build_workorder_tree
+
+
+VIEW_BOARD = "board"
+VIEW_TREE = "tree"
+VIEW_MODES = {VIEW_BOARD, VIEW_TREE}
 
 
 def quick_transition_choices_for(user, workorder):
@@ -93,6 +104,25 @@ def page_context_json(payload):
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _requested_view_mode(request):
+    view_mode = request.GET.get("view", VIEW_BOARD).strip()
+    if view_mode not in VIEW_MODES:
+        return VIEW_BOARD
+    return view_mode
+
+
+def _with_query(url, params):
+    cleaned = {key: value for key, value in params.items() if value not in {None, ""}}
+    if not cleaned:
+        return url
+    return f"{url}?{urlencode(cleaned)}"
+
+
+def _mark_workorders_changed(response):
+    response["HX-Trigger"] = "workordersChanged"
+    return response
+
+
 def _related_user_search_q(relation_name, query):
     fields = ("username", "first_name", "last_name", "email")
     search_query = Q()
@@ -135,14 +165,14 @@ def _department_search_ids(query):
     return department_ids
 
 
-def workorders_board_page_context(request, board):
+def workorders_board_page_context(request, board, view_mode=VIEW_BOARD):
     return {
         "schema_version": "1",
         "page": {
             "path": request.path,
-            "title": "Канбан заявок",
+            "title": "Дерево заявок" if view_mode == VIEW_TREE else "Канбан заявок",
             "module": "workorders",
-            "view": "board",
+            "view": view_mode,
         },
         "selection": {},
         "filters": {
@@ -153,7 +183,7 @@ def workorders_board_page_context(request, board):
             "assignee": request.GET.get("assignee", ""),
             "device": request.GET.get("device", ""),
         },
-        "ui_state": {"focused_region": "board"},
+        "ui_state": {"focused_region": "tree" if view_mode == VIEW_TREE else "board"},
     }
 
 
@@ -179,6 +209,9 @@ def workorder_detail_page_context(request, workorder):
 
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
+
+    def get_view_mode(self):
+        return _requested_view_mode(self.request)
 
     def get_board(self):
         slug = self.kwargs.get("board_slug")
@@ -236,11 +269,13 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         board = self.get_board()
+        view_mode = self.get_view_mode()
         context["page_ai_context_json"] = page_context_json(
-            workorders_board_page_context(self.request, board)
+            workorders_board_page_context(self.request, board, view_mode=view_mode)
         )
         if not board:
             context["no_boards"] = True
+            context["current_view"] = view_mode
             return context
 
         queryset = self.get_queryset(board)
@@ -277,7 +312,16 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 }
             )
         board_column_count = len(columns) if columns else 1
+        query_for_board = self.request.GET.copy()
+        query_for_board["view"] = VIEW_BOARD
+        query_for_tree = self.request.GET.copy()
+        query_for_tree["view"] = VIEW_TREE
         context["current_board"] = board
+        context["current_view"] = view_mode
+        context["view_urls"] = {
+            VIEW_BOARD: f"{self.request.path}?{query_for_board.urlencode()}",
+            VIEW_TREE: f"{self.request.path}?{query_for_tree.urlencode()}",
+        }
         context["visible_boards"] = visible_boards_queryset(self.request.user)
         context["board_columns"] = [
             {
@@ -289,13 +333,17 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             for code, data in columns.items()
         ]
         context["board_visible_slots"] = min(max(board_column_count, 1), 5)
+        if view_mode == VIEW_TREE:
+            context["workorder_tree"] = build_workorder_tree(
+                queryset,
+                can_create_workorder=can_create(self.request.user),
+            )
         context["status_choices"] = WorkOrderStatus.choices
-        context["departments"] = Department.objects.select_related("parent").order_by(
-            "parent_id", "name", "id"
-        )
+        context["departments"] = visible_departments_queryset(self.request.user)
         context["assignees"] = User.objects.order_by("first_name", "username")
-        context["devices"] = MedicalDevice.objects.order_by("name")
+        context["devices"] = visible_devices_queryset(self.request.user)
         context["filters"] = {
+            "view": view_mode,
             "q": self.request.GET.get("q", ""),
             "department": self.request.GET.get("department", ""),
             "status": self.request.GET.get("status", ""),
@@ -310,8 +358,14 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def get_template_names(self):
         if self.request.htmx and self.request.htmx.target == "detail-panel":
             return ["workorders/partials/detail_panel_empty.html"]
-        if self.request.htmx:
+        if self.request.htmx and self.request.htmx.target == "board-columns":
             return ["workorders/partials/board_columns.html"]
+        if self.request.htmx and self.request.htmx.target == "workorders-tree":
+            return ["workorders/partials/tree_view.html"]
+        if self.request.htmx and self.request.htmx.target == "workorders-view":
+            return ["workorders/partials/workorders_view.html"]
+        if self.request.htmx:
+            return ["workorders/partials/workorders_view.html"]
         return [self.template_name]
 
 
@@ -325,6 +379,21 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         board_id = self.request.GET.get("board")
         if board_id:
             initial["board"] = board_id
+        department_id = self.request.GET.get("department")
+        if department_id and visible_departments_queryset(self.request.user).filter(
+            pk=department_id
+        ).exists():
+            initial["department"] = department_id
+        device_id = self.request.GET.get("device")
+        if device_id:
+            device = (
+                visible_devices_queryset(self.request.user)
+                .filter(pk=device_id)
+                .first()
+            )
+            if device:
+                initial["device"] = device.pk
+                initial.setdefault("department", device.department_id)
         return initial
 
     def get_form_kwargs(self):
@@ -340,11 +409,19 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     def get_success_url(self):
         if self.request.htmx:
             if self.object and self.object.board_id:
-                return reverse(
+                url = reverse(
                     "workorders:board_specific",
                     kwargs={"board_slug": self.object.board.slug},
                 )
-            return reverse("workorders:board")
+            else:
+                url = reverse("workorders:board")
+            return_view = self.request.POST.get("return_view") or self.request.GET.get(
+                "return_view"
+            )
+            return _with_query(
+                url,
+                {"view": return_view if return_view in VIEW_MODES else ""},
+            )
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
     def dispatch(self, request, *args, **kwargs):
@@ -370,6 +447,12 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
             form.fields["assignee"].disabled = True
             form.fields["assignee"].required = False
         return form
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        return_view = self.request.GET.get("return_view") or self.request.GET.get("view")
+        context["return_view"] = return_view if return_view in VIEW_MODES else VIEW_BOARD
+        return context
 
 
 class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
@@ -400,11 +483,12 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
             detail_view.args = self.args
             detail_view.kwargs = self.kwargs
             detail_view.object = self.object
-            return render(
+            response = render(
                 self.request,
                 "workorders/partials/detail_panel.html",
                 detail_view.get_context_data(object=self.object),
             )
+            return _mark_workorders_changed(response)
         return super().form_valid(form)
 
     def get_form(self, form_class=None):
@@ -472,7 +556,7 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
                 body=form.cleaned_data["body"],
             )
             if request.htmx:
-                return render(
+                response = render(
                     request,
                     "workorders/partials/comments.html",
                     {
@@ -480,6 +564,7 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
                         "comment_form": WorkOrderCommentForm(),
                     },
                 )
+                return _mark_workorders_changed(response)
             messages.success(request, "Комментарий добавлен.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:
@@ -508,7 +593,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
                 content_type=getattr(uploaded_file, "content_type", ""),
             )
             if request.htmx:
-                return render(
+                response = render(
                     request,
                     "workorders/partials/attachments.html",
                     {
@@ -517,6 +602,7 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
                         "can_upload_attachment": True,
                     },
                 )
+                return _mark_workorders_changed(response)
             messages.success(request, "Файл добавлен.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:
@@ -555,11 +641,12 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
                     "workorders/partials/board_columns.html",
                     board_view.get_context_data(),
                 )
-            return render(
+            response = render(
                 request,
                 "workorders/partials/status_section.html",
                 _stepper_context(request.user, workorder),
             )
+            return _mark_workorders_changed(response)
         messages.success(request, "Статус заявки обновлен.")
         return redirect("workorders:detail", pk=workorder.pk)
 
@@ -625,7 +712,8 @@ class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
         workorder.refresh_from_db()
         context = _stepper_context(request.user, workorder)
         if request.htmx:
-            return render(request, "workorders/partials/status_section.html", context)
+            response = render(request, "workorders/partials/status_section.html", context)
+            return _mark_workorders_changed(response)
         messages.success(request, "Закрытие заявки подтверждено.")
         return redirect("workorders:detail", pk=workorder.pk)
 
@@ -645,9 +733,10 @@ class WorkOrderRateView(LoginRequiredMixin, View):
                 "can_rate": can_rate(request.user, workorder),
             }
             if request.htmx:
-                return render(
+                response = render(
                     request, "workorders/partials/rating_section.html", context
                 )
+                return _mark_workorders_changed(response)
             messages.success(request, "Оценка сохранена.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:

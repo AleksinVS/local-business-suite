@@ -28,21 +28,35 @@ class Command(BaseCommand):
         )
         main_board.allowed_groups.set(groups.values())
 
-        departments = {
-            name: Department.objects.get_or_create(name=name, parent=None)[0]
-            for name in ("Стационар", "Поликлиника", "Администрация", "ОЛД1", "ОЛД2", "УЗИ")
-        }
+        departments = {}
+
+        def ensure_department(name, parent=None):
+            department, _ = Department.objects.get_or_create(
+                name=name,
+                parent=parent,
+            )
+            departments[name] = department
+            return department
+
+        stationary = ensure_department("Стационар")
+        polyclinic = ensure_department("Поликлиника")
+        administration = ensure_department("Администрация")
+        diagnostics = ensure_department("Диагностика", parent=polyclinic)
+        ensure_department("Реанимация", parent=stationary)
+        ensure_department("ОЛД1", parent=diagnostics)
+        ensure_department("ОЛД2", parent=diagnostics)
+        ensure_department("УЗИ", parent=diagnostics)
 
         users = {}
         user_specs = [
-            ("chief_manager", "manager", "Главный", "Менеджер", True),
-            ("tech_ivanov", "technician", "Иван", "Иванов", False),
-            ("tech_petrov", "technician", "Петр", "Петров", False),
-            ("nurse_stationary", "customer", "Анна", "Соколова", False),
-            ("registry_operator", "customer", "Мария", "Орлова", False),
-            ("admin_office", "customer", "Ольга", "Киреева", False),
+            ("chief_manager", "manager", "Главный", "Менеджер", True, administration),
+            ("tech_ivanov", "technician", "Иван", "Иванов", False, stationary),
+            ("tech_petrov", "technician", "Петр", "Петров", False, diagnostics),
+            ("nurse_stationary", "customer", "Анна", "Соколова", False, stationary),
+            ("registry_operator", "customer", "Мария", "Орлова", False, diagnostics),
+            ("admin_office", "customer", "Ольга", "Киреева", False, administration),
         ]
-        for username, role, first_name, last_name, is_staff in user_specs:
+        for username, role, first_name, last_name, is_staff, department in user_specs:
             user, _ = User.objects.get_or_create(
                 username=username,
                 defaults={
@@ -56,6 +70,7 @@ class Command(BaseCommand):
             user.first_name = first_name
             user.last_name = last_name
             user.is_staff = is_staff
+            user.department = department
             user.set_password(DEMO_PASSWORD)
             user.save()
             user.groups.set([groups[role]])

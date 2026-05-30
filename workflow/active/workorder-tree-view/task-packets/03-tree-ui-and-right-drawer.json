@@ -1,0 +1,53 @@
+{
+  "task_id": "03-tree-ui-and-right-drawer",
+  "status": "completed",
+  "title": "Tree UI and right drawer",
+  "goal": "Implement the tree view interface with board styling and preserve create/edit/detail flows through the right drawer.",
+  "read_scope": [
+    "templates/workorders/board.html",
+    "templates/workorders/partials/kanban_column.html",
+    "templates/workorders/partials/detail_panel.html",
+    "templates/workorders/partials/workorder_form_partial.html",
+    "templates/workorders/partials/workorder_edit_form_partial.html",
+    "static/src/css/app.css",
+    "static/src/js/page_context.js"
+  ],
+  "write_scope": [
+    "templates/workorders/board.html",
+    "templates/workorders/partials/workorder_view_switcher.html",
+    "templates/workorders/partials/tree_view.html",
+    "templates/workorders/partials/tree_row.html",
+    "static/src/css/app.css",
+    "static/src/js/workorder_tree.js",
+    "templates/.desc.json",
+    "templates/workorders/.desc.json",
+    "templates/workorders/partials/.desc.json",
+    "static/src/js/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Add a segmented board/tree switcher near the current filters.",
+    "Use current board visual tokens and compact work-card styling for workorder rows.",
+    "Use the existing drawer and detail-panel-content HTMX target.",
+    "Create button on top toolbar must work in tree mode.",
+    "Create action on department/device row must pass safe initial department/device values.",
+    "After create, return to tree mode when the user started in tree mode.",
+    "After edit, refresh the selected row or tree partial without breaking the drawer.",
+    "Support localStorage expansion state keyed by board and view.",
+    "Implement keyboard expand/collapse and row opening.",
+    "Use aria-labels/tooltips for icon-only actions."
+  ],
+  "acceptance": [
+    "Tree mode visually matches the board style.",
+    "Clicking a workorder row opens the existing detail drawer.",
+    "Editing a workorder from tree mode uses the existing drawer form.",
+    "Creating from a device node preselects that device where permitted.",
+    "Keyboard user can expand/collapse and open a workorder.",
+    "No text overlaps on common desktop and mobile widths."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    "E2E_BASE_URL=http://127.0.0.1:8000 E2E_USERNAME=chief_manager E2E_PASSWORD=... npm run test:e2e -- --project=chromium --grep \"workorder tree\"",
+    "manual or Playwright screenshot check for desktop and mobile tree view"
+  ]
+}

@@ -2,7 +2,7 @@
   "$schema": "./schemas/role_rules.schema.json",
   "customer": {
     "display_name": "Заказчик (Пользователь)",
-    "view_scope": "all",
+    "view_scope": "department_branch",
     "create_workorder": true,
     "edit_scope": "authored",
     "comment_scope": "visible",

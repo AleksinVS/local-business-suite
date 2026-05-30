@@ -13,6 +13,7 @@
   >
     {% csrf_token %}
     <input type="hidden" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}">
+    <input type="hidden" name="return_view" value="{{ return_view|default:'board' }}">
     {{ form.board.errors }}
     <div class="form-grid">
       <div class="input-group full-width">

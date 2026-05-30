@@ -1,0 +1,30 @@
+{
+  "task_id": "00-design-and-planning-docs",
+  "status": "completed",
+  "title": "Design and planning documentation",
+  "goal": "Document the workorder tree view decision, UX approach, access model and implementation workflow before code changes.",
+  "write_scope": [
+    "docs/adr/ADR-0023-workorder-tree-view-and-customer-branch-access.md",
+    "docs/planning/active/workorder-tree-view.md",
+    "workflow/active/workorder-tree-view/",
+    "docs/planning/backlog.md",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Document that tree mode is an alternative projection over the same server-visible workorder dataset.",
+    "Document that customer branch visibility is a server-side access change.",
+    "Document UI/UX principles and right drawer behavior.",
+    "Document implementation task packets and verification commands."
+  ],
+  "acceptance": [
+    "ADR exists and contains context, decision, alternatives, consequences and acceptance criteria.",
+    "Active planning file exists and describes UX, architecture, risks and stages.",
+    "Workflow block exists with brief, architect plan, task packets, executor report and acceptance.",
+    "Backlog links to ADR, active plan and workflow block."
+  ],
+  "verification": [
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

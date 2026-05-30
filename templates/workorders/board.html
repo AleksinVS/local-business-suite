@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block header_context %}
 <nav class="breadcrumbs header-breadcrumbs">
@@ -15,7 +16,7 @@
 <div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}">
 <div class="toolbar">
   <form method="get" class="filters">
-    <input type="hidden" name="view" value="board">
+    <input type="hidden" name="view" value="{{ current_view }}">
 
     <div class="input-group">
       <label for="boardSearch">Поиск</label>
@@ -26,7 +27,7 @@
         value="{{ filters.q }}"
         placeholder="Номер, заголовок, изделие, подразделение, сотрудник"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
-        hx-target="#board-columns"
+        hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="keyup changed delay:250ms, search"
         hx-include="closest form"
@@ -37,7 +38,7 @@
       <label for="boardSelect">Доска</label>
       <select id="boardSelect" onchange="window.location.href=this.value">
         {% for board in visible_boards %}
-          <option value="{% url 'workorders:board_specific' board.slug %}" {% if current_board.id == board.id %}selected{% endif %}>{{ board.title }}</option>
+          <option value="{% url 'workorders:board_specific' board.slug %}?view={{ current_view }}" {% if current_board.id == board.id %}selected{% endif %}>{{ board.title }}</option>
         {% empty %}
           <option value="">Нет доступных досок</option>
         {% endfor %}
@@ -51,7 +52,7 @@
         name="department"
 
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
-        hx-target="#board-columns"
+        hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
@@ -68,7 +69,7 @@
         id="boardStatus"
         name="status"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
-        hx-target="#board-columns"
+        hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
@@ -85,7 +86,7 @@
         id="boardAssignee"
         name="assignee"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
-        hx-target="#board-columns"
+        hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
@@ -102,7 +103,7 @@
         id="boardDevice"
         name="device"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
-        hx-target="#board-columns"
+        hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
@@ -113,14 +114,15 @@
         {% endfor %}
       </select>
     </div>
+    {% include "workorders/partials/workorder_view_switcher.html" %}
   </form>
     {% if current_board %}
     <button
       class="btn btn-primary"
-      hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}"
+      hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}&return_view={{ current_view }}"
       hx-target="#detail-panel-content"
       hx-swap="innerHTML"
-      onclick="openKanbanDrawer()"
+      onclick="openWorkorderDrawer()"
     >
       Создать заявку
     </button>
@@ -132,11 +134,11 @@
   <p>У вас нет прав на просмотр ни одной канбан-доски.</p>
 </div>
 {% else %}
-{% include "workorders/partials/board_columns.html" %}
+{% include "workorders/partials/workorders_view.html" %}
 {% endif %}
 
 {# Drawer Overlay & Panel for Kanban #}
-<div class="drawer-overlay" id="drawerOverlay" onclick="closeKanbanDrawer()"></div>
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeWorkorderDrawer()"></div>
 <aside class="drawer drawer-large" id="detail-panel">
   <div id="detail-panel-content" style="height: 100%; display: flex; flex-direction: column;">
     {% include "workorders/partials/detail_panel_empty.html" %}
@@ -148,7 +150,7 @@
 {% block extra_scripts %}
   {{ block.super }}
   <script>
-    function openKanbanDrawer() {
+    function openWorkorderDrawer() {
       const panel = document.getElementById('detail-panel');
       const overlay = document.getElementById('drawerOverlay');
       if (panel) panel.classList.add('active');
@@ -156,13 +158,16 @@
       if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
     }
 
-    function closeKanbanDrawer() {
+    function closeWorkorderDrawer() {
       const panel = document.getElementById('detail-panel');
       const overlay = document.getElementById('drawerOverlay');
       if (panel) panel.classList.remove('active');
       if (overlay) overlay.classList.remove('active');
       if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
     }
+
+    function openKanbanDrawer() { openWorkorderDrawer(); }
+    function closeKanbanDrawer() { closeWorkorderDrawer(); }
 
     function toggleColumn(column) {
       column.classList.toggle('collapsed');
@@ -184,7 +189,7 @@
     }
 
     document.addEventListener('htmx:afterOnLoad', function(evt) {
-      if (evt.detail.target.id === 'board-columns') {
+      if (evt.detail.target.id === 'board-columns' || evt.detail.target.id === 'workorders-view') {
         restoreColumnStates();
       }
     });
@@ -272,4 +277,5 @@
       });
     })();
   </script>
+  <script src="{% static 'src/js/workorder_tree.js' %}"></script>
 {% endblock %}

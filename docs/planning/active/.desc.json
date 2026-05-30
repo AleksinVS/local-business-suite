@@ -10,5 +10,6 @@
   "context-aware-sidebar-ai-chat.md": "Активный план контекстного ИИ-чата в левой боковой панели",
   "universal-right-drawer-ai-navigation.md": "Активный план универсального открытия правого сайдбара ИИ-ботом",
   "module-registered-agent-skills-and-mcp-facade.md": "Активный план модульных AI skills и registry-driven MCP-фасада",
-  "interface-russification-and-localization.md": "Активный план русификации интерфейса портала и подготовки к локализации"
+  "interface-russification-and-localization.md": "Активный план русификации интерфейса портала и подготовки к локализации",
+  "workorder-tree-view.md": "Активный план дерева заявок и режимов просмотра доски"
 }

@@ -31,7 +31,9 @@ class WorkOrderRoleMatrixTests(TestCase):
             serial_number="SN-001",
             department=self.department,
         )
-        self.customer = User.objects.create_user(username="customer", password="pass")
+        self.customer = User.objects.create_user(
+            username="customer", password="pass", department=self.department
+        )
         self.technician = User.objects.create_user(username="tech", password="pass")
         self.manager = User.objects.create_user(username="manager", password="pass")
         self.outsider = User.objects.create_user(username="outsider", password="pass")
@@ -197,7 +199,9 @@ class WorkOrderViewPermissionTests(TestCase):
             serial_number="SN-002",
             department=self.sub_department,
         )
-        self.customer = User.objects.create_user(username="customer2", password="pass")
+        self.customer = User.objects.create_user(
+            username="customer2", password="pass", department=self.sub_department
+        )
         self.technician = User.objects.create_user(username="tech2", password="pass")
         self.manager = User.objects.create_user(username="manager2", password="pass")
         self.outsider = User.objects.create_user(username="outsider2", password="pass")
@@ -300,6 +304,73 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, 'hx-trigger="change"')
         self.assertContains(response, 'data-column-code="')
 
+    def test_customer_visibility_is_limited_to_department_branch(self):
+        sibling_department = Department.objects.create(
+            name="Соседнее отделение", parent=self.department
+        )
+        sibling_device = MedicalDevice.objects.create(
+            name="Чужой монитор",
+            serial_number="SN-FOREIGN",
+            department=sibling_department,
+        )
+        foreign = WorkOrder.objects.create(
+            title="Заявка вне ветки",
+            description="Даже authored заявка не должна быть видна вне ветки.",
+            department=sibling_department,
+            author=self.customer,
+            board=self.board,
+            device=sibling_device,
+        )
+
+        self.client.force_login(self.customer)
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertNotContains(response, foreign.title)
+
+        detail_response = self.client.get(reverse("workorders:detail", args=[foreign.pk]))
+        self.assertEqual(detail_response.status_code, 404)
+
+    def test_customer_without_department_sees_empty_branch(self):
+        customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        no_department_customer = User.objects.create_user(
+            username="customer_without_department", password="pass"
+        )
+        no_department_customer.groups.add(customer_group)
+
+        self.client.force_login(no_department_customer)
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.workorder.title)
+
+    def test_tree_view_renders_workorders_with_existing_drawer_target(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("workorders:board"), {"view": "tree"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["current_view"], "tree")
+        self.assertContains(response, 'id="workorders-tree"')
+        self.assertContains(response, 'role="treegrid"')
+        self.assertContains(response, self.workorder.title)
+        self.assertContains(response, f'hx-get="{reverse("workorders:detail", args=[self.workorder.pk])}"')
+        self.assertContains(response, 'hx-target="#detail-panel-content"')
+
+    def test_tree_view_htmx_renders_workorders_view_partial(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {"view": "tree"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="workorders-view",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="workorders-view"')
+        self.assertContains(response, 'id="workorders-tree"')
+        self.assertContains(response, self.workorder.title)
+
     def test_board_create_drawer_keeps_current_board(self):
         self.client.force_login(self.customer)
         response = self.client.get(
@@ -311,6 +382,56 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="board"')
         self.assertContains(response, f'value="{self.board.pk}"')
+
+    def test_tree_create_drawer_prefills_allowed_department_and_device(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            (
+                f"{reverse('workorders:create')}?board={self.board.pk}"
+                f"&department={self.sub_department.pk}&device={self.device.pk}"
+                "&return_view=tree"
+            ),
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["return_view"], "tree")
+        self.assertEqual(
+            str(response.context["form"].initial["department"]),
+            str(self.sub_department.pk),
+        )
+        self.assertEqual(str(response.context["form"].initial["device"]), str(self.device.pk))
+
+    def test_customer_create_form_rejects_foreign_department_branch(self):
+        sibling_department = Department.objects.create(
+            name="Неврология", parent=self.department
+        )
+        sibling_device = MedicalDevice.objects.create(
+            name="Чужой аппарат",
+            serial_number="SN-FORM-FOREIGN",
+            department=sibling_department,
+        )
+
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "title": "Чужая ветка",
+                "description": "Попытка создать вне своей ветки.",
+                "department": sibling_department.pk,
+                "priority": "medium",
+                "device": sibling_device.pk,
+                "assignee": "",
+                "board": self.board.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            WorkOrder.objects.filter(title="Чужая ветка").exists()
+        )
+        self.assertIn("department", response.context["form"].errors)
 
     def test_technician_can_move_card_to_other_column(self):
         self.client.force_login(self.technician)
@@ -379,6 +500,33 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(created.title, "Заявка из канбана")
         self.assertEqual(created.board, self.board)
         self.assertEqual(created.author, self.customer)
+
+    def test_customer_can_create_workorder_from_tree_drawer(self):
+        self.client.force_login(self.customer)
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "title": "Заявка из дерева",
+                "description": "Создана через правую панель дерева.",
+                "department": self.sub_department.pk,
+                "priority": "medium",
+                "device": self.device.pk,
+                "assignee": "",
+                "board": self.board.pk,
+                "return_view": "tree",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(
+            response["HX-Redirect"],
+            f"{reverse('workorders:board_specific', kwargs={'board_slug': self.board.slug})}?view=tree",
+        )
+        created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
+        self.assertEqual(created.title, "Заявка из дерева")
+        self.assertEqual(created.device, self.device)
 
     def test_customer_can_create_workorder_without_device(self):
         self.client.force_login(self.customer)
@@ -647,7 +795,9 @@ class StepperContextTests(TestCase):
             serial_number="SN-X01",
             department=self.department,
         )
-        self.customer = User.objects.create_user(username="cust_stepper", password="pass")
+        self.customer = User.objects.create_user(
+            username="cust_stepper", password="pass", department=self.department
+        )
         self.technician = User.objects.create_user(username="tech_stepper", password="pass")
         self.manager = User.objects.create_user(username="mgr_stepper", password="pass")
 

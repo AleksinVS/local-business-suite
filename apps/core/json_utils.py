@@ -9,6 +9,7 @@ ROLE_SCOPE_VALUES = {
     "all",
     "visible",
     "authored",
+    "department_branch",
     "assigned",
     "assigned_or_unassigned",
     "assigned_or_unassigned_or_authored",

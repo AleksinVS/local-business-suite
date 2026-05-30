@@ -59,6 +59,17 @@ def has_role_capability(user, capability):
     return any(rule.get(capability) for rule in active_role_rules(user))
 
 
+def user_department_branch_ids(user):
+    if not getattr(user, "is_authenticated", False):
+        return set()
+    if not getattr(user, "department_id", None):
+        return set()
+    cache_key = "_workorders_department_branch_ids"
+    if not hasattr(user, cache_key):
+        setattr(user, cache_key, set(user.department.descendant_ids()))
+    return getattr(user, cache_key)
+
+
 def scope_matches(user, workorder, scope):
     if scope in {None, "none"}:
         return False
@@ -74,6 +85,8 @@ def scope_matches(user, workorder, scope):
         return workorder.assignee_id in {None, user.id}
     if scope == "assigned_or_unassigned_or_authored":
         return workorder.assignee_id in {None, user.id} or workorder.author_id == user.id
+    if scope == "department_branch":
+        return workorder.department_id in user_department_branch_ids(user)
     return False
 
 
@@ -128,6 +141,8 @@ def can_create(user) -> bool:
 
 
 def can_edit(user, workorder: WorkOrder) -> bool:
+    if not can_view(user, workorder):
+        return False
     return any(scope_matches(user, workorder, rule.get("edit_scope")) for rule in active_role_rules(user))
 
 
@@ -140,21 +155,29 @@ def can_assign(user, workorder: WorkOrder) -> bool:
 
 
 def can_comment(user, workorder: WorkOrder) -> bool:
+    if not can_view(user, workorder):
+        return False
     return any(scope_matches(user, workorder, rule.get("comment_scope")) for rule in active_role_rules(user))
 
 
 def can_upload_attachment(user, workorder: WorkOrder) -> bool:
+    if not can_view(user, workorder):
+        return False
     return any(scope_matches(user, workorder, rule.get("upload_attachment_scope")) for rule in active_role_rules(user))
 
 
 def can_confirm_closure(user, workorder: WorkOrder) -> bool:
     if workorder.status != WorkOrderStatus.RESOLVED:
         return False
+    if not can_view(user, workorder):
+        return False
     return any(scope_matches(user, workorder, rule.get("confirm_closure_scope")) for rule in active_role_rules(user))
 
 
 def can_rate(user, workorder: WorkOrder) -> bool:
     if workorder.status != WorkOrderStatus.CLOSED:
+        return False
+    if not can_view(user, workorder):
         return False
     return any(scope_matches(user, workorder, rule.get("rate_scope")) for rule in active_role_rules(user))
 

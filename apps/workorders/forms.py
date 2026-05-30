@@ -11,7 +11,11 @@ from .models import (
     WorkOrderAttachment,
     WorkOrderComment,
 )
-from .selectors import visible_boards_queryset
+from .selectors import (
+    visible_boards_queryset,
+    visible_departments_queryset,
+    visible_devices_queryset,
+)
 
 
 class DepartmentChoiceField(forms.ModelChoiceField):
@@ -44,6 +48,8 @@ class WorkOrderForm(forms.ModelForm):
         self.fields["device"].required = False
         if user:
             self.fields["board"].queryset = visible_boards_queryset(user)
+            self.fields["department"].queryset = visible_departments_queryset(user)
+            self.fields["device"].queryset = visible_devices_queryset(user)
             # If only one board is visible, set it as initial
             if self.fields["board"].queryset.count() == 1:
                 self.fields["board"].initial = self.fields["board"].queryset.first()
@@ -74,6 +80,8 @@ class WorkOrderUpdateForm(forms.ModelForm):
         self.fields["device"].required = False
         if user:
             self.fields["board"].queryset = visible_boards_queryset(user)
+            self.fields["department"].queryset = visible_departments_queryset(user)
+            self.fields["device"].queryset = visible_devices_queryset(user)
 
 
 class WorkOrderCommentForm(forms.ModelForm):

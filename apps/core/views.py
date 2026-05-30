@@ -100,6 +100,7 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
         ]
         context["view_scopes"] = [
             ("all", "Все заявки"),
+            ("department_branch", "Ветка своего подразделения"),
             ("assigned_or_unassigned_or_authored", "Свои + Неназначенные"),
             ("authored", "Только свои"),
             ("none", "Нет доступа"),

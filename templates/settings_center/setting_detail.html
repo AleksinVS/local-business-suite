@@ -8,6 +8,7 @@
     <div>
       <p class="eyebrow">{{ descriptor.domain_label }} / {{ descriptor.section }}</p>
       <h1>{{ descriptor.title }}</h1>
+      <p class="setting-code-line"><code>{{ descriptor.setting_id }}</code></p>
       <p class="description">{{ descriptor.description }}</p>
     </div>
     <div class="header-actions">
@@ -27,6 +28,12 @@
       <div class="structured-setting-actions">
         <a class="button" href="{% url 'settings_center:workflow_transitions' %}">Открыть матрицу переходов</a>
         <span class="muted">Удобный режим для настройки переходов без ручного JSON.</span>
+      </div>
+    {% endif %}
+    {% if is_status_color_palette %}
+      <div class="structured-setting-actions">
+        <a class="button" href="{% url 'settings_center:workorder_status_colors' %}">Открыть палитру</a>
+        <span class="muted">Удобный режим для настройки цветов без ручного JSON.</span>
       </div>
     {% endif %}
     <form method="post" class="settings-form">
@@ -63,6 +70,7 @@
 
 <style>
   .settings-form textarea { width: 100%; min-height: 460px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9rem; }
+  .setting-code-line { margin: 0.25rem 0 0; color: var(--text-muted); overflow-wrap: anywhere; }
   .structured-setting-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .checkbox-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
   .json-preview { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow: auto; }

@@ -14,6 +14,12 @@ User = get_user_model()
 DEMO_PASSWORD = "HospitalDemo-2026!"
 DEMO_EMAIL_DOMAIN = "demo.local"
 DEMO_MARKER = "[hospital-demo]"
+DEFAULT_COLUMNS = [
+    ("new", "Новые", 10, ["new"]),
+    ("in_progress", "В работе", 20, ["accepted", "in_progress", "on_hold"]),
+    ("done", "Выполнены", 30, ["resolved"]),
+    ("archive", "Архив", 40, ["closed", "cancelled"]),
+]
 
 
 class Command(BaseCommand):
@@ -27,6 +33,24 @@ class Command(BaseCommand):
             defaults={"title": "Основная доска"},
         )
         main_board.allowed_groups.set(groups.values())
+        backlog_board, _ = Board.objects.get_or_create(
+            slug="backlog",
+            defaults={"title": "Техподдержка"},
+        )
+        backlog_board.title = "Техподдержка"
+        backlog_board.save(update_fields=["title"])
+        backlog_board.allowed_groups.set(groups.values())
+
+        for board in (main_board, backlog_board):
+            for code, title, position, statuses in DEFAULT_COLUMNS:
+                board.columns.update_or_create(
+                    code=code,
+                    defaults={
+                        "title": title,
+                        "position": position,
+                        "statuses": statuses,
+                    },
+                )
 
         departments = {}
 

@@ -7,6 +7,7 @@
   data-parent-id="{{ row.parent_id }}"
   data-has-children="{% if row.has_children %}true{% else %}false{% endif %}"
   data-node-type="{{ row.node_type }}"
+  {% if row.node_type == "workorder" %}data-status="{{ row.workorder.status }}"{% endif %}
   {% if row.has_children %}aria-expanded="true"{% endif %}
   aria-level="{{ row.aria_level }}"
   {% if row.node_type == "workorder" %}
@@ -32,12 +33,14 @@
       {% else %}
         <span class="tree-toggle-placeholder" aria-hidden="true"></span>
       {% endif %}
-      <span class="tree-node-icon" aria-hidden="true">
-        {% if row.node_type == "organization" %}▦{% elif row.node_type == "department" %}▣{% elif row.node_type == "device" %}◉{% else %}•{% endif %}
-      </span>
     </div>
     <div class="tree-node-copy">
-      <div class="tree-node-title">{{ row.label }}</div>
+      <div class="tree-node-title">
+        <span class="tree-node-icon" aria-hidden="true">
+          {% if row.node_type == "organization" %}▦{% elif row.node_type == "department" %}▣{% elif row.node_type == "device" %}◉{% else %}•{% endif %}
+        </span>
+        <span class="tree-node-title-text">{{ row.label }}</span>
+      </div>
       {% if row.subtitle %}
         <div class="tree-node-subtitle">{{ row.subtitle|truncatechars:130 }}</div>
       {% endif %}

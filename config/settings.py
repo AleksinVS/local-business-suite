@@ -33,6 +33,7 @@ from apps.core.json_utils import (
     validate_memory_trust_policy_payload,
     validate_role_rules_payload,
     validate_task_brief_payload,
+    validate_workorder_status_colors_payload,
     validate_workflow_rules_payload,
 )
 
@@ -326,6 +327,7 @@ def get_contract_path(filename, env_var, sub_dir=None):
 
 LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUSINESS_ROLE_RULES_FILE")
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
+LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE = get_contract_path("workorder_status_colors.json", "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE")
 LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", sub_dir="integrations")
 LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = get_contract_path("datasets.json", "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", sub_dir="analytics") # Note: analytics in data/analytics/
 LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE = get_contract_path("sources.json", "LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE", sub_dir="analytics")
@@ -492,6 +494,12 @@ try:
     LOCAL_BUSINESS_ROLE_RULES = load_json_file(LOCAL_BUSINESS_ROLE_RULES_FILE)
     validate_role_rules_payload(
         LOCAL_BUSINESS_ROLE_RULES,
+        workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
+    )
+
+    LOCAL_BUSINESS_WORKORDER_STATUS_COLORS = load_json_file(LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE)
+    validate_workorder_status_colors_payload(
+        LOCAL_BUSINESS_WORKORDER_STATUS_COLORS,
         workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
     )
 

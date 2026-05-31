@@ -353,9 +353,59 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.context["current_view"], "tree")
         self.assertContains(response, 'id="workorders-tree"')
         self.assertContains(response, 'role="treegrid"')
+        self.assertContains(response, 'data-node-type="workorder"')
+        self.assertContains(response, 'data-status="new"')
+        self.assertContains(response, "--workorder-status-new")
         self.assertContains(response, self.workorder.title)
         self.assertContains(response, f'hx-get="{reverse("workorders:detail", args=[self.workorder.pk])}"')
         self.assertContains(response, 'hx-target="#detail-panel-content"')
+
+    def test_tree_structure_rows_do_not_render_helper_subtitles(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("workorders:board"), {"view": "tree"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Структура заявок по подразделениям и медизделиям")
+        self.assertNotContains(response, 'tree-node-subtitle">Подразделение')
+        self.assertNotContains(response, 'tree-node-subtitle">Отделение')
+
+    def test_board_filters_accept_multiple_values(self):
+        accepted = WorkOrder.objects.create(
+            title="Принятая заявка",
+            description="Для проверки множественного фильтра.",
+            department=self.sub_department,
+            author=self.customer,
+            board=self.board,
+            status=WorkOrderStatus.ACCEPTED,
+        )
+        resolved = WorkOrder.objects.create(
+            title="Выполненная заявка",
+            description="Не должна попасть в выбранные статусы.",
+            department=self.sub_department,
+            author=self.customer,
+            board=self.board,
+            status=WorkOrderStatus.RESOLVED,
+        )
+
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {"status": [WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertContains(response, accepted.title)
+        self.assertNotContains(response, resolved.title)
+
+    def test_backlog_board_is_created_for_portal_feedback(self):
+        board = Board.objects.get(slug="backlog")
+
+        self.assertEqual(board.title, "Техподдержка")
+        self.assertEqual(
+            list(board.columns.order_by("position").values_list("code", flat=True)),
+            ["new", "in_progress", "done", "archive"],
+        )
 
     def test_tree_view_htmx_renders_workorders_view_partial(self):
         self.client.force_login(self.manager)

@@ -13,7 +13,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}">
+<div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}" style="{{ workorder_status_color_style }}">
 <div class="toolbar">
   <form method="get" class="filters">
     <input type="hidden" name="view" value="{{ current_view }}">
@@ -47,72 +47,141 @@
 
     <div class="input-group">
       <label for="boardDept">Подразделение</label>
-      <select
+      <details
         id="boardDept"
-        name="department"
-
+        class="multi-filter-dropdown"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
       >
-        <option value="">Все</option>
+        <summary>
+          <span>Все</span>
+          {% if filters.department_values %}
+            <strong>{{ filters.department_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
         {% for department in departments %}
-          <option value="{{ department.id }}" {% if filters.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.indented_name }}</option>
+          <label class="multi-filter-option" for="boardDept_{{ department.id }}">
+            <input
+              type="checkbox"
+              id="boardDept_{{ department.id }}"
+              name="department"
+              value="{{ department.id }}"
+              {% if department.id|stringformat:"s" in filters.department_values %}checked{% endif %}
+            >
+            <span>{{ department.indented_name }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных подразделений</span>
         {% endfor %}
-      </select>
+        </div>
+      </details>
     </div>
     <div class="input-group">
       <label for="boardStatus">Статус</label>
-      <select
+      <details
         id="boardStatus"
-        name="status"
+        class="multi-filter-dropdown"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
       >
-        <option value="">Все</option>
+        <summary>
+          <span>Все</span>
+          {% if filters.status_values %}
+            <strong>{{ filters.status_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
         {% for value, label in status_choices %}
-          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+          <label class="multi-filter-option" for="boardStatus_{{ value }}">
+            <input
+              type="checkbox"
+              id="boardStatus_{{ value }}"
+              name="status"
+              value="{{ value }}"
+              {% if value in filters.status_values %}checked{% endif %}
+            >
+            <span>{{ label }}</span>
+          </label>
         {% endfor %}
-      </select>
+        </div>
+      </details>
     </div>
     <div class="input-group">
       <label for="boardAssignee">Исполнитель</label>
-      <select
+      <details
         id="boardAssignee"
-        name="assignee"
+        class="multi-filter-dropdown"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
       >
-        <option value="">Все</option>
+        <summary>
+          <span>Все</span>
+          {% if filters.assignee_values %}
+            <strong>{{ filters.assignee_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
         {% for assignee in assignees %}
-          <option value="{{ assignee.id }}" {% if filters.assignee == assignee.id|stringformat:"s" %}selected{% endif %}>{{ assignee.get_full_name|default:assignee.username }}</option>
+          <label class="multi-filter-option" for="boardAssignee_{{ assignee.id }}">
+            <input
+              type="checkbox"
+              id="boardAssignee_{{ assignee.id }}"
+              name="assignee"
+              value="{{ assignee.id }}"
+              {% if assignee.id|stringformat:"s" in filters.assignee_values %}checked{% endif %}
+            >
+            <span>{{ assignee.get_full_name|default:assignee.username }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных исполнителей</span>
         {% endfor %}
-      </select>
+        </div>
+      </details>
     </div>
     <div class="input-group">
       <label for="boardDevice">Изделие</label>
-      <select
+      <details
         id="boardDevice"
-        name="device"
+        class="multi-filter-dropdown"
         hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
         hx-target="#workorders-view"
         hx-swap="outerHTML"
         hx-trigger="change"
         hx-include="closest form"
       >
-        <option value="">Все</option>
+        <summary>
+          <span>Все</span>
+          {% if filters.device_values %}
+            <strong>{{ filters.device_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
         {% for device in devices %}
-          <option value="{{ device.id }}" {% if filters.device == device.id|stringformat:"s" %}selected{% endif %}>{{ device.name }}</option>
+          <label class="multi-filter-option" for="boardDevice_{{ device.id }}">
+            <input
+              type="checkbox"
+              id="boardDevice_{{ device.id }}"
+              name="device"
+              value="{{ device.id }}"
+              {% if device.id|stringformat:"s" in filters.device_values %}checked{% endif %}
+            >
+            <span>{{ device.name }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных изделий</span>
         {% endfor %}
-      </select>
+        </div>
+      </details>
     </div>
     {% include "workorders/partials/workorder_view_switcher.html" %}
   </form>
@@ -195,6 +264,17 @@
     });
 
     restoreColumnStates();
+
+    document.addEventListener("click", function (event) {
+      const link = event.target.closest("[data-workorder-view-target]");
+      if (!link) return;
+      const form = link.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      params.set("view", link.dataset.workorderViewTarget);
+      window.location.href = `${window.location.pathname}?${params.toString()}`;
+    });
 
     (function () {
       function csrfToken() {

@@ -16,5 +16,6 @@
   "memory_claims_policy.schema.json": "Schema для политики claims/beliefs памяти",
   "memory_retrieval_budget.schema.json": "Schema для бюджета retrieval orchestration памяти",
   "memory_ingestion_profiles.schema.json": "Schema для профилей ingestion-коннектора памяти",
-  "memory_graph_schema.schema.json": "Schema для единой схемы графа памяти"
+  "memory_graph_schema.schema.json": "Schema для единой схемы графа памяти",
+  "workorder_status_colors.schema.json": "Schema для палитры цветов статусов заявок"
 }

@@ -112,7 +112,6 @@ def build_workorder_tree(queryset, *, can_create_workorder=False):
         level=0,
         node_type="organization",
         label="Организация",
-        subtitle="Структура заявок по подразделениям и медизделиям",
         sort_label="",
     )
 
@@ -129,7 +128,6 @@ def build_workorder_tree(queryset, *, can_create_workorder=False):
                 level=depth,
                 node_type="department",
                 label=department.name,
-                subtitle="Подразделение" if depth == 1 else "Отделение",
                 department_id=department_id,
                 sort_label=department.name,
             )

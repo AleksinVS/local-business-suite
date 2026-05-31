@@ -3,6 +3,7 @@
   "dashboard.html": "Дашборд зарегистрированных settings descriptors и audit",
   "setting_detail.html": "Страница просмотра/редактирования runtime contract descriptor",
   "workflow_transitions.html": "Матрица настройки переходов статусов заявок через workflow_rules contract",
+  "workorder_status_colors.html": "Форма настройки цветов статусов заявок через runtime contract",
   "env_status.html": "Статус bootstrap .env настроек",
   "env_proposal.html": "Форма создания .env proposal в data/",
   "user_list.html": "Локальное управление пользователями портала",

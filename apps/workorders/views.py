@@ -2,6 +2,7 @@ from collections import OrderedDict
 import json
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
@@ -104,6 +105,26 @@ def page_context_json(payload):
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _filter_values(request, key):
+    return [value for value in request.GET.getlist(key) if value]
+
+
+def _workorder_status_color_style():
+    statuses = getattr(settings, "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS", {}).get(
+        "statuses",
+        {},
+    )
+    declarations = []
+    for status, config in statuses.items():
+        color = config.get("color")
+        background = config.get("background")
+        if color:
+            declarations.append(f"--workorder-status-{status}: {color}")
+        if background:
+            declarations.append(f"--workorder-status-{status}-bg: {background}")
+    return "; ".join(declarations)
+
+
 def _requested_view_mode(request):
     view_mode = request.GET.get("view", VIEW_BOARD).strip()
     if view_mode not in VIEW_MODES:
@@ -178,10 +199,10 @@ def workorders_board_page_context(request, board, view_mode=VIEW_BOARD):
         "filters": {
             "board": board.slug if board else "",
             "q": request.GET.get("q", ""),
-            "department": request.GET.get("department", ""),
-            "status": request.GET.get("status", ""),
-            "assignee": request.GET.get("assignee", ""),
-            "device": request.GET.get("device", ""),
+            "department": _filter_values(request, "department"),
+            "status": _filter_values(request, "status"),
+            "assignee": _filter_values(request, "assignee"),
+            "device": _filter_values(request, "device"),
         },
         "ui_state": {"focused_region": "tree" if view_mode == VIEW_TREE else "board"},
     }
@@ -230,10 +251,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             attachment_count=Count("attachments", distinct=True),
         )
         q = self.request.GET.get("q", "").strip()
-        department = self.request.GET.get("department", "").strip()
-        status_value = self.request.GET.get("status", "").strip()
-        assignee = self.request.GET.get("assignee", "").strip()
-        device = self.request.GET.get("device", "").strip()
+        departments = _filter_values(self.request, "department")
+        status_values = _filter_values(self.request, "status")
+        assignees = _filter_values(self.request, "assignee")
+        devices = _filter_values(self.request, "device")
 
         if q:
             matched_department_ids = _department_search_ids(q)
@@ -250,20 +271,18 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             if matched_department_ids:
                 search_filter |= Q(department_id__in=matched_department_ids)
             queryset = queryset.filter(search_filter)
-        if department:
-            selected_department = Department.objects.filter(pk=department).first()
-            if selected_department:
-                queryset = queryset.filter(
-                    department_id__in=selected_department.descendant_ids()
-                )
-            else:
-                queryset = queryset.none()
-        if status_value:
-            queryset = queryset.filter(status=status_value)
-        if assignee:
-            queryset = queryset.filter(assignee__id=assignee)
-        if device:
-            queryset = queryset.filter(device__id=device)
+        if departments:
+            selected_departments = Department.objects.filter(pk__in=departments)
+            department_ids = set()
+            for selected_department in selected_departments:
+                department_ids.update(selected_department.descendant_ids())
+            queryset = queryset.filter(department_id__in=department_ids) if department_ids else queryset.none()
+        if status_values:
+            queryset = queryset.filter(status__in=status_values)
+        if assignees:
+            queryset = queryset.filter(assignee__id__in=assignees)
+        if devices:
+            queryset = queryset.filter(device__id__in=devices)
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -318,6 +337,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         query_for_tree["view"] = VIEW_TREE
         context["current_board"] = board
         context["current_view"] = view_mode
+        context["workorder_status_color_style"] = _workorder_status_color_style()
         context["view_urls"] = {
             VIEW_BOARD: f"{self.request.path}?{query_for_board.urlencode()}",
             VIEW_TREE: f"{self.request.path}?{query_for_tree.urlencode()}",
@@ -345,10 +365,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         context["filters"] = {
             "view": view_mode,
             "q": self.request.GET.get("q", ""),
-            "department": self.request.GET.get("department", ""),
-            "status": self.request.GET.get("status", ""),
-            "assignee": self.request.GET.get("assignee", ""),
-            "device": self.request.GET.get("device", ""),
+            "department_values": _filter_values(self.request, "department"),
+            "status_values": _filter_values(self.request, "status"),
+            "assignee_values": _filter_values(self.request, "assignee"),
+            "device_values": _filter_values(self.request, "device"),
         }
         context["can_manage_board_columns"] = can_manage_board_columns(
             self.request.user

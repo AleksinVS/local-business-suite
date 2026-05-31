@@ -27,6 +27,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         self.assertIn("core.contract.role_rules", setting_ids)
         self.assertIn("accounts.user.ad_identity_link", setting_ids)
+        self.assertIn("workorders.contract.status_colors", setting_ids)
         self.assertIn("ai.contract.tools", setting_ids)
         self.assertIn("memory.source.acl_mode", setting_ids)
         self.assertIn("settings_center.env.OPENAI_API_KEY", setting_ids)
@@ -42,6 +43,34 @@ class SettingsCenterRegistryTests(TestCase):
         response = self.client.get(reverse("settings_center:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Центр настроек")
+        self.assertContains(response, "Режим входа Django")
+        self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
+
+    def test_setting_detail_shows_russian_title_and_english_identifier(self):
+        staff = User.objects.create_user(username="settings-detail-staff", password="pass", is_staff=True)
+        self.client.force_login(staff)
+
+        response = self.client.get(
+            reverse(
+                "settings_center:setting_detail",
+                kwargs={"setting_id": "settings_center.env.DJANGO_AUTH_MODE"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Режим входа Django")
+        self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
+
+    def test_env_status_shows_russian_title_and_english_keys(self):
+        staff = User.objects.create_user(username="settings-env-staff", password="pass", is_staff=True)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("settings_center:env_status"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Режим входа Django")
+        self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
+        self.assertContains(response, "DJANGO_AUTH_MODE")
 
     def test_help_ask_route_uses_setting_context(self):
         staff = User.objects.create_user(username="settings-help-staff", password="pass", is_staff=True)
@@ -118,7 +147,32 @@ class SettingsCenterContractTests(TestCase):
                 self.assertEqual(set(saved["transitions"]["accepted"]), {"new", "closed"})
                 self.assertEqual(set(saved["transitions"]["closed"]), {"new", "accepted"})
                 self.assertEqual(settings.LOCAL_BUSINESS_WORKFLOW_RULES, saved)
-                self.assertEqual(SettingsChange.objects.filter(setting_id="core.contract.workflow_rules").count(), 1)
+            self.assertEqual(SettingsChange.objects.filter(setting_id="core.contract.workflow_rules").count(), 1)
+
+    def test_workorder_status_color_palette_view_updates_contract(self):
+        actor = User.objects.create_user(username="color-admin", password="pass", is_staff=True)
+        payload = load_json_file("contracts/workorder_status_colors.json")
+        with TemporaryDirectory() as tmpdir:
+            color_file = Path(tmpdir) / "workorder_status_colors.json"
+            color_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with override_settings(
+                LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE=color_file,
+                LOCAL_BUSINESS_WORKORDER_STATUS_COLORS=payload,
+            ):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("settings_center:workorder_status_colors"))
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Цвета статусов заявок")
+
+                post_data = {"confirm": "on"}
+                for status, config in payload["statuses"].items():
+                    post_data[f"color__{status}"] = "#111111" if status == "new" else config["color"]
+                    post_data[f"background__{status}"] = config["background"]
+
+                response = self.client.post(reverse("settings_center:workorder_status_colors"), post_data)
+
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(load_json_file(color_file)["statuses"]["new"]["color"], "#111111")
 
 
 class SettingsCenterEnvAndHelpTests(TestCase):

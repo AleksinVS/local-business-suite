@@ -76,6 +76,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         context["is_contract"] = self.descriptor.storage_kind == "runtime_contract"
         context["can_edit"] = self.descriptor.is_editable
         context["is_workflow_transition_matrix"] = self.descriptor.widget == "workflow_transition_matrix"
+        context["is_status_color_palette"] = self.descriptor.widget == "status_color_palette"
         return context
 
     def form_valid(self, form):
@@ -207,6 +208,69 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
                     if target != source and post.get(f"transition__{source}__{target}") == "on"
                 ]
         return transitions
+
+
+class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
+    template_name = "settings_center/workorder_status_colors.html"
+    setting_id = "workorders.contract.status_colors"
+
+    def get_descriptor(self):
+        return get_registry().get(self.setting_id)
+
+    def get_payload(self):
+        return read_contract_value(self.get_descriptor())
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        descriptor = self.get_descriptor()
+        payload = self.get_payload()
+        rows = [
+            {
+                "code": code,
+                "label": config.get("label", code),
+                "color": config.get("color", "#64748b"),
+                "background": config.get("background", "#f8fafc"),
+            }
+            for code, config in payload.get("statuses", {}).items()
+        ]
+        context.update(
+            {
+                "descriptor": descriptor,
+                "rows": rows,
+                "raw_payload": pretty_json(payload),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        descriptor = self.get_descriptor()
+        before = self.get_payload()
+        statuses = {}
+        for code, config in before.get("statuses", {}).items():
+            statuses[code] = {
+                "label": config.get("label", code),
+                "color": request.POST.get(f"color__{code}", config.get("color", "#64748b")),
+                "background": request.POST.get(
+                    f"background__{code}",
+                    config.get("background", "#f8fafc"),
+                ),
+            }
+        after = {
+            "$schema": before.get("$schema", "./schemas/workorder_status_colors.schema.json"),
+            "statuses": statuses,
+        }
+        try:
+            change = apply_contract_payload(
+                actor=request.user,
+                setting_id=descriptor.setting_id,
+                raw_payload=json.dumps(after, ensure_ascii=False),
+                confirmed=request.POST.get("confirm") == "on",
+            )
+        except ValidationError as exc:
+            messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
+            return self.render_to_response(self.get_context_data())
+        messages.success(request, f"Цвета статусов сохранены. Аудит #{change.pk}.")
+        return redirect("settings_center:workorder_status_colors")
 
 
 class EnvStatusView(SettingsManagementMixin, TemplateView):

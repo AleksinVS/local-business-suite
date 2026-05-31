@@ -3,6 +3,7 @@
   <div class="segmented-control">
     <a
       href="{{ view_urls.board }}"
+      data-workorder-view-target="board"
       class="segmented-option {% if current_view == 'board' %}active{% endif %}"
       aria-current="{% if current_view == 'board' %}page{% else %}false{% endif %}"
     >
@@ -10,6 +11,7 @@
     </a>
     <a
       href="{{ view_urls.tree }}"
+      data-workorder-view-target="tree"
       class="segmented-option {% if current_view == 'tree' %}active{% endif %}"
       aria-current="{% if current_view == 'tree' %}page{% else %}false{% endif %}"
     >

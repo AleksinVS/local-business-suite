@@ -30,8 +30,9 @@ test.describe("workorder tree view", () => {
     await expect(page.locator("#detail-panel.active")).toBeVisible();
     await expect(page.locator("#detail-panel-content [data-ai-context]")).toBeVisible();
 
-    const context = await page.evaluate(() => window.LocalBusinessPageContext?.getCurrent());
-    expect(context?.envelope?.selection?.object_type).toBe("workorder");
+    await expect
+      .poll(() => page.evaluate(() => window.LocalBusinessPageContext?.getCurrent()?.envelope?.selection?.object_type))
+      .toBe("workorder");
   });
 
   test("supports keyboard expand and collapse", async ({ page }) => {
@@ -45,6 +46,27 @@ test.describe("workorder tree view", () => {
     await expect(expandable).toHaveAttribute("aria-expanded", "false");
     await page.keyboard.press("ArrowRight");
     await expect(expandable).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("keeps active filters when switching between board and tree", async ({ page }) => {
+    await login(page);
+    await page.goto("/workorders/?view=board");
+
+    await page.locator("#boardStatus summary").click();
+    await page.locator("#boardStatus_new").check();
+    await page.locator("#boardStatus_accepted").check();
+    await page.getByRole("link", { name: "Дерево" }).click();
+
+    await expect(page).toHaveURL(/view=tree/);
+    const url = new URL(page.url());
+    expect(url.searchParams.getAll("status")).toEqual(["new", "accepted"]);
+    await expect(page.locator("#workorders-tree")).toBeVisible();
+
+    await page.getByRole("link", { name: "Доска" }).click();
+
+    await expect(page).toHaveURL(/view=board/);
+    const boardUrl = new URL(page.url());
+    expect(boardUrl.searchParams.getAll("status")).toEqual(["new", "accepted"]);
   });
 
   test("collapses branches recursively from the toggle button", async ({ page }) => {

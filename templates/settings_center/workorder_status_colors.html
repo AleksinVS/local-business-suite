@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Цвета статусов заявок{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">{{ descriptor.domain_label }} / {{ descriptor.section }}</p>
+      <h1>{{ descriptor.title }}</h1>
+      <p class="setting-code-line"><code>{{ descriptor.setting_id }}</code></p>
+      <p class="description">{{ descriptor.description }}</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:setting_detail' descriptor.setting_id %}">JSON</a>
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+    </div>
+  </div>
+
+  <form method="post" class="settings-form status-color-form">
+    {% csrf_token %}
+    <div class="status-color-grid">
+      {% for row in rows %}
+        <div class="status-color-row">
+          <div class="status-color-preview" style="--preview-color: {{ row.color }}; --preview-bg: {{ row.background }};">
+            <span class="badge" style="--status-color: {{ row.color }};">{{ row.label }}</span>
+            <span class="status-color-line"></span>
+          </div>
+          <div>
+            <strong>{{ row.label }}</strong>
+            <code>{{ row.code }}</code>
+          </div>
+          <label>
+            Основной
+            <input type="color" name="color__{{ row.code }}" value="{{ row.color }}">
+          </label>
+          <label>
+            Заливка
+            <input type="color" name="background__{{ row.code }}" value="{{ row.background }}">
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+    <label class="checkbox-row">
+      <input type="checkbox" name="confirm">
+      Подтверждаю применение изменения
+    </label>
+    <div class="table-actions">
+      <button class="button" type="submit">Сохранить палитру</button>
+    </div>
+  </form>
+</section>
+
+<style>
+  .setting-code-line { margin: 0.25rem 0 0; color: var(--text-muted); overflow-wrap: anywhere; }
+  .status-color-form { display: grid; gap: 1rem; }
+  .status-color-grid { display: grid; gap: 0.75rem; }
+  .status-color-row {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.2fr) minmax(150px, 0.8fr) auto auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .status-color-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 42px;
+    padding: 0.45rem 0.6rem;
+    border-left: 4px solid var(--preview-color);
+    background: var(--preview-bg);
+  }
+  .status-color-line { flex: 1; height: 2px; background: var(--preview-color); opacity: 0.25; }
+  .status-color-row code { display: block; margin-top: 0.15rem; color: var(--text-muted); }
+  .status-color-row label { display: grid; gap: 0.25rem; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
+  .status-color-row input[type="color"] { width: 64px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+  .checkbox-row { display: flex; gap: 0.5rem; align-items: center; }
+  @media (max-width: 840px) {
+    .status-color-row { grid-template-columns: 1fr 1fr; }
+    .status-color-preview { grid-column: 1 / -1; }
+  }
+</style>
+{% endblock %}

@@ -19,6 +19,7 @@ DOMAIN_LABELS = {
     "memory": "Память",
     "ai": "ИИ",
     "accounts": "Учетные записи",
+    "workorders": "Заявки",
     "settings_center": "Центр настроек",
 }
 

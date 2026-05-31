@@ -19,6 +19,7 @@ from apps.core.json_utils import (
     validate_memory_routing_payload,
     validate_memory_sources_payload,
     validate_role_rules_payload,
+    validate_workorder_status_colors_payload,
     validate_workflow_rules_payload,
 )
 
@@ -29,6 +30,10 @@ from .services import build_masked_diff, record_settings_change
 
 VALIDATORS = {
     "validate_role_rules_payload": lambda payload: validate_role_rules_payload(
+        payload,
+        workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
+    ),
+    "validate_workorder_status_colors_payload": lambda payload: validate_workorder_status_colors_payload(
         payload,
         workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
     ),

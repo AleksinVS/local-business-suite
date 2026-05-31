@@ -7,6 +7,7 @@ app_name = "settings_center"
 urlpatterns = [
     path("", views.SettingsDashboardView.as_view(), name="dashboard"),
     path("workflow/transitions/", views.WorkflowTransitionMatrixView.as_view(), name="workflow_transitions"),
+    path("workorders/status-colors/", views.WorkOrderStatusColorSettingsView.as_view(), name="workorder_status_colors"),
     path("settings/<path:setting_id>/", views.SettingDetailView.as_view(), name="setting_detail"),
     path("env/", views.EnvStatusView.as_view(), name="env_status"),
     path("env/propose/", views.EnvProposalView.as_view(), name="env_propose"),

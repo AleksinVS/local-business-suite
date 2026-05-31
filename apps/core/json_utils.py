@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from django.core.exceptions import ValidationError
@@ -805,6 +806,53 @@ def validate_workflow_rules_payload(payload):
                 + ", ".join(sorted(invalid_targets))
                 + "."
             )
+
+
+def validate_workorder_status_colors_payload(payload, workflow_payload=None):
+    _ensure_non_empty_mapping(payload, "Конфигурация цветов статусов заявок")
+    statuses = payload.get("statuses")
+    if not isinstance(statuses, dict) or not statuses:
+        raise ValidationError("Поле statuses должно быть непустым JSON-объектом.")
+
+    known_statuses = set()
+    if workflow_payload:
+        known_statuses = set(workflow_payload.get("statuses", []))
+        missing = known_statuses - set(statuses.keys())
+        if missing:
+            raise ValidationError(
+                "Для некоторых статусов не заданы цвета: "
+                + ", ".join(sorted(missing))
+                + "."
+            )
+        extra = set(statuses.keys()) - known_statuses
+        if extra:
+            raise ValidationError(
+                "В цветах описаны неизвестные статусы: "
+                + ", ".join(sorted(extra))
+                + "."
+            )
+
+    for status, config in statuses.items():
+        if not isinstance(status, str) or not status:
+            raise ValidationError("Код статуса должен быть непустой строкой.")
+        if not isinstance(config, dict):
+            raise ValidationError(f"Настройка статуса '{status}' должна быть JSON-объектом.")
+        missing_keys = {"label", "color", "background"} - set(config.keys())
+        if missing_keys:
+            raise ValidationError(
+                f"Настройка статуса '{status}' не содержит поля: "
+                + ", ".join(sorted(missing_keys))
+                + "."
+            )
+        for key in ("label",):
+            if not isinstance(config.get(key), str) or not config.get(key).strip():
+                raise ValidationError(f"Поле {key} у статуса '{status}' должно быть непустой строкой.")
+        for key in ("color", "background"):
+            value = config.get(key)
+            if not isinstance(value, str) or not re.match(r"^#[0-9a-fA-F]{6}$", value):
+                raise ValidationError(
+                    f"Поле {key} у статуса '{status}' должно быть цветом HEX вида #RRGGBB."
+                )
 
 
 def validate_integration_registry_payload(payload):

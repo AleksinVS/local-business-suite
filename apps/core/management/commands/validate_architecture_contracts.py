@@ -36,6 +36,7 @@ from apps.core.json_utils import (
     validate_memory_trust_policy_payload,
     validate_role_rules_payload,
     validate_task_brief_payload,
+    validate_workorder_status_colors_payload,
     validate_workflow_rules_payload,
 )
 from services.agent_runtime.task_types import STATUS_ALIASES
@@ -55,6 +56,10 @@ class Command(BaseCommand):
         validate_workflow_rules_payload(workflow_payload)
         role_payload = load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE)
         validate_role_rules_payload(role_payload, workflow_payload=workflow_payload)
+        validate_workorder_status_colors_payload(
+            load_json_file(settings.LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE),
+            workflow_payload=workflow_payload,
+        )
         validate_integration_registry_payload(load_json_file(settings.LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE))
         validate_dataset_registry_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE))
         validate_analytics_sources_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE))

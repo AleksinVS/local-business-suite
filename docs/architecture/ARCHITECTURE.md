@@ -20,6 +20,8 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[AI Architecture](../../ai/chat_agent/ARCHITECTURE.md)**: Technical details of the AI agent, tool gateway, and confirmation flows.
 - **[Integrations](INTEGRATIONS.md)**: Strategy for connecting with legacy enterprise systems (Bridges).
 - **[Analytics Model](ANALYTICS_MODEL.md)**: Design of the analytical layer (Parquet + DuckDB + Evidence).
+- **[Observability Baseline](OBSERVABILITY_BASELINE.md)**: Minimal p50/p95 metrics and local latency event reporting before performance or stack decisions.
+- **[Service Extraction Guide](SERVICE_EXTRACTION_GUIDE.md)**: Rules for safely extracting technical workers/services while keeping Django as the business source of truth.
 - **[Knowledge-driven Analytics Plan](KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md)**: Continuous business analytics from memory, email contents, documents, optional DMS and AI diagnostics.
 - **[Memory Service Plan](MEMORY_SERVICE_IMPLEMENTATION_PLAN.md)**: Implementation plan for the AI memory service.
 - **[Memory Ingestion and Bootstrapping Plan](MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md)**: Final plan for corporate document ingestion and graph schema bootstrapping.
@@ -46,3 +48,4 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0006: External system knowledge connectors](../adr/ADR-0006-external-system-knowledge-connectors.md)
 - [ADR-0008: Knowledge-driven business analytics](../adr/ADR-0008-knowledge-driven-business-analytics.md)
 - [ADR-0011: File-backed knowledge and unified search](../adr/ADR-0011-file-backed-knowledge-and-unified-search.md)
+- [ADR-0024: Service extraction readiness](../adr/ADR-0024-service-extraction-readiness.md)

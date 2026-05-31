@@ -180,6 +180,12 @@ python manage.py shell -c "from apps.ai.tool_definitions import get_tool_registr
 True
 ```
 
+Отчет по базовым latency-метрикам, если включен сбор `LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED=true`:
+
+```bash
+python manage.py performance_report
+```
+
 ## Развертывание
 
 Поддерживаемые варианты:
@@ -210,6 +216,8 @@ Runtime-данные не коммитятся:
 - `docs/architecture/POLICY_MODEL.md` — модель ролей и политик.
 - `docs/architecture/INTEGRATIONS.md` — стратегия интеграций.
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
+- `docs/architecture/OBSERVABILITY_BASELINE.md` — базовая наблюдаемость, p50/p95 и команда `performance_report`.
+- `docs/architecture/SERVICE_EXTRACTION_GUIDE.md` — правила безопасного выноса технических workers/services без смены основного стека.
 - `docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md` — непрерывная бизнес-аналитика из знаний, email, документов и DMS.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
@@ -218,6 +226,7 @@ Runtime-данные не коммитятся:
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — опросники для владельцев данных и профильных экспертов.
 - `docs/guides/TESTING_POLICY.md` — уровни тестов, матрица обязательных проверок и независимая проверка субагентом.
+- `docs/guides/WORKER_AND_QUEUE_OPERATIONS.md` — единые правила worker-команд, очередей, retry и idempotency.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.
 - `docs/deployment/DEPLOYMENT.md` — production deployment.
 - `docs/deployment/IIS_SSO.md` — IIS и Active Directory.

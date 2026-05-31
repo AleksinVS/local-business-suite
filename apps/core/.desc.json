@@ -8,6 +8,7 @@
   "debug_views.py": "Debug-представления (включаются в DEBUG=True)",
   "health_views.py": "Health-check endpoint (/health/)",
   "json_utils.py": "Утилиты валидации JSON-контрактов",
+  "performance.py": "Опциональный сбор latency-событий и расчет p50/p95 для базовой наблюдаемости",
   "source_adapters.py": "Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников",
   "right_panels.py": "Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре",
   "ai_skills.py": "Общий контракт AgentSkillProvider и registry модульных AI skills",
@@ -20,6 +21,7 @@
   "tests.py": "Тесты приложения",
   "management/commands/sync_ai_tool_registry.py": "Синхронизация реестра AI-инструментов",
   "management/commands/validate_architecture_contracts.py": "Валидация JSON-контрактов",
+  "management/commands/performance_report.py": "Отчет p50/p95 по latency-событиям из data/logs/performance_events.jsonl",
   "management/commands/generate_change_plan.py": "Генерация плана изменений",
   "management/commands/seed_hospital_demo.py": "Сидирование демо-данных больницы"
 }

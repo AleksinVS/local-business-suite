@@ -108,6 +108,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "apps.core.middleware.PathInfoDebugMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "apps.core.performance.PerformanceMetricsMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -191,6 +192,29 @@ LOGGING = {
         },
     },
 }
+
+LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED = os.environ.get(
+    "LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
+LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH = Path(
+    os.environ.get(
+        "LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH",
+        DATA_DIR / "logs" / "performance_events.jsonl",
+    )
+)
+LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE = float(
+    os.environ.get("LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE", "1.0")
+)
+if not 0 <= LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE <= 1:
+    raise ImproperlyConfigured("LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE must be between 0 and 1")
+LOCAL_BUSINESS_PERFORMANCE_METRICS_EXCLUDE_PREFIXES = tuple(
+    prefix.strip()
+    for prefix in os.environ.get(
+        "LOCAL_BUSINESS_PERFORMANCE_METRICS_EXCLUDE_PREFIXES",
+        "/static/,/media/,/favicon.",
+    ).split(",")
+    if prefix.strip()
+)
 
 DATABASES = {
     "default": {

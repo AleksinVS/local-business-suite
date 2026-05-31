@@ -116,6 +116,25 @@ GUNICORN_GRACEFUL_TIMEOUT=30
 
 `python manage.py validate_architecture_contracts` checks this relation. If `GUNICORN_TIMEOUT` is too low, deployment must be stopped before users see hanging AI chat streams.
 
+## Опциональный базовый замер производительности
+
+Для расследования задержек можно включить локальный сбор latency-событий. По умолчанию он выключен, чтобы не добавлять запись на диск на каждый HTTP-запрос.
+
+```env
+LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED=true
+LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH=data/logs/performance_events.jsonl
+LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE=1.0
+LOCAL_BUSINESS_PERFORMANCE_METRICS_EXCLUDE_PREFIXES=/static/,/media/,/favicon.
+```
+
+Отчет p50/p95:
+
+```bash
+python manage.py performance_report --group-by route_name --min-count 20
+```
+
+События не содержат полный URL, query string, тело запроса, prompt, `user_id`, значения форм или исходные документы. Операционные правила описаны в `docs/architecture/OBSERVABILITY_BASELINE.md`.
+
 ## AI chat error handling
 
 AI chat must fail visibly and audibly in production: the UI should never leave the assistant bubble in a permanent `печатает...` state.

@@ -7,7 +7,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 import apps.core.json_utils as json_utils
@@ -33,6 +33,11 @@ from apps.core.ai_skills import (
     get_agent_skill,
     register_agent_skill,
     registered_agent_skills,
+)
+from apps.core.performance import (
+    PerformanceMetricsMiddleware,
+    record_performance_event,
+    summarize_performance_events,
 )
 from apps.core.right_panels import (
     RightPanelDescriptor,
@@ -111,6 +116,75 @@ class DepartmentModelTests(TestCase):
 
         self.assertEqual(str(grandchild), "Стационар / Кардиология / Палата интенсивной терапии")
         self.assertEqual(set(root.descendant_ids()), {root.id, child.id, grandchild.id})
+
+
+class PerformanceMetricsTests(TestCase):
+    def test_summary_calculates_p50_and_p95_by_route(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "performance_events.jsonl"
+            for duration in [10, 20, 30, 40, 100]:
+                record_performance_event(
+                    {
+                        "route_name": "workorders:board",
+                        "route_pattern": "workorders/",
+                        "duration_ms": duration,
+                        "status_code": 200,
+                    },
+                    path=path,
+                )
+            record_performance_event(
+                {
+                    "route_name": "ai:chat_stream",
+                    "route_pattern": "ai/chat/<int:pk>/stream/",
+                    "duration_ms": 600,
+                    "status_code": 200,
+                },
+                path=path,
+            )
+
+            rows = summarize_performance_events(path, group_by="route_name")
+
+        by_group = {row["group"]: row for row in rows}
+        self.assertEqual(by_group["workorders:board"]["count"], 5)
+        self.assertEqual(by_group["workorders:board"]["p50_ms"], 30)
+        self.assertEqual(by_group["workorders:board"]["p95_ms"], 100)
+        self.assertEqual(by_group["ai:chat_stream"]["p50_ms"], 600)
+
+    @override_settings(
+        LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED=True,
+        LOCAL_BUSINESS_PERFORMANCE_METRICS_SAMPLE_RATE=1.0,
+    )
+    def test_middleware_writes_route_metadata_without_raw_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "performance_events.jsonl"
+
+            def get_response(request):
+                from django.http import HttpResponse
+
+                return HttpResponse("ok")
+
+            with override_settings(LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH=path):
+                request = RequestFactory().get("/workorders/123/?secret=value")
+                request.resolver_match = type(
+                    "ResolverMatch",
+                    (),
+                    {
+                        "view_name": "workorders:detail",
+                        "url_name": "detail",
+                        "route": "workorders/<int:pk>/",
+                    },
+                )()
+                response = PerformanceMetricsMiddleware(get_response)(request)
+
+            self.assertEqual(response.status_code, 200)
+            payload = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(payload["route_name"], "workorders:detail")
+            self.assertEqual(payload["route_pattern"], "workorders/<int:pk>/")
+            stable_payload = {
+                key: value for key, value in payload.items() if key not in {"created_at", "duration_ms"}
+            }
+            self.assertNotIn("123", json.dumps(stable_payload))
+            self.assertNotIn("secret", json.dumps(stable_payload))
 
 
 class SourceAdapterContractTests(TestCase):

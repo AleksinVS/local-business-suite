@@ -6,6 +6,8 @@
   "INTEGRATIONS.md": "Интеграции с внешними системами",
   "POLICY_MODEL.md": "Модель политик доступа",
   "ANALYTICS_MODEL.md": "Модель аналитики (экспорт данных)",
+  "OBSERVABILITY_BASELINE.md": "Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report",
+  "SERVICE_EXTRACTION_GUIDE.md": "Правила безопасного выноса технических сервисов из Django",
   "KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md": "План непрерывной бизнес-аналитики из знаний, email, документов и DMS",
   "MEMORY_SERVICE_IMPLEMENTATION_PLAN.md": "План реализации сервиса памяти СоСНА",
   "MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md": "План ingestion-коннектора и bootstrapping схемы графа памяти",

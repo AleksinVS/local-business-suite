@@ -31,6 +31,7 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertIn("ai.contract.tools", setting_ids)
         self.assertIn("memory.source.acl_mode", setting_ids)
         self.assertIn("settings_center.env.OPENAI_API_KEY", setting_ids)
+        self.assertIn("settings_center.env.LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED", setting_ids)
 
     def test_dashboard_requires_staff(self):
         staff = User.objects.create_user(username="settings-staff", password="pass", is_staff=True)

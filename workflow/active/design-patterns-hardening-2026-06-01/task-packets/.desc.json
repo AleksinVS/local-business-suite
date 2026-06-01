@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для внедрения архитектурных паттернов",
+  "01-service-layer-and-write-paths.json": "Task packet: единый слой сценариев записи и write-path",
+  "02-ai-command-flow-and-gateway-identity.json": "Task packet: AI-команды, подтверждение, audit и service identity",
+  "03-policies-selectors-and-read-models.json": "Task packet: политики доступа, выборки и read models",
+  "04-source-adapters-and-integration-boundaries.json": "Task packet: переходники источников и границы интеграций",
+  "05-outbox-workers-and-idempotency.json": "Task packet: журнал исходящих задач, workers и повторное выполнение без дублей",
+  "06-docs-tests-and-acceptance.json": "Task packet: документация, тесты и приемка"
+}

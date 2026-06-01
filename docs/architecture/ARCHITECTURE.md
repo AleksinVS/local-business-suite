@@ -22,6 +22,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[Analytics Model](ANALYTICS_MODEL.md)**: Design of the analytical layer (Parquet + DuckDB + Evidence).
 - **[Observability Baseline](OBSERVABILITY_BASELINE.md)**: Minimal p50/p95 metrics and local latency event reporting before performance or stack decisions.
 - **[Service Extraction Guide](SERVICE_EXTRACTION_GUIDE.md)**: Rules for safely extracting technical workers/services while keeping Django as the business source of truth.
+- **[Design Patterns Review](DESIGN_PATTERNS_REVIEW_2026-06-01.md)**: Recommended design patterns for the current Django monorepo, AI gateway, contracts, memory, analytics and future workers.
 - **[Knowledge-driven Analytics Plan](KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md)**: Continuous business analytics from memory, email contents, documents, optional DMS and AI diagnostics.
 - **[Memory Service Plan](MEMORY_SERVICE_IMPLEMENTATION_PLAN.md)**: Implementation plan for the AI memory service.
 - **[Memory Ingestion and Bootstrapping Plan](MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md)**: Final plan for corporate document ingestion and graph schema bootstrapping.

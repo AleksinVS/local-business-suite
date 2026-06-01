@@ -1,0 +1,27 @@
+{
+  "task_id": "02-contract-write-paths-and-role-settings",
+  "title": "Единый путь записи runtime contracts и роли",
+  "goal": "Убрать прямую запись role_rules вне Settings Center service layer.",
+  "write_scope": [
+    "apps/core/views.py",
+    "apps/ai/services.py",
+    "apps/settings_center/contract_services.py",
+    "apps/core/tests.py",
+    "apps/ai/tests.py",
+    "apps/settings_center/tests.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md"
+  ],
+  "non_goals": [
+    "Не менять формат role_rules без отдельной причины",
+    "Не расширять права Settings Center"
+  ],
+  "implementation_notes": [
+    "Старый RoleRulesUpdateView должен вызывать общий service layer или быть заменен ссылкой на Settings Center.",
+    "AI tool access.update_role_permissions должен либо вызывать тот же service layer с audit, либо стать proposal-only/read-only.",
+    "Любая запись runtime contract должна сохранять atomic write, validation и audit."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.core.tests apps.ai.tests apps.settings_center.tests",
+    ".venv/bin/python manage.py validate_architecture_contracts"
+  ]
+}

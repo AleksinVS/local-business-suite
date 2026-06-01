@@ -12,5 +12,6 @@
   "TESTING_POLICY.md": "Политика тестирования, матрица обязательных проверок и независимая проверка субагентом",
   "WORKER_AND_QUEUE_OPERATIONS.md": "Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",
+  "ARCHITECTURE_REVIEW_2026-06-01.md": "Архитектурное ревью проекта от 2026-06-01 и план рекомендуемых исправлений",
   "PROJECT_STRUCTURE_SYSTEM.md": "Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)"
 }

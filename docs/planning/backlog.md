@@ -121,6 +121,52 @@ MVP vertical slice реализован: контракты аналитики, 
 
 ## Next
 
+### Внедрение архитектурных паттернов
+
+Подготовлен отдельный planning/workflow-блок для постепенного внедрения прикладных паттернов из архитектурного анализа. Scope направлен на единые сценарии записи, безопасные AI-команды, единые политики доступа, переходники источников и надежные фоновые задачи.
+
+Контекст:
+- анализ паттернов находится в `docs/architecture/DESIGN_PATTERNS_REVIEW_2026-06-01.md`;
+- активный план находится в `docs/planning/active/design-patterns-hardening-2026-06-01.md`;
+- workflow package находится в `workflow/active/design-patterns-hardening-2026-06-01/`;
+- связанные исправления по ревью находятся в `docs/planning/active/architecture-review-remediation-2026-06-01.md`.
+
+Предварительный scope:
+- свести write-сценарии UI, AI и management commands к доменным сервисам;
+- оформить AI write tools как команды с подтверждением, audit и trace identifiers;
+- усилить service identity и session ownership в AI gateway/MCP;
+- унифицировать политики доступа и повторяемые выборки;
+- закрепить `SourceAdapter`/`SourceObjectEnvelope` как границу памяти, аналитики и внешних источников;
+- спроектировать job/outbox contract для ingestion, indexing, analytics recompute и external connectors;
+- добавить idempotency keys, retry limits и ручной путь разбора ошибок.
+
+Критерии готовности к старту:
+- завершены или синхронизированы пересекающиеся исправления из архитектурного ревью;
+- согласовано, какие write-сценарии входят в первый срез;
+- определено, нужен ли ADR для изменения AI gateway/MCP identity model или production worker контура.
+
+### Исправления по архитектурному ревью 2026-06-01
+
+Архитектурное ревью сохранено и требует отдельного hardening-среза перед расширением production-использования AI/MCP, памяти и внешних источников.
+
+Контекст:
+- ревью находится в `docs/guides/ARCHITECTURE_REVIEW_2026-06-01.md`;
+- активный план находится в `docs/planning/active/architecture-review-remediation-2026-06-01.md`;
+- workflow package находится в `workflow/active/architecture-review-remediation-2026-06-01/`.
+
+Предварительный scope:
+- привести production-старт и Windows/IIS инструкции к миграциям всех runtime-баз: `default`, `chat`, `knowledge_meta`, `analytics_control`;
+- свести изменение `role_rules` к единому Settings Center service layer с atomic write, validation и audit;
+- убрать raw prompt и полный actor context из agent runtime logs, оставить разбор ошибок по `request_id`, hash и данным `ChatMessage`;
+- усилить AI gateway/MCP identity checks до публикации MCP наружу;
+- перенести PATH_INFO debug logging из корня проекта в runtime/local path;
+- обновить устаревшие ссылки в архитектурной документации.
+
+Критерии готовности к старту:
+- подтверждено, что корневой `BACKLOG.md` остается личными заметками владельца и не входит в scope чистки;
+- согласовано, будет ли `access.update_role_permissions` оставлен как audited wrapper или переведен в proposal-only;
+- согласована модель service identity для MCP, если фасад планируется использовать вне внутренней Docker/host-сети.
+
 ### Производительность и готовность к выносу сервисов
 
 Базовое архитектурное решение и минимальный контур p50/p95 реализованы. Следующий этап — собрать фактические показатели на пилоте и закрыть дешевые узкие места внутри текущего Django-стека до обсуждения Go/Rust-выноса.

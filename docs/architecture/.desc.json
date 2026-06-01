@@ -5,6 +5,7 @@
   "DOMAIN_MODEL.md": "Доменная модель (сущности, инварианты)",
   "INTEGRATIONS.md": "Интеграции с внешними системами",
   "POLICY_MODEL.md": "Модель политик доступа",
+  "DESIGN_PATTERNS_REVIEW_2026-06-01.md": "Анализ полезных паттернов проектирования для текущей архитектуры",
   "ANALYTICS_MODEL.md": "Модель аналитики (экспорт данных)",
   "OBSERVABILITY_BASELINE.md": "Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report",
   "SERVICE_EXTRACTION_GUIDE.md": "Правила безопасного выноса технических сервисов из Django",

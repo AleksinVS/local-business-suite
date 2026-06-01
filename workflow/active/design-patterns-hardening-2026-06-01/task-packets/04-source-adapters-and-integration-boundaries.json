@@ -1,0 +1,32 @@
+{
+  "task_id": "04-source-adapters-and-integration-boundaries",
+  "title": "Переходники источников и границы интеграций",
+  "goal": "Закрепить SourceAdapter/SourceObjectEnvelope как единую границу между доменами, памятью, аналитикой и внешними источниками.",
+  "write_scope": [
+    "apps/core/source_adapters.py",
+    "apps/workorders/source_adapter.py",
+    "apps/waiting_list/source_adapter.py",
+    "apps/memory/",
+    "apps/analytics/",
+    "contracts/integrations/",
+    "contracts/analytics/",
+    "contracts/ai/",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не менять schema_version SourceObjectEnvelope без ADR",
+    "Не подключать реальную внешнюю ИС без pilot source и владельца данных",
+    "Не давать memory/analytics прямую зависимость от формата внешних систем"
+  ],
+  "implementation_notes": [
+    "Новые источники должны регистрироваться через registry и adapter.",
+    "Envelope должен содержать source_code, object_type, object_id, content_hash, sensitivity, privacy_profile, access_policy и provenance.",
+    "Memory и analytics принимают envelope, а source-specific mapping остается внутри adapter.",
+    "Для новых adapters обязательны dry-run, audit и тест на validate_source_object_envelope."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.memory.tests apps.analytics.tests apps.core.tests",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ]
+}

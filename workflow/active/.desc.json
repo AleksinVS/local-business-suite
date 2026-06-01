@@ -11,5 +11,7 @@
   "module-registered-agent-skills-and-mcp-facade": "Workflow: модульные AI skills и registry-driven MCP-фасад",
   "interface-russification": "Workflow: русификация интерфейса портала и подготовка к локализации",
   "testing-policy-and-independent-verification": "Workflow: политика тестирования и независимая проверка субагентом",
-  "workorder-tree-view": "Workflow: дерево заявок и режимы просмотра доски"
+  "workorder-tree-view": "Workflow: дерево заявок и режимы просмотра доски",
+  "architecture-review-remediation-2026-06-01": "Workflow: исправления по архитектурному ревью 2026-06-01",
+  "design-patterns-hardening-2026-06-01": "Workflow: внедрение архитектурных паттернов 2026-06-01"
 }

@@ -1,0 +1,54 @@
+{
+  "block_id": "design-patterns-hardening-2026-06-01",
+  "title": "Внедрение архитектурных паттернов",
+  "status": "planned",
+  "source_review": "docs/architecture/DESIGN_PATTERNS_REVIEW_2026-06-01.md",
+  "planning_doc": "docs/planning/active/design-patterns-hardening-2026-06-01.md",
+  "tasks": [
+    {
+      "task_id": "01-service-layer-and-write-paths",
+      "packet": "task-packets/01-service-layer-and-write-paths.json",
+      "risk": "high",
+      "summary": "Свести write-сценарии UI, AI и management commands к доменным сервисам."
+    },
+    {
+      "task_id": "02-ai-command-flow-and-gateway-identity",
+      "packet": "task-packets/02-ai-command-flow-and-gateway-identity.json",
+      "risk": "high",
+      "summary": "Оформить AI write tools как команды и усилить проверку пользователя, сессии и служебной идентичности."
+    },
+    {
+      "task_id": "03-policies-selectors-and-read-models",
+      "packet": "task-packets/03-policies-selectors-and-read-models.json",
+      "risk": "medium",
+      "summary": "Унифицировать политики доступа, повторяемые выборки и read models для памяти и аналитики."
+    },
+    {
+      "task_id": "04-source-adapters-and-integration-boundaries",
+      "packet": "task-packets/04-source-adapters-and-integration-boundaries.json",
+      "risk": "medium",
+      "summary": "Закрепить SourceAdapter/SourceObjectEnvelope как единую границу памяти, аналитики и внешних источников."
+    },
+    {
+      "task_id": "05-outbox-workers-and-idempotency",
+      "packet": "task-packets/05-outbox-workers-and-idempotency.json",
+      "risk": "high",
+      "summary": "Спроектировать и внедрить минимальный job/outbox contract для фоновых задач с повторным выполнением без дублей."
+    },
+    {
+      "task_id": "06-docs-tests-and-acceptance",
+      "packet": "task-packets/06-docs-tests-and-acceptance.json",
+      "risk": "medium",
+      "summary": "Обновить документацию, тесты, e2e-сценарии и acceptance reports."
+    }
+  ],
+  "required_checks": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py makemigrations --check --dry-run",
+    ".venv/bin/python manage.py test apps.workorders.tests apps.ai.tests apps.memory.tests apps.analytics.tests apps.settings_center.tests",
+    "git diff --check"
+  ],
+  "adr_required": "conditional",
+  "adr_note": "ADR нужен перед изменением модели доверия AI gateway/MCP, вводом production worker/message broker, новым storage backend или изменением SourceObjectEnvelope."
+}

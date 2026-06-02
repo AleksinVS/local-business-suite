@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import hashlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -13,6 +14,31 @@ from .schemas import ChatRequest, ChatResponse
 
 
 mcp_server = build_mcp_server()
+
+
+def _prompt_hash(prompt: str) -> str:
+    if not prompt:
+        return ""
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def _safe_chat_log_context(payload: ChatRequest, actor_context) -> dict:
+    return {
+        "session_id": payload.session_id,
+        "conversation_id": actor_context.conversation_id,
+        "request_id": actor_context.request_id,
+        "origin_channel": actor_context.origin_channel,
+        "model_id": payload.model_id,
+        "prompt_sha256": _prompt_hash(payload.prompt),
+        "prompt_length": len(payload.prompt or ""),
+        "history_count": len(payload.history or []),
+        "actor_user_id": actor_context.user_id,
+        "actor_channel": actor_context.channel,
+        "actor_source": actor_context.source,
+        "actor_is_superuser": actor_context.is_superuser,
+        "actor_roles_count": len(actor_context.roles or []),
+        "page_context_present": bool(actor_context.page_context),
+    }
 
 
 @asynccontextmanager
@@ -45,6 +71,8 @@ def list_models():
 async def chat_stream(payload: ChatRequest):
     logger = logging.getLogger(__name__)
     actor_context = payload.actor.ensure_trace_context()
+    log_context = _safe_chat_log_context(payload, actor_context)
+    logger.info("Agent runtime stream request: %s", log_context)
     
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
@@ -69,8 +97,19 @@ async def chat_stream(payload: ChatRequest):
             
             yield "data: [DONE]\n\n"
         except Exception as exc:
-            logger.error(f"Error in stream_agent: {exc}", exc_info=True)
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+            logger.error(
+                "Agent runtime stream failed: request_id=%s conversation_id=%s error_type=%s",
+                actor_context.request_id,
+                actor_context.conversation_id,
+                exc.__class__.__name__,
+            )
+            yield "data: " + json.dumps(
+                {
+                    "error": "agent_runtime_error",
+                    "request_id": actor_context.request_id,
+                    "conversation_id": actor_context.conversation_id,
+                }
+            ) + "\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -79,10 +118,8 @@ async def chat_stream(payload: ChatRequest):
 def chat(payload: ChatRequest):
     logger = logging.getLogger(__name__)
     actor_context = payload.actor.ensure_trace_context()
-    logger.info(
-        f"Received chat request: session_id={payload.session_id}, prompt={payload.prompt[:100]}"
-    )
-    logger.info(f"Actor: {actor_context}")
+    log_context = _safe_chat_log_context(payload, actor_context)
+    logger.info("Agent runtime chat request: %s", log_context)
 
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
@@ -99,11 +136,25 @@ def chat(payload: ChatRequest):
             model_id=payload.model_id,
         )
     except Exception as exc:
-        logger.error(f"Error in run_agent: {exc}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.error(
+            "Agent runtime chat failed: request_id=%s conversation_id=%s error_type=%s",
+            actor_context.request_id,
+            actor_context.conversation_id,
+            exc.__class__.__name__,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "agent_runtime_error",
+                "request_id": actor_context.request_id,
+                "conversation_id": actor_context.conversation_id,
+            },
+        ) from exc
     return ChatResponse(
         session_id=payload.session_id,
         assistant_message=result["assistant_message"],
         tool_trace=result["tool_trace"],
         ui_commands=result.get("ui_commands", []),
+        conversation_id=actor_context.conversation_id,
+        request_id=actor_context.request_id,
     )

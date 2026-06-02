@@ -413,6 +413,8 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки внедрения архитектурных паттернов
+      EXECUTOR_REPORT.ai-gateway-and-role-write-path.md: file # Отчет исполнения среза AI gateway, runtime logging и role write-path
+      TASK_ACCEPTANCE.ai-gateway-and-role-write-path.md: file # Приемка среза AI gateway, runtime logging и role write-path
     interface-russification: # Workflow: русификация интерфейса портала и подготовка к локализации
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для русификации UI

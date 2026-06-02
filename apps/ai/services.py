@@ -606,40 +606,52 @@ def get_analytics_summary_for_actor(*, actor, payload):
 
 def update_role_permissions_for_actor(*, actor, payload):
     """
-    Updates permissions for a specific role in config/role_rules.json.
-    STRICT SECURITY GATE: Only superusers can perform this action.
+    Изменяет права роли через Settings Center service layer.
+
+    Так AI-инструмент использует тот же путь записи, что и UI: валидацию,
+    атомарную запись в рабочий контракт и SettingsChange audit.
     """
     if not actor.is_superuser:
         raise PermissionDenied("Критичное действие: менять права ролей могут только администраторы с полными правами.")
 
     from django.conf import settings
+    from apps.settings_center.contract_services import apply_contract_payload
     import json
-    from apps.core.json_utils import pretty_json, atomic_write_json
+    import copy
 
     role_name = payload.get("role_name")
     permissions_map = payload.get("permissions_map", {})
 
     if not role_name:
         raise ValidationError("Нужно указать role_name.")
+    if not isinstance(permissions_map, dict):
+        raise ValidationError("permissions_map должен быть JSON-объектом.")
 
-    current_rules = settings.LOCAL_BUSINESS_ROLE_RULES.copy()
+    current_rules = copy.deepcopy(settings.LOCAL_BUSINESS_ROLE_RULES)
     if role_name not in current_rules:
         raise ValidationError(f"Роль '{role_name}' не существует.")
 
-    # Update permissions
+    updated_keys = []
     for key, value in permissions_map.items():
         if key in current_rules[role_name] or key == "display_name":
             current_rules[role_name][key] = value
+            updated_keys.append(key)
 
-    # Save to file
-    atomic_write_json(settings.LOCAL_BUSINESS_ROLE_RULES_FILE, current_rules)
-    settings.LOCAL_BUSINESS_ROLE_RULES = current_rules
+    if not updated_keys:
+        raise ValidationError("Нет допустимых полей для изменения роли.")
 
+    change = apply_contract_payload(
+        actor=actor,
+        setting_id="core.contract.role_rules",
+        raw_payload=json.dumps(current_rules, ensure_ascii=False),
+        confirmed=True,
+    )
     return {
         "ok": True,
         "message": f"Права роли '{role_name}' успешно обновлены.",
         "role_name": role_name,
-        "updated_keys": list(permissions_map.keys())
+        "updated_keys": updated_keys,
+        "settings_change_id": change.id,
     }
 
 def get_role_rules_for_actor(*, actor, payload):

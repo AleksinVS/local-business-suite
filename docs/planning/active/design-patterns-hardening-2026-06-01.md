@@ -2,7 +2,7 @@
 
 Дата: 2026-06-01.
 
-Статус: planned.
+Статус: in progress.
 
 Основание: `docs/architecture/DESIGN_PATTERNS_REVIEW_2026-06-01.md`.
 
@@ -156,6 +156,21 @@ Gateway обязан проверять:
 7. Расширить selectors/querysets для повторяющихся read-сценариев.
 8. Добавить или обновить unit/integration/e2e проверки.
 9. Обновить архитектурную и эксплуатационную документацию.
+
+## Журнал Реализации
+
+### 2026-06-01. AI gateway и role write-path
+
+Первый срез реализации закрывает часть пунктов 1, 2, 4, 5 и 9:
+
+- `services/agent_runtime/app.py` больше не пишет сырой prompt и полный actor context в технический лог;
+- runtime-лог содержит только `request_id`, `conversation_id`, `session_id`, `model_id`, длину и hash prompt, счетчик истории и безопасную сводку исполнителя;
+- ошибки `/chat` и `/chat/stream` возвращают технический код и trace identifiers без текста исключения и не пишут значение исключения в runtime/Django warning logs;
+- Django AI gateway проверяет, что `actor.user_id` существует, активен, имеет корректный тип, а переданный `username` не противоречит `user_id`;
+- `access.update_role_permissions` переведен на `apps.settings_center.contract_services.apply_contract_payload`, поэтому использует валидацию, атомарную запись и `SettingsChange` audit;
+- `AgentActionLog.request_payload` получил command metadata: tool, action kind, actor, session, confirmation state и список ключей payload без дублирования значений.
+
+Исполнительный отчет: `workflow/active/design-patterns-hardening-2026-06-01/EXECUTOR_REPORT.ai-gateway-and-role-write-path.md`.
 
 ## Acceptance Checks
 

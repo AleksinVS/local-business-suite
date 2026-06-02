@@ -1,8 +1,8 @@
 [
   {
     "code": "project_architecture_docs",
-    "title": "Project architecture documents",
-    "description": "Versioned architecture and ADR documents that are safe to index as internal project knowledge.",
+    "title": "Архитектурные документы проекта",
+    "description": "Версионируемые архитектурные документы и ADR, которые можно индексировать как внутренние знания проекта.",
     "source_kind": "documentation",
     "domain": "project",
     "owner": "engineering",
@@ -36,8 +36,8 @@
   },
   {
     "code": "ai_contract_defaults",
-    "title": "AI contract defaults",
-    "description": "Git-managed AI contracts and schemas without runtime state, secrets, or patient data.",
+    "title": "Дефолтные контракты ИИ",
+    "description": "Управляемые через Git ИИ-контракты и схемы без runtime-состояния, секретов и данных пациентов.",
     "source_kind": "contract_file",
     "domain": "ai",
     "owner": "engineering",
@@ -72,8 +72,8 @@
   },
   {
     "code": "workorders",
-    "title": "Work orders source data",
-    "description": "Internal kanban work orders exposed through the universal source adapter for source_data search and analytics.",
+    "title": "Данные заявок",
+    "description": "Внутренние канбан-заявки, доступные через универсальный адаптер источников для поиска source_data и аналитики.",
     "source_kind": "django_model",
     "source_origin": "internal",
     "domain": "workorders",
@@ -115,8 +115,8 @@
   },
   {
     "code": "waiting_list",
-    "title": "Waiting list source data",
-    "description": "Internal waiting list entries exposed through the universal source adapter for source_data search and analytics.",
+    "title": "Данные листа ожидания",
+    "description": "Внутренние записи листа ожидания, доступные через универсальный адаптер источников для поиска source_data и аналитики.",
     "source_kind": "django_model",
     "source_origin": "internal",
     "domain": "waiting_list",
@@ -158,8 +158,8 @@
   },
   {
     "code": "synthetic_workorder_timeline",
-    "title": "Synthetic work order timeline",
-    "description": "Synthetic non-patient maintenance events for retrieval and RBAC evaluation fixtures.",
+    "title": "Синтетическая история заявок",
+    "description": "Синтетические непациентские события обслуживания для проверки поиска и RBAC.",
     "source_kind": "synthetic_fixture",
     "domain": "workorders",
     "owner": "operations",
@@ -191,8 +191,8 @@
   },
   {
     "code": "synthetic_inventory_reference",
-    "title": "Synthetic inventory reference",
-    "description": "Synthetic medical device reference records for safe local indexing tests.",
+    "title": "Синтетический справочник медизделий",
+    "description": "Синтетические справочные записи медизделий для безопасных локальных проверок индексации.",
     "source_kind": "synthetic_fixture",
     "domain": "inventory",
     "owner": "operations",
@@ -224,8 +224,8 @@
   },
   {
     "code": "external_api_landing_zone",
-    "title": "External API landing zone",
-    "description": "Disabled default source template for external information system connectors with queued normalized envelopes.",
+    "title": "Зона приема внешних API",
+    "description": "Отключенный по умолчанию шаблон источника для коннекторов внешних информационных систем с очередью нормализованных пакетов.",
     "source_kind": "external_api_snapshot",
     "domain": "external_systems",
     "owner": "knowledge_owner",

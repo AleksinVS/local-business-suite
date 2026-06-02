@@ -1,7 +1,7 @@
 [
   {
     "code": "department_issues_spike",
-    "title": "Department issues spike",
+    "title": "Всплеск проблем подразделений",
     "owner": "operations",
     "metric_code": "department_issues_reported",
     "condition": "gte",
@@ -12,7 +12,7 @@
   },
   {
     "code": "regulator_requests_present",
-    "title": "Regulator request received",
+    "title": "Запрос регулятора получен",
     "owner": "compliance",
     "metric_code": "regulator_requests_open",
     "condition": "gte",

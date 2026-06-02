@@ -1,7 +1,7 @@
 [
   {
     "code": "department_reports_daily",
-    "title": "Daily department report analysis",
+    "title": "Ежедневный анализ отчетов подразделений",
     "owner": "operations",
     "sources": ["department_reports_imap", "memory_knowledge"],
     "include": {
@@ -24,7 +24,7 @@
   },
   {
     "code": "regulator_requests_daily",
-    "title": "Daily regulator request analysis",
+    "title": "Ежедневный анализ запросов регулятора",
     "owner": "compliance",
     "sources": ["regulator_requests_imap", "memory_knowledge"],
     "include": {

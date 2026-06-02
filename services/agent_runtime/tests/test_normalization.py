@@ -6,6 +6,7 @@ Or: python -m unittest services.agent_runtime.tests.test_normalization -v
 
 import asyncio
 import json
+import os
 import unittest
 from unittest.mock import patch
 
@@ -524,6 +525,75 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         self.assertEqual(gateway.calls[0]["tool_code"], "ai.skills.create_or_update")
         self.assertEqual(gateway.calls[0]["payload"]["skill_id"], "demo.skill")
         self.assertEqual(gateway.calls[0]["payload"]["required_tools"], ["ui.open_right_panel"])
+
+
+class TestRuntimeSafeLogging(unittest.TestCase):
+    """Проверяет, что runtime-логи получают только технический контекст."""
+
+    def test_safe_chat_log_context_excludes_raw_prompt_and_actor_details(self):
+        from services.agent_runtime.app import _safe_chat_log_context
+        from services.agent_runtime.schemas import ActorContext, ChatRequest, HistoryMessage
+
+        payload = ChatRequest(
+            session_id="session-safe-log",
+            prompt="Секретный пользовательский prompt",
+            history=[HistoryMessage(role="user", content="old message")],
+            model_id="test-model",
+            actor=ActorContext(
+                user_id=17,
+                username="doctor-secret",
+                roles=["role-secret"],
+                channel="sidebar",
+                source="django-chat",
+                page_context={"context_hint": "secret-page-context"},
+            ),
+        )
+        actor_context = payload.actor.ensure_trace_context()
+
+        log_context = _safe_chat_log_context(payload, actor_context)
+        serialized = json.dumps(log_context, ensure_ascii=False)
+
+        self.assertEqual(log_context["prompt_length"], len(payload.prompt))
+        self.assertEqual(len(log_context["prompt_sha256"]), 64)
+        self.assertEqual(log_context["history_count"], 1)
+        self.assertEqual(log_context["actor_user_id"], 17)
+        self.assertEqual(log_context["actor_roles_count"], 1)
+        self.assertTrue(log_context["page_context_present"])
+        self.assertNotIn(payload.prompt, serialized)
+        self.assertNotIn("doctor-secret", serialized)
+        self.assertNotIn("role-secret", serialized)
+        self.assertNotIn("secret-page-context", serialized)
+
+    def test_chat_error_log_excludes_exception_text(self):
+        from fastapi import HTTPException
+        from services.agent_runtime.app import chat
+        from services.agent_runtime.schemas import ActorContext, ChatRequest
+
+        payload = ChatRequest(
+            session_id="session-error-log",
+            prompt="Секретный пользовательский prompt",
+            model_id="test-model",
+            actor=ActorContext(
+                user_id=17,
+                username="doctor-secret",
+                roles=["role-secret"],
+                channel="sidebar",
+            ),
+        )
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
+            "services.agent_runtime.app.run_agent",
+            side_effect=RuntimeError("leaked prompt text"),
+        ), self.assertLogs("services.agent_runtime.app", level="ERROR") as captured:
+            with self.assertRaises(HTTPException) as raised:
+                chat(payload)
+
+        log_output = "\n".join(captured.output)
+        self.assertIn("error_type=RuntimeError", log_output)
+        self.assertNotIn("leaked prompt text", log_output)
+        self.assertNotIn(payload.prompt, log_output)
+        self.assertEqual(raised.exception.detail["error"], "agent_runtime_error")
+        self.assertNotIn("leaked prompt text", json.dumps(raised.exception.detail))
 
 
 class TestMCPResources(unittest.TestCase):

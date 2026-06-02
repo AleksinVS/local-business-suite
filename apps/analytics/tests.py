@@ -64,6 +64,8 @@ class AnalyticsDashboardTests(TestCase):
         response = self.client.get(reverse("analytics:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Сводка по заявкам")
+        self.assertContains(response, "Выполнена")
+        self.assertNotContains(response, f"<td>{WorkOrderStatus.RESOLVED}</td>", html=True)
 
     def test_regular_user_cannot_view_analytics_dashboard(self):
         self.client.force_login(self.user)

@@ -7,6 +7,7 @@ import time
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -184,13 +185,39 @@ def reject_invalid_gateway_token(request):
 
 
 def validate_gateway_actor(actor_context, session_id=None):
+    if not isinstance(actor_context, dict):
+        return JsonResponse({"error": "Контекст исполнителя должен быть JSON-объектом."}, status=400)
+
+    actor_user_id = actor_context.get("user_id")
+    if not actor_user_id:
+        return JsonResponse({"error": "Контекст исполнителя должен содержать user_id."}, status=403)
+    try:
+        actor_user_id = int(actor_user_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Контекст исполнителя содержит некорректный user_id."}, status=403)
+    if actor_user_id <= 0:
+        return JsonResponse({"error": "Контекст исполнителя содержит некорректный user_id."}, status=403)
+
+    User = get_user_model()
+    actor = User.objects.filter(pk=actor_user_id, is_active=True).first()
+    if not actor:
+        return JsonResponse({"error": "Исполнитель не найден или отключен."}, status=403)
+
+    actor_username = actor_context.get("username")
+    if actor_username and actor_username != actor.username:
+        logger.warning(
+            "Denied AI gateway username mismatch: actor_user=%s supplied_username=%s",
+            actor_user_id,
+            actor_username,
+        )
+        return JsonResponse({"error": "Имя исполнителя не совпадает с user_id."}, status=403)
+
     if not session_id:
         return None
     session_external_id = normalize_session_external_id(session_id)
     session = ChatSession.objects.filter(external_id=session_external_id).first()
     if not session:
         return None
-    actor_user_id = actor_context.get("user_id")
     if str(actor_user_id) != str(session.user_id):
         logger.warning(
             "Denied AI gateway actor mismatch: session=%s session_user=%s actor_user=%s",
@@ -523,10 +550,10 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
                 runtime_method="chat",
             )
             logger.warning(
-                "AI chat runtime error: request_id=%s action_id=%s",
+                "AI chat runtime error: request_id=%s action_id=%s error_type=%s",
                 request_id,
                 payload.get("technical_trace_id"),
-                exc_info=True,
+                exc.__class__.__name__,
             )
             messages.error(request, payload["message"])
             return redirect("ai:chat_detail", external_id=session.external_id)
@@ -657,10 +684,10 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     partial_content=partial_content,
                 )
                 logger.warning(
-                    "AI chat stream failed: request_id=%s action_id=%s",
+                    "AI chat stream failed: request_id=%s action_id=%s error_type=%s",
                     request_id,
                     payload.get("technical_trace_id"),
-                    exc_info=True,
+                    exc.__class__.__name__,
                 )
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"

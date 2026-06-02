@@ -1,7 +1,7 @@
 [
   {
     "code": "memory_knowledge",
-    "title": "Memory knowledge deltas",
+    "title": "Изменения базы знаний памяти",
     "source_kind": "memory",
     "owner": "analytics",
     "enabled": true,
@@ -11,12 +11,12 @@
     "sensitivity": "internal",
     "retention_profile": "normalized_default",
     "config": {
-      "description": "Materializes selected memory knowledge changes into analytics facts."
+      "description": "Преобразует выбранные изменения базы знаний памяти в аналитические факты."
     }
   },
   {
     "code": "workorders",
-    "title": "Work orders source data",
+    "title": "Данные заявок",
     "source_kind": "django_model",
     "owner": "operations",
     "enabled": true,
@@ -38,7 +38,7 @@
   },
   {
     "code": "waiting_list",
-    "title": "Waiting list source data",
+    "title": "Данные листа ожидания",
     "source_kind": "django_model",
     "owner": "operations",
     "enabled": true,
@@ -60,7 +60,7 @@
   },
   {
     "code": "department_reports_imap",
-    "title": "Department reports mailbox",
+    "title": "Почтовый ящик отчетов подразделений",
     "source_kind": "email_imap",
     "owner": "operations",
     "enabled": false,
@@ -92,7 +92,7 @@
   },
   {
     "code": "regulator_requests_imap",
-    "title": "Regulator requests mailbox",
+    "title": "Почтовый ящик запросов регулятора",
     "source_kind": "email_imap",
     "owner": "compliance",
     "enabled": false,

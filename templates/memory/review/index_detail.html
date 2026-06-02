@@ -81,7 +81,7 @@
     <h2>Задания индекса</h2>
     <ul class="compact-list">
       {% for job in related_jobs %}
-        <li>#{{ job.pk }} · {{ job.job_kind }} · {{ job.status }} · {{ job.created_at }}</li>
+        <li>#{{ job.pk }} · {{ job.get_job_kind_display }} · {{ job.get_status_display }} · {{ job.created_at }}</li>
       {% empty %}
         <li class="muted">Связанных заданий нет.</li>
       {% endfor %}

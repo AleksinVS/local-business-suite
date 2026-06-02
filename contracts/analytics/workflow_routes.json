@@ -1,7 +1,7 @@
 [
   {
     "code": "department_issue_review",
-    "title": "Review department operational issue",
+    "title": "Разбор операционной проблемы подразделения",
     "owner": "operations",
     "target": "analytics_case",
     "requires_confirmation": true,
@@ -9,7 +9,7 @@
   },
   {
     "code": "regulator_request_review",
-    "title": "Review regulator request",
+    "title": "Разбор запроса регулятора",
     "owner": "compliance",
     "target": "analytics_case",
     "requires_confirmation": true,

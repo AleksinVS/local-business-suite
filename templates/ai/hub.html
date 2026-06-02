@@ -15,8 +15,9 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th>Название</th>
               <th>Код</th>
-              <th>Назначение</th>
+              <th>Описание</th>
               <th>Тип</th>
               <th>Подтверждение</th>
             </tr>
@@ -24,6 +25,7 @@
           <tbody>
             {% for tool in tool_registry %}
               <tr>
+                <td>{{ tool.title }}</td>
                 <td><code>{{ tool.code }}</code></td>
                 <td>{{ tool.description }}</td>
                 <td>{{ tool.mode_label }}</td>
@@ -39,7 +41,7 @@
       <h2>Типы задач</h2>
       <ul class="compact-list">
         {% for task in task_types %}
-          <li><strong>{{ task.code }}</strong> — {{ task.description }}</li>
+          <li><strong>{{ task.title }}</strong> <code>{{ task.id }}</code> — {{ task.description }}</li>
         {% endfor %}
       </ul>
     </article>
@@ -59,7 +61,7 @@
       <h2>Последние действия агента</h2>
       <ul class="compact-list">
         {% for action in recent_actions %}
-          <li>{{ action.created_at|date:"d.m.Y H:i" }} · {{ action.actor.username }} · {{ action.tool_code }} · {{ action.get_status_display }}</li>
+          <li>{{ action.created_at|date:"d.m.Y H:i" }} · {{ action.actor.username }} · <code>{{ action.tool_code }}</code> · {{ action.get_status_display }}</li>
         {% empty %}
           <li>Действий пока нет.</li>
         {% endfor %}

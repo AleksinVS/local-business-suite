@@ -1,7 +1,7 @@
 [
   {
     "code": "department_issue_review",
-    "title": "Department issue review",
+    "title": "Разбор проблемы подразделения",
     "owner": "operations",
     "signal_kinds": ["department_issues_spike"],
     "allowed_evidence": ["analytics_fact", "memory_fact", "email_excerpt", "document_ref"],
@@ -10,7 +10,7 @@
   },
   {
     "code": "regulator_request_review",
-    "title": "Regulator request review",
+    "title": "Разбор запроса регулятора",
     "owner": "compliance",
     "signal_kinds": ["regulator_requests_present"],
     "allowed_evidence": ["analytics_fact", "email_excerpt", "document_ref"],

@@ -388,6 +388,12 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(enqueue_response.status_code, 302)
         job = MemoryIndexJob.objects.get(payload__document_id=document.document_id)
         self.assertEqual(job.job_kind, MemoryIndexJob.JobKind.REINDEX)
+        dashboard_response = self.client.get(reverse("memory:review_dashboard"))
+        detail_response = self.client.get(reverse("memory:review_index_detail", kwargs={"document_id": document.document_id}))
+        self.assertContains(dashboard_response, "Переиндексация")
+        self.assertContains(dashboard_response, "Ожидает")
+        self.assertContains(detail_response, "Переиндексация")
+        self.assertContains(detail_response, "Ожидает")
         self.assertEqual(
             MemoryReviewAction.objects.get(search_document=document, action=MemoryReviewAction.Action.ENQUEUE_REINDEX).decision,
             MemoryReviewAction.Decision.QUEUED,

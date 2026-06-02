@@ -1,7 +1,7 @@
 [
   {
     "code": "department_reports_received",
-    "title": "Department reports received",
+    "title": "Полученные отчеты подразделений",
     "owner": "operations",
     "fact_type": "department_report_received",
     "aggregation": "count",
@@ -13,7 +13,7 @@
   },
   {
     "code": "department_issues_reported",
-    "title": "Department issues reported",
+    "title": "Зафиксированные проблемы подразделений",
     "owner": "operations",
     "fact_type": "department_issue_reported",
     "aggregation": "count",
@@ -25,7 +25,7 @@
   },
   {
     "code": "regulator_requests_open",
-    "title": "Regulator requests received",
+    "title": "Полученные запросы регулятора",
     "owner": "compliance",
     "fact_type": "regulator_request_received",
     "aggregation": "count",

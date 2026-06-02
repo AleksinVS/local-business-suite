@@ -72,6 +72,20 @@ def _build_task_type_report(tool_code: str, payload: dict) -> dict:
     return {}
 
 
+def _build_command_context(*, tool_code, action_kind, actor, session, payload, trace_context, confirmation_state):
+    return {
+        "tool_code": tool_code,
+        "action_kind": action_kind,
+        "actor_id": actor.pk if actor else None,
+        "session_id": str(session.external_id) if session else "",
+        "conversation_id": trace_context.get("conversation_id", ""),
+        "request_id": trace_context.get("request_id", ""),
+        "origin_channel": trace_context.get("origin_channel", ""),
+        "confirmation_state": confirmation_state,
+        "payload_keys": sorted(str(key) for key in (payload or {}).keys()),
+    }
+
+
 def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_message):
     """Execute the tool logic and return the result dict or raise an exception."""
     if tool_code == "ui.get_current_context":
@@ -278,8 +292,28 @@ def execute_tool(
         if pending:
             requires_confirmation = False  # replay confirmed pending action
 
-    # Augment request_payload with trace context for audit trail
-    audit_request_payload = _build_audit_request_payload(tool_code=tool_code, payload=payload, trace_context=trace_context)
+    confirmation_state = "not_required"
+    if requires_confirmation and not confirmed_token:
+        confirmation_state = "pending_required"
+    elif confirmed_token:
+        confirmation_state = "confirmed_token"
+
+    command_context = _build_command_context(
+        tool_code=tool_code,
+        action_kind=tool["mode"],
+        actor=actor,
+        session=session,
+        payload=payload,
+        trace_context=trace_context,
+        confirmation_state=confirmation_state,
+    )
+
+    audit_request_payload = _build_audit_request_payload(
+        tool_code=tool_code,
+        payload=payload,
+        trace_context=trace_context,
+        command_context=command_context,
+    )
 
     if requires_confirmation and not confirmed_token:
         pending = PendingAction.objects.create(
@@ -515,10 +549,20 @@ def execute_pending_action(
                 "origin_channel": origin_channel,
                 "actor_version": actor_version,
             }
+            command_context = _build_command_context(
+                tool_code=pending.tool_code,
+                action_kind=pending.action_kind,
+                actor=pending.actor,
+                session=pending.session,
+                payload=pending.payload,
+                trace_context=trace_context,
+                confirmation_state="confirmed" if confirmed else "cancelled",
+            )
             audit_request_payload = _build_audit_request_payload(
                 tool_code=pending.tool_code,
                 payload=pending.payload,
                 trace_context=trace_context,
+                command_context=command_context,
             )
 
             if confirmed:
@@ -692,7 +736,7 @@ def execute_pending_action(
         }
 
 
-def _build_audit_request_payload(*, tool_code, payload, trace_context):
+def _build_audit_request_payload(*, tool_code, payload, trace_context, command_context=None):
     safe_payload = dict(payload or {})
     if tool_code in {"memory.remember", "memory.update_personal"}:
         for key in ("user_note", "new_text"):
@@ -709,7 +753,10 @@ def _build_audit_request_payload(*, tool_code, payload, trace_context):
                 for key, value in safe_payload["frontmatter"].items()
                 if key in {"name", "description", "source_code", "object_types", "required_tools", "trigger_examples"}
             }
-    return {**trace_context, **safe_payload}
+    audit_payload = {**trace_context, **safe_payload}
+    if command_context:
+        audit_payload["command"] = command_context
+    return audit_payload
 
 
 def _redact_secret_like_text(text: str) -> str:

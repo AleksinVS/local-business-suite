@@ -40,6 +40,10 @@ class AIViewsTests(TestCase):
         self.manager.groups.add(manager_group)
         self.customer.groups.add(customer_group)
         self.department = Department.objects.create(name="Стационар")
+        self.manager.department = self.department
+        self.customer.department = self.department
+        self.manager.save(update_fields=["department"])
+        self.customer.save(update_fields=["department"])
         self.board = Board.objects.create(title="Test Board", slug="test-board-ai")
         self.board.allowed_groups.add(manager_group, customer_group)
         self.customer_workorder = WorkOrder.objects.create(
@@ -56,6 +60,8 @@ class AIViewsTests(TestCase):
         response = self.client.get(reverse("ai:hub"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "ИИ-центр")
+        self.assertContains(response, "Список заявок")
+        self.assertContains(response, "workorders.list")
 
     def test_customer_cannot_open_ai_hub(self):
         self.client.force_login(self.customer)
@@ -90,6 +96,42 @@ class AIViewsTests(TestCase):
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_tool_gateway_rejects_username_mismatch(self):
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {
+                        "user_id": self.customer.id,
+                        "username": self.manager.username,
+                        "channel": "internal",
+                    },
+                    "payload": {"status": WorkOrderStatus.NEW},
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("не совпадает", response.json()["error"])
+
+    def test_tool_gateway_rejects_invalid_actor_user_id(self):
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": "not-a-number", "channel": "internal"},
+                    "payload": {"status": WorkOrderStatus.NEW},
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("некорректный user_id", response.json()["error"])
 
     def test_list_workorders_tool_returns_visible_items_and_logs_action(self):
         response = self.client.post(
@@ -259,6 +301,61 @@ class AIViewsTests(TestCase):
         self.assertIsNotNone(action)
         self.assertIn("<SKILL_BODY_REDACTED", json.dumps(action.request_payload))
         self.assertNotIn("visible demo records", json.dumps(action.request_payload))
+
+    def test_admin_role_update_tool_uses_settings_center_audit(self):
+        from apps.core.json_utils import load_json_file
+        from apps.settings_center.models import SettingsChange
+
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+
+        with TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            role_rules = load_json_file("contracts/role_rules.json")
+            role_file.write_text(json.dumps(role_rules, ensure_ascii=False), encoding="utf-8")
+            first_role = next(role for role in role_rules if role != "$schema")
+
+            with override_settings(
+                LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
+                LOCAL_BUSINESS_ROLE_RULES=role_rules,
+            ):
+                result = execute_tool(
+                    tool_code="access.update_role_permissions",
+                    actor_context={"user_id": self.manager.id, "channel": "internal"},
+                    payload={
+                        "role_name": first_role,
+                        "permissions_map": {"display_name": "AI audited role"},
+                    },
+                    request_id="req-ai-role-update",
+                )
+                self.assertTrue(result["ok"], result)
+                self.assertTrue(result["meta"]["awaiting_confirmation"])
+
+                confirm = execute_pending_action(
+                    token=result["meta"]["pending_action_token"],
+                    confirmed=True,
+                    actor_context={"user_id": self.manager.id, "channel": "internal"},
+                    request_id="req-ai-role-update-confirm",
+                )
+
+                self.assertTrue(confirm["ok"], confirm)
+                self.assertEqual(load_json_file(role_file)[first_role]["display_name"], "AI audited role")
+                self.assertEqual(
+                    SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
+                    1,
+                )
+                self.assertEqual(
+                    confirm["result"]["settings_change_id"],
+                    SettingsChange.objects.get(setting_id="core.contract.role_rules").id,
+                )
+
+        action = AgentActionLog.objects.filter(
+            tool_code="access.update_role_permissions",
+            status=AgentActionLog.Status.PENDING,
+        ).first()
+        self.assertIsNotNone(action)
+        self.assertEqual(action.request_payload["command"]["confirmation_state"], "pending_required")
+        self.assertEqual(action.request_payload["command"]["tool_code"], "access.update_role_permissions")
 
     def test_non_admin_cannot_confirm_runtime_skill_creation(self):
         with TemporaryDirectory() as tmpdir:
@@ -607,12 +704,14 @@ class AIViewsTests(TestCase):
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(user=self.customer, title="Проверка ошибки")
 
-        response = self.client.post(
-            reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
-            {"prompt": "Проверь память"},
-        )
+        with self.assertLogs("apps.ai.views", level="WARNING") as captured:
+            response = self.client.post(
+                reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
+                {"prompt": "Проверь память"},
+            )
 
         self.assertEqual(response.status_code, 302)
+        self.assertNotIn("runtime exploded", "\n".join(captured.output))
         action = AgentActionLog.objects.get(tool_code="agent_runtime.chat")
         self.assertEqual(action.status, AgentActionLog.Status.FAILED)
         self.assertIn("runtime exploded", action.error_message)
@@ -635,15 +734,17 @@ class AIViewsTests(TestCase):
             content="Найди в памяти концентратор",
         )
 
-        response = self.client.post(
-            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
-            data=json.dumps({"msg_id": user_message.id}),
-            content_type="application/json",
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-        body = b"".join(response.streaming_content).decode("utf-8")
+        with self.assertLogs("apps.ai.views", level="WARNING") as captured:
+            response = self.client.post(
+                reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
+                data=json.dumps({"msg_id": user_message.id}),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            body = b"".join(response.streaming_content).decode("utf-8")
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn("runtime stream exploded", "\n".join(captured.output))
         self.assertIn("Не удалось получить ответ от ИИ-сервиса", body)
         self.assertIn("request_id", body)
         self.assertNotIn("runtime stream exploded", body)

@@ -16,9 +16,15 @@ class AnalyticsDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         base_qs = WorkOrder.objects.select_related("assignee")
-        context["status_summary"] = list(
-            base_qs.values("status").annotate(total=Count("id")).order_by("status")
-        )
+        status_labels = dict(WorkOrderStatus.choices)
+        context["status_summary"] = [
+            {
+                "status": row["status"],
+                "status_label": status_labels.get(row["status"], row["status"]),
+                "total": row["total"],
+            }
+            for row in base_qs.values("status").annotate(total=Count("id")).order_by("status")
+        ]
         department_rows = list(
             base_qs.values("department")
             .annotate(total=Count("id"))

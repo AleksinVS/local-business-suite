@@ -2,7 +2,7 @@
 
 Дата: 2026-06-01.
 
-Статус: review saved, remediation planned.
+Статус: review saved, remediation in progress.
 
 ## Краткий вывод
 
@@ -52,6 +52,14 @@ git diff --check
 
 Рекомендуемое изменение: убрать из `services/agent_runtime/app.py` логирование `prompt[:100]` и полного `actor_context`. При необходимости добавить отдельный debug-режим, который по умолчанию выключен и пишет только обезличенный диагностический пакет в `.local/` или `data/logs/` с явным сроком хранения.
 
+Состояние на 2026-06-01 после первого среза реализации:
+
+- raw prompt, полный actor context и значение runtime-исключения убраны из логов `services/agent_runtime/app.py` и Django warning-логов chat surface;
+- runtime пишет только trace identifiers, длину и hash prompt, model id и безопасную сводку исполнителя;
+- `access.update_role_permissions` переведен на Settings Center service layer;
+- Django AI gateway отклоняет отсутствующего, отключенного, некорректного или противоречивого actor до запуска инструмента;
+- внешний MCP-доступ по-прежнему требует отдельного ADR и усиления модели доверия.
+
 ## Находки
 
 ### 1. Production-старт не мигрирует раздельные базы
@@ -83,6 +91,8 @@ git diff --check
 
 Рекомендация: оставить один write-path для runtime contracts. Старые формы и AI-инструменты должны вызывать Settings Center service layer или стать read-only/proposal-only.
 
+Состояние: AI tool `access.update_role_permissions` уже вызывает `apps.settings_center.contract_services.apply_contract_payload`, поэтому использует валидацию, атомарную запись и `SettingsChange` audit. Старые не-AI пути еще нужно проверить отдельно.
+
 ### 3. AI gateway и MCP-фасад принимают actor из тела запроса
 
 Приоритет: high.
@@ -97,6 +107,8 @@ git diff --check
 
 Рекомендация: ввести service identity model для runtime/MCP, обязательную привязку сессии к пользователю, запрет tool execution без проверенной session ownership и отдельный ADR/update к ADR-0021 перед внешним MCP-доступом.
 
+Состояние: Django gateway теперь проверяет наличие активного пользователя по `actor.user_id`, корректный тип `user_id`, совпадение `username` при его передаче и владельца существующей session. Это снижает риск подмены actor внутри текущей внутренней схемы, но не заменяет ADR для внешнего MCP.
+
 ### 4. Agent runtime пишет пользовательский prompt в технический лог
 
 Приоритет: high.
@@ -110,6 +122,8 @@ git diff --check
 Риск: технический лог agent runtime может содержать персональные данные, сведения из заявок, внутренние документы или секреты, введенные пользователем.
 
 Рекомендация: заменить raw prompt logging на `request_id`, `conversation_id`, prompt length/hash, model id и error category. Для глубокого разбора использовать `ChatMessage.content` через контролируемый операторский доступ.
+
+Состояние: выполнено для `/chat` и `/chat/stream` в `services/agent_runtime/app.py`; Django chat surface также больше не пишет значение runtime-исключения в warning-лог. Сырой текст ошибки остается в `AgentActionLog.error_message` для контролируемого операторского разбора по `request_id`.
 
 ### 5. Временный debug log может попадать в корень проекта
 

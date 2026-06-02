@@ -19,7 +19,8 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th>Ключ</th>
+          <th>Настройка</th>
+          <th>Переменная</th>
           <th>Раздел</th>
           <th>Эффективное значение</th>
           <th>Режим</th>
@@ -29,7 +30,11 @@
       <tbody>
         {% for row in rows %}
           <tr>
-            <td>{{ row.descriptor.metadata.env_key }}</td>
+            <td>
+              <strong>{{ row.descriptor.title }}</strong>
+              <code class="setting-code">{{ row.descriptor.setting_id }}</code>
+            </td>
+            <td><code>{{ row.descriptor.metadata.env_key }}</code></td>
             <td>{{ row.descriptor.section }}</td>
             <td>{{ row.effective_value|default:"" }}</td>
             <td>{{ row.apply_mode_label }}</td>
@@ -40,4 +45,7 @@
     </table>
   </div>
 </section>
+<style>
+  .setting-code { display: block; margin-top: 0.15rem; color: var(--text-muted); font-size: 0.78rem; overflow-wrap: anywhere; }
+</style>
 {% endblock %}

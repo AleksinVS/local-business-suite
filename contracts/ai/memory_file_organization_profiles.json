@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "name": "memory_file_organization_profiles",
+  "description": "Default profiles for file source auto organization. Host-specific paths must be set in runtime contracts or deployment silos.",
+  "profiles": {
+    "corporate_docs_auto_organization_v1": {
+      "enabled": false,
+      "source_code": "corporate_memory_docs",
+      "incoming_path": "incoming/new",
+      "managed_root": "data/runtime-placeholder/not-in-default-contract",
+      "baseline_profile": "baseline_auto_v1",
+      "physical_move_policy": "approval_required",
+      "source_delete_policy": {
+        "mode": "quarantine_then_purge",
+        "retention_days": 30,
+        "requires_backup_checkpoint": true
+      },
+      "storage_backend": "managed_fs",
+      "future_backends": [
+        "s3_compatible"
+      ],
+      "proposal_thresholds": {
+        "min_users": 2,
+        "min_events": 5,
+        "min_files": 3,
+        "min_confidence": 0.7
+      }
+    }
+  }
+}

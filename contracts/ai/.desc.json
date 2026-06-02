@@ -12,5 +12,6 @@
   "memory_claims_policy.json": "Политика жизненного цикла claims/beliefs памяти",
   "memory_retrieval_budget.json": "Бюджеты lightweight retrieval orchestration без обязательного LLM в hot path",
   "memory_ingestion_profiles.json": "Дефолтные профили ingestion-коннектора памяти: adapters, parsers, OCR, limits и policies",
+  "memory_file_organization_profiles.json": "Дефолтные профили автоупорядочивания файловых источников без host-specific путей",
   "memory_graph_schema.json": "Дефолтная единая схема графа памяти для bootstrapping и extraction"
 }

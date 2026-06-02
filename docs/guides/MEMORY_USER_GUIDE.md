@@ -74,6 +74,7 @@
 - очередь `MemoryIngestionIssue`;
 - карточка issue с безопасными metadata и действиями acknowledge/assign/resolve/ignore/reindex;
 - список и карточка `MemorySearchDocument` с FTS/vector diagnostics;
+- раздел `Файлы` с baseline-размещениями, предложениями общей структуры и заданиями переноса;
 - журнал `MemoryReviewAction`.
 
 Для низкоуровневого осмотра остается Django Admin:
@@ -100,6 +101,33 @@
 - password-protected, encrypted, partial, suspicious и unsupported документы попадают в issue/review queue;
 - graph schema proposals проверяются профильными экспертами и владельцем графа;
 - graph runtime search в `memory.search` пока отключен; graph extraction и schema bootstrapping остаются отдельным подготовительным контуром.
+
+## Автоупорядочивание файлов
+
+Для файловых источников может быть включен отдельный режим автоупорядочивания:
+
+- система создает исходную виртуальную структуру после анализа текущего источника;
+- новые файлы кладутся во входной каталог, обычно `<source>/incoming/new`;
+- пользовательские виртуальные структуры могут отличаться от общей структуры;
+- популярные и устойчивые структуры используются как агрегированный сигнал для предложений;
+- физический перенос выполняется только после согласования администратором;
+- исходный файл удаляется только через карантин, retention и backup checkpoint.
+
+Пользовательские виртуальные папки не дают доступ к файлу сами по себе. Если у пользователя нет права на исходный объект, наличие файла в виртуальной структуре не обходит проверку доступа.
+
+Операторский UI:
+
+```text
+/memory/review/file-organization/
+```
+
+Пользовательский UI личной виртуальной структуры:
+
+```text
+/memory/files/
+```
+
+Администратор видит confidence, evidence/conflicts, предложения общей структуры и задания переноса. Обычный пользователь работает с входным каталогом и доступными ему виртуальными представлениями, но не согласует физический перенос.
 
 ## Операторские команды
 
@@ -136,6 +164,16 @@ python manage.py memory_eval --dry-run
 python manage.py memory_eval --output-json
 ```
 
+Проверить автоупорядочивание файлов:
+
+```bash
+python manage.py memory_file_organization_baseline --source-code <code> --dry-run
+python manage.py memory_file_incoming_worker --source-code <code> --dry-run
+python manage.py memory_file_structure_stats --source-code <code> --dry-run
+python manage.py memory_file_move_worker --source-code <code> --dry-run
+python manage.py memory_file_auto_organization_e2e
+```
+
 Eval report пишется только в `data/memory/eval/`.
 
 ## Ограничения текущей версии
@@ -150,6 +188,7 @@ Eval report пишется только в `data/memory/eval/`.
 - review UI для issues памяти и состояния поискового индекса доступен в `/memory/review/`; Django Admin остается техническим fallback;
 - claim extraction, `MemoryClaim` и `MemoryBelief` перенесены на следующие этапы;
 - ingestion MVP поддерживает local/UNC discovery, issue queue, text-like file ingestion, `.csv/.tsv/.xlsx/.xls`, bootstrap package и graph schema proposals;
+- автоупорядочивание файлов поддерживает stable file identity, baseline virtual structure, incoming worker, агрегированные proposals и managed_fs copy/verify/quarantine;
 - PDF/DOC/DOCX/images пока не извлекаются полноценно: такие документы попадают в issue queue до подключения production parser/OCR backend;
 - ACL inheritance, raw vault, production cloud OCR/LLM и review каждого graph instance не входят в MVP;
 - облачная маршрутизация для чувствительных случаев не включена.

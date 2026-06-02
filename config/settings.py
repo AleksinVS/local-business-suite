@@ -26,6 +26,7 @@ from apps.core.json_utils import (
     validate_memory_profiles_payload,
     validate_memory_claims_policy_payload,
     validate_memory_graph_schema_payload,
+    validate_memory_file_organization_profiles_payload,
     validate_memory_ingestion_profiles_payload,
     validate_memory_retrieval_budget_payload,
     validate_memory_routing_payload,
@@ -393,6 +394,11 @@ LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE = get_contract_path(
     "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
     sub_dir="ai",
 )
+LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE = get_contract_path(
+    "memory_file_organization_profiles.json",
+    "LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE",
+    sub_dir="ai",
+)
 LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE = get_contract_path(
     "memory_graph_schema.json",
     "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
@@ -596,6 +602,9 @@ try:
 
     LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
     validate_memory_ingestion_profiles_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES)
+
+    LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE)
+    validate_memory_file_organization_profiles_payload(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES)
 
     LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA = load_json_file(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE)
     validate_memory_graph_schema_payload(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA)

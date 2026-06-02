@@ -15,6 +15,7 @@
 - **Ролевая модель и политики доступа** на основе серверных контрактов.
 - **AI-чат** с bounded tools и gateway-интеграцией в Django.
 - **Система памяти AI** для поиска по безопасному корпусу знаний с citations и audit.
+- **Автоупорядочивание файловых источников памяти** с виртуальной baseline-структурой, входным каталогом и безопасным managed_fs переносом.
 - **Аналитика** по заявкам и устройствам.
 - **Контрактная конфигурация** ролей, workflow, AI tools, task types и memory sources.
 
@@ -49,6 +50,8 @@
 - хранит метаданные знаний в `data/db/knowledge_meta.sqlite3`, а индексы отдельно в `data/indexes/`;
 - поддерживает локальный SQLite-поиск по перестраиваемым токенам без хранения полного текста знания в индексе;
 - обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
+- строит стабильную идентичность файлов, baseline virtual structure, входной каталог и согласованный managed_fs перенос с quarantine/purge gate;
+- дает пользователю личную виртуальную файловую структуру в `/memory/files/`, не меняя физическое размещение и права доступа;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
 - поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа, но не включает graph runtime search;
 - содержит reference implementation подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
@@ -67,16 +70,19 @@
 - `docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md` — целевая схема файловых знаний, раздельных баз и единого поиска.
 - `docs/architecture/MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md` — план строгого хранения текста знания только в файле знания.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — финальный план ingestion-коннектора и bootstrapping схемы графа.
+- `docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md` — план автоупорядочивания файловых источников: virtual structure, incoming, proposals, managed_fs и future S3.
 - `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план сбора знаний из внешних информационных систем.
 - `docs/adr/ADR-0003-ai-memory-service.md` — архитектурное решение по памяти.
 - `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md` — архитектурное решение по ingestion и bootstrapping.
 - `docs/adr/ADR-0006-external-system-knowledge-connectors.md` — архитектурное решение по коннекторам внешних ИС.
 - `docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md` — архитектурное решение по файловым знаниям и единому поиску.
 - `docs/adr/ADR-0013-file-only-knowledge-body.md` — архитектурное решение: текст знания только в файле, индекс перестраиваемый.
+- `docs/adr/ADR-0025-file-source-auto-organization.md` — архитектурное решение по автоупорядочиванию файловых источников.
 - `contracts/ai/memory_sources.json` — источники памяти.
 - `contracts/ai/memory_profiles.json` — профили chunking, extraction, indexing и ranking.
 - `contracts/ai/memory_routing.json` — правила маршрутизации по sensitivity.
 - `contracts/ai/memory_ingestion_profiles.json` — профили local/UNC adapters, parser/OCR cascade, limits и raw/ACL policies.
+- `contracts/ai/memory_file_organization_profiles.json` — профили входного каталога, managed root, retention и порогов предложений файловой структуры.
 - `contracts/ai/memory_graph_schema.json` — единая схема графа памяти.
 
 Ограничения текущей версии:
@@ -87,6 +93,7 @@
 - старый слой `MemorySnapshot`/`MemoryChunk` удален из текущей схемы; индексация идет через `MemorySearchDocument`;
 - отдельное DuckDB-хранилище аналитических срезов еще не подключено;
 - external connector MVP является reference implementation; source-specific pilot adapter выбирается и реализуется отдельно;
+- автоупорядочивание файлов поддерживает `managed_fs`, а S3/S3-compatible backend оставлен будущим backend;
 - graph runtime search отключен и отображается как `disabled/not_ready`;
 - ingestion MVP реально обрабатывает text-like файлы (`.txt`, `.md`, `.log`, `.json`, `.yaml`, `.yml`, `.csv`, `.tsv`) и табличные `.xlsx/.xls`, а PDF/DOC/DOCX/images пока переводит в issue queue до подключения Docling/Tika/OCR backend;
 - внешний API памяти вынесен в backlog и пока не реализуется;
@@ -159,6 +166,11 @@ python manage.py knowledge_writer_worker --dry-run
 python manage.py knowledge_index_worker --dry-run
 python manage.py knowledge_reflection_worker --dry-run
 python manage.py memory_verify_knowledge_files --strict
+python manage.py memory_file_organization_baseline --source-code <code> --dry-run
+python manage.py memory_file_incoming_worker --source-code <code> --dry-run
+python manage.py memory_file_structure_stats --source-code <code> --dry-run
+python manage.py memory_file_move_worker --source-code <code> --dry-run
+python manage.py memory_file_auto_organization_e2e
 python manage.py memory_file_content_search_e2e
 ```
 

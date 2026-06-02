@@ -13,6 +13,7 @@ from apps.core.json_utils import (
     validate_ai_registry_payload,
     validate_ai_task_types_payload,
     validate_ai_tools_payload,
+    validate_memory_file_organization_profiles_payload,
     validate_memory_profiles_payload,
     validate_memory_graph_schema_payload,
     validate_memory_ingestion_profiles_payload,
@@ -45,6 +46,7 @@ VALIDATORS = {
     "validate_memory_profiles_payload": validate_memory_profiles_payload,
     "validate_memory_routing_payload": validate_memory_routing_payload,
     "validate_memory_ingestion_profiles_payload": validate_memory_ingestion_profiles_payload,
+    "validate_memory_file_organization_profiles_payload": validate_memory_file_organization_profiles_payload,
     "validate_memory_graph_schema_payload": validate_memory_graph_schema_payload,
     "validate_memory_sources_payload": lambda payload: validate_memory_sources_payload(
         payload,

@@ -208,6 +208,11 @@ python manage.py memory_discover_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
 python manage.py memory_graph_extract --source-code <code> --dry-run
+python manage.py memory_file_organization_baseline --source-code <code> --dry-run
+python manage.py memory_file_incoming_worker --source-code <code> --dry-run
+python manage.py memory_file_structure_stats --source-code <code> --dry-run
+python manage.py memory_file_move_worker --source-code <code> --dry-run
+python manage.py memory_file_auto_organization_e2e
 python manage.py memory_reindex --dry-run
 python manage.py memory_eval --dry-run
 python manage.py validate_architecture_contracts

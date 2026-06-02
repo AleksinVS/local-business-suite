@@ -1,0 +1,49 @@
+{
+  "task_id": "03-incoming-folder-processing",
+  "title": "Incoming folder processing",
+  "status": "completed",
+  "objective": "Add an incoming folder workflow for new files and route them into virtual placement or review.",
+  "read_scope": [
+    "apps/memory/document_ingestion.py",
+    "apps/memory/acl.py",
+    "apps/memory/security.py",
+    "apps/memory/deidentification.py",
+    "apps/memory/file_organization.py",
+    "contracts/ai/memory_file_organization_profiles.json",
+    "docs/guides/WORKER_AND_QUEUE_OPERATIONS.md"
+  ],
+  "write_scope": [
+    "apps/memory/file_organization_incoming.py",
+    "apps/memory/management/commands/memory_file_incoming_worker.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/review_services.py",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "non_goals": [
+    "Do not allow incoming processing to bypass source ACL policy.",
+    "Do not write raw parser logs outside .local/ or data/.",
+    "Do not publish files with secret_blocked or unresolved ACL.",
+    "Do not require S3."
+  ],
+  "requirements": [
+    "Worker must process only stable files.",
+    "Worker must be idempotent by source, file_id or content hash policy.",
+    "Secret scanning must run before indexing or publication.",
+    "Privacy policy must follow the source profile.",
+    "Low confidence placement must create a review item or issue."
+  ],
+  "acceptance_checks": [
+    "A new incoming file receives stable identity and proposed virtual placement.",
+    "A locked or changing file is skipped or retried without duplicate records.",
+    "Secret-containing files are blocked and visible in review.",
+    "Unsupported files create issues instead of disappearing."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py memory_file_incoming_worker --source-code <code> --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

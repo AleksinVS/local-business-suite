@@ -119,6 +119,31 @@ MVP vertical slice реализован: контракты аналитики, 
 - реализовать optional DMS connector для выбранной системы документооборота;
 - провести pilot tuning scope, retention, authority и dedup rules с владельцем данных.
 
+### Автоупорядочивание файловых источников
+
+MVP реализован и ожидает приемку владельцем. Добавлен контур stable file identity, автоматический baseline, входной каталог, агрегированные предложения структуры, managed_fs copy/verify/quarantine/purge gate, минимальный UI и e2e-проверка. S3/S3-compatible backend оставлен как future backend через подготовленную модель хранения.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0025-file-source-auto-organization.md`;
+- проектный план находится в `docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md`;
+- активный план находится в `docs/planning/active/memory-file-source-auto-organization.md`;
+- workflow package находится в `workflow/active/memory-file-source-auto-organization/`.
+
+Статус реализации:
+- добавлены модели `MemoryFileObject`, версии, физические размещения, path aliases, virtual views/placements, usage events, organization proposals/decisions и move jobs;
+- добавлен контракт `memory_file_organization_profiles.json` и schema;
+- baseline generator создает виртуальные размещения с confidence/evidence/conflicts и review visibility;
+- incoming worker обрабатывает стабильные файлы и блокирует найденные секреты;
+- статистика создает предложения только после aggregation thresholds;
+- managed_fs перенос выполняет copy/verify/metadata commit/quarantine, а purge требует retention и backup checkpoint;
+- UI `/memory/review/file-organization/` показывает источники, baseline, proposals и move jobs;
+- UI `/memory/files/` позволяет пользователю создать личное виртуальное размещение доступного файла;
+- `memory_file_auto_organization_e2e` покрывает основной сценарий.
+
+Оставшееся действие:
+- выбрать реальный пилотный source, настроить runtime `managed_root`, retention и backup checkpoint;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ## Next
 
 ### Внедрение архитектурных паттернов

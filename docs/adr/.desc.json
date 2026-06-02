@@ -23,5 +23,6 @@
   "ADR-0021-module-registered-agent-skills-and-mcp-facade.md": "ADR: Модульные AI skills и registry-driven MCP-фасад",
   "ADR-0022-interface-russification-and-localization-roadmap.md": "ADR: Русскоязычный интерфейс портала и путь к локализации",
   "ADR-0023-workorder-tree-view-and-customer-branch-access.md": "ADR: Дерево заявок и доступ заказчика по ветке отделения",
-  "ADR-0024-service-extraction-readiness.md": "ADR: Готовность к выносу сервисов без смены основного стека"
+  "ADR-0024-service-extraction-readiness.md": "ADR: Готовность к выносу сервисов без смены основного стека",
+  "ADR-0025-file-source-auto-organization.md": "ADR: Автоупорядочивание файловых источников через виртуальные структуры и управляемый перенос"
 }

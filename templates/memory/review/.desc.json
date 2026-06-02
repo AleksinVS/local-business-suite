@@ -6,5 +6,6 @@
   "issue_detail.html": "Карточка issue, безопасные metadata и действия ревью",
   "index_list.html": "Список MemorySearchDocument с diagnostics FTS/vector",
   "index_detail.html": "Карточка search document и действия reindex/delete stale",
+  "file_organization.html": "Сводка автоупорядочивания файлов: baseline placements, proposals и move jobs",
   "audit.html": "Журнал MemoryReviewAction"
 }

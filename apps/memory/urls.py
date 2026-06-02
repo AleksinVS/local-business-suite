@@ -5,6 +5,7 @@ from . import views
 app_name = "memory"
 
 urlpatterns = [
+    path("files/", views.MemoryFileUserViewsView.as_view(), name="user_file_views"),
     path("review/", views.MemoryReviewDashboardView.as_view(), name="review_dashboard"),
     path("review/issues/", views.MemoryIssueListView.as_view(), name="review_issue_list"),
     path("review/issues/<int:pk>/", views.MemoryIssueDetailView.as_view(), name="review_issue_detail"),
@@ -13,4 +14,10 @@ urlpatterns = [
     path("review/index/<path:document_id>/action/", views.MemoryIndexActionView.as_view(), name="review_index_action"),
     path("review/index/<path:document_id>/", views.MemoryIndexDetailView.as_view(), name="review_index_detail"),
     path("review/audit/", views.MemoryReviewAuditView.as_view(), name="review_audit"),
+    path("review/file-organization/", views.MemoryFileOrganizationView.as_view(), name="file_organization"),
+    path(
+        "review/file-organization/proposals/<int:pk>/action/",
+        views.MemoryFileOrganizationProposalActionView.as_view(),
+        name="file_organization_proposal_action",
+    ),
 ]

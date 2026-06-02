@@ -352,6 +352,32 @@ REQUIRED_MEMORY_INGESTION_PROFILE_KEYS = {
     "issue_policy",
 }
 
+REQUIRED_MEMORY_FILE_ORGANIZATION_ROOT_KEYS = {
+    "version",
+    "name",
+    "description",
+    "profiles",
+}
+
+REQUIRED_MEMORY_FILE_ORGANIZATION_PROFILE_KEYS = {
+    "enabled",
+    "source_code",
+    "incoming_path",
+    "managed_root",
+    "baseline_profile",
+    "physical_move_policy",
+    "source_delete_policy",
+    "storage_backend",
+    "future_backends",
+    "proposal_thresholds",
+}
+
+REQUIRED_MEMORY_FILE_SOURCE_DELETE_POLICY_KEYS = {
+    "mode",
+    "retention_days",
+    "requires_backup_checkpoint",
+}
+
 REQUIRED_MEMORY_GRAPH_SCHEMA_ROOT_KEYS = {
     "schema_version",
     "name",
@@ -651,6 +677,22 @@ MEMORY_INGESTION_ISSUE_KIND_VALUES = {
     "schema_unknown_type",
     "schema_unknown_relation",
     "canonicalization_conflict",
+}
+
+MEMORY_FILE_ORGANIZATION_STORAGE_BACKEND_VALUES = {
+    "managed_fs",
+    "s3_compatible",
+}
+
+MEMORY_FILE_ORGANIZATION_PHYSICAL_MOVE_POLICY_VALUES = {
+    "approval_required",
+    "disabled",
+}
+
+MEMORY_FILE_ORGANIZATION_DELETE_MODE_VALUES = {
+    "quarantine_then_purge",
+    "quarantine_only",
+    "disabled",
 }
 
 
@@ -1608,6 +1650,88 @@ def validate_memory_ingestion_profiles_payload(payload):
                 + ", ".join(sorted(unknown_issue_kinds))
                 + "."
             )
+
+
+def validate_memory_file_organization_profiles_payload(payload):
+    _ensure_non_empty_mapping(payload, "Memory file organization profiles")
+    missing = REQUIRED_MEMORY_FILE_ORGANIZATION_ROOT_KEYS - set(payload.keys())
+    if missing:
+        raise ValidationError(
+            f"Memory file organization profiles не содержит обязательные поля: {', '.join(sorted(missing))}."
+        )
+    for key in ("version", "name", "description"):
+        if not isinstance(payload.get(key), str) or not payload.get(key):
+            raise ValidationError(f"Поле '{key}' в memory file organization profiles должно быть непустой строкой.")
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, dict) or not profiles:
+        raise ValidationError("Поле profiles в memory file organization profiles должно быть непустым JSON-объектом.")
+
+    for profile_id, profile in profiles.items():
+        if not isinstance(profile, dict):
+            raise ValidationError(f"File organization profile '{profile_id}' должен быть JSON-объектом.")
+        missing_profile_keys = REQUIRED_MEMORY_FILE_ORGANIZATION_PROFILE_KEYS - set(profile.keys())
+        if missing_profile_keys:
+            raise ValidationError(
+                f"File organization profile '{profile_id}' не содержит обязательные поля: "
+                f"{', '.join(sorted(missing_profile_keys))}."
+            )
+        if type(profile.get("enabled")) is not bool:
+            raise ValidationError(f"Поле enabled у file organization profile '{profile_id}' должно быть boolean.")
+        for key in ("source_code", "incoming_path", "baseline_profile", "physical_move_policy", "storage_backend"):
+            if not isinstance(profile.get(key), str) or not profile.get(key):
+                raise ValidationError(f"Поле {key} у file organization profile '{profile_id}' должно быть непустой строкой.")
+        managed_root = profile.get("managed_root")
+        if not isinstance(managed_root, str):
+            raise ValidationError(f"Поле managed_root у file organization profile '{profile_id}' должно быть строкой.")
+        if _path_looks_absolute_or_unc(profile.get("incoming_path", "")):
+            raise ValidationError(f"Поле incoming_path у file organization profile '{profile_id}' должно быть относительным путем.")
+        if profile["physical_move_policy"] not in MEMORY_FILE_ORGANIZATION_PHYSICAL_MOVE_POLICY_VALUES:
+            raise ValidationError(f"File organization profile '{profile_id}' содержит недопустимый physical_move_policy.")
+        if profile["storage_backend"] not in MEMORY_FILE_ORGANIZATION_STORAGE_BACKEND_VALUES:
+            raise ValidationError(f"File organization profile '{profile_id}' содержит недопустимый storage_backend.")
+        future_backends = profile.get("future_backends")
+        _ensure_list_of_strings(future_backends, f"Поле future_backends у file organization profile '{profile_id}'")
+        unknown_backends = set(future_backends) - MEMORY_FILE_ORGANIZATION_STORAGE_BACKEND_VALUES
+        if unknown_backends:
+            raise ValidationError(
+                f"File organization profile '{profile_id}' содержит неизвестные future_backends: "
+                + ", ".join(sorted(unknown_backends))
+                + "."
+            )
+        delete_policy = profile.get("source_delete_policy")
+        if not isinstance(delete_policy, dict):
+            raise ValidationError(f"Поле source_delete_policy у file organization profile '{profile_id}' должно быть JSON-объектом.")
+        missing_delete_keys = REQUIRED_MEMORY_FILE_SOURCE_DELETE_POLICY_KEYS - set(delete_policy.keys())
+        if missing_delete_keys:
+            raise ValidationError(
+                f"source_delete_policy у file organization profile '{profile_id}' не содержит поля: "
+                f"{', '.join(sorted(missing_delete_keys))}."
+            )
+        if delete_policy.get("mode") not in MEMORY_FILE_ORGANIZATION_DELETE_MODE_VALUES:
+            raise ValidationError(f"File organization profile '{profile_id}' содержит недопустимый source_delete_policy.mode.")
+        if type(delete_policy.get("retention_days")) is not int or delete_policy["retention_days"] < 0:
+            raise ValidationError(f"source_delete_policy.retention_days у file organization profile '{profile_id}' должно быть числом >= 0.")
+        if type(delete_policy.get("requires_backup_checkpoint")) is not bool:
+            raise ValidationError(
+                f"source_delete_policy.requires_backup_checkpoint у file organization profile '{profile_id}' должно быть boolean."
+            )
+        thresholds = profile.get("proposal_thresholds")
+        if not isinstance(thresholds, dict):
+            raise ValidationError(f"Поле proposal_thresholds у file organization profile '{profile_id}' должно быть JSON-объектом.")
+        for key in ("min_users", "min_events", "min_files", "min_confidence"):
+            if key not in thresholds:
+                raise ValidationError(f"proposal_thresholds у file organization profile '{profile_id}' не содержит {key}.")
+        for key in ("min_users", "min_events", "min_files"):
+            if type(thresholds.get(key)) is not int or thresholds[key] < 1:
+                raise ValidationError(f"proposal_thresholds.{key} у file organization profile '{profile_id}' должно быть положительным числом.")
+        min_confidence = thresholds.get("min_confidence")
+        if not isinstance(min_confidence, (int, float)) or min_confidence < 0 or min_confidence > 1:
+            raise ValidationError(f"proposal_thresholds.min_confidence у file organization profile '{profile_id}' должен быть между 0 и 1.")
+
+
+def _path_looks_absolute_or_unc(path_value: str) -> bool:
+    value = str(path_value or "").strip()
+    return value.startswith("/") or value.startswith("\\\\") or re.match(r"^[A-Za-z]:[\\/]", value) is not None
 
 
 def validate_memory_graph_schema_payload(payload):

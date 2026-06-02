@@ -1,6 +1,6 @@
 # Текущее состояние MVP памяти
 
-Дата: 2026-05-26.
+Дата: 2026-06-02.
 
 Этот документ фиксирует фактическую рабочую границу системы памяти. Целевые планы и ADR остаются источником решений "куда идем", но текущий runtime нужно сверять с этим описанием.
 
@@ -45,6 +45,7 @@ memory.remember
 - Для `adapter_check` источников выдача `source_data` выполняет финальную проверку доступа через доменный адаптер; при отсутствии адаптера результат fail-closed.
 - Privacy defaults для source adapters: PII по умолчанию выключено, внешние источники могут явно включать `pii_guarded`; secret scanning всегда включен.
 - AI-инструмент `workorders.search` ищет по индексированным заявкам через `memory.search` в режиме `source_explicit`.
+- Автоупорядочивание файлового источника: stable `MemoryFileObject`, версии, история физических путей, baseline virtual structure, incoming worker, пользовательский UI `/memory/files/`, агрегированные proposals, `managed_fs` copy/verify/quarantine и блокировка purge без backup checkpoint.
 
 ## Что не работает как runtime MVP
 
@@ -57,6 +58,8 @@ memory.remember
 - MLflow/Ragas/DeepEval quality tracing.
 - Source-specific production connector для внешней ИС.
 - Внешний HTTP API памяти.
+- S3/S3-compatible backend для файлового автоупорядочивания.
+- Автоматическое физическое перемещение без администраторского согласования.
 
 Эти контуры не удалены из ADR и долгосрочных планов, но в текущем runtime они должны отображаться как `planned`, `disabled` или `not_ready`.
 
@@ -89,6 +92,7 @@ python manage.py test apps.memory.tests apps.ai.tests
 python manage.py memory_eval --dry-run
 python manage.py memory_file_backed_e2e
 python manage.py memory_file_content_search_e2e
+python manage.py memory_file_auto_organization_e2e
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py source_adapter_reconcile --source-code workorders --target all --backend fulltext --dry-run

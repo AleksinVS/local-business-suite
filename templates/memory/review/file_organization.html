@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Автоупорядочивание файлов | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+{% include "memory/review/_nav.html" %}
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Ревью памяти</p>
+      <h1>Автоупорядочивание файлов</h1>
+      <p class="description">Baseline, виртуальные структуры, предложения общей структуры и задания безопасного переноса.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link-muted" href="{% url 'memory:user_file_views' %}">Моя структура</a>
+    </div>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Источник</th>
+          <th>Файлы</th>
+          <th>Baseline</th>
+          <th>Предложения</th>
+          <th>Переносы</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sources %}
+          <tr>
+            <td><code>{{ row.source.code }}</code></td>
+            <td>{{ row.file_count }}</td>
+            <td>{{ row.baseline_count }}</td>
+            <td>{{ row.proposal_count }}</td>
+            <td>{{ row.move_job_count }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">Источники памяти пока не созданы.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Предложения структуры</h2>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Предложение</th>
+          <th>Источник</th>
+          <th>Статус</th>
+          <th>Файлы</th>
+          <th>Уверенность</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for proposal in proposals %}
+          <tr>
+            <td>{{ proposal.title }}</td>
+            <td><code>{{ proposal.source.code }}</code></td>
+            <td>{{ proposal.get_status_display }}</td>
+            <td>{{ proposal.affected_file_count }}</td>
+            <td>{{ proposal.confidence }}</td>
+            <td>
+              {% if can_decide_file_organization %}
+                <form method="post" action="{% url 'memory:file_organization_proposal_action' proposal.pk %}" class="inline-form">
+                  {% csrf_token %}
+                  <select name="decision">
+                    {% for value, label in proposal_decisions %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="button-link-muted">Записать</button>
+                </form>
+              {% else %}
+                <span class="muted">Только просмотр</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="muted">Предложений пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="memory-review-grid">
+  <article class="panel">
+    <div class="section-head">
+      <h2>Последние виртуальные размещения</h2>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Путь</th>
+            <th>Структура</th>
+            <th>Статус</th>
+            <th>Уверенность</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for placement in placements %}
+            <tr>
+              <td>{{ placement.virtual_path }}</td>
+              <td>{{ placement.view.slug }}</td>
+              <td>{{ placement.get_status_display }}</td>
+              <td>{{ placement.confidence }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="muted">Размещений пока нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="section-head">
+      <h2>Задания переноса</h2>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Задание</th>
+            <th>Источник</th>
+            <th>Статус</th>
+            <th>Retention</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in move_jobs %}
+            <tr>
+              <td><code>{{ job.idempotency_key }}</code></td>
+              <td><code>{{ job.source.code }}</code></td>
+              <td>{{ job.get_status_display }}</td>
+              <td>{{ job.retention_until|default:"" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="muted">Заданий переноса пока нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{% endblock %}

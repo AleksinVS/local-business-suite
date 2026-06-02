@@ -13,6 +13,7 @@ from django.urls import reverse
 import apps.core.json_utils as json_utils
 from apps.core.json_utils import (
     validate_memory_claims_policy_payload,
+    validate_memory_file_organization_profiles_payload,
     validate_memory_profiles_payload,
     validate_memory_retrieval_budget_payload,
     validate_memory_routing_payload,
@@ -525,6 +526,7 @@ class ArchitectureContractTests(TestCase):
     def test_validate_architecture_contracts_command_passes(self):
         required_settings = (
             "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
+            "LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE",
             "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
             "LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE",
             "LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE",
@@ -626,6 +628,9 @@ class ArchitectureContractTests(TestCase):
         validate_memory_retrieval_budget_payload(
             json.loads((default_contracts / "memory_retrieval_budget.json").read_text(encoding="utf-8"))
         )
+        validate_memory_file_organization_profiles_payload(
+            json.loads((default_contracts / "memory_file_organization_profiles.json").read_text(encoding="utf-8"))
+        )
 
     def test_validate_architecture_contracts_reads_memory_contract_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -634,6 +639,7 @@ class ArchitectureContractTests(TestCase):
             routing_path = tmp_path / "memory_routing.json"
             sources_path = tmp_path / "memory_sources.json"
             ingestion_profiles_path = tmp_path / "memory_ingestion_profiles.json"
+            file_organization_profiles_path = tmp_path / "memory_file_organization_profiles.json"
             graph_schema_path = tmp_path / "memory_graph_schema.json"
             trust_policy_path = tmp_path / "memory_trust_policy.json"
             claims_policy_path = tmp_path / "memory_claims_policy.json"
@@ -644,6 +650,9 @@ class ArchitectureContractTests(TestCase):
             sources_payload = json.loads((default_contracts / "memory_sources.json").read_text(encoding="utf-8"))
             ingestion_profiles_payload = json.loads(
                 (default_contracts / "memory_ingestion_profiles.json").read_text(encoding="utf-8")
+            )
+            file_organization_profiles_payload = json.loads(
+                (default_contracts / "memory_file_organization_profiles.json").read_text(encoding="utf-8")
             )
             trust_policy_payload = json.loads((default_contracts / "memory_trust_policy.json").read_text(encoding="utf-8"))
             claims_policy_payload = json.loads((default_contracts / "memory_claims_policy.json").read_text(encoding="utf-8"))
@@ -656,6 +665,7 @@ class ArchitectureContractTests(TestCase):
             )
             sources_path.write_text(json.dumps(sources_payload), encoding="utf-8")
             ingestion_profiles_path.write_text(json.dumps(ingestion_profiles_payload), encoding="utf-8")
+            file_organization_profiles_path.write_text(json.dumps(file_organization_profiles_payload), encoding="utf-8")
             graph_schema_path.write_text(json.dumps(valid_memory_graph_schema_payload()), encoding="utf-8")
             trust_policy_path.write_text(json.dumps(trust_policy_payload), encoding="utf-8")
             claims_policy_path.write_text(json.dumps(claims_policy_payload), encoding="utf-8")
@@ -666,6 +676,7 @@ class ArchitectureContractTests(TestCase):
                 LOCAL_BUSINESS_MEMORY_ROUTING_FILE=routing_path,
                 LOCAL_BUSINESS_MEMORY_SOURCES_FILE=sources_path,
                 LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE=ingestion_profiles_path,
+                LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE=file_organization_profiles_path,
                 LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE=graph_schema_path,
                 LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE=trust_policy_path,
                 LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE=claims_policy_path,

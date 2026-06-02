@@ -148,6 +148,23 @@ python manage.py memory_eval --dry-run
 python manage.py memory_eval --output-json
 ```
 
+Команды автоупорядочивания файлового источника:
+
+```bash
+python manage.py memory_file_organization_baseline --source-code <code> --dry-run
+python manage.py memory_file_organization_baseline --source-code <code>
+python manage.py memory_file_incoming_worker --source-code <code> --dry-run
+python manage.py memory_file_incoming_worker --source-code <code>
+python manage.py memory_file_structure_stats --source-code <code> --dry-run
+python manage.py memory_file_structure_stats --source-code <code>
+python manage.py memory_file_move_worker --source-code <code> --dry-run
+python manage.py memory_file_move_worker --source-code <code>
+python manage.py memory_file_move_worker --source-code <code> --purge --backup-checkpoint-ref <snapshot-id>
+python manage.py memory_file_auto_organization_e2e
+```
+
+Baseline и incoming не меняют физические файлы. `memory_file_move_worker` обрабатывает только согласованные задания переноса. `--purge` удаляет только карантинную копию исходника после retention и, если политика требует, после `backup-checkpoint-ref`.
+
 Ожидаемый smoke-результат для synthetic eval:
 
 ```text
@@ -166,11 +183,18 @@ Issue/review queue нужна для исключений, а не для все
 /memory/review/
 ```
 
+Личные виртуальные файловые структуры доступны пользователям по адресу:
+
+```text
+/memory/files/
+```
+
 Основные разделы:
 
 - `Сводка` — счетчики открытых issues, blocker/privacy cases и проблем состояния индекса;
 - `Issues` — очередь `MemoryIngestionIssue` с фильтрами по статусу, severity, типу, источнику и группам проблем;
 - `Индекс` — состояние `MemorySearchDocument`, FTS/vector metadata и действия reindex/delete stale;
+- `Файлы` — baseline-размещения, предложения общей файловой структуры и задания переноса;
 - `Журнал` — неизменяемые `MemoryReviewAction` для решений оператора.
 
 UI использует `ReviewQueueItem` как read-only проекцию для списков. Постоянной таблицы `ReviewCase` в MVP нет: источником истины остаются `MemoryIngestionIssue`, `MemorySearchDocument` и `MemoryReviewAction`.
@@ -215,6 +239,57 @@ ignored
 - `ignored` допустим только с понятной причиной, например устаревший файл или намеренно неподдерживаемый формат.
 
 Password-protected, encrypted, partial и suspicious документы не должны тихо исчезать из процесса: они остаются видимыми в issue queue и audit.
+
+## Автоупорядочивание файлового источника
+
+Архитектурное решение: `docs/adr/ADR-0025-file-source-auto-organization.md`.
+
+Runtime-профили настраиваются в:
+
+```text
+data/contracts/ai/memory_file_organization_profiles.json
+```
+
+Default-шаблон лежит в:
+
+```text
+contracts/ai/memory_file_organization_profiles.json
+```
+
+Обязательные параметры профиля:
+
+- `source_code` — код `MemorySource`;
+- `incoming_path` — относительный путь входного каталога, обычно `incoming/new`;
+- `managed_root` — host-specific управляемый корень, задается в runtime contract или deployment silo;
+- `physical_move_policy=approval_required`;
+- `source_delete_policy.mode=quarantine_then_purge`;
+- `source_delete_policy.retention_days`;
+- `source_delete_policy.requires_backup_checkpoint`;
+- `proposal_thresholds` — минимальные пороги для предложений общей структуры.
+
+Рабочая последовательность:
+
+```text
+memory_discover_source
+  -> memory_file_organization_baseline
+  -> memory_file_incoming_worker
+  -> memory_file_structure_stats
+  -> admin proposal decision
+  -> memory_file_move_worker
+  -> quarantine retention
+  -> memory_file_move_worker --purge --backup-checkpoint-ref <snapshot-id>
+```
+
+Правила безопасности:
+
+- `relative_path` не используется как личность файла в контуре автоупорядочивания;
+- `MemoryFileObject.file_id` связывает один и тот же файл после смены пути;
+- baseline создает только виртуальные размещения и review issues;
+- входной каталог блокирует текстовые файлы с найденными секретами до публикации размещения;
+- пользовательские виртуальные структуры не дают право доступа к файлу;
+- предложения общей структуры строятся из агрегированных сигналов и порогов, а не из одного пользователя;
+- физический перенос создает managed copy, проверяет SHA-256 и размер, затем переносит исходник в карантин;
+- окончательное удаление исходника запрещено до retention и backup checkpoint, если профиль требует checkpoint.
 
 Правила операторских действий:
 

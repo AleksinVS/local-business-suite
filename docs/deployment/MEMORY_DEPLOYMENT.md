@@ -9,12 +9,13 @@
 Код:
 
 - Django app `apps.memory`;
-- контракты `contracts/ai/memory_sources.json`, `memory_profiles.json`, `memory_routing.json`, `memory_trust_policy.json`, `memory_claims_policy.json`, `memory_retrieval_budget.json`, `memory_ingestion_profiles.json`, `memory_graph_schema.json`;
+- контракты `contracts/ai/memory_sources.json`, `memory_profiles.json`, `memory_routing.json`, `memory_trust_policy.json`, `memory_claims_policy.json`, `memory_retrieval_budget.json`, `memory_ingestion_profiles.json`, `memory_file_organization_profiles.json`, `memory_graph_schema.json`;
 - схемы `contracts/schemas/memory_*.schema.json`;
 - AI tool `memory.search`;
 - management commands `memory_sync_source`, `memory_reindex`, `memory_eval`;
 - file-backed knowledge commands `knowledge_writer_worker`, `knowledge_index_worker`, `knowledge_reflection_worker`, `memory_verify_knowledge_files`, `memory_file_backed_e2e`;
 - external connector commands `memory_external_enqueue`, `memory_external_worker`, `memory_external_queue_status`, `memory_external_cleanup`.
+- file source auto organization commands `memory_file_organization_baseline`, `memory_file_incoming_worker`, `memory_file_structure_stats`, `memory_file_move_worker`, `memory_file_auto_organization_e2e`.
 
 Runtime data:
 
@@ -112,6 +113,7 @@ cp contracts/ai/memory_trust_policy.json data/contracts/ai/memory_trust_policy.j
 cp contracts/ai/memory_claims_policy.json data/contracts/ai/memory_claims_policy.json
 cp contracts/ai/memory_retrieval_budget.json data/contracts/ai/memory_retrieval_budget.json
 cp contracts/ai/memory_ingestion_profiles.json data/contracts/ai/memory_ingestion_profiles.json
+cp contracts/ai/memory_file_organization_profiles.json data/contracts/ai/memory_file_organization_profiles.json
 cp contracts/ai/memory_graph_schema.json data/contracts/ai/memory_graph_schema.json
 python manage.py validate_architecture_contracts
 ```
@@ -142,6 +144,37 @@ Get-ChildItem "\\SERVER\Share\Folder" -File | Select-Object -First 5
 ```
 
 Если процесс работает как Windows service, проверку нужно выполнять в контексте той же service identity.
+
+## Auto Organization Managed FS
+
+Режим автоупорядочивания файлового источника включается отдельным runtime-контрактом:
+
+```text
+data/contracts/ai/memory_file_organization_profiles.json
+```
+
+Production checklist:
+
+- применить миграции `knowledge_meta`, иначе таблицы `MemoryFileObject`, `MemoryFileVirtualPlacement`, `MemoryFileMoveJob` будут отсутствовать;
+- задать `managed_root` в runtime contract или приватном deployment repo, не в default contract;
+- создать входной каталог `<source>/incoming/new`;
+- закрывать прямую запись в старые рабочие папки организационно или правами доступа, когда входной каталог принят пользователями;
+- проверить `memory_file_organization_baseline --dry-run` и только потом запускать без `--dry-run`;
+- запускать `memory_file_move_worker` только после администраторского решения по предложению структуры;
+- хранить move manifests и карантин внутри runtime `managed_root`, а не в репозитории;
+- запускать purge только после backup/snapshot checkpoint:
+
+```bash
+python manage.py memory_file_move_worker --source-code <code> --purge --backup-checkpoint-ref <snapshot-id>
+```
+
+Smoke:
+
+```bash
+python manage.py memory_file_auto_organization_e2e
+```
+
+Команда создает синтетический corpus в `.local/e2e/`, проверяет baseline, incoming, proposal, managed_fs copy/verify, quarantine и блокировку purge без backup checkpoint.
 
 ## External System Connector MVP
 
@@ -191,6 +224,11 @@ python manage.py knowledge_reflection_worker --help
 python manage.py memory_verify_knowledge_files --help
 python manage.py memory_file_backed_e2e --help
 python manage.py memory_file_content_search_e2e --help
+python manage.py memory_file_organization_baseline --help
+python manage.py memory_file_incoming_worker --help
+python manage.py memory_file_structure_stats --help
+python manage.py memory_file_move_worker --help
+python manage.py memory_file_auto_organization_e2e --help
 python manage.py memory_reflect_chats --help
 python manage.py memory_reindex --help
 python manage.py memory_eval --help

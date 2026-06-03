@@ -53,8 +53,8 @@ class LDAPAuthConfigTests(TestCase):
     def test_ad_group_sync_removes_only_ad_managed_missing_roles(self):
         User = get_user_model()
         user = User.objects.create_user(username="ldap-user")
-        technician = Group.objects.create(name="technician")
-        local_group = Group.objects.create(name="local-only")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        local_group, _ = Group.objects.get_or_create(name="local-only")
         user.groups.add(technician, local_group)
 
         sync_user_groups(

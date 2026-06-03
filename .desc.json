@@ -29,6 +29,5 @@
   ".env.example": "Шаблон переменных окружения",
   ".gitignore": "Исключения из Git",
   ".dockerignore": "Исключения из Docker build context",
-  "pytest.ini": "Конфигурация pytest",
-  "start_agent_runtime.bat": "Скрипт запуска agent runtime на Windows"
+  "pytest.ini": "Конфигурация pytest"
 }

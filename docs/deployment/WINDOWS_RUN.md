@@ -15,7 +15,7 @@
 Из корня проекта:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -Setup -Migrate -SeedRoles
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\run_windows.ps1 -Setup -Migrate -SeedRoles
 ```
 
 Эта команда:
@@ -30,13 +30,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -Setup -Migra
 После подготовки можно запустить только Django:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -WebOnly
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\run_windows.ps1 -WebOnly
 ```
 
 Или поднять Django и AI runtime вместе:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -StartRuntime
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\run_windows.ps1 -StartRuntime
 ```
 
 ## Что поднимается
@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -StartRuntime
 ## Если нужен доступ с хоста или из другой машины
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -WebOnly -BindHost 0.0.0.0 -Port 8000
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\run_windows.ps1 -WebOnly -BindHost 0.0.0.0 -Port 8000
 ```
 
 Для `VirtualBox` после этого нужно еще пробросить порт или использовать `Bridged Adapter`.
@@ -58,6 +58,25 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_windows.ps1 -WebOnly -Bin
 - Без `agent_runtime` обычные Django-экраны работают, но AI-часть не будет полноценной.
 - Если `OPENAI_API_KEY` не задан, runtime может стартовать, но AI-запросы будут завершаться ошибкой.
 - Если PowerShell блокирует скрипт, используйте `-ExecutionPolicy Bypass`, как в примерах выше.
+- На Windows Server с IIS не запускайте одновременно ручной runtime через `-StartRuntime` и автозапуск через Task Scheduler. Для постоянного режима оставьте только задачу планировщика.
+
+## Автозапуск Agent Runtime на Windows Server
+
+Для постоянного запуска Agent Runtime используйте одну задачу Task Scheduler:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup_agent_runtime_autostart.ps1 -Force
+```
+
+Скрипт регистрирует задачу `Portal Agent Runtime` в `\Portal\` и запускает runtime через `.venv\Scripts\python.exe`. Перед регистрацией он ищет и предлагает удалить старые задачи, которые запускали тот же runtime через другой Python или старый `start_agent_runtime.bat`.
+
+Диагностика дублей без изменения системы:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\check_agent_runtime_autostart.ps1
+```
+
+Если одновременно видны процессы через `.venv` и `C:\Program Files\Python311\python.exe`, обычно причина в старой задаче планировщика в корне Task Scheduler и новой задаче в `\Portal\`. Перезапустите `setup_agent_runtime_autostart.ps1 -Force` и оставьте одну задачу.
 
 ## Полезные команды
 

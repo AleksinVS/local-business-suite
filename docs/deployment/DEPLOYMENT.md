@@ -29,12 +29,14 @@ Production-развертывание поддерживает две конфи
 - **Python**: 3.11.9 (важно: 3.13+ несовместим с wfastcgi 3.0.0)
 - **FastCGI**: wfastcgi 3.0.0
 - **Аутентификация**: Windows Authentication (SSO) с fallback на LDAP
+- **Agent Runtime**: отдельный процесс uvicorn, запускаемый через `.venv\Scripts\python.exe` одной задачей Task Scheduler. Скрипты: `scripts/windows/setup_agent_runtime_autostart.ps1` и `scripts/windows/check_agent_runtime_autostart.ps1`.
 
 **Важные особенности IIS развертывания**:
 - Используйте отдельный IIS Site для приложения, а не application внутри другого сайта
 - Требуется middleware для исправления проблемы с PATH_INFO (см. `IIS_SSO.md`)
 - Секреты хранятся в `.env` файле, не в `web.config`
 - Статические файлы обслуживаются через Whitenoise middleware
+- Не оставляйте две задачи автозапуска Agent Runtime. После перехода со старой задачи через `C:\Program Files\Python311\python.exe` на `.venv\Scripts\python.exe` выполните `setup_agent_runtime_autostart.ps1 -Force` и проверьте результат через `check_agent_runtime_autostart.ps1`.
 
 ## Что должно быть на VPS
 

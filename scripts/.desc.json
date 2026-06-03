@@ -1,14 +1,8 @@
 {
   ".": "Скрипты и инструменты разработки",
-  "dev/": "Инструменты разработки (генератор структуры)",
-  "dev/generate-structure.js": "Генератор PROJECT_STRUCTURE.yaml из .desc.json",
-  "e2e/": "Playwright e2e конфигурация и тесты",
-  "init_project.ps1": "Инициализация проекта (PowerShell)",
-  "run_windows.ps1": "Запуск на Windows (PowerShell)",
-  "run_agent_runtime.ps1": "Запуск agent runtime (PowerShell)",
-  "start_agent_runtime.bat": "Запуск agent runtime (BAT)",
-  "start_agent_runtime.ps1": "Запуск agent runtime (PowerShell)",
-  "setup_agent_runtime_autostart.ps1": "Настройка автозапуска agent runtime",
-  "setup-docker-rights.sh": "Настройка Docker прав на VPS (Bash)",
-  "verify_ui.py": "Верификация UI (Python скрипт)"
+  "dev": "Инструменты разработки (генератор структуры)",
+  "e2e": "Playwright e2e конфигурация и тесты",
+  "linux": "Linux deployment и обслуживание",
+  "utils": "Утилиты локальной проверки",
+  "windows": "Windows-скрипты запуска, IIS-подготовки и автозапуска"
 }

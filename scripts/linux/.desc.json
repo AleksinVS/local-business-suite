@@ -1,0 +1,5 @@
+{
+  ".": "Linux deployment и обслуживание",
+  "deploy.sh": "Скрипт деплоя на Linux/VPS",
+  "setup-docker-rights.sh": "Настройка прав пользователя для Docker на VPS"
+}

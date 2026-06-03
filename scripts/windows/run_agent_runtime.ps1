@@ -4,12 +4,17 @@
 
 $ErrorActionPreference = "Stop"
 $env:PYTHONUNBUFFERED = "1"
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+
+if (-not (Test-Path $VenvPython)) {
+    throw "Python виртуального окружения не найден: $VenvPython"
+}
 
 Write-Host "Запуск Agent Runtime..." -ForegroundColor Green
-Write-Host "Рабочая директория: $scriptPath" -ForegroundColor Cyan
+Write-Host "Рабочая директория: $ProjectRoot" -ForegroundColor Cyan
 
-cd $scriptPath
+Set-Location $ProjectRoot
 
 # Проверка порта
 $port = 8090
@@ -22,10 +27,11 @@ if ($connection.TcpTestSucceeded) {
 
 # Запуск в фоновом задании
 $job = Start-Job -ScriptBlock {
-    $scriptPath = $using:scriptPath
+    $ProjectRoot = $using:ProjectRoot
+    $VenvPython = $using:VenvPython
     $env:PYTHONUNBUFFERED = "1"
-    cd $scriptPath
-    & ".\.venv\Scripts\python.exe" -m uvicorn services.agent_runtime.app:app --host 127.0.0.1 --port 8090 -timeout-keep-alive 300
+    Set-Location $ProjectRoot
+    & $VenvPython -m uvicorn services.agent_runtime.app:app --host 127.0.0.1 --port 8090 --timeout-keep-alive 300 --log-level info
 }
 
 Write-Host "Agent Runtime запущен в фоновом режиме (Job ID: $($job.Id))" -ForegroundColor Green

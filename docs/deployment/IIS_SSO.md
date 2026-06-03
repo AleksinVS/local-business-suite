@@ -309,7 +309,7 @@ iisreset
 ```powershell
 cd C:\inetpub\local-business-suite
 
-py -3.12 -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -U pip
 .\.venv\Scripts\pip.exe install -r requirements.txt
 .\.venv\Scripts\pip.exe install wfastcgi
@@ -320,6 +320,22 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe manage.py seed_roles
 .\.venv\Scripts\python.exe manage.py check
 ```
+
+## Agent Runtime на Windows Server
+
+IIS/FastCGI запускает Django. Agent Runtime должен запускаться отдельно через одну задачу Task Scheduler:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup_agent_runtime_autostart.ps1 -Force
+```
+
+Проверить, нет ли старой задачи через `C:\Program Files\Python311\python.exe` или второго процесса uvicorn:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\check_agent_runtime_autostart.ps1
+```
+
+Если диагностика показывает больше одной задачи или больше одного процесса Agent Runtime, оставьте только задачу `Portal Agent Runtime` в `\Portal\`, созданную текущим скриптом автозапуска.
 
 ## Переход на нормальный LDAPS
 

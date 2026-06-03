@@ -11,7 +11,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $EnvFile = Join-Path $ProjectRoot ".env"
 $EnvExampleFile = Join-Path $ProjectRoot ".env.example"

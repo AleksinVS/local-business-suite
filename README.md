@@ -142,6 +142,7 @@ python manage.py runserver
 ## Проверка проекта
 
 Подробная политика тестирования: `docs/guides/TESTING_POLICY.md`.
+Практические способы ускорения без снижения покрытия: `docs/guides/TEST_ACCELERATION.md`.
 
 Базовые проверки:
 
@@ -237,6 +238,7 @@ Runtime-данные не коммитятся:
 - `docs/guides/MEMORY_USER_GUIDE.md` — руководство по системе памяти.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — опросники для владельцев данных и профильных экспертов.
+- `docs/guides/TEST_ACCELERATION.md` — ускорение локальных и контрольных тестов без снижения покрытия.
 - `docs/guides/TESTING_POLICY.md` — уровни тестов, матрица обязательных проверок и независимая проверка субагентом.
 - `docs/guides/WORKER_AND_QUEUE_OPERATIONS.md` — единые правила worker-команд, очередей, retry и idempotency.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.

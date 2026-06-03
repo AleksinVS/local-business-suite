@@ -288,6 +288,7 @@ docs: # Документация проекта
     PROJECT_REVIEW.md: file # Чек-лист ревью проекта
     PROJECT_STRUCTURE_SYSTEM.md: file # Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)
     SETTINGS_CENTER_OPERATIONS.md: file # Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals
+    TEST_ACCELERATION.md: file # Практический guide по ускорению тестов без снижения покрытия
     TESTING_POLICY.md: file # Политика тестирования, матрица обязательных проверок и независимая проверка субагентом
     WORKER_AND_QUEUE_OPERATIONS.md: file # Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости
   legacy: # Устаревшая документация (MVP)
@@ -495,8 +496,10 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Исполнительный план документационного workflow-блока
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки документации по тестированию
       EXECUTOR_REPORT.documentation.md: file # Отчет исполнения по созданию политики тестирования
+      EXECUTOR_REPORT.test-runtime-acceleration.md: file # Отчет исполнения по ускорению повторных тестовых прогонов
       RETROSPECTIVE.md: file # Ретроспектива создания политики тестирования
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационной задачи по политике тестирования
+      TASK_ACCEPTANCE.test-runtime-acceleration.md: file # Приемка задачи по test-fast и guide ускорения тестов
     universal-right-drawer-ai-navigation: # Workflow: универсальное открытие правого сайдбара ИИ-ботом
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для universal right drawer AI navigation

@@ -12,6 +12,7 @@
 
 - `AGENTS.md`;
 - `README.md`;
+- `docs/guides/TEST_ACCELERATION.md`;
 - `pytest.ini`;
 - `scripts/e2e/playwright.config.ts`;
 - профильные ADR и planning-документы.

@@ -3,7 +3,9 @@
   "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки документации по тестированию",
   "ARCHITECT_PLAN.json": "Исполнительный план документационного workflow-блока",
   "EXECUTOR_REPORT.documentation.md": "Отчет исполнения по созданию политики тестирования",
+  "EXECUTOR_REPORT.test-runtime-acceleration.md": "Отчет исполнения по ускорению повторных тестовых прогонов",
   "TASK_ACCEPTANCE.documentation.md": "Приемка документационной задачи по политике тестирования",
+  "TASK_ACCEPTANCE.test-runtime-acceleration.md": "Приемка задачи по test-fast и guide ускорения тестов",
   "RETROSPECTIVE.md": "Ретроспектива создания политики тестирования",
   "task-packets": "Task packet для проектной и исполнительной документации"
 }

@@ -1,0 +1,4 @@
+{
+  ".": "Tauri capabilities и разрешения plugins",
+  "default.json": "Минимальные разрешения core, notification, autostart, opener и stronghold для главного окна"
+}

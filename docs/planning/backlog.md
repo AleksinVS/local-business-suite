@@ -146,7 +146,7 @@ MVP реализован и ожидает приемку владельцем. 
 
 ### PWA-first уведомления и опциональный Tauri-клиент
 
-Этап 1 PWA/browser notifications реализован как MVP и ожидает приемку владельцем. Второй этап Tauri остается опциональным будущим срезом для пользователей, которым нужен постоянный фоновый канал.
+Этап 1 PWA/browser notifications реализован как MVP. Этап 2 Tauri реализован как первичный optional client и ожидает техническую проверку сборки на целевых ОС.
 
 Контекст:
 - архитектурное решение находится в `docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md`;
@@ -154,6 +154,8 @@ MVP реализован и ожидает приемку владельцем. 
 - активный план находится в `docs/planning/active/desktop-notifications-pwa-tauri.md`;
 - workflow package находится в `workflow/active/desktop-notifications-pwa-tauri/`;
 - руководство пользователя находится в `docs/guides/NOTIFICATIONS_USER_GUIDE.md`.
+- руководство Tauri-клиента находится в `docs/guides/DESKTOP_NOTIFIER_USER_GUIDE.md`;
+- deployment guide Tauri-клиента находится в `docs/deployment/DESKTOP_NOTIFIER_DEPLOYMENT.md`.
 
 Статус реализации:
 - добавлен серверный домен `apps.notifications`;
@@ -163,12 +165,18 @@ MVP реализован и ожидает приемку владельцем. 
 - доставка в открытую страницу работает через polling с cursor;
 - события заявок создают безопасные уведомления для разрешенных получателей;
 - добавлены unit/integration тесты и Playwright spec для PWA-ресурсов.
+- добавлен device API для Tauri: exchange-code, feed, ack, revoke;
+- добавлена страница `Уведомления` -> `Устройства`;
+- добавлен Tauri 2 клиент `clients/desktop-notifier/` с tray, notifications, autostart, opener и Stronghold vault.
 
 Оставшееся действие:
 - выполнить миграции на целевой базе;
 - проверить HTTPS-профиль production для PWA/browser notifications;
 - выполнить авторизованный Playwright UI-сценарий на стенде с `E2E_USERNAME` и `E2E_PASSWORD`;
-- после приемки владельцем либо архивировать этап 1, либо открыть отдельный scope этапа 2 Tauri.
+- собрать Tauri-клиент на Windows и выбранном Linux окружении;
+- проверить tray/notification behavior на рабочих местах;
+- решить вопросы installer signing, обновлений и подавления дублей PWA/Tauri;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ## Next
 

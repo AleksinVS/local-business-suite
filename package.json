@@ -10,7 +10,12 @@
     "playwright:install": "playwright install chromium",
     "test:e2e": "playwright test -c scripts/e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test -c scripts/e2e/playwright.config.ts --headed",
-    "test:e2e:ui": "playwright test -c scripts/e2e/playwright.config.ts --ui"
+    "test:e2e:ui": "playwright test -c scripts/e2e/playwright.config.ts --ui",
+    "desktop-notifier:dev": "npm --prefix clients/desktop-notifier run tauri:dev",
+    "desktop-notifier:build": "npm --prefix clients/desktop-notifier run tauri:build",
+    "desktop-notifier:rust:fmt": "npm --prefix clients/desktop-notifier run rust:fmt",
+    "desktop-notifier:rust:check": "npm --prefix clients/desktop-notifier run rust:check",
+    "desktop-notifier:rust:test": "npm --prefix clients/desktop-notifier run rust:test"
   },
   "repository": {
     "type": "git",

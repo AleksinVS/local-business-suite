@@ -231,3 +231,34 @@ class NotificationDeviceToken(models.Model):
 
     def __str__(self):
         return f"{self.user_id}:{self.device_name}:{self.platform}"
+
+
+class NotificationDeviceLinkCode(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_device_link_codes",
+        verbose_name="Пользователь",
+    )
+    code_hash = models.CharField("Хеш кода", max_length=128, unique=True)
+    device_name = models.CharField("Название устройства", max_length=160, blank=True)
+    platform = models.CharField("Платформа", max_length=64, blank=True)
+    expires_at = models.DateTimeField("Истекает")
+    used_at = models.DateTimeField("Использовано", blank=True, null=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["expires_at", "used_at"]),
+        ]
+        verbose_name = "Код подключения устройства"
+        verbose_name_plural = "Коды подключения устройств"
+
+    @property
+    def is_active(self):
+        return self.used_at is None and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f"{self.user_id}:{self.expires_at:%Y-%m-%d %H:%M}"

@@ -188,6 +188,8 @@ The `request_id` shown to the user should match `AgentActionLog.request_payload[
 
 Для пилота PWA-уведомлений production-профиль должен быть переведен на HTTPS через Caddy, IIS TLS binding или другой утвержденный reverse proxy.
 
+Опциональный Tauri-клиент уведомлений собирается и распространяется отдельно от Django deployment. Инструкции находятся в `docs/deployment/DESKTOP_NOTIFIER_DEPLOYMENT.md`.
+
 ## Основной сценарий деплоя
 
 Использовать только [deploy.sh](deploy.sh):

@@ -18,7 +18,10 @@
         <h2>Уведомления</h2>
         <p id="notification-status-text">Загрузка...</p>
       </div>
-      <a href="{% url 'notifications:center' %}" class="notification-link">Все</a>
+      <div class="notification-head-links">
+        <a href="{% url 'notifications:devices' %}" class="notification-link">Устройства</a>
+        <a href="{% url 'notifications:center' %}" class="notification-link">Все</a>
+      </div>
     </div>
     <div class="notification-permission-panel" id="notification-permission-panel">
       <p id="notification-permission-text">

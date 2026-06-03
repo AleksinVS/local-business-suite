@@ -9,7 +9,10 @@
         <h2>Уведомления</h2>
         <p class="text-muted">Здесь отображаются последние события, доступные вашей учетной записи.</p>
       </div>
-      <button type="button" class="button-link" id="notifications-page-enable-button">Включить браузерные уведомления</button>
+      <div class="notification-page-actions">
+        <a class="button-link button-link-muted" href="{% url 'notifications:devices' %}">Устройства</a>
+        <button type="button" class="button-link" id="notifications-page-enable-button">Включить браузерные уведомления</button>
+      </div>
     </div>
     <div id="notifications-page-list" class="notification-list notification-list-page">
       <div class="notification-empty">Загрузка уведомлений...</div>

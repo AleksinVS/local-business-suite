@@ -16,6 +16,7 @@
 - **AI-чат** с bounded tools и gateway-интеграцией в Django.
 - **Система памяти AI** для поиска по безопасному корпусу знаний с citations и audit.
 - **Автоупорядочивание файловых источников памяти** с виртуальной baseline-структурой, входным каталогом и безопасным managed_fs переносом.
+- **Уведомления портала**: PWA/browser notifications без стороннего Web Push и опциональный Tauri-клиент в трее.
 - **Аналитика** по заявкам и устройствам.
 - **Контрактная конфигурация** ролей, workflow, AI tools, task types и memory sources.
 
@@ -27,6 +28,7 @@
 - `contracts/` — дефолтные JSON-контракты, которые версионируются в Git.
 - `data/contracts/` — runtime-копии контрактов для изменяемой среды.
 - `services/agent_runtime/` — отдельный runtime AI-агента на LangGraph/MCP.
+- `clients/desktop-notifier/` — опциональный Tauri-клиент уведомлений в трее.
 - `docs/` — архитектура, ADR, инструкции пользователя, deployment и планирование.
 - `workflow/` — рабочие пакеты и отчеты выполнения активных блоков разработки.
 
@@ -207,6 +209,7 @@ python manage.py performance_report
 - **Windows Server / IIS**: IIS 10+, FastCGI, wfastcgi, Python 3.11. Инструкция: `docs/deployment/IIS_SSO.md`.
 - **Локальный запуск Windows**: `docs/deployment/WINDOWS_RUN.md`.
 - **Система памяти**: дополнительные шаги в `docs/deployment/MEMORY_DEPLOYMENT.md`.
+- **Tauri-клиент уведомлений**: сборка и распространение в `docs/deployment/DESKTOP_NOTIFIER_DEPLOYMENT.md`.
 
 Runtime-данные не коммитятся:
 
@@ -235,7 +238,10 @@ Runtime-данные не коммитятся:
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
 - `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md` — план queued API-коннекторов и landing zone для внешних ИС.
+- `docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md` — архитектура PWA-уведомлений и Tauri-клиента.
 - `docs/guides/MEMORY_USER_GUIDE.md` — руководство по системе памяти.
+- `docs/guides/NOTIFICATIONS_USER_GUIDE.md` — руководство по центру уведомлений и PWA.
+- `docs/guides/DESKTOP_NOTIFIER_USER_GUIDE.md` — руководство по Tauri-клиенту уведомлений.
 - `docs/guides/MEMORY_INGESTION_OPERATIONS.md` — эксплуатация ingestion, review queues и schema bootstrapping.
 - `docs/guides/MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md` — опросники для владельцев данных и профильных экспертов.
 - `docs/guides/TEST_ACCELERATION.md` — ускорение локальных и контрольных тестов без снижения покрытия.

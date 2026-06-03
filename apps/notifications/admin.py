@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     NotificationBrowserClient,
     NotificationDeviceToken,
+    NotificationDeviceLinkCode,
     NotificationEvent,
     NotificationPreference,
     NotificationRecipient,
@@ -54,3 +55,11 @@ class NotificationDeviceTokenAdmin(admin.ModelAdmin):
     list_filter = ("platform", "revoked_at")
     search_fields = ("user__username", "device_name")
     readonly_fields = ("token_hash", "created_at", "last_seen_at", "revoked_at")
+
+
+@admin.register(NotificationDeviceLinkCode)
+class NotificationDeviceLinkCodeAdmin(admin.ModelAdmin):
+    list_display = ("user", "device_name", "platform", "expires_at", "used_at", "created_at")
+    list_filter = ("used_at", "expires_at", "created_at")
+    search_fields = ("user__username", "device_name", "platform")
+    readonly_fields = ("code_hash", "created_at", "used_at")

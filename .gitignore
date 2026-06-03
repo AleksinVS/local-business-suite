@@ -23,5 +23,6 @@ wfastcgi.ini
 deployments/
 VOB3/
 node_modules/
+clients/*/dist/
 playwright-report/
 test-results/

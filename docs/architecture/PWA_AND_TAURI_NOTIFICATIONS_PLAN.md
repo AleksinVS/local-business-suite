@@ -2,7 +2,7 @@
 
 ## Статус
 
-Архитектура принята. Этап 1 реализован как MVP и ожидает приемку владельцем. Этап 2 Tauri не начат.
+Архитектура принята. Этап 1 реализован как MVP. Этап 2 Tauri реализован как первичный optional client и ожидает техническую проверку сборки на целевых ОС.
 
 Архитектурное решение: `docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md`.
 
@@ -70,6 +70,31 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 - UI управления device tokens;
 - quiet hours UI.
 
+## Реализованный срез этапа 2
+
+Реализовано:
+
+- модель одноразового `NotificationDeviceLinkCode`;
+- обмен одноразового кода на device token;
+- хранение на сервере только HMAC-хеша device token;
+- bearer-auth API `/notifications/api/devices/feed/`, `/ack/`, `/revoke/`;
+- страница `Уведомления` -> `Устройства` для выпуска кода и отзыва устройства;
+- Tauri 2 проект `clients/desktop-notifier/`;
+- tray menu: открыть, свернуть, выход;
+- системные уведомления через Tauri notification plugin;
+- открытие портала через opener plugin;
+- автозапуск через autostart plugin;
+- хранение device token в Stronghold vault;
+- deployment и user guide для настольного клиента.
+
+Осталось перед production rollout:
+
+- собрать клиент на Windows и выбранном Linux окружении;
+- проверить tray/notification behavior на рабочих местах;
+- подготовить Windows installer signing;
+- определить стратегию обновлений клиента;
+- при необходимости добавить подавление дублей между PWA и Tauri.
+
 ## Пользовательские сценарии
 
 ### Этап 1. Включение PWA-уведомлений
@@ -114,9 +139,9 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 
 1. Пользователь устанавливает приложение уведомлений.
 2. В портале открывает "Подключить приложение уведомлений".
-3. Получает одноразовый код или deep link подключения.
+3. Получает одноразовый код подключения.
 4. Tauri-клиент меняет код на device token.
-5. Клиент сохраняет токен в защищенном хранилище ОС.
+5. Клиент сохраняет токен в Stronghold vault.
 6. Иконка появляется в трее.
 7. Клиент получает уведомления от портала даже при закрытом браузере, пока сам клиент запущен.
 
@@ -208,7 +233,7 @@ POST /notifications/api/devices/ack/
 POST /notifications/api/devices/revoke/
 ```
 
-Эти endpoint пока не реализованы. В этапе 1 добавлена только модель `NotificationDeviceToken` как подготовка к Tauri.
+Эти endpoint реализованы во втором срезе. Они используют `Authorization: Bearer <device_token>` и не принимают Django session cookie как способ авторизации Tauri-клиента.
 
 Токен устройства:
 

@@ -1,6 +1,6 @@
 {
   "block_id": "desktop-notifications-pwa-tauri",
-  "status": "stage1_pwa_mvp_implemented_tauri_pending",
+  "status": "stage1_pwa_mvp_implemented_stage2_tauri_primary_client_implemented",
   "created_at": "2026-06-03",
   "architecture_sources": [
     "docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md",

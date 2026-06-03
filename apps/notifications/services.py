@@ -1,4 +1,9 @@
 import hashlib
+import hmac
+import secrets
+import string
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Iterable
 
 from django.conf import settings
@@ -10,6 +15,8 @@ from .models import (
     BrowserNotificationPermission,
     NotificationBrowserClient,
     NotificationChannel,
+    NotificationDeviceLinkCode,
+    NotificationDeviceToken,
     NotificationEvent,
     NotificationPreference,
     NotificationRecipient,
@@ -19,6 +26,9 @@ from .models import (
 from .selectors import new_count_for_user, unread_count_for_user
 
 User = get_user_model()
+
+DEVICE_SCOPE_READ = "notifications:read"
+DEVICE_SCOPE_ACK = "notifications:ack"
 
 SEVERITY_ORDER = {
     NotificationSeverity.INFO: 10,
@@ -218,6 +228,14 @@ def _hash_browser_fingerprint(fingerprint: str) -> str:
     return hashlib.sha256(base).hexdigest()
 
 
+def _hash_secret(value: str, *, purpose: str) -> str:
+    return hmac.new(
+        str(settings.SECRET_KEY).encode("utf-8"),
+        f"{purpose}:{value}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def _user_agent_family(user_agent: str) -> str:
     value = (user_agent or "").strip()
     if not value:
@@ -262,3 +280,116 @@ def register_browser_client(
         enabled=bool(enabled) and normalized_permission == BrowserNotificationPermission.GRANTED,
     )
     return browser_client
+
+
+def normalize_link_code(code: str) -> str:
+    return "".join(ch for ch in str(code or "").upper() if ch.isalnum())
+
+
+def _format_link_code(raw: str) -> str:
+    return "-".join(raw[index : index + 4] for index in range(0, len(raw), 4))
+
+
+def create_device_link_code(user, *, ttl_minutes: int = 10):
+    alphabet = string.ascii_uppercase + string.digits
+    raw = "".join(secrets.choice(alphabet) for _ in range(12))
+    display_code = _format_link_code(raw)
+    link_code = NotificationDeviceLinkCode.objects.create(
+        user=user,
+        code_hash=_hash_secret(normalize_link_code(display_code), purpose="notification-device-link-code"),
+        expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
+    )
+    return link_code, display_code
+
+
+def hash_device_token(token: str) -> str:
+    return _hash_secret(str(token or ""), purpose="notification-device-token")
+
+
+@dataclass(frozen=True)
+class DeviceExchangeResult:
+    device: NotificationDeviceToken
+    raw_token: str
+
+
+@transaction.atomic
+def exchange_device_link_code(*, code: str, device_name: str, platform: str) -> DeviceExchangeResult | None:
+    normalized_code = normalize_link_code(code)
+    if not normalized_code:
+        return None
+    link_code = (
+        NotificationDeviceLinkCode.objects.select_for_update()
+        .filter(
+            code_hash=_hash_secret(normalized_code, purpose="notification-device-link-code"),
+            used_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        )
+        .select_related("user")
+        .first()
+    )
+    if link_code is None:
+        return None
+
+    raw_token = f"lbsn_dt_{secrets.token_urlsafe(32)}"
+    device = NotificationDeviceToken.objects.create(
+        user=link_code.user,
+        device_name=safe_text(device_name or "Устройство уведомлений", max_length=160),
+        platform=safe_text(platform or "unknown", max_length=64),
+        token_hash=hash_device_token(raw_token),
+        scopes=[DEVICE_SCOPE_READ, DEVICE_SCOPE_ACK],
+        last_seen_at=timezone.now(),
+    )
+    link_code.device_name = device.device_name
+    link_code.platform = device.platform
+    link_code.used_at = timezone.now()
+    link_code.save(update_fields=["device_name", "platform", "used_at"])
+    return DeviceExchangeResult(device=device, raw_token=raw_token)
+
+
+def authenticate_device_token(auth_header: str) -> NotificationDeviceToken | None:
+    prefix = "Bearer "
+    if not str(auth_header or "").startswith(prefix):
+        return None
+    raw_token = auth_header[len(prefix) :].strip()
+    if not raw_token:
+        return None
+    device = (
+        NotificationDeviceToken.objects.select_related("user")
+        .filter(
+            token_hash=hash_device_token(raw_token),
+            revoked_at__isnull=True,
+            user__is_active=True,
+        )
+        .first()
+    )
+    return device
+
+
+def touch_device(device: NotificationDeviceToken):
+    device.last_seen_at = timezone.now()
+    device.save(update_fields=["last_seen_at"])
+
+
+def device_has_scope(device: NotificationDeviceToken, scope: str) -> bool:
+    return scope in (device.scopes or [])
+
+
+def revoke_device(device: NotificationDeviceToken):
+    if device.revoked_at:
+        return device
+    device.revoked_at = timezone.now()
+    device.save(update_fields=["revoked_at"])
+    return device
+
+
+def serialize_device(device: NotificationDeviceToken) -> dict:
+    return {
+        "id": device.pk,
+        "device_name": device.device_name,
+        "platform": device.platform,
+        "scopes": device.scopes,
+        "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
+        "revoked_at": device.revoked_at.isoformat() if device.revoked_at else None,
+        "created_at": device.created_at.isoformat(),
+        "is_active": device.is_active,
+    }

@@ -1,0 +1,5 @@
+{
+  ".": "Rust entrypoints Tauri-клиента",
+  "main.rs": "Desktop entrypoint, запускающий app_lib::run",
+  "lib.rs": "Инициализация plugins, tray menu и обработчики окна"
+}

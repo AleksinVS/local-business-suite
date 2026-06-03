@@ -1,5 +1,6 @@
 {
   ".": "Гайды по деплою (Docker, IIS)",
+  "DESKTOP_NOTIFIER_DEPLOYMENT.md": "Инструкция сборки и распространения Tauri-клиента уведомлений",
   "DEPLOYMENT.md": "Основной гайд по деплою (Docker + VPS)",
   "IIS_SSO.md": "Настройка IIS с Windows Authentication SSO",
   "MEMORY_DEPLOYMENT.md": "Развертывание, runtime contracts и smoke-проверки системы памяти",

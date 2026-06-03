@@ -1,8 +1,8 @@
 {
   "task_id": "05-optional-tauri-client-design",
   "title": "Optional Tauri tray client design",
-  "status": "pending",
-  "objective": "Prepare the second-stage optional Tauri tray client without making it mandatory for all users.",
+  "status": "implemented_primary_client",
+  "objective": "Implement the second-stage optional Tauri tray client without making it mandatory for all users.",
   "read_scope": [
     "docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md",
     "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
@@ -11,9 +11,12 @@
     "docs/deployment/DEPLOYMENT.md"
   ],
   "write_scope": [
-    "apps/notifications/device_api.py",
+    "apps/notifications/models.py",
+    "apps/notifications/services.py",
+    "apps/notifications/views.py",
+    "apps/notifications/urls.py",
     "apps/notifications/tests.py",
-    "clients/desktop-notifier/ or another approved client directory",
+    "clients/desktop-notifier/",
     "docs/guides/DESKTOP_NOTIFIER_USER_GUIDE.md",
     "docs/deployment/DESKTOP_NOTIFIER_DEPLOYMENT.md",
     "docs/planning/active/desktop-notifications-pwa-tauri.md",
@@ -45,8 +48,10 @@
   ],
   "verification_commands": [
     "python manage.py test apps.notifications.tests",
-    "npm run tauri test",
-    "npm run tauri build",
+    "npm run desktop-notifier:rust:fmt",
+    "npm run desktop-notifier:rust:check",
+    "npm run desktop-notifier:rust:test",
+    "npm run desktop-notifier:build",
     "make gen-struct",
     "git diff --check"
   ]

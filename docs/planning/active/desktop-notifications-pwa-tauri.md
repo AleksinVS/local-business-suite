@@ -2,7 +2,7 @@
 
 ## Статус
 
-Архитектура принята. Этап 1 PWA/browser notifications реализован как MVP и ожидает приемку владельцем. Этап 2 Tauri не начат.
+Архитектура принята. Этап 1 PWA/browser notifications реализован как MVP. Этап 2 Tauri реализован как первичный optional client и ожидает техническую проверку сборки на целевых ОС.
 
 Архитектурное решение: `docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md`.
 
@@ -70,9 +70,9 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 
 ### Этап 2. Опциональный Tauri-клиент
 
-Включено после отдельного старта:
+Реализовано:
 
-- проект Tauri-клиента в согласованном месте репозитория;
+- проект Tauri-клиента в `clients/desktop-notifier/`;
 - регистрация устройства через одноразовый код;
 - device token с ограниченным scope;
 - tray icon, меню, автозапуск;
@@ -86,6 +86,14 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 - офлайн-редактирование заявок;
 - замена веб-портала;
 - обязательная установка всем пользователям.
+
+Остаточные ограничения этапа 2:
+
+- сборка Tauri требует установленных Node.js, Rust и системных зависимостей Tauri;
+- tray и системные уведомления Linux зависят от окружения рабочего стола;
+- Windows production rollout требует отдельной подписи установщика;
+- автообновление клиента не реализовано;
+- возможны дубли при одновременной работе PWA и Tauri.
 
 ## Затрагиваемые модули
 
@@ -157,6 +165,7 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 - Клиент показывает системное уведомление при закрытом браузере, если клиент запущен.
 - Клик открывает портал в системном браузере.
 - Токен не дает доступа к общему API портала.
+- Клиент хранит токен в Stronghold vault, а сервер хранит только HMAC-хеш токена.
 - Логи клиента не содержат секретов и чувствительного текста заявок.
 - Есть инструкции сборки и установки Windows/Linux.
 
@@ -177,8 +186,10 @@ git diff --check
 
 ```bash
 python manage.py test apps.notifications.tests
-npm run tauri test
-npm run tauri build
+npm run desktop-notifier:rust:fmt
+npm run desktop-notifier:rust:check
+npm run desktop-notifier:rust:test
+npm run desktop-notifier:build
 make gen-struct
 git diff --check
 ```
@@ -188,5 +199,5 @@ git diff --check
 - Нужно ли добавлять quiet hours UI во второй срез?
 - Какие события заявок не должны уведомлять автора собственного действия?
 - Нужен ли отдельный escalation-канал email для критичных событий?
-- Где лучше разместить Tauri-клиент в структуре проекта: `clients/` или `services/`?
+- Нужна ли стратегия автообновления Tauri-клиента?
 - Нужна ли централизованная админка для принудительного выключения уведомлений пользователям?

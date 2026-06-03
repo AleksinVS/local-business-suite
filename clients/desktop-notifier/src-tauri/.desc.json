@@ -1,0 +1,9 @@
+{
+  ".": "Rust runtime Tauri 2 для настольного клиента уведомлений",
+  "Cargo.toml": "Cargo manifest Tauri-клиента и plugin dependencies",
+  "build.rs": "Tauri build hook",
+  "tauri.conf.json": "Конфигурация окна, сборки, bundle и security policy",
+  "src/": "Rust entrypoints, tray menu и plugin initialization",
+  "capabilities/": "Tauri capabilities и разрешения plugins",
+  "icons/": "Иконки сборки настольного клиента"
+}

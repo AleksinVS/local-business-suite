@@ -144,6 +144,32 @@ MVP реализован и ожидает приемку владельцем. 
 - выбрать реальный пилотный source, настроить runtime `managed_root`, retention и backup checkpoint;
 - после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
 
+### PWA-first уведомления и опциональный Tauri-клиент
+
+Этап 1 PWA/browser notifications реализован как MVP и ожидает приемку владельцем. Второй этап Tauri остается опциональным будущим срезом для пользователей, которым нужен постоянный фоновый канал.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md`;
+- проектный план находится в `docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md`;
+- активный план находится в `docs/planning/active/desktop-notifications-pwa-tauri.md`;
+- workflow package находится в `workflow/active/desktop-notifications-pwa-tauri/`;
+- руководство пользователя находится в `docs/guides/NOTIFICATIONS_USER_GUIDE.md`.
+
+Статус реализации:
+- добавлен серверный домен `apps.notifications`;
+- добавлен центр уведомлений в шапку портала;
+- добавлены PWA manifest и root service worker;
+- browser permission запрашивается только по явному действию пользователя;
+- доставка в открытую страницу работает через polling с cursor;
+- события заявок создают безопасные уведомления для разрешенных получателей;
+- добавлены unit/integration тесты и Playwright spec для PWA-ресурсов.
+
+Оставшееся действие:
+- выполнить миграции на целевой базе;
+- проверить HTTPS-профиль production для PWA/browser notifications;
+- выполнить авторизованный Playwright UI-сценарий на стенде с `E2E_USERNAME` и `E2E_PASSWORD`;
+- после приемки владельцем либо архивировать этап 1, либо открыть отдельный scope этапа 2 Tauri.
+
 ## Next
 
 ### Внедрение архитектурных паттернов

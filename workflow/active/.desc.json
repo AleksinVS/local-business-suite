@@ -14,5 +14,6 @@
   "workorder-tree-view": "Workflow: дерево заявок и режимы просмотра доски",
   "architecture-review-remediation-2026-06-01": "Workflow: исправления по архитектурному ревью 2026-06-01",
   "design-patterns-hardening-2026-06-01": "Workflow: внедрение архитектурных паттернов 2026-06-01",
-  "memory-file-source-auto-organization": "Workflow: автоупорядочивание файловых источников"
+  "memory-file-source-auto-organization": "Workflow: автоупорядочивание файловых источников",
+  "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент"
 }

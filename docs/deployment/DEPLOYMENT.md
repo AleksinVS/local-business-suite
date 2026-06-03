@@ -174,6 +174,20 @@ The `request_id` shown to the user should match `AgentActionLog.request_payload[
 - `/health/` возвращает только минимальный статус, подробная диагностика доступна только staff-пользователям;
 - `DJANGO_DEBUG=0`, production `DJANGO_SECRET_KEY` и `LOCAL_BUSINESS_AI_GATEWAY_TOKEN` обязательны.
 
+## PWA и браузерные уведомления
+
+Центр уведомлений в портале работает через обычные session-auth API и не требует отдельного runtime-сервиса.
+
+Для PWA service worker и системных браузерных уведомлений в production нужен HTTPS. Исключение браузеров для небезопасного origin обычно действует только на `localhost` в разработке.
+
+Если стенд остается в HTTP-only trusted network profile:
+
+- серверная очередь и центр уведомлений в портале работают;
+- browser notification permission и установка PWA могут быть недоступны или нестабильны;
+- пользователю нельзя обещать системные уведомления ОС.
+
+Для пилота PWA-уведомлений production-профиль должен быть переведен на HTTPS через Caddy, IIS TLS binding или другой утвержденный reverse proxy.
+
 ## Основной сценарий деплоя
 
 Использовать только [deploy.sh](deploy.sh):

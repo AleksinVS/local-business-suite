@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.inventory",
     "apps.workorders",
+    "apps.notifications",
     "apps.analytics",
     "apps.ai",
     "apps.memory",

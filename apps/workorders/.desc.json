@@ -8,6 +8,7 @@
   "services.py": "Сервисы: создание, переходы статусов, подтверждение закрытия, оценка",
   "policies.py": "Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory",
   "selectors.py": "Запросы для получения видимых нарядов",
+  "notification_events.py": "Производители безопасных уведомлений по событиям заявок",
   "source_adapter.py": "SourceAdapter заявок для memory source_data search и analytics projection",
   "right_panel.py": "RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре",
   "ai_skills.py": "Модульные AI skills заявок для открытия карточек и workflow-инструкций",

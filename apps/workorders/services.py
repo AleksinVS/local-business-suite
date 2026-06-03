@@ -1,5 +1,6 @@
 from django.utils import timezone
 
+from . import notification_events
 from .models import WorkOrder, WorkOrderStatus, WorkOrderTransitionLog, Board
 
 
@@ -16,7 +17,7 @@ def create_workorder(
 ) -> WorkOrder:
     if not board:
         board = Board.objects.filter(slug="main").first()
-    return WorkOrder.objects.create(
+    workorder = WorkOrder.objects.create(
         author=author,
         title=title,
         description=description,
@@ -26,6 +27,8 @@ def create_workorder(
         assignee=assignee,
         board=board,
     )
+    notification_events.notify_workorder_created(workorder, actor=author)
+    return workorder
 
 
 def transition_workorder(*, workorder: WorkOrder, user, to_status: str) -> WorkOrder:
@@ -50,6 +53,11 @@ def transition_workorder(*, workorder: WorkOrder, user, to_status: str) -> WorkO
         to_status=to_status,
         actor=user,
     )
+    notification_events.notify_workorder_status_changed(
+        workorder,
+        actor=user,
+        previous_status=previous_status,
+    )
     return workorder
 
 
@@ -72,6 +80,11 @@ def confirm_closure(*, workorder: WorkOrder, user) -> WorkOrder:
         from_status=previous_status,
         to_status=WorkOrderStatus.CLOSED,
         actor=user,
+    )
+    notification_events.notify_workorder_status_changed(
+        workorder,
+        actor=user,
+        previous_status=previous_status,
     )
     return workorder
 

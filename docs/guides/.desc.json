@@ -8,6 +8,7 @@
   "MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md": "Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний",
   "MEMORY_INGESTION_OPERATIONS.md": "Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти",
   "MEMORY_USER_GUIDE.md": "Руководство пользователя и администратора по системе памяти",
+  "NOTIFICATIONS_USER_GUIDE.md": "Руководство пользователя по центру уведомлений, PWA и ограничениям браузерных уведомлений",
   "SETTINGS_CENTER_OPERATIONS.md": "Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals",
   "TEST_ACCELERATION.md": "Практический guide по ускорению тестов без снижения покрытия",
   "TESTING_POLICY.md": "Политика тестирования, матрица обязательных проверок и независимая проверка субагентом",

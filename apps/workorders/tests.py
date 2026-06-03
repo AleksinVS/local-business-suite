@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
+from apps.notifications.models import NotificationRecipient
 
 from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
@@ -18,7 +19,7 @@ from .policies import (
     can_view,
 )
 from .right_panel import WorkOrderRightPanelProvider
-from .services import confirm_closure, transition_workorder
+from .services import confirm_closure, create_workorder, transition_workorder
 
 User = get_user_model()
 
@@ -129,6 +130,47 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
         self.assertEqual(self.workorder.transitions.count(), 1)
+
+    def test_create_workorder_service_notifies_visible_recipients_without_author(self):
+        workorder = create_workorder(
+            author=self.customer,
+            title="Проверить кабель",
+            description="Без чувствительных деталей в уведомлении.",
+            department=self.department,
+            priority="medium",
+            assignee=self.technician,
+            board=self.board,
+        )
+
+        recipients = set(
+            NotificationRecipient.objects.filter(
+                event__event_type="workorders.created",
+                event__source_object_id=str(workorder.pk),
+            ).values_list("user__username", flat=True)
+        )
+
+        self.assertIn(self.technician.username, recipients)
+        self.assertIn(self.manager.username, recipients)
+        self.assertNotIn(self.customer.username, recipients)
+        self.assertNotIn(self.outsider.username, recipients)
+
+    def test_transition_service_notifies_author_and_excludes_actor(self):
+        transition_workorder(
+            workorder=self.workorder,
+            user=self.technician,
+            to_status=WorkOrderStatus.ACCEPTED,
+        )
+
+        recipients = set(
+            NotificationRecipient.objects.filter(
+                event__event_type="workorders.status_changed",
+                event__source_object_id=str(self.workorder.pk),
+            ).values_list("user__username", flat=True)
+        )
+
+        self.assertIn(self.customer.username, recipients)
+        self.assertIn(self.manager.username, recipients)
+        self.assertNotIn(self.technician.username, recipients)
 
     def test_workorder_number_is_human_readable(self):
         self.assertEqual(self.workorder.number, str(self.workorder.pk))

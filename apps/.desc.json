@@ -5,6 +5,7 @@
   "accounts/": "Аутентификация, хелперы и сидирование ролей",
   "inventory/": "Каталог управляемых активов (медицинские устройства)",
   "workorders/": "Модуль заявок с workflow (наряды-заказы)",
+  "notifications/": "Домен пользовательских уведомлений: серверная очередь, API, настройки и браузерные клиенты",
   "analytics/": "Операционные дашборды внутри Django",
   "memory/": "Метаданные сервиса AI-памяти: sources, snapshots, chunks, facts, jobs, audit",
   "settings_center/": "Reusable GUI и service layer для управляемых настроек, audit, users, env proposals и contextual help",

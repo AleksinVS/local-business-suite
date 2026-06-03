@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 
 from apps.accounts.views import PortalLoginView, PortalLogoutView
+from apps.notifications.views import service_worker
 
 from . import views as config_views
 
@@ -26,6 +27,8 @@ urlpatterns = [
     path("inventory/", include("apps.inventory.urls")),
     path("memory/", include("apps.memory.urls")),
     path("settings/", include("apps.settings_center.urls")),
+    path("notifications/", include("apps.notifications.urls")),
+    path("service-worker.js", service_worker, name="service_worker"),
     path("workorders/", include("apps.workorders.urls")),
     path("waiting-list/", include("apps.waiting_list.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

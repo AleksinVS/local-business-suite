@@ -14,5 +14,6 @@
   "workorder-tree-view.md": "Активный план дерева заявок и режимов просмотра доски",
   "architecture-review-remediation-2026-06-01.md": "Активный план исправлений по архитектурному ревью 2026-06-01",
   "design-patterns-hardening-2026-06-01.md": "Активный план внедрения архитектурных паттернов",
-  "memory-file-source-auto-organization.md": "Активный план автоупорядочивания файловых источников"
+  "memory-file-source-auto-organization.md": "Активный план автоупорядочивания файловых источников",
+  "desktop-notifications-pwa-tauri.md": "Активный план PWA-first уведомлений и опционального Tauri-клиента"
 }

@@ -17,6 +17,7 @@ from django.views.generic import CreateView, DetailView, TemplateView, UpdateVie
 
 from apps.core.models import Department
 
+from . import notification_events
 from .forms import (
     KanbanColumnTitleForm,
     WorkOrderAttachmentForm,
@@ -453,13 +454,14 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         form.instance.author = self.request.user
         if not can_manage_assignments(self.request.user):
             form.instance.assignee = None
+        self.object = form.save()
+        notification_events.notify_workorder_created(self.object, actor=self.request.user)
         if self.request.htmx:
-            self.object = form.save()
             response = HttpResponse(status=204)
             response["HX-Redirect"] = self.get_success_url()
             return response
-        response = super().form_valid(form)
-        return response
+        messages.success(self.request, "Заявка создана.")
+        return redirect(self.get_success_url())
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
@@ -494,7 +496,16 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         return can_edit(self.request.user, self.get_object())
 
     def form_valid(self, form):
+        previous = WorkOrder.objects.get(pk=form.instance.pk)
+        changed_fields = set(form.changed_data)
+        previous_assignee_id = previous.assignee_id
         self.object = form.save()
+        notification_events.notify_workorder_updated(
+            self.object,
+            actor=self.request.user,
+            changed_fields=changed_fields,
+            previous_assignee_id=previous_assignee_id,
+        )
         messages.success(self.request, "Заявка обновлена.")
         if self.request.htmx:
             # Re-render the detail panel for this workorder
@@ -574,6 +585,10 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
                 workorder=workorder,
                 author=request.user,
                 body=form.cleaned_data["body"],
+            )
+            notification_events.notify_workorder_comment_created(
+                workorder,
+                actor=request.user,
             )
             if request.htmx:
                 response = render(

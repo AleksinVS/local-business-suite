@@ -3,5 +3,6 @@
   "health.spec.ts": "Checks that the Django health endpoint is reachable",
   "sidebar_ai_context.spec.ts": "Checks the left-panel AI chat and page-context tracking on the work order board",
   "right_panel_ai_navigation.spec.ts": "Checks opening module objects in the shared right panel from the AI chat page",
-  "workorder_tree.spec.ts": "Checks workorder tree view navigation and right drawer opening"
+  "workorder_tree.spec.ts": "Checks workorder tree view navigation and right drawer opening",
+  "notifications.spec.ts": "Checks PWA manifest, root service worker and authenticated notification center behavior"
 }

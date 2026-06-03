@@ -1,7 +1,9 @@
 PYTHON := ./.venv/bin/python
 PYTHON_INSTALL := $(PYTHON) -m pip install
+TEST_SCOPE ?=
+TEST_FLAGS ?=
 
-.PHONY: venv install check test test-all contracts change-plan ai-runtime gen-struct
+.PHONY: venv install check test test-fast test-all contracts change-plan ai-runtime gen-struct
 
 venv:
 	python3 -m venv .venv
@@ -13,7 +15,10 @@ check:
 	$(PYTHON) manage.py check
 
 test:
-	$(PYTHON) manage.py test
+	$(PYTHON) manage.py test $(TEST_SCOPE) $(TEST_FLAGS)
+
+test-fast:
+	$(PYTHON) manage.py test $(TEST_SCOPE) --keepdb $(TEST_FLAGS)
 
 test-all:
 	pytest --tb=short -q

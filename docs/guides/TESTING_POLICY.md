@@ -39,6 +39,16 @@ git diff --check
 .venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v
 ```
 
+Для локального повторного запуска без пересоздания тестовых баз используйте штатный Django-режим `--keepdb`:
+
+```bash
+make test-fast
+make test-fast TEST_SCOPE=apps.ai.tests
+make test TEST_SCOPE=apps.ai.tests
+```
+
+`test-fast` не снижает покрытие сам по себе: он запускает тот же набор тестов, но переиспользует уже созданные тестовые базы и создает их заново только при отсутствии. Выборочный `TEST_SCOPE` нужен для быстрой обратной связи по затронутому приложению; перед завершением крупной или рискованной работы нужен полный прогон `make test` или `make test-fast` без `TEST_SCOPE`.
+
 ### Integration-тесты
 
 Нужны, когда изменение проходит через несколько компонентов: Django view, service layer, tool gateway, контракты, память, индекс, audit или runtime wrapper.

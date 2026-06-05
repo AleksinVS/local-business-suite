@@ -36,7 +36,8 @@ Production-развертывание поддерживает две конфи
 - Требуется middleware для исправления проблемы с PATH_INFO (см. `IIS_SSO.md`)
 - Секреты хранятся в `.env` файле, не в `web.config`
 - Статические файлы обслуживаются через Whitenoise middleware
-- Не оставляйте две задачи автозапуска Agent Runtime. После перехода со старой задачи через `C:\Program Files\Python311\python.exe` на `.venv\Scripts\python.exe` выполните `setup_agent_runtime_autostart.ps1 -Force` и проверьте результат через `check_agent_runtime_autostart.ps1`.
+- Не оставляйте две задачи автозапуска Agent Runtime. Целевая задача — `Portal Agent Runtime` в `\Portal\`, исполнитель — `.venv\Scripts\python.exe`. Если есть устаревшая задача (например, из `archive/TASK_SCHEDULER_COMPLETED.md` с исполнителем `C:\Program Files\Python311\python.exe`), выполните `setup_agent_runtime_autostart.ps1 -Force` и проверьте результат через `check_agent_runtime_autostart.ps1`.
+- Два процесса python с разными `ExecutablePath` (`.venv\Scripts\python.exe` и `C:\Program Files\Python311\python.exe`) — это **нормально**: uvicorn multiprocessing (master + worker) на venv, построенном поверх системного Python 3.11 (см. `pyvenv.cfg:executable`). Подробности в `WINDOWS_RUN.md` → «Анатомия процессов Agent Runtime».
 
 ## Что должно быть на VPS
 

@@ -329,13 +329,15 @@ IIS/FastCGI запускает Django. Agent Runtime должен запуска
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup_agent_runtime_autostart.ps1 -Force
 ```
 
-Проверить, нет ли старой задачи через `C:\Program Files\Python311\python.exe` или второго процесса uvicorn:
+Проверить состояние автозапуска:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\check_agent_runtime_autostart.ps1
 ```
 
-Если диагностика показывает больше одной задачи или больше одного процесса Agent Runtime, оставьте только задачу `Portal Agent Runtime` в `\Portal\`, созданную текущим скриптом автозапуска.
+Ожидаемый результат: `OK: 1 root process (uvicorn master) + 1 worker subprocess(es) (uvicorn multiprocessing)`. Два python-процесса с разными `ExecutablePath` (`.venv\Scripts\python.exe` и `C:\Program Files\Python311\python.exe`) — это master + worker, не дубль: uvicorn multiprocessing, плюс venv на этой машине построен поверх системного Python 3.11 (см. `pyvenv.cfg:executable`). Подробности в `WINDOWS_RUN.md` → «Анатомия процессов Agent Runtime».
+
+Чек-скрипт выдаёт `WARNING` только в случае реальных проблем: больше одной scheduled task, больше одного root-процесса, root-процесс с неожиданным исполнителем, или worker без master'а. В этих случаях нужно оставить только задачу `Portal Agent Runtime` в `\Portal\`, созданную текущим скриптом автозапуска, и перезапустить `setup_agent_runtime_autostart.ps1 -Force`.
 
 ## Переход на нормальный LDAPS
 

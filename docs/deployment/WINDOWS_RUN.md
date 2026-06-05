@@ -76,7 +76,51 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup_agent_runtime_a
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\check_agent_runtime_autostart.ps1
 ```
 
-Если одновременно видны процессы через `.venv` и `C:\Program Files\Python311\python.exe`, обычно причина в старой задаче планировщика в корне Task Scheduler и новой задаче в `\Portal\`. Перезапустите `setup_agent_runtime_autostart.ps1 -Force` и оставьте одну задачу.
+Диагностика должна показывать `OK: 1 root process (uvicorn master) + N worker subprocess(es) (uvicorn multiprocessing)`. Если видит `WARNING`, см. раздел «Анатомия процессов Agent Runtime» ниже.
+
+## Анатомия процессов Agent Runtime
+
+После регистрации задачи и её запуска в системе живут **ровно две** структуры, связанные с Agent Runtime:
+
+| Что | Ожидаемый путь | Почему |
+|---|---|---|
+| Scheduled task `\Portal\Portal Agent Runtime` | `C:\inetpub\portal\.venv\Scripts\python.exe` | Прямой запуск через venv-лаунчер, как задано в `setup_agent_runtime_autostart.ps1:32-34, 138-159` |
+| Master процесс (uvicorn) | `C:\inetpub\portal\.venv\Scripts\python.exe` | Стартует от scheduled task, parent = svchost/services.exe |
+| Worker subprocess (uvicorn) | `C:\Program Files\Python311\python.exe` | См. ниже |
+
+### Почему worker subprocess использует `C:\Program Files\Python311\python.exe`, а не `.venv\Scripts\python.exe`
+
+Это **не дубль интерпретатора**, а особенность venv-лаунчера на Windows. В этом проекте venv создан поверх системного Python 3.11:
+
+```ini
+# .venv\pyvenv.cfg
+home = C:\Program Files\Python311
+executable = C:\Program Files\Python311\python.exe
+version = 3.11.9
+```
+
+`C:\inetpub\portal\.venv\Scripts\python.exe` — это **proxy executable**: при старте он через `os.execv` перезапускает сам себя на путь из `pyvenv.cfg:executable`, то есть на `C:\Program Files\Python311\python.exe`. После такого re-exec `sys.executable` внутри процесса указывает на `C:\Program Files\Python311\python.exe`.
+
+uvicorn 0.35.0 при старте через `python -m uvicorn ...` всегда работает в режиме multiprocessing: мастер-процесс и один worker subprocess. См. исходники uvicorn:
+
+- `uvicorn/main.py:567-580` — `Multiprocess(config, target=server.run, sockets=[sock]).run()` при `config.workers > 1` либо `config.should_reload`.
+- `uvicorn/supervisors/multiprocess.py:122-126` — `init_processes` создаёт воркеров и кладёт им уже открытый listening socket.
+- `uvicorn/_subprocess.py:18, 51` — `multiprocessing.get_context("spawn")` запускает child через `sys.executable` родителя.
+
+В итоге `sys.executable` в worker subprocess после re-exec venv-лаунчера = `C:\Program Files\Python311\python.exe`, поэтому в `Get-CimInstance Win32_Process` worker показывается с этим путём.
+
+**Это нормальное состояние.** В диспетчере задач и `Get-Process` всегда будет видно **два** python-процесса с разными `Path`, но это **один** ASGI-сервис.
+
+### Что считать реальным дублём
+
+Чек-скрипт `check_agent_runtime_autostart.ps1` помечает состояние как проблемное, если:
+
+- в `Task Scheduler` больше одной задачи Agent Runtime (например, устаревшая в корне планировщика + новая в `\Portal\`);
+- запущено больше одного **root** процесса (parent которого не входит в список процессов Agent Runtime) — это значит, runtime стартовал независимо из двух источников;
+- root-процесс использует Python не из ожидаемого множества (`.venv\Scripts\python.exe` или путь из `pyvenv.cfg:executable`);
+- запущены worker subprocess'ы, но root-процесс отсутствует (master упал, worker висит).
+
+Если в Task Scheduler действительно **две** задачи (например, старая в корне из `archive/TASK_SCHEDULER_COMPLETED.md` и новая в `\Portal\`), то это **настоящий** дубль. Удалить лишнюю можно через `setup_agent_runtime_autostart.ps1 -Force` — он перед регистрацией найдёт и предложит удалить чужие задачи по совпадению в `Actions` (см. `setup_agent_runtime_autostart.ps1:44-114`).
 
 ## Полезные команды
 

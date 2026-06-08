@@ -385,12 +385,18 @@ services: # Автономные сервисы (вне Django)
     schemas.py: file # Pydantic-схемы данных (запросы, ответы)
     task_types.py: file # Обработчики типов задач (workorders, lookup, inventory, analytics)
     tools.py: file # Клиент для вызова инструментов Django (HTTP → gateway)
+  copilot_runtime: # CopilotKit Runtime: Node-сервис, связывающий React CopilotKit UI с Python AG-UI agent runtime
+    Dockerfile: file # Контейнер Node.js для CopilotKit Runtime
+    server.mjs: file # HTTP-сервер CopilotKit Runtime v2 с AG-UI HttpAgent
 static: # Исходные статические ресурсы (CSS, JS)
   icons: # Иконки PWA и статические пиктограммы портала
     pwa-icon-192.png: file # PNG-иконка PWA 192x192 для Chromium/Edge
     pwa-icon-512.png: file # PNG-иконка PWA 512x512 для Chromium/Edge
     pwa-icon.svg: file # Масштабируемая иконка PWA для manifest.webmanifest
-  src: directory... # Исходный код статических ресурсов
+  src: # Исходный код статических ресурсов
+    copilotkit: # Исходники React-острова CopilotKit для основной Django-оболочки
+      copilotkit.css: file # Локальные стили встраивания CopilotKit в левую панель портала
+      main.jsx: file # Точка входа React-острова CopilotKit
   manifest.webmanifest: file # PWA manifest портала
   service-worker.js: file # Service worker PWA без кэширования защищенных HTML/API
 templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
@@ -489,7 +495,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для CopilotKit/AG-UI интеграции
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки интеграции CopilotKit через AG-UI
       EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза CopilotKit/AG-UI
+      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого среза реализации CopilotKit/AG-UI
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза CopilotKit/AG-UI
+      TASK_ACCEPTANCE.implementation.md: file # Приемка первого среза реализации CopilotKit/AG-UI
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов
@@ -610,8 +618,9 @@ docker-compose.yml: file # Локальный Docker Compose (dev)
 Dockerfile: file # Docker-образ для web (Django + Gunicorn)
 Makefile: file # Команды сборки и проверки (venv, install, check, test, contracts, gen-struct)
 manage.py: file # Точка входа Django CLI
-package-lock.json: file # Lock-файл Node.js dev-зависимостей
-package.json: file # Node.js dev-зависимости и npm-скрипты, включая Playwright CLI для e2e и Tauri desktop notifier
+package-lock.json: file # Lock-файл Node.js зависимостей
+package.json: file # Node.js зависимости и npm-скрипты: Playwright, CopilotKit React bundle, CopilotKit runtime
 pytest.ini: file # Конфигурация pytest
 requirements.lock: file # Lock-файл зависимостей (pip-compile)
 requirements.txt: file # Зависимости Python
+vite.copilotkit.config.mjs: file # Vite-конфигурация сборки React-острова CopilotKit в static/dist/copilotkit

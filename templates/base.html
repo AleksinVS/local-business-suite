@@ -9,6 +9,9 @@
     <meta name="theme-color" content="#135d66">
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
+    {% if copilotkit_enabled %}
+      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}">
+    {% endif %}
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <div class="app-layout">
@@ -109,7 +112,17 @@
         </div>
         <section class="sidebar-ai-panel" aria-label="{% block sidebar_panel_label %}Встроенный ИИ-чат{% endblock %}">
           {% block sidebar_panel %}
-            {% if show_sidebar_ai_chat %}
+            {% if copilotkit_enabled %}
+              <div
+                id="copilotkit-sidebar-root"
+                class="copilotkit-sidebar-root"
+                data-config-url="{% url 'ai:copilotkit_config' %}"
+                data-runtime-url="{{ copilotkit_runtime_url }}"
+                data-agent-id="{{ copilotkit_agent_id }}"
+              >
+                <div class="sidebar-chat-loading">Загрузка чата...</div>
+              </div>
+            {% elif show_sidebar_ai_chat %}
               <div
                 id="sidebar-ai-chat"
                 hx-get="{% url 'ai:sidebar_chat' %}"
@@ -352,6 +365,9 @@
     <script src="{% static 'src/js/page_context.js' %}"></script>
     <script src="{% static 'src/js/right_panel.js' %}"></script>
     <script src="{% static 'src/js/sidebar_chat.js' %}"></script>
+    {% if copilotkit_enabled %}
+      <script type="module" src="{% static 'dist/copilotkit/copilotkit-island.js' %}"></script>
+    {% endif %}
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>

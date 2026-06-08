@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed
+Accepted
 
 ## Дата
 
@@ -76,12 +76,13 @@ Django template
 
 ```text
 services/copilot_runtime/
-  package.json
-  src/server.ts
-  README.md
+  Dockerfile
+  server.mjs
 ```
 
 Этот сервис отвечает только за Copilot Runtime endpoint и проксирование AG-UI agent. Он не выполняет бизнес-логику и не пишет в базу.
+
+Для первого среза Node-зависимости закреплены в корневых `package.json` и `package-lock.json`, а сервис запускается командой `npm run copilot-runtime:start`.
 
 Прямое подключение CopilotKit frontend к `HttpAgent` разрешено только для локального прототипа и e2e-spike. В production использовать `runtimeUrl` и серверный Copilot Runtime.
 
@@ -94,6 +95,8 @@ LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
 ```
 
 До приемки пилота текущий AI sidebar остается основным.
+
+Контекст исполнителя передается из Django в CopilotKit как подписанный HMAC payload с коротким TTL. Agent runtime отклоняет AG-UI запросы без действующей подписи до вызова агента.
 
 ### Frontend tools только для UI-действий
 

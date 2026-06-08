@@ -49,6 +49,7 @@ CHAT_RUNTIME_ERROR_MESSAGE = (
     "Технический идентификатор: {request_id}."
 )
 PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
+COPILOTKIT_ACTOR_VERSION = "copilotkit-ag-ui-v1"
 
 
 def classify_chat_runtime_error(exc):
@@ -176,6 +177,34 @@ def gateway_token_is_valid(request):
     expected_token = settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN or ""
     gateway_token = request.headers.get("X-AI-Gateway-Token", "")
     return bool(expected_token) and hmac.compare_digest(gateway_token, expected_token)
+
+
+def copilotkit_signature_payload(payload):
+    actor = payload.get("actor") or {}
+    signed_payload = {
+        "actor": {
+            "actor_version": actor.get("actor_version", ""),
+            "channel": actor.get("channel", ""),
+            "is_superuser": bool(actor.get("is_superuser", False)),
+            "origin_channel": actor.get("origin_channel", ""),
+            "roles": list(actor.get("roles") or []),
+            "source": actor.get("source", ""),
+            "user_id": actor.get("user_id"),
+            "username": actor.get("username", ""),
+        },
+        "actor_version": payload.get("actor_version", ""),
+        "issued_at": payload.get("issued_at") or 0,
+        "model_id": payload.get("model_id", ""),
+        "origin_channel": payload.get("origin_channel", ""),
+        "session_id": payload.get("session_id", ""),
+    }
+    return json.dumps(signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def sign_copilotkit_actor_payload(payload):
+    token = (settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN or "").encode("utf-8")
+    message = copilotkit_signature_payload(payload).encode("utf-8")
+    return hmac.new(token, message, hashlib.sha256).hexdigest()
 
 
 def reject_invalid_gateway_token(request):
@@ -427,6 +456,50 @@ class AIPageContextUpdateView(LoginRequiredMixin, View):
                 "context_version": snapshot.context_version,
                 "context_hash": snapshot.context_hash,
                 "context_hint": snapshot.resolved_summary.get("context_hint", ""),
+            }
+        )
+
+
+class AICopilotKitConfigView(LoginRequiredMixin, View):
+    http_method_names = ["get"]
+
+    def get(self, request):
+        if not settings.LOCAL_BUSINESS_COPILOTKIT_ENABLED:
+            return JsonResponse({"enabled": False, "error": "CopilotKit отключен."}, status=404)
+
+        session = get_or_create_sidebar_session(request.user)
+        model_id = (session.metadata or {}).get("model_id", "")
+        issued_at = int(time.time())
+        actor_payload = {
+            "session_id": str(session.external_id),
+            "model_id": model_id,
+            "origin_channel": "copilotkit",
+            "actor_version": COPILOTKIT_ACTOR_VERSION,
+            "issued_at": issued_at,
+            "actor": {
+                "user_id": request.user.id,
+                "username": request.user.username,
+                "roles": list(request.user.groups.values_list("name", flat=True)),
+                "is_superuser": request.user.is_superuser,
+                "channel": ChatSession.Channel.SIDEBAR,
+                "source": "django-copilotkit",
+                "origin_channel": "copilotkit",
+                "actor_version": COPILOTKIT_ACTOR_VERSION,
+            },
+        }
+        actor_payload["signature"] = sign_copilotkit_actor_payload(actor_payload)
+        return JsonResponse(
+            {
+                "enabled": True,
+                "runtime_url": settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
+                "agent_id": settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+                "thread_id": str(session.external_id),
+                "forwarded_props": actor_payload,
+                "labels": {
+                    "title": "ИИ-чат",
+                    "initial": "Опишите задачу или попросите открыть объект в правой панели.",
+                    "placeholder": "Сообщение...",
+                },
             }
         )
 

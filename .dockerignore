@@ -11,6 +11,8 @@ build/
 venv/
 ENV/
 env/
+node_modules/
+services/*/node_modules/
 
 # Django
 *.log

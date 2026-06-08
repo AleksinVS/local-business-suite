@@ -1,5 +1,6 @@
 {
   ".": "Исходный код статических ресурсов",
+  "copilotkit/": "React-остров CopilotKit для встраивания AI-чата в основную Django-оболочку",
   "css/app.css": "Основные стили приложения",
   "js/ai_chat.js": "JavaScript для AI-чата (HTMX streaming, UI)",
   "js/page_context.js": "Browser bridge для безопасного контекста текущего окна AI-чата",

@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed. Документация подготовлена для отдельной ветки и последующего согласования перед реализацией.
+Accepted. В ветке добавлен первый рабочий срез: AG-UI endpoint, CopilotKit Runtime service, React-остров в основной Django-оболочке и feature flag.
 
 Архитектурное решение: `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`.
 
@@ -54,7 +54,7 @@ data: [DONE]
 ```text
 Browser / Django page
   |
-  | static/dist/copilotkit-island.js
+  | static/dist/copilotkit/copilotkit-island.js
   v
 React island
   |
@@ -158,6 +158,8 @@ error -> RUN_ERROR
 
 Особое правило: в AG-UI stream нельзя отдавать raw tool payload, если он содержит PII, секреты, raw paths, actor context или полный prompt.
 
+Статус первого среза: выполнено. `/ag-ui` принимает подписанный Django actor payload и не меняет `/chat` или `/chat/stream`.
+
 ### Этап 2. Copilot Runtime service
 
 Задачи:
@@ -175,6 +177,8 @@ error -> RUN_ERROR
 
 Прямой browser `HttpAgent` допускается только в `.local/` spike или e2e-прототипе.
 
+Статус первого среза: выполнено как `services/copilot_runtime/server.mjs`, Dockerfile и root npm script `copilot-runtime:start`. Отдельный `package.json` внутри сервиса не добавлен: зависимости закреплены в корневом lock-файле.
+
 ### Этап 3. React island в Django UI
 
 Задачи:
@@ -191,12 +195,14 @@ error -> RUN_ERROR
 
 ```html
 <div
-  id="copilotkit-root"
+  id="copilotkit-sidebar-root"
   data-runtime-url="/copilotkit"
-  data-agent="local_business"
-  data-window-id="{{ window_id }}"
+  data-agent-id="local_business"
+  data-config-url="/ai/chat/copilotkit/config/"
 ></div>
 ```
+
+Статус первого среза: выполнено как `static/src/copilotkit/main.jsx`, `vite.copilotkit.config.mjs` и контейнер `#copilotkit-sidebar-root` в `templates/base.html`.
 
 ### Этап 4. UI tools и human-in-the-loop
 
@@ -237,7 +243,10 @@ error -> RUN_ERROR
 LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
 LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=/copilotkit
 LOCAL_BUSINESS_COPILOTKIT_AGENT_ID=local_business
+LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS=900
 LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL=http://agent-runtime:8090/ag-ui
+COPILOTKIT_BASE_PATH=/copilotkit
+COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
 ```
 
@@ -252,6 +261,7 @@ python manage.py check
 python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
+npm run build:copilotkit
 npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
 make gen-struct
 ```
@@ -259,9 +269,8 @@ make gen-struct
 Если добавлен `services/copilot_runtime`, дополнительно:
 
 ```bash
-npm --prefix services/copilot_runtime test
-npm --prefix services/copilot_runtime run typecheck
-curl -fsS http://127.0.0.1:<port>/health
+npm run copilot-runtime:start
+curl -fsS http://127.0.0.1:3100/health
 ```
 
 ## Acceptance

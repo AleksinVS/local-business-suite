@@ -4,6 +4,30 @@
 
 ## Active
 
+### CopilotKit и AG-UI в основном Django UI
+
+Первый рабочий срез добавлен в отдельной ветке: AG-UI endpoint, CopilotKit Runtime service, React-остров в левой AI-панели и feature flag. До включения пилота нужны финальные проверки, e2e на стенде и приемка владельцем.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
+- проектный план находится в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`;
+- активный план находится в `docs/planning/active/copilotkit-ag-ui-integration.md`;
+- workflow package находится в `workflow/active/copilotkit-ag-ui-integration/`;
+- операционный guide находится в `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md`;
+- deployment note находится в `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
+
+Статус реализации:
+- добавлен `/ag-ui` в `services.agent_runtime` без изменения текущих `/chat` и `/chat/stream`;
+- добавлен `services/copilot_runtime` как server-side Copilot Runtime service;
+- CopilotKit встроен как React island за `LOCAL_BUSINESS_COPILOTKIT_ENABLED`;
+- actor/session context подписывается Django и проверяется agent runtime;
+- `ui.open_right_panel` идет через AG-UI state/custom event и существующий безопасный правый сайдбар.
+
+Оставшееся действие:
+- выполнить финальные unit/check/contract/static build проверки;
+- выполнить e2e на стенде с включенным feature flag;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Русификация интерфейса портала
 
 MVP реализован и ожидает приемку владельцем. Видимые элементы UI переведены на русский, путь к будущей архитектуре локализации зафиксирован без внедрения полноценного многоязычного runtime в текущем срезе.
@@ -179,31 +203,6 @@ MVP реализован и ожидает приемку владельцем. 
 - после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ## Next
-
-### CopilotKit и AG-UI в основном Django UI
-
-Подготовлен документационный срез для пилотного встраивания CopilotKit в основной Django UI через AG-UI adapter. Реализация не начата: перед стартом нужно согласовать ADR и deployment-подход.
-
-Контекст:
-- архитектурное решение находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
-- проектный план находится в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`;
-- активный план находится в `docs/planning/active/copilotkit-ag-ui-integration.md`;
-- workflow package находится в `workflow/active/copilotkit-ag-ui-integration/`;
-- операционный guide находится в `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md`;
-- deployment note находится в `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
-
-Предварительный scope:
-- добавить AG-UI endpoint в `services.agent_runtime`, не ломая текущие `/chat` и `/chat/stream`;
-- добавить отдельный server-side Copilot Runtime service;
-- встроить CopilotKit как React island за feature flag;
-- сохранить Django AI gateway, confirmation и audit как единственный путь бизнес-действий;
-- покрыть основной сценарий e2e и проверить privacy/security ограничения.
-
-Критерии готовности к старту:
-- владелец принимает ADR-0027 или корректирует решение;
-- согласовано, нужен ли отдельный `services/copilot_runtime`;
-- согласовано место первого React island: текущий sidebar или отдельный экспериментальный маршрут;
-- согласовано, кто видит pilot и какие e2e обязательны для первого включения.
 
 ### Внедрение архитектурных паттернов
 

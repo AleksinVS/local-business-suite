@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed. Документ описывает целевой deployment после реализации ADR-0027.
+Accepted for pilot. Первый срез реализован, но production-включение требует отдельной приемки на целевом хосте.
 
 ## Назначение
 
@@ -25,7 +25,10 @@ reverse proxy: Caddy/IIS
 LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
 LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=/copilotkit
 LOCAL_BUSINESS_COPILOTKIT_AGENT_ID=local_business
+LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS=900
 LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL=http://agent-runtime:8090/ag-ui
+COPILOTKIT_BASE_PATH=/copilotkit
+COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
 ```
 
@@ -86,9 +89,17 @@ Reverse proxy rules:
 React island должен собираться в статические файлы проекта, например:
 
 ```text
-static/dist/copilotkit-island.js
-static/dist/copilotkit-island.css
+static/dist/copilotkit/copilotkit-island.js
+static/dist/copilotkit/copilotkit-island.css
 ```
+
+Локальная сборка:
+
+```bash
+npm run build:copilotkit
+```
+
+Docker-образ `web` собирает этот bundle в отдельной Node-стадии и копирует результат в Python-образ. `static/dist/` не хранится в Git.
 
 После изменения структуры:
 
@@ -132,9 +143,7 @@ python manage.py check
 python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
-npm --prefix services/copilot_runtime test
-npm --prefix services/copilot_runtime run typecheck
+npm run build:copilotkit
+node --check services/copilot_runtime/server.mjs
 npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
 ```
-
-Если `services/copilot_runtime` еще не реализован, npm-команды пропускаются с явной записью причины в отчете.

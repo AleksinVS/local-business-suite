@@ -226,6 +226,14 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
 }
 
+#copilotkit-sidebar-root,
+.copilotkit-sidebar-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .sidebar-chat-loading,
 .sidebar-chat-empty {
   color: var(--text-muted);

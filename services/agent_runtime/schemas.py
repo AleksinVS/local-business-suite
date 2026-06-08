@@ -62,6 +62,93 @@ class ChatRequest(BaseModel):
     model_id: str = ""
 
 
+class AGUIMessage(BaseModel):
+    id: str = ""
+    role: str
+    content: Any = ""
+    name: str = ""
+    toolCalls: list[dict[str, Any]] = Field(default_factory=list)
+    toolCallId: str = ""
+
+
+class AGUIRunAgentInput(BaseModel):
+    """Subset of AG-UI RunAgentInput accepted by the local runtime.
+
+    The JavaScript @ag-ui/client sends this object through HttpAgent as JSON.
+    The runtime only uses safe message text and explicitly forwarded Django
+    actor/session context; client-provided tools are not executed directly.
+    """
+
+    threadId: str
+    runId: str
+    parentRunId: str = ""
+    state: dict[str, Any] = Field(default_factory=dict)
+    messages: list[AGUIMessage] = Field(default_factory=list)
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    context: list[dict[str, Any]] = Field(default_factory=list)
+    forwardedProps: dict[str, Any] = Field(default_factory=dict)
+    resume: list[dict[str, Any]] = Field(default_factory=list)
+
+    def latest_user_text(self) -> str:
+        for message in reversed(self.messages):
+            if message.role != "user":
+                continue
+            content = message.content
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        parts.append(str(item.get("text") or ""))
+                return "".join(parts)
+        return ""
+
+    def history_messages(self) -> list[HistoryMessage]:
+        history: list[HistoryMessage] = []
+        latest_user_seen = False
+        for message in reversed(self.messages):
+            if message.role == "user":
+                if not latest_user_seen:
+                    latest_user_seen = True
+                    continue
+                content = message.content
+                history.append(
+                    HistoryMessage(
+                        role="user",
+                        content=content if isinstance(content, str) else "",
+                    )
+                )
+            elif message.role == "assistant":
+                history.append(
+                    HistoryMessage(
+                        role="assistant",
+                        content=message.content if isinstance(message.content, str) else "",
+                    )
+                )
+            elif message.role == "tool":
+                history.append(
+                    HistoryMessage(
+                        role="tool",
+                        content=message.content if isinstance(message.content, str) else "",
+                        tool_name=message.toolCallId or message.name,
+                    )
+                )
+        history.reverse()
+        return history
+
+
+class AGUIActorPayload(BaseModel):
+    actor: ActorContext
+    session_id: str = ""
+    model_id: str = ""
+    origin_channel: str = "copilotkit"
+    actor_version: str = ""
+    issued_at: int = 0
+    signature: str = ""
+    page_context: dict[str, Any] = Field(default_factory=dict)
+
+
 class TaskTypeReport(BaseModel):
     """
     Machine-readable task-type resolution for the bounded scope

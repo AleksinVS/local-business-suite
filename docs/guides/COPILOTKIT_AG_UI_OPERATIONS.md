@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed. Руководство описывает целевой порядок эксплуатации после реализации ADR-0027. Пока код не добавлен, команды с `services/copilot_runtime` являются плановыми.
+Accepted for pilot. Первый рабочий срез реализован за feature flag: Django config endpoint, React-остров, CopilotKit Runtime service и AG-UI endpoint.
 
 Связанные документы:
 
@@ -78,14 +78,14 @@ uvicorn services.agent_runtime.app:app --host 0.0.0.0 --port 8090 --reload
 Запустить Copilot Runtime:
 
 ```bash
-npm --prefix services/copilot_runtime run dev
+npm run copilot-runtime:start
 ```
 
 Проверить health:
 
 ```bash
 curl -fsS http://127.0.0.1:8090/health
-curl -fsS http://127.0.0.1:<copilot-port>/health
+curl -fsS http://127.0.0.1:3100/health
 ```
 
 Проверить Django:
@@ -93,6 +93,13 @@ curl -fsS http://127.0.0.1:<copilot-port>/health
 ```bash
 python manage.py check
 python manage.py validate_architecture_contracts
+npm run build:copilotkit
+```
+
+Для локальной проверки без reverse proxy можно временно поставить:
+
+```text
+LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=http://127.0.0.1:3100/copilotkit
 ```
 
 ## Smoke-сценарии
@@ -148,7 +155,7 @@ python manage.py validate_architecture_contracts
 Проверить:
 
 - `LOCAL_BUSINESS_COPILOTKIT_ENABLED`;
-- наличие bundle в static;
+- выполнен ли `npm run build:copilotkit` или собран Docker-образ web;
 - template feature flag;
 - browser console на ошибку загрузки JS;
 - права пользователя на экспериментальный UI.
@@ -206,6 +213,7 @@ python manage.py check
 python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
+npm run build:copilotkit
 npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
 git diff --check
 ```

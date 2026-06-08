@@ -68,6 +68,41 @@ class AIViewsTests(TestCase):
         response = self.client.get(reverse("ai:hub"))
         self.assertEqual(response.status_code, 403)
 
+    def test_copilotkit_config_is_feature_flagged(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(reverse("ai:copilotkit_config"))
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(response.json()["enabled"])
+
+    def test_copilotkit_config_returns_signed_actor_payload(self):
+        from .views import sign_copilotkit_actor_payload
+
+        self.client.force_login(self.customer)
+        with self.settings(
+            LOCAL_BUSINESS_COPILOTKIT_ENABLED=True,
+            LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL="/copilotkit",
+            LOCAL_BUSINESS_COPILOTKIT_AGENT_ID="local_business",
+        ):
+            response = self.client.get(reverse("ai:copilotkit_config"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        forwarded = payload["forwarded_props"]
+        self.assertTrue(payload["enabled"])
+        self.assertEqual(payload["runtime_url"], "/copilotkit")
+        self.assertEqual(payload["agent_id"], "local_business")
+        self.assertEqual(forwarded["session_id"], payload["thread_id"])
+        self.assertEqual(forwarded["actor"]["user_id"], self.customer.id)
+        self.assertEqual(forwarded["actor"]["source"], "django-copilotkit")
+        self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
+        self.assertTrue(
+            ChatSession.objects.filter(
+                user=self.customer,
+                external_id=forwarded["session_id"],
+                channel=ChatSession.Channel.SIDEBAR,
+            ).exists()
+        )
+
     def test_tool_gateway_rejects_invalid_token(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),

@@ -28,6 +28,7 @@
 - `contracts/` — дефолтные JSON-контракты, которые версионируются в Git.
 - `data/contracts/` — runtime-копии контрактов для изменяемой среды.
 - `services/agent_runtime/` — отдельный runtime AI-агента на LangGraph/MCP.
+- `services/copilot_runtime/` — пилотный CopilotKit Runtime для AG-UI интеграции в основной Django UI.
 - `clients/desktop-notifier/` — опциональный Tauri-клиент уведомлений в трее.
 - `docs/` — архитектура, ADR, инструкции пользователя, deployment и планирование.
 - `workflow/` — рабочие пакеты и отчеты выполнения активных блоков разработки.
@@ -39,6 +40,8 @@
 - `contracts/` и `data/contracts/` — декларативные контракты системы.
 - `apps/ai/tool_definitions.py` — реестр AI-инструментов на стороне Django.
 - `python manage.py validate_architecture_contracts` — проверка контрактов.
+
+Пилот CopilotKit/AG-UI выключен по умолчанию и описан в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`, `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md` и `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
 
 ## Система памяти AI
 

@@ -1,6 +1,6 @@
 {
   "block_id": "copilotkit-ag-ui-integration",
-  "status": "proposed_documentation_ready",
+  "status": "active_first_slice_implemented",
   "created_at": "2026-06-09",
   "architecture_sources": [
     "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
@@ -53,8 +53,9 @@
     "python manage.py validate_architecture_contracts",
     "python manage.py test apps.ai.tests",
     "python -m unittest services.agent_runtime.tests.test_normalization -v",
-    "npm --prefix services/copilot_runtime test",
-    "npm --prefix services/copilot_runtime run typecheck",
+    "npm run build:copilotkit",
+    "node --check services/copilot_runtime/server.mjs",
+    "curl -fsS http://127.0.0.1:3100/health",
     "npm run test:e2e -- --project=chromium --grep \"copilotkit|ag-ui|sidebar\"",
     "make gen-struct",
     "git diff --check"

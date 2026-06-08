@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed, documentation-ready. Реализация не начата.
+Active implementation. Документация и первый рабочий срез реализации добавлены в отдельной ветке.
 
 Архитектурное решение: `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`.
 
@@ -58,6 +58,8 @@ Workflow-блок: `workflow/active/copilotkit-ag-ui-integration/`.
 - operations/deployment docs;
 - workflow package.
 
+Статус: выполнено.
+
 ### Этап 1. AG-UI adapter
 
 Write scope:
@@ -74,6 +76,8 @@ Acceptance:
 - event order покрыт тестами;
 - ошибки маппятся в безопасный `RUN_ERROR`;
 - `ui_command` не раскрывает raw payload.
+
+Статус: выполнено в первом срезе. Дополнительно добавлена проверка HMAC-подписи actor payload.
 
 ### Этап 2. Copilot Runtime service
 
@@ -92,6 +96,8 @@ Acceptance:
 - не имеет доступа к БД;
 - умеет прокинуть request/session context безопасно.
 
+Статус: выполнено как root npm-зависимости + `services/copilot_runtime/server.mjs`.
+
 ### Этап 3. React island
 
 Write scope:
@@ -107,6 +113,8 @@ Acceptance:
 - текущий sidebar остается fallback;
 - visual state не ломает mobile/desktop layout;
 - frontend tools выполняют только UI-команды.
+
+Статус: выполнено как встроенный `CopilotChat` в левую AI-панель за feature flag.
 
 ### Этап 4. Security, e2e и deployment
 
@@ -127,6 +135,7 @@ python manage.py check
 python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
+npm run build:copilotkit
 npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
 make gen-struct
 ```

@@ -5,5 +5,6 @@
   "IIS_SSO.md": "Настройка IIS с Windows Authentication SSO",
   "MEMORY_DEPLOYMENT.md": "Развертывание, runtime contracts и smoke-проверки системы памяти",
   "SETTINGS_CENTER_DEPLOYMENT.md": "Deployment note для Settings Center, env proposals, migrations и restart semantics",
-  "WINDOWS_RUN.md": "Запуск на Windows (разработка)"
+  "WINDOWS_RUN.md": "Запуск на Windows (разработка)",
+  "COPILOTKIT_AG_UI_DEPLOYMENT.md": "Deployment note для CopilotKit Runtime, AG-UI endpoint и React island"
 }

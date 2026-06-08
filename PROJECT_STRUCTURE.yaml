@@ -267,10 +267,12 @@ docs: # Документация проекта
     ADR-0024-service-extraction-readiness.md: file # ADR: Готовность к выносу сервисов без смены основного стека
     ADR-0025-file-source-auto-organization.md: file # ADR: Автоупорядочивание файловых источников через виртуальные структуры и управляемый перенос
     ADR-0026-pwa-first-and-optional-tauri-notifications.md: file # ADR: PWA-first уведомления без стороннего Web Push и опциональный Tauri-клиент
+    ADR-0027-copilotkit-ag-ui-django-integration.md: file # ADR: CopilotKit и AG-UI как дополнительный интерфейс ИИ-чата в Django UI
   architecture: # Архитектурные документы проекта
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
     blueprint.md: file # Blueprint — детальный план системы
+    COPILOTKIT_AG_UI_INTEGRATION_PLAN.md: file # План интеграции CopilotKit и AG-UI в основной Django UI
     DESIGN_PATTERNS_REVIEW_2026-06-01.md: file # Анализ полезных паттернов проектирования для текущей архитектуры
     DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
     INTEGRATIONS.md: file # Интеграции с внешними системами
@@ -294,6 +296,7 @@ docs: # Документация проекта
     SERVICE_EXTRACTION_GUIDE.md: file # Правила безопасного выноса технических сервисов из Django
     SETTINGS_CENTER_IMPLEMENTATION_PLAN.md: file # План реализации Settings Center, GUI настроек и контекстной справки
   deployment: # Гайды по деплою (Docker, IIS)
+    COPILOTKIT_AG_UI_DEPLOYMENT.md: file # Deployment note для CopilotKit Runtime, AG-UI endpoint и React island
     DEPLOYMENT.md: file # Основной гайд по деплою (Docker + VPS)
     DESKTOP_NOTIFIER_DEPLOYMENT.md: file # Инструкция сборки и распространения Tauri-клиента уведомлений
     IIS_SSO.md: file # Настройка IIS с Windows Authentication SSO
@@ -305,6 +308,7 @@ docs: # Документация проекта
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     ARCHITECTURE_REVIEW_2026-06-01.md: file # Архитектурное ревью проекта от 2026-06-01 и план рекомендуемых исправлений
     CHANGE_PATTERNS.md: file # Паттерны внесения изменений
+    COPILOTKIT_AG_UI_OPERATIONS.md: file # Операционный guide по включению, проверке, разбору ошибок и rollback CopilotKit/AG-UI
     DESKTOP_NOTIFIER_USER_GUIDE.md: file # Руководство пользователя по Tauri-клиенту уведомлений в трее
     INTERFACE_RUSSIFICATION.md: file # Правила русскоязычных UI-строк до внедрения полноценной локализации
     KNOWLEDGE_ANALYTICS_OPERATIONS.md: file # Операционный guide по knowledge-driven business analytics, IMAP, DMS и дедупликации
@@ -325,6 +329,7 @@ docs: # Документация проекта
     active: # Активные планы крупных направлений
       architecture-review-remediation-2026-06-01.md: file # Активный план исправлений по архитектурному ревью 2026-06-01
       context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
+      copilotkit-ag-ui-integration.md: file # Активный план интеграции CopilotKit и AG-UI в основной Django UI
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
@@ -479,6 +484,12 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки контекстного sidebar AI-чата
       EXECUTOR_REPORT.01-06.md: file # Отчет исполнения task packets 01-06
       TASK_ACCEPTANCE.01-06.md: file # Приемочный отчет реализации task packets 01-06
+    copilotkit-ag-ui-integration: # Workflow: CopilotKit и AG-UI в основном Django UI
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для CopilotKit/AG-UI интеграции
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки интеграции CopilotKit через AG-UI
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза CopilotKit/AG-UI
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза CopilotKit/AG-UI
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

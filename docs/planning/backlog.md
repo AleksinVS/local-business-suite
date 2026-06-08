@@ -180,6 +180,31 @@ MVP реализован и ожидает приемку владельцем. 
 
 ## Next
 
+### CopilotKit и AG-UI в основном Django UI
+
+Подготовлен документационный срез для пилотного встраивания CopilotKit в основной Django UI через AG-UI adapter. Реализация не начата: перед стартом нужно согласовать ADR и deployment-подход.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
+- проектный план находится в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`;
+- активный план находится в `docs/planning/active/copilotkit-ag-ui-integration.md`;
+- workflow package находится в `workflow/active/copilotkit-ag-ui-integration/`;
+- операционный guide находится в `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md`;
+- deployment note находится в `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
+
+Предварительный scope:
+- добавить AG-UI endpoint в `services.agent_runtime`, не ломая текущие `/chat` и `/chat/stream`;
+- добавить отдельный server-side Copilot Runtime service;
+- встроить CopilotKit как React island за feature flag;
+- сохранить Django AI gateway, confirmation и audit как единственный путь бизнес-действий;
+- покрыть основной сценарий e2e и проверить privacy/security ограничения.
+
+Критерии готовности к старту:
+- владелец принимает ADR-0027 или корректирует решение;
+- согласовано, нужен ли отдельный `services/copilot_runtime`;
+- согласовано место первого React island: текущий sidebar или отдельный экспериментальный маршрут;
+- согласовано, кто видит pilot и какие e2e обязательны для первого включения.
+
 ### Внедрение архитектурных паттернов
 
 Подготовлен отдельный planning/workflow-блок для постепенного внедрения прикладных паттернов из архитектурного анализа. Scope направлен на единые сценарии записи, безопасные AI-команды, единые политики доступа, переходники источников и надежные фоновые задачи.

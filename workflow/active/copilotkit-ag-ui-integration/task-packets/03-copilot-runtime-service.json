@@ -1,0 +1,36 @@
+{
+  "task_id": "03-copilot-runtime-service",
+  "title": "Server-side Copilot Runtime service",
+  "status": "planned",
+  "goal": "Add a separate Copilot Runtime service that connects CopilotKit UI to the AG-UI endpoint through a server-side HttpAgent.",
+  "read_scope": [
+    "services/agent_runtime/README.md",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/deployment/IIS_SSO.md",
+    "package.json"
+  ],
+  "write_scope": [
+    "services/copilot_runtime/",
+    "services/.desc.json",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not put business logic in Copilot Runtime.",
+    "Do not give Copilot Runtime direct database access.",
+    "Do not use direct browser HttpAgent for production.",
+    "Do not add hosted CopilotKit persistence."
+  ],
+  "acceptance": [
+    "Copilot Runtime has a health endpoint.",
+    "Runtime connects to agent_runtime /ag-ui server-side.",
+    "Telemetry is disabled through environment in on-prem profile.",
+    "Service-to-service auth is documented and does not expose secrets.",
+    "Typecheck/test commands are documented."
+  ],
+  "verification": [
+    "npm --prefix services/copilot_runtime test",
+    "npm --prefix services/copilot_runtime run typecheck",
+    "curl -fsS http://127.0.0.1:<copilot-port>/health"
+  ]
+}

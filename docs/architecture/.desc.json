@@ -24,5 +24,6 @@
   "MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md": "План автоупорядочивания файловых источников: baseline, incoming, виртуальные структуры, перенос и S3-ready storage",
   "MEMORY_MVP_CURRENT_STATE.md": "Текущее фактическое состояние MVP системы памяти",
   "PWA_AND_TAURI_NOTIFICATIONS_PLAN.md": "План PWA-first уведомлений и опционального Tauri-клиента",
-  "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки"
+  "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки",
+  "COPILOTKIT_AG_UI_INTEGRATION_PLAN.md": "План интеграции CopilotKit и AG-UI в основной Django UI"
 }

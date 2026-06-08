@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: CopilotKit и AG-UI в основном Django UI",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки интеграции CopilotKit через AG-UI",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для CopilotKit/AG-UI интеграции",
+  "EXECUTOR_REPORT.documentation.md": "Отчет исполнения документационного среза CopilotKit/AG-UI",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка документационного среза CopilotKit/AG-UI",
+  "task-packets": "Task packets для документации, AG-UI adapter, Copilot Runtime, React island, security и e2e"
+}

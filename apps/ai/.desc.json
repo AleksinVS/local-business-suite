@@ -8,6 +8,7 @@
   "page_context.py": "Валидация, server-side snapshot и resolver безопасного контекста окна для AI-чата",
   "chat_settings.py": "Разрешение эффективных runtime-настроек full-page/sidebar AI-чата",
   "context_processors.py": "Template flags и базовый route context для встроенного AI-чата без DB-запросов",
+  "ui_runtime/": "Общий runtime-слой AI UI: драйверы, actor payload, подпись и config",
   "commands.py": "Предопределённые slash-команды",
   "runtime_client.py": "Клиент для связи с agent runtime (HTTP)",
   "settings_descriptors.py": "Доменные descriptors Settings Center для AI runtime contracts",

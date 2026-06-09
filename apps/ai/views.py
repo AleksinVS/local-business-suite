@@ -41,6 +41,9 @@ from .services import (
     serialize_session_history,
 )
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
+from .ui_runtime.actor import build_actor_payload, sign_actor_payload, signature_payload
+from .ui_runtime.config import build_sidebar_ai_ui_config
+from .ui_runtime.drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_ui_driver
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,6 @@ CHAT_RUNTIME_ERROR_MESSAGE = (
     "Технический идентификатор: {request_id}."
 )
 PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
-COPILOTKIT_ACTOR_VERSION = "copilotkit-ag-ui-v1"
 
 
 def classify_chat_runtime_error(exc):
@@ -180,31 +182,11 @@ def gateway_token_is_valid(request):
 
 
 def copilotkit_signature_payload(payload):
-    actor = payload.get("actor") or {}
-    signed_payload = {
-        "actor": {
-            "actor_version": actor.get("actor_version", ""),
-            "channel": actor.get("channel", ""),
-            "is_superuser": bool(actor.get("is_superuser", False)),
-            "origin_channel": actor.get("origin_channel", ""),
-            "roles": list(actor.get("roles") or []),
-            "source": actor.get("source", ""),
-            "user_id": actor.get("user_id"),
-            "username": actor.get("username", ""),
-        },
-        "actor_version": payload.get("actor_version", ""),
-        "issued_at": payload.get("issued_at") or 0,
-        "model_id": payload.get("model_id", ""),
-        "origin_channel": payload.get("origin_channel", ""),
-        "session_id": payload.get("session_id", ""),
-    }
-    return json.dumps(signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return signature_payload(payload)
 
 
 def sign_copilotkit_actor_payload(payload):
-    token = (settings.LOCAL_BUSINESS_AI_GATEWAY_TOKEN or "").encode("utf-8")
-    message = copilotkit_signature_payload(payload).encode("utf-8")
-    return hmac.new(token, message, hashlib.sha256).hexdigest()
+    return sign_actor_payload(payload)
 
 
 def reject_invalid_gateway_token(request):
@@ -460,48 +442,100 @@ class AIPageContextUpdateView(LoginRequiredMixin, View):
         )
 
 
+class AIUIConfigView(LoginRequiredMixin, View):
+    http_method_names = ["get"]
+
+    def get(self, request):
+        driver = configured_ai_ui_driver()
+        if driver not in {DRIVER_COPILOTKIT, DRIVER_NATIVE}:
+            return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
+        runtime_url = ""
+        if driver == DRIVER_NATIVE:
+            runtime_url = reverse("ai:ui_ag_ui_run")
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=driver,
+                runtime_url=runtime_url,
+            )
+        )
+
+
 class AICopilotKitConfigView(LoginRequiredMixin, View):
     http_method_names = ["get"]
 
     def get(self, request):
-        if not settings.LOCAL_BUSINESS_COPILOTKIT_ENABLED:
+        if configured_ai_ui_driver() != DRIVER_COPILOTKIT:
             return JsonResponse({"enabled": False, "error": "CopilotKit отключен."}, status=404)
+
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=DRIVER_COPILOTKIT,
+                runtime_url=settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
+                agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+            )
+        )
+
+
+class AIUIAGUIRunProxyView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        if configured_ai_ui_driver() != DRIVER_NATIVE:
+            return JsonResponse({"error": "Native AI UI отключен."}, status=404)
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
 
         session = get_or_create_sidebar_session(request.user)
         model_id = (session.metadata or {}).get("model_id", "")
-        issued_at = int(time.time())
-        actor_payload = {
-            "session_id": str(session.external_id),
-            "model_id": model_id,
-            "origin_channel": "copilotkit",
-            "actor_version": COPILOTKIT_ACTOR_VERSION,
-            "issued_at": issued_at,
-            "actor": {
-                "user_id": request.user.id,
-                "username": request.user.username,
-                "roles": list(request.user.groups.values_list("name", flat=True)),
-                "is_superuser": request.user.is_superuser,
-                "channel": ChatSession.Channel.SIDEBAR,
-                "source": "django-copilotkit",
-                "origin_channel": "copilotkit",
-                "actor_version": COPILOTKIT_ACTOR_VERSION,
-            },
+        forwarded = body.get("forwardedProps") if isinstance(body.get("forwardedProps"), dict) else {}
+        page_context = forwarded.get("page_context") if isinstance(forwarded.get("page_context"), dict) else {}
+        run_payload = {
+            "threadId": str(session.external_id),
+            "runId": str(body.get("runId") or f"run_{uuid.uuid4().hex}"),
+            "parentRunId": str(body.get("parentRunId") or ""),
+            "state": body.get("state") if isinstance(body.get("state"), dict) else {},
+            "messages": body.get("messages") if isinstance(body.get("messages"), list) else [],
+            "tools": [],
+            "context": body.get("context") if isinstance(body.get("context"), list) else [],
+            "forwardedProps": build_actor_payload(
+                user=request.user,
+                session=session,
+                driver=DRIVER_NATIVE,
+                model_id=model_id,
+                page_context=page_context,
+            ),
+            "resume": body.get("resume") if isinstance(body.get("resume"), list) else [],
         }
-        actor_payload["signature"] = sign_copilotkit_actor_payload(actor_payload)
-        return JsonResponse(
-            {
-                "enabled": True,
-                "runtime_url": settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
-                "agent_id": settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
-                "thread_id": str(session.external_id),
-                "forwarded_props": actor_payload,
-                "labels": {
-                    "title": "ИИ-чат",
-                    "initial": "Опишите задачу или попросите открыть объект в правой панели.",
-                    "placeholder": "Сообщение...",
-                },
-            }
-        )
+
+        def stream_generator():
+            try:
+                for chunk in AgentRuntimeClient().ag_ui_stream(run_payload):
+                    yield chunk
+            except Exception as exc:
+                logger.warning(
+                    "Native AI UI AG-UI proxy failed: user_id=%s session=%s error_type=%s",
+                    request.user.id,
+                    session.external_id,
+                    exc.__class__.__name__,
+                )
+                yield "data: " + json.dumps(
+                    {
+                        "type": "RUN_ERROR",
+                        "message": "ИИ-сервис вернул ошибку.",
+                        "code": "agent_runtime_error",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ) + "\n\n"
+
+        response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
 
 class AIChatMessageCreateView(LoginRequiredMixin, View):

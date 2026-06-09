@@ -23,10 +23,14 @@ reverse proxy: Caddy/IIS
 
 ```text
 LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
+LOCAL_BUSINESS_AI_UI_DRIVER=legacy
 LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=/copilotkit
 LOCAL_BUSINESS_COPILOTKIT_AGENT_ID=local_business
 LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS=900
 LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL=http://agent-runtime:8090/ag-ui
+LOCAL_BUSINESS_AI_UI_PROTOCOL_VERSION=1.0
+LOCAL_BUSINESS_AI_UI_AGUI_PROFILE=ag-ui@0.0.55
+LOCAL_BUSINESS_AI_UI_ACTOR_TOKEN_TTL_SECONDS=900
 COPILOTKIT_BASE_PATH=/copilotkit
 COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
@@ -130,7 +134,7 @@ Cookie/session rules:
 
 ## Rollback
 
-1. Поставить `LOCAL_BUSINESS_COPILOTKIT_ENABLED=false`.
+1. Поставить `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`.
 2. Перезапустить Django web.
 3. Убрать `/copilotkit` из reverse proxy или остановить `copilot_runtime`.
 4. Проверить текущий AI sidebar.
@@ -145,6 +149,6 @@ python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
 npm run build:copilotkit
 node --check services/copilot_runtime/server.mjs
-E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium
+E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep "CopilotKit"
 npm run test:e2e -- --project=chromium
 ```

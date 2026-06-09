@@ -1,5 +1,6 @@
 {
   ".": "Руководства разработчика",
+  "AI_UI_PROTOCOL_OPERATIONS.md": "Операционный guide по общему AI UI protocol foundation и драйверам legacy/copilotkit/native",
   "AI_SIDEBAR_CHAT.md": "Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings",
   "AI_SKILLS_OPERATIONS.md": "Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources",
   "CHANGE_PATTERNS.md": "Паттерны внесения изменений",

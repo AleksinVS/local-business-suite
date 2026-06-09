@@ -1,7 +1,7 @@
 {
   "task_id": "06-e2e-security-deployment",
   "title": "E2E, security checks and deployment profile documentation",
-  "status": "pending",
+  "status": "partially_completed",
   "objective": "Verify legacy, CopilotKit and native AI UI drivers end to end, then document production deployment choices and rollback.",
   "write_scope": [
     "scripts/e2e/tests/",

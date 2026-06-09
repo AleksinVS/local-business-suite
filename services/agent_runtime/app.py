@@ -9,9 +9,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 
-from .ag_ui_adapter import (
+from .protocols.agui.v1 import (
     agui_history,
     agui_prompt,
+    protocol_metadata_event,
     run_error_event,
     run_finished_event,
     run_started_event,
@@ -53,6 +54,7 @@ def _agui_signature_payload(payload: AGUIActorPayload) -> str:
         "model_id": payload.model_id,
         "origin_channel": payload.origin_channel,
         "session_id": payload.session_id,
+        "ui_driver": payload.ui_driver,
     }
     return json.dumps(signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -62,7 +64,12 @@ def _agui_signature_is_valid(payload: AGUIActorPayload) -> bool:
     token = settings.django_gateway_token or ""
     if not token or not payload.signature or not payload.issued_at:
         return False
-    ttl_seconds = int(os.environ.get("LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS", "900"))
+    ttl_seconds = int(
+        os.environ.get(
+            "LOCAL_BUSINESS_AI_UI_ACTOR_TOKEN_TTL_SECONDS",
+            os.environ.get("LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS", "900"),
+        )
+    )
     if abs(int(time.time()) - int(payload.issued_at)) > ttl_seconds:
         return False
     expected = hmac.new(
@@ -182,6 +189,11 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
         message_id = f"msg_{run_input.runId}"
         try:
             yield sse_event(run_started_event(run_input))
+            yield sse_event(
+                protocol_metadata_event(
+                    driver=actor_payload.ui_driver or actor_payload.origin_channel
+                )
+            )
             result = run_agent(
                 actor=actor,
                 session_id=actor_payload.session_id or run_input.threadId,

@@ -91,7 +91,9 @@ class AIViewsTests(TestCase):
         self.assertTrue(payload["enabled"])
         self.assertEqual(payload["runtime_url"], "/copilotkit")
         self.assertEqual(payload["agent_id"], "local_business")
+        self.assertEqual(payload["driver"], "copilotkit")
         self.assertEqual(forwarded["session_id"], payload["thread_id"])
+        self.assertEqual(forwarded["ui_driver"], "copilotkit")
         self.assertEqual(forwarded["actor"]["user_id"], self.customer.id)
         self.assertEqual(forwarded["actor"]["source"], "django-copilotkit")
         self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
@@ -102,6 +104,57 @@ class AIViewsTests(TestCase):
                 channel=ChatSession.Channel.SIDEBAR,
             ).exists()
         )
+
+    def test_native_ai_ui_config_returns_signed_actor_payload(self):
+        from .views import sign_copilotkit_actor_payload
+
+        self.client.force_login(self.customer)
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
+            response = self.client.get(reverse("ai:ui_config"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        forwarded = payload["forwarded_props"]
+        self.assertTrue(payload["enabled"])
+        self.assertEqual(payload["driver"], "native")
+        self.assertEqual(payload["runtime_url"], reverse("ai:ui_ag_ui_run"))
+        self.assertEqual(forwarded["ui_driver"], "native")
+        self.assertEqual(forwarded["actor"]["source"], "django-native-ai-ui")
+        self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
+
+    def test_native_ai_ui_proxy_overwrites_client_actor_payload(self):
+        self.client.force_login(self.customer)
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"), patch("apps.ai.views.AgentRuntimeClient") as client_class:
+            client = client_class.return_value
+            client.ag_ui_stream.return_value = ['data: {"type":"RUN_STARTED"}\n\n']
+            response = self.client.post(
+                reverse("ai:ui_ag_ui_run"),
+                data=json.dumps(
+                    {
+                        "threadId": "forged-thread",
+                        "runId": "run-1",
+                        "messages": [{"id": "u1", "role": "user", "content": "Проверка"}],
+                        "forwardedProps": {
+                            "actor": {"user_id": self.manager.id},
+                            "signature": "invalid",
+                            "page_context": {"envelope": {"page": {"module": "workorders"}}},
+                        },
+                    }
+                ),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            body = b"".join(response.streaming_content).decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("RUN_STARTED", body)
+        run_payload = client.ag_ui_stream.call_args.args[0]
+        forwarded = run_payload["forwardedProps"]
+        self.assertNotEqual(run_payload["threadId"], "forged-thread")
+        self.assertEqual(forwarded["actor"]["user_id"], self.customer.id)
+        self.assertEqual(forwarded["ui_driver"], "native")
+        self.assertEqual(forwarded["page_context"]["envelope"]["page"]["module"], "workorders")
+        self.assertRegex(forwarded["signature"], r"^[a-f0-9]{64}$")
 
     def test_tool_gateway_rejects_invalid_token(self):
         response = self.client.post(

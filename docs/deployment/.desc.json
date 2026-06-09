@@ -1,5 +1,6 @@
 {
   ".": "Гайды по деплою (Docker, IIS)",
+  "AI_UI_PROTOCOL_DEPLOYMENT.md": "Deployment note по выбору AI UI драйвера legacy/copilotkit/native",
   "DESKTOP_NOTIFIER_DEPLOYMENT.md": "Инструкция сборки и распространения Tauri-клиента уведомлений",
   "DEPLOYMENT.md": "Основной гайд по деплою (Docker + VPS)",
   "IIS_SSO.md": "Настройка IIS с Windows Authentication SSO",

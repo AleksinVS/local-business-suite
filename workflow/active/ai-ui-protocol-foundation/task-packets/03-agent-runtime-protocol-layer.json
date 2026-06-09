@@ -1,7 +1,7 @@
 {
   "task_id": "03-agent-runtime-protocol-layer",
   "title": "Versioned protocol layer in agent runtime",
-  "status": "pending",
+  "status": "completed_first_slice",
   "objective": "Create services.agent_runtime.protocols with common internal events, AG-UI v1 adapter, protocol metadata and versioned UI commands.",
   "write_scope": [
     "services/agent_runtime/protocols/",

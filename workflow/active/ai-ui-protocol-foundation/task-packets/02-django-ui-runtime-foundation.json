@@ -1,7 +1,7 @@
 {
   "task_id": "02-django-ui-runtime-foundation",
   "title": "Django AI UI runtime foundation",
-  "status": "pending",
+  "status": "completed_first_slice",
   "objective": "Extract common Django-side actor context, signing, UI driver selection and config payload logic out of CopilotKit-specific views.",
   "write_scope": [
     "apps/ai/ui_runtime/",

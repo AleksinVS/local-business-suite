@@ -45,9 +45,11 @@ function normalizeRightPanelCommand(command) {
 function CommandBridge({ agentId }) {
   const { agent } = useAgent({ agentId });
   const executed = useRef(new Set());
-  const commands = Array.isArray(agent.state?.localBusinessUiCommands)
-    ? agent.state.localBusinessUiCommands
-    : [];
+  const commands = Array.isArray(agent.state?.localBusiness?.uiCommands)
+    ? agent.state.localBusiness.uiCommands
+    : Array.isArray(agent.state?.localBusinessUiCommands)
+      ? agent.state.localBusinessUiCommands
+      : [];
   const commandKey = JSON.stringify(commands);
 
   useEffect(() => {

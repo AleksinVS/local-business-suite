@@ -1,0 +1,117 @@
+.native-ai-ui {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.native-ai-ui-header {
+  flex: 0 0 auto;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: #fbfdff;
+}
+
+.native-ai-ui-title {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.native-ai-ui-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.native-ai-ui-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 96%;
+}
+
+.native-ai-ui-message.is-user {
+  align-self: flex-end;
+}
+
+.native-ai-ui-message.is-assistant,
+.native-ai-ui-message.is-tool {
+  align-self: flex-start;
+}
+
+.native-ai-ui-meta {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.native-ai-ui-bubble {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.native-ai-ui-message.is-user .native-ai-ui-bubble {
+  background: #e8f1ff;
+  border-color: #bfdbfe;
+}
+
+.native-ai-ui-message.is-tool .native-ai-ui-bubble {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.native-ai-ui-message.is-pending .native-ai-ui-bubble {
+  opacity: 0.72;
+}
+
+.native-ai-ui-form {
+  display: grid;
+  grid-template-columns: 1fr 36px;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.native-ai-ui-form textarea {
+  min-height: 42px;
+  max-height: min(180px, 34vh);
+  resize: none;
+  overflow-y: auto;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.native-ai-ui-form button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  align-self: end;
+  font-weight: 800;
+}
+
+.native-ai-ui-error {
+  padding: 1rem;
+  color: #991b1b;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}

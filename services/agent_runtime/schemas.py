@@ -143,6 +143,7 @@ class AGUIActorPayload(BaseModel):
     session_id: str = ""
     model_id: str = ""
     origin_channel: str = "copilotkit"
+    ui_driver: str = ""
     actor_version: str = ""
     issued_at: int = 0
     signature: str = ""

@@ -1,7 +1,7 @@
 {
   "task_id": "04-copilotkit-driver-refactor",
   "title": "Refactor CopilotKit driver onto shared foundation",
-  "status": "pending",
+  "status": "completed_first_slice",
   "objective": "Move the existing CopilotKit pilot to the shared UI runtime and protocol foundation without changing the user-visible pilot behavior.",
   "write_scope": [
     "static/src/copilotkit/",

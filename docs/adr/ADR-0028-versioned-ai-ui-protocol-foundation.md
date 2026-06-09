@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed
+Accepted
 
 ## Дата
 
@@ -202,6 +202,19 @@ CopilotKit-специфичные настройки остаются отдел
 - потребуется матрица e2e для `legacy`, `copilotkit` и `native`;
 - придется поддерживать protocol metadata и обратную совместимость расширений;
 - часть существующих имен `copilotkit_*` нужно перенести в нейтральный слой.
+
+## Реализационный статус
+
+Первый срез выполнен в ветке `feature/copilotkit-ag-ui-integration`:
+
+- добавлен `apps.ai.ui_runtime` для драйверов, actor payload, подписи и config payload;
+- добавлен `services.agent_runtime.protocols` с common capabilities/UI commands и AG-UI v1 adapter;
+- `/ag-ui` отдает `local_business.protocol` metadata event;
+- `open_right_panel` получил `version` и основной путь `/localBusiness/uiCommands`;
+- старый путь `/localBusinessUiCommands` сохранен как временная совместимость;
+- CopilotKit config endpoint переведен на общий config builder;
+- добавлен native AG-UI-compatible sidebar через Django same-origin proxy `/ai/ui/ag-ui/run/`;
+- добавлена настройка `LOCAL_BUSINESS_AI_UI_DRIVER=legacy|copilotkit|native`.
 
 ## Требования к реализации
 

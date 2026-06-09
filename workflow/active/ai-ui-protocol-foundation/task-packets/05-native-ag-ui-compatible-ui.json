@@ -1,7 +1,7 @@
 {
   "task_id": "05-native-ag-ui-compatible-ui",
   "title": "Native AG-UI-compatible AI UI driver",
-  "status": "pending",
+  "status": "completed_first_slice",
   "objective": "Add a self-hosted native UI driver that consumes the AG-UI-compatible endpoint and local_business protocol extensions without requiring Copilot Runtime.",
   "write_scope": [
     "static/src/ai_ui/",

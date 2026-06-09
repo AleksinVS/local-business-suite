@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
     {% if copilotkit_enabled %}
       <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}">
+    {% elif native_ai_ui_enabled %}
+      <link rel="stylesheet" href="{% static 'src/ai_ui/native_ai.css' %}">
     {% endif %}
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
@@ -119,6 +121,14 @@
                 data-config-url="{% url 'ai:copilotkit_config' %}"
                 data-runtime-url="{{ copilotkit_runtime_url }}"
                 data-agent-id="{{ copilotkit_agent_id }}"
+              >
+                <div class="sidebar-chat-loading">Загрузка чата...</div>
+              </div>
+            {% elif native_ai_ui_enabled %}
+              <div
+                id="native-ai-sidebar-root"
+                class="native-ai-sidebar-root"
+                data-config-url="{% url 'ai:ui_config' %}"
               >
                 <div class="sidebar-chat-loading">Загрузка чата...</div>
               </div>
@@ -367,6 +377,8 @@
     <script src="{% static 'src/js/sidebar_chat.js' %}"></script>
     {% if copilotkit_enabled %}
       <script type="module" src="{% static 'dist/copilotkit/copilotkit-island.js' %}"></script>
+    {% elif native_ai_ui_enabled %}
+      <script src="{% static 'src/ai_ui/native_ai.js' %}"></script>
     {% endif %}
     {% block extra_scripts %}{% endblock %}
   </body>

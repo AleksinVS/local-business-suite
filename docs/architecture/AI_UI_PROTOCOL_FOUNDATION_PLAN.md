@@ -2,7 +2,7 @@
 
 ## Статус
 
-Proposed. Документ описывает следующий этап после первого CopilotKit/AG-UI среза. Реализация еще не выполнена.
+Accepted. Первый реализационный срез выполнен: общий Django UI runtime, agent runtime protocol layer, protocol metadata, CopilotKit refactor и минимальный native AG-UI-compatible sidebar.
 
 Связанные документы:
 
@@ -35,27 +35,28 @@ Proposed. Документ описывает следующий этап пос
 - Не включать Copilot Cloud, hosted persistence или внешнюю аналитику.
 - Не добавлять browser-side write tools.
 
-## Текущая отправная точка
+## Фактическое состояние первого среза
 
-В ветке CopilotKit-пилота уже есть:
+Реализовано:
 
-- `services.agent_runtime /ag-ui`;
-- `services/agent_runtime/ag_ui_adapter.py`;
-- `services/copilot_runtime/server.mjs`;
-- React island `static/src/copilotkit/main.jsx`;
-- Django endpoint `/ai/chat/copilotkit/config/`;
-- HMAC-подписанный actor payload;
-- feature flag `LOCAL_BUSINESS_COPILOTKIT_ENABLED`;
-- e2e для CopilotKit sidebar.
+- `apps/ai/ui_runtime/` для выбора драйвера, actor payload, подписи и config payload;
+- `LOCAL_BUSINESS_AI_UI_DRIVER=legacy|copilotkit|native`;
+- `GET /ai/ui/config/` для активного AI UI драйвера;
+- `POST /ai/ui/ag-ui/run/` как Django same-origin proxy для native UI;
+- `services/agent_runtime/protocols/common/` с capabilities и UI command allow-list;
+- `services/agent_runtime/protocols/agui/` с AG-UI events и v1 mapper;
+- `CUSTOM name="local_business.protocol"` в начале успешного `/ag-ui` run;
+- `STATE_DELTA path="/localBusiness/uiCommands"` как основной путь UI-команд;
+- временный compatibility path `/localBusinessUiCommands`;
+- native sidebar `static/src/ai_ui/native_ai.js`;
+- Playwright spec `scripts/e2e/tests/native_ai_ui.spec.ts`.
 
-Ограничения текущего состояния:
+Оставшиеся ограничения:
 
-- общий actor signing находится рядом с CopilotKit-specific view;
-- UI driver выбирается boolean-флагом;
-- frontend command path привязан к `localBusinessUiCommands`;
-- нет protocol metadata event;
-- нет отдельного места для common/internal events;
-- native UI пока не имеет собственного execution path.
+- native UI пока минимальный: текст, tool trace и UI commands без расширенного UX истории;
+- persistent chat history для native идет через agent runtime/Django контур, но UI после перезагрузки не восстанавливает прошлые сообщения;
+- `services/agent_runtime/ag_ui_adapter.py` оставлен как compatibility re-export;
+- отдельный `protocols.native.v1` не добавлен, потому что native UI пока использует AG-UI-compatible endpoint напрямую.
 
 ## Целевая архитектура
 
@@ -69,7 +70,7 @@ apps.ai.ui_runtime
   |
   +--> legacy HTMX sidebar
   +--> copilotkit React island -> Copilot Runtime
-  +--> native AG-UI UI
+  +--> native AG-UI UI -> Django same-origin AG-UI proxy
 
 Copilot Runtime или native клиент
   |
@@ -93,10 +94,8 @@ existing LangGraph agent -> Django AI gateway -> domain services
 apps/ai/ui_runtime/
   __init__.py
   actor.py
-  commands.py
   config.py
   drivers.py
-  schemas.py
 ```
 
 Назначение:
@@ -116,15 +115,10 @@ services/agent_runtime/protocols/
   common/
     __init__.py
     capabilities.py
-    events.py
     ui_commands.py
   agui/
     __init__.py
-    v1.py
     events.py
-    schemas.py
-  native/
-    __init__.py
     v1.py
 ```
 
@@ -132,7 +126,6 @@ services/agent_runtime/protocols/
 
 - нормализовать входной запрос;
 - проверить подпись actor payload;
-- описать внутренние события;
 - перевести внутренние события в AG-UI;
 - добавить project extensions без нарушения AG-UI-compatible клиентов.
 
@@ -254,7 +247,7 @@ Native UI должен уметь:
 
 ### Этап 1. Документы и ADR
 
-Статус: этот документ.
+Статус: выполнено.
 
 Результаты:
 
@@ -264,6 +257,8 @@ Native UI должен уметь:
 - workflow-блок и task packets.
 
 ### Этап 2. Django UI runtime foundation
+
+Статус: выполнено.
 
 Вынести из CopilotKit view:
 
@@ -275,6 +270,8 @@ Native UI должен уметь:
 
 ### Этап 3. Agent protocol foundation
 
+Статус: выполнено.
+
 Создать `services/agent_runtime/protocols/`:
 
 - common internal events;
@@ -283,6 +280,8 @@ Native UI должен уметь:
 - protocol metadata.
 
 ### Этап 4. Refactor CopilotKit driver
+
+Статус: выполнено.
 
 Перевести текущий CopilotKit path на общую основу:
 
@@ -293,6 +292,8 @@ Native UI должен уметь:
 
 ### Этап 5. Native AG-UI-compatible UI
 
+Статус: выполнено как минимальный sidebar driver.
+
 Добавить самописный UI driver:
 
 - отдельный frontend entrypoint;
@@ -301,6 +302,8 @@ Native UI должен уметь:
 - выполнение только allow-listed UI-команд.
 
 ### Этап 6. Verification and deployment profiles
+
+Статус: частично выполнено. Добавлены unit/integration/e2e проверки; production-проверка на целевом deployment остается перед включением пользователям.
 
 Проверить:
 

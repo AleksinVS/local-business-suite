@@ -667,8 +667,10 @@ class TestAGUIAdapter(unittest.TestCase):
         )
 
         self.assertEqual([event["type"] for event in events], ["STATE_DELTA", "CUSTOM"])
-        self.assertEqual(events[0]["delta"][0]["path"], "/localBusinessUiCommands")
+        self.assertEqual(events[0]["delta"][0]["path"], "/localBusiness/uiCommands")
+        self.assertEqual(events[0]["delta"][1]["path"], "/localBusinessUiCommands")
         self.assertNotIn("unsafe", events[0]["delta"][0]["value"][0])
+        self.assertEqual(events[0]["delta"][0]["value"][0]["version"], "1.0")
         self.assertEqual(events[0]["delta"][0]["value"][0]["htmx_url"], "/workorders/42/")
         self.assertEqual(events[1]["name"], "local_business.ui_command")
 
@@ -752,6 +754,9 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
             events = asyncio.run(self._collect_events(response))
 
         self.assertEqual(events[0]["type"], "RUN_STARTED")
+        self.assertEqual(events[1]["type"], "CUSTOM")
+        self.assertEqual(events[1]["name"], "local_business.protocol")
+        self.assertEqual(events[1]["value"]["local_business_protocol"], "1.0")
         self.assertIn("TEXT_MESSAGE_START", [event["type"] for event in events])
         self.assertIn("TEXT_MESSAGE_CONTENT", [event["type"] for event in events])
         self.assertIn("TOOL_CALL_START", [event["type"] for event in events])

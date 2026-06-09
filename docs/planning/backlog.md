@@ -4,6 +4,24 @@
 
 ## Active
 
+### Версионируемая основа AI UI протоколов
+
+Подготовлен документационный срез для общей основы, которая позволит вести два варианта интерфейса параллельно: CopilotKit/AG-UI и самописный AG-UI-compatible UI. Цель - вынести actor/session context, подпись, UI-команды, внутренние события агента, protocol metadata и выбор UI-драйвера из CopilotKit-specific слоя.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md`;
+- активный план находится в `docs/planning/active/ai-ui-protocol-foundation.md`;
+- workflow package находится в `workflow/active/ai-ui-protocol-foundation/`.
+
+Оставшееся действие:
+- подтвердить ADR-0028 или внести правки;
+- реализовать общий `apps.ai.ui_runtime`;
+- реализовать `services.agent_runtime.protocols`;
+- перевести CopilotKit-пилот на общий слой;
+- добавить самописный AG-UI-compatible UI driver;
+- покрыть `legacy`, `copilotkit` и `native` режимы e2e-проверками.
+
 ### CopilotKit и AG-UI в основном Django UI
 
 Первый рабочий срез добавлен в отдельной ветке: AG-UI endpoint, CopilotKit Runtime service, React-остров в левой AI-панели и feature flag. Локальный e2e выполнен в режиме CopilotKit и fallback-режиме. До включения пилота нужны проверка reverse proxy на целевом deployment и приемка владельцем.

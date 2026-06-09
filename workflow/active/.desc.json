@@ -16,5 +16,6 @@
   "design-patterns-hardening-2026-06-01": "Workflow: внедрение архитектурных паттернов 2026-06-01",
   "memory-file-source-auto-organization": "Workflow: автоупорядочивание файловых источников",
   "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
-  "copilotkit-ag-ui-integration": "Workflow: CopilotKit и AG-UI в основном Django UI"
+  "copilotkit-ag-ui-integration": "Workflow: CopilotKit и AG-UI в основном Django UI",
+  "ai-ui-protocol-foundation": "Workflow: версионируемая основа AI UI протоколов"
 }

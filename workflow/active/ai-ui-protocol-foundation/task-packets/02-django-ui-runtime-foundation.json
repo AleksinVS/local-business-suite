@@ -1,0 +1,33 @@
+{
+  "task_id": "02-django-ui-runtime-foundation",
+  "title": "Django AI UI runtime foundation",
+  "status": "pending",
+  "objective": "Extract common Django-side actor context, signing, UI driver selection and config payload logic out of CopilotKit-specific views.",
+  "write_scope": [
+    "apps/ai/ui_runtime/",
+    "apps/ai/views.py",
+    "apps/ai/context_processors.py",
+    "apps/ai/urls.py",
+    "apps/ai/tests.py",
+    "config/settings.py",
+    "templates/base.html",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not remove the legacy sidebar.",
+    "Do not change domain tools or gateway behavior.",
+    "Do not introduce browser-side write actions."
+  ],
+  "acceptance_checks": [
+    "LOCAL_BUSINESS_AI_UI_DRIVER supports legacy, copilotkit and native values.",
+    "Actor payload signing is implemented in a neutral module.",
+    "CopilotKit config path continues to work or has a compatible alias.",
+    "Templates select the sidebar driver through the common setting."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.ai.tests",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

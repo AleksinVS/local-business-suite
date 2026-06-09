@@ -268,7 +268,9 @@ docs: # Документация проекта
     ADR-0025-file-source-auto-organization.md: file # ADR: Автоупорядочивание файловых источников через виртуальные структуры и управляемый перенос
     ADR-0026-pwa-first-and-optional-tauri-notifications.md: file # ADR: PWA-first уведомления без стороннего Web Push и опциональный Tauri-клиент
     ADR-0027-copilotkit-ag-ui-django-integration.md: file # ADR: CopilotKit и AG-UI как дополнительный интерфейс ИИ-чата в Django UI
+    ADR-0028-versioned-ai-ui-protocol-foundation.md: file # ADR: Версионируемая основа AI UI протоколов для CopilotKit и самописного интерфейса
   architecture: # Архитектурные документы проекта
+    AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
     blueprint.md: file # Blueprint — детальный план системы
@@ -327,6 +329,7 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
+      ai-ui-protocol-foundation.md: file # Активный план версионируемой основы AI UI протоколов
       architecture-review-remediation-2026-06-01.md: file # Активный план исправлений по архитектурному ревью 2026-06-01
       context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
       copilotkit-ag-ui-integration.md: file # Активный план интеграции CopilotKit и AG-UI в основной Django UI
@@ -481,6 +484,12 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   base.html: file # Базовый шаблон (navbar, sidebar, общий правый сайдбар, HTMX скрипты)
 workflow: # Исполнительные workflow-пакеты для сложных работ
   active: # Активные workflow-блоки
+    ai-ui-protocol-foundation: # Workflow: версионируемая основа AI UI протоколов
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для общей основы AI UI протоколов
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки общей основы AI UI протоколов
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза общей основы AI UI протоколов
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза общей основы AI UI протоколов
     architecture-review-remediation-2026-06-01: # Workflow: исправления по архитектурному ревью 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для исправлений по архитектурному ревью

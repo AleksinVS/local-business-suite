@@ -120,7 +120,81 @@ uvicorn 0.35.0 при старте через `python -m uvicorn ...` всегд
 - root-процесс использует Python не из ожидаемого множества (`.venv\Scripts\python.exe` или путь из `pyvenv.cfg:executable`);
 - запущены worker subprocess'ы, но root-процесс отсутствует (master упал, worker висит).
 
-Если в Task Scheduler действительно **две** задачи (например, старая в корне из `archive/TASK_SCHEDULER_COMPLETED.md` и новая в `\Portal\`), то это **настоящий** дубль. Удалить лишнюю можно через `setup_agent_runtime_autostart.ps1 -Force` — он перед регистрацией найдёт и предложит удалить чужие задачи по совпадению в `Actions` (см. `setup_agent_runtime_autostart.ps1:44-114`).
+Если в Task Scheduler действительно **две** задачи (например, старая в корне из `archive/TASK_SCHEDULER_COMPLETED.md` и новая в `\Portal\`), то это **настоящий** дубль. Удалить лишнюю можно через `setup_agent_runtime_autostart.ps1 -Force` — он перед регистрацией найдёт и предложить удалить чужие задачи по совпадению в `Actions` (см. `setup_agent_runtime_autostart.ps1:44-114`).
+
+## Типичные проблемы и защитные лимиты Agent Runtime
+
+Эти сценарии отлажены на проде. Для каждого указан симптом, причина и команды диагностики.
+
+### «ИИ-сервис недоступен» в чате
+
+Симптом: каждое сообщение возвращает `Не удалось получить ответ от ИИ-сервиса. Причина: ИИ-сервис недоступен. Технический идентификатор: <uuid>`. Ошибка формируется в `apps/ai/views.py:54-68` при `httpx.ConnectError` на `127.0.0.1:8090` — runtime не отвечает.
+
+Диагностика:
+
+```powershell
+curl http://127.0.0.1:8090/health
+# {"status": "ok"} — runtime жив; иначе — поднимаем
+```
+
+Подъём без перезагрузки сервера:
+
+```powershell
+Start-ScheduledTask -TaskName "Portal Agent Runtime" -TaskPath "\Portal\"
+```
+
+### `DisallowedHost` 400 на gateway-запросах runtime
+
+Симптом: runtime поднят, `/health` отвечает 200, чат отвечает общими фразами без вызова инструментов. В логах runtime видно `GET http://127.0.0.1/ai/gateway/skills/catalog/ "HTTP/1.1 400 Bad Request"`. Django отклоняет `Host: 127.0.0.1`, потому что `ALLOWED_HOSTS` в проде — `['stc-web', 'web']` (или другие имена, заданные `DJANGO_ALLOWED_HOSTS`). `gateway_client.get_skills_catalog()` ловит `httpx.HTTPError` и возвращает пустой список (`services/agent_runtime/gateway_client.py:57-58`), LLM продолжает отвечать, но tool-вызовы не работают.
+
+Фикс: `DJANGO_AI_GATEWAY_URL` в `.env` должен указывать на хост из `ALLOWED_HOSTS`:
+
+```env
+# в проде на машине с hostname = stc-web
+DJANGO_AI_GATEWAY_URL=http://stc-web/ai/gateway
+```
+
+После правки `.env` обязателен перезапуск runtime (`Stop-ScheduledTask` + `Start-ScheduledTask`), потому что `services/agent_runtime/config.py:64-66` читает env через `load_dotenv` один раз при импорте.
+
+### Runtime завис → каскадный отказ Django
+
+Симптом: сообщения «уходят без ответа», `POST /ai/chat/<uuid>/delete/` падает с «Ошибка соединения» (см. `static/src/js/ai_chat.js:683, 707`). `curl /health` на runtime возвращает таймаут, но TCP-порт `8090` остаётся в `LISTEN` (`netstat -ano | grep ":8090"`). У wfastcgi-воркеров, державших стримы, появляются соединения в `FinWait2` к runtime.
+
+Причина: длительный LLM-вызов (z.ai или другой провайдер завис) блокирует worker uvicorn. Worker зависает в `CloseWait` и не отвечает новым запросам. Все wfastcgi-воркеры, державшие чат-стримы, тоже блокируются — пул wfastcgi заканчивается, и даже запросы, которые runtime не трогают (например, удаление чата), не получают свободный воркер и отваливаются по таймауту. На стороне браузера JS ловит `fetch` rejection и показывает общее `alert('Ошибка соединения.')`.
+
+Защитные лимиты в деплое:
+
+- **LLM-таймаут 120s** в `services/agent_runtime/graph.py:85-92, 209-216` (`init_kwargs = {"temperature": 0, "timeout": 120}`). При зависании провайдера LLM-вызов упадёт через 120 секунд, `try/except` в `services/agent_runtime/app.py:99-105, 138-152` вернёт клиенту осмысленную ошибку (`error: agent_runtime_error` в SSE-потоке или HTTP 400 для sync), runtime не зависнет, wfastcgi-воркеры освободятся.
+- **wfastcgi-лимиты** в `web.config` `<appSettings>`:
+
+  ```xml
+  <add key="instanceMaxRequests" value="2000" />
+  <add key="idleTimeoutInSeconds" value="300" />
+  ```
+
+  Каждый воркер перерабатывается после 2000 запросов (защита от state-засорения и медленных утечек), простаивающие закрываются через 5 минут. Эти значения не предотвращают зависание, но не дают воркерам копить мусор.
+
+Аварийное восстановление, если runtime уже завис:
+
+```powershell
+Stop-ScheduledTask -TaskName "Portal Agent Runtime" -TaskPath "\Portal\"
+Get-WmiObject Win32_Process -Filter "Name='python.exe'" |
+    Where-Object { $_.CommandLine -like '*uvicorn*' } |
+    ForEach-Object { $_.Terminate() }
+Start-ScheduledTask -TaskName "Portal Agent Runtime" -TaskPath "\Portal\"
+# ждём ~5 секунд
+curl http://127.0.0.1:8090/health
+```
+
+Висящие wfastcgi-воркеры IIS перезапустит по мере освобождения; чтобы ускорить:
+
+```powershell
+Get-WmiObject Win32_Process -Filter "Name='python.exe'" |
+    Where-Object { $_.CommandLine -like '*wfastcgi*' } |
+    ForEach-Object { $_.Terminate() }
+```
+
+Первое обращение к `/ai/...` через Windows-auth (например, `curl --ntlm -u : http://stc-web/ai/chat/`) заставит IIS поднять свежие воркеры, которые прочтут обновлённый `web.config`.
 
 ## Полезные команды
 

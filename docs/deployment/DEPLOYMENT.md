@@ -119,6 +119,10 @@ GUNICORN_GRACEFUL_TIMEOUT=30
 
 `python manage.py validate_architecture_contracts` checks this relation. If `GUNICORN_TIMEOUT` is too low, deployment must be stopped before users see hanging AI chat streams.
 
+### Runtime-side LLM timeout
+
+В дополнение к Gunicorn-таймауту, LLM-вызов в самом runtime ограничен 120 секундами через `init_kwargs = {"temperature": 0, "timeout": 120}` в `services/agent_runtime/graph.py:85-92, 209-216` (sync и stream пути). При зависании LLM-провайдера runtime получает `httpx.TimeoutException`, существующий `try/except` в `services/agent_runtime/app.py:99-105, 138-152` возвращает клиенту осмысленную ошибку и wfastcgi-воркер не зависает на стриме. Это правило не отменяет GUNICORN_TIMEOUT, а дополняет его: первое ограничивает время ожидания LLM на стороне runtime, второе — общее время обработки запроса на стороне Django.
+
 ## Опциональный базовый замер производительности
 
 Для расследования задержек можно включить локальный сбор latency-событий. По умолчанию он выключен, чтобы не добавлять запись на диск на каждый HTTP-запрос.

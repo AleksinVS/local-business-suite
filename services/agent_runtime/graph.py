@@ -82,7 +82,7 @@ def run_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0}
+    init_kwargs = {"temperature": 0, "timeout": 120}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:
@@ -206,7 +206,7 @@ def stream_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0}
+    init_kwargs = {"temperature": 0, "timeout": 120}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:

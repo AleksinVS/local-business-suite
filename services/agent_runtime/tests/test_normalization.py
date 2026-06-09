@@ -635,5 +635,126 @@ class TestMCPResources(unittest.TestCase):
         self.assertNotIn("headers", tool_payload)
 
 
+class TestExtractUiCommand(unittest.TestCase):
+    """Regression: the runtime used to call _extract_ui_command only on
+    a plain dict, but LangChain's @tool decorator wraps the function
+    return in a ToolMessage whose payload is a stringified dict in
+    .content (or .artifact when response_format is set). Without the
+    unwrap, ui.open_right_panel calls succeeded against the gateway
+    but produced empty ui_commands and the user-facing chat claimed
+    success while the right sidebar never opened.
+    """
+
+    def _import(self):
+        from services.agent_runtime.graph import _extract_ui_command
+        return _extract_ui_command
+
+    def test_extracts_from_raw_dict(self):
+        extract = self._import()
+        result = {
+            "ok": True,
+            "tool": "ui.open_right_panel",
+            "result": {
+                "status": "ok",
+                "ui_command": {
+                    "type": "open_right_panel",
+                    "source_code": "workorders",
+                    "object_type": "workorder",
+                    "object_id": "4",
+                    "htmx_url": "/workorders/4/panel/",
+                },
+            },
+        }
+        cmd = extract(result)
+        self.assertEqual(cmd["type"], "open_right_panel")
+        self.assertEqual(cmd["object_id"], "4")
+        self.assertEqual(cmd["htmx_url"], "/workorders/4/panel/")
+
+    def test_extracts_from_tool_message_artifact(self):
+        extract = self._import()
+        from langchain_core.messages import ToolMessage
+
+        original = {
+            "ok": True,
+            "tool": "ui.open_right_panel",
+            "result": {
+                "ui_command": {
+                    "type": "open_right_panel",
+                    "source_code": "waiting_list",
+                    "object_type": "waiting_list_entry",
+                    "object_id": "12",
+                    "htmx_url": "/waiting-list/12/panel/",
+                },
+            },
+        }
+        msg = ToolMessage(
+            content="ignored-by-extractor",
+            tool_call_id="call-1",
+            artifact=original,
+        )
+        cmd = extract(msg)
+        self.assertEqual(cmd["source_code"], "waiting_list")
+        self.assertEqual(cmd["object_type"], "waiting_list_entry")
+        self.assertEqual(cmd["object_id"], "12")
+
+    def test_extracts_from_tool_message_content_repr(self):
+        """Modern LangChain serialises the dict return via repr() into
+        .content (single quotes, not valid JSON). _extract_ui_command
+        must accept that shape too."""
+        extract = self._import()
+        from langchain_core.messages import ToolMessage
+
+        # repr() of a dict uses single quotes
+        original_repr = (
+            "{'ok': True, 'tool': 'ui.open_right_panel', "
+            "'result': {'ui_command': "
+            "{'type': 'open_right_panel', 'object_id': '7'}}}"
+        )
+        msg = ToolMessage(
+            content=original_repr,
+            tool_call_id="call-1",
+        )
+        cmd = extract(msg)
+        self.assertIsNotNone(cmd)
+        self.assertEqual(cmd["type"], "open_right_panel")
+        self.assertEqual(cmd["object_id"], "7")
+
+    def test_extracts_from_tool_message_content_json(self):
+        """Some LangChain versions use json.dumps (double quotes) in
+        .content. _extract_ui_command must accept that shape too."""
+        extract = self._import()
+        from langchain_core.messages import ToolMessage
+
+        original_json = json.dumps({
+            "ok": True,
+            "result": {
+                "ui_command": {
+                    "type": "open_right_panel",
+                    "object_id": "9",
+                },
+            },
+        })
+        msg = ToolMessage(content=original_json, tool_call_id="call-1")
+        cmd = extract(msg)
+        self.assertIsNotNone(cmd)
+        self.assertEqual(cmd["object_id"], "9")
+
+    def test_returns_none_for_tool_without_ui_command(self):
+        extract = self._import()
+        # workorders.list returns work orders, not a ui_command
+        from langchain_core.messages import ToolMessage
+        msg = ToolMessage(
+            content="{'ok': True, 'result': {'orders': []}}",
+            tool_call_id="call-1",
+        )
+        self.assertIsNone(extract(msg))
+
+    def test_returns_none_for_garbage_content(self):
+        extract = self._import()
+        from langchain_core.messages import ToolMessage
+        msg = ToolMessage(content="not a dict", tool_call_id="call-1")
+        self.assertIsNone(extract(msg))
+
+
 if __name__ == "__main__":
     unittest.main()

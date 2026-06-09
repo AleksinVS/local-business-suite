@@ -16,6 +16,37 @@ from .tools import build_tools
 
 
 def _extract_ui_command(tool_result):
+    """Pull the `ui_command` descriptor out of a tool's return value.
+
+    LangChain's `@tool` decorator wraps the function return into a
+    `ToolMessage`. By default the return dict is serialised into
+    `.content` (as a Python `repr()` string) and `.artifact` is left
+    as None unless the function declares
+    `tool_config={"response_format": "content_and_artifact"}` and
+    returns a `(content, artifact)` tuple. Older call sites that
+    bypass the tool framework may still return the raw dict. We
+    accept all three shapes.
+    """
+    artifact = getattr(tool_result, "artifact", None)
+    if isinstance(artifact, dict):
+        tool_result = artifact
+    elif not isinstance(tool_result, dict):
+        # LangChain stores the tool's return value in `.content` as a
+        # string. Older versions used json.dumps (double quotes), the
+        # current one uses repr() (single quotes). Try both.
+        content = getattr(tool_result, "content", None)
+        if isinstance(content, str):
+            try:
+                import json as _json
+                tool_result = _json.loads(content)
+            except (ValueError, TypeError):
+                try:
+                    import ast
+                    tool_result = ast.literal_eval(content)
+                except (ValueError, SyntaxError):
+                    return None
+        else:
+            return None
     if not isinstance(tool_result, dict):
         return None
     result = tool_result.get("result")

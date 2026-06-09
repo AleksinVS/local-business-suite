@@ -31,13 +31,16 @@
 
   <div class="sidebar-chat-messages" id="sidebar-ai-message-list">
     {% for message in sidebar_chat_messages %}
-      <div class="sidebar-chat-message {% if message.role == 'user' %}is-user{% else %}is-assistant{% endif %}">
-        <div class="sidebar-chat-message-meta">
-          <span>{% if message.role == 'user' %}Вы{% else %}Ассистент{% endif %}</span>
-          <time>{{ message.created_at|date:"H:i" }}</time>
+      {% if message.role == "user" or message.role == "assistant" %}
+        {# TOOL и SYSTEM сообщения не рендерятся — они сохранены в БД для LLM-контекста, но в UI не нужны #}
+        <div class="sidebar-chat-message {% if message.role == 'user' %}is-user{% else %}is-assistant{% endif %}">
+          <div class="sidebar-chat-message-meta">
+            <span>{% if message.role == 'user' %}Вы{% else %}Ассистент{% endif %}</span>
+            <time>{{ message.created_at|date:"H:i" }}</time>
+          </div>
+          <div class="sidebar-chat-bubble">{{ message.content|linebreaksbr }}</div>
         </div>
-        <div class="sidebar-chat-bubble">{{ message.content|linebreaksbr }}</div>
-      </div>
+      {% endif %}
     {% empty %}
       <div class="sidebar-chat-empty">Задайте вопрос по текущей странице или открытой карточке.</div>
     {% endfor %}

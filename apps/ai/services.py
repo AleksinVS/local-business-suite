@@ -242,11 +242,12 @@ def compact_sidebar_session(session):
 def _build_sidebar_summary_text(messages):
     lines = []
     for message in messages[-80:]:
+        # TOOL и SYSTEM сообщения — служебные; в пользовательском summary они
+        # не нужны (TOOL-сообщения пользователь всё равно не видит в UI,
+        # SYSTEM — это синтетические вставки для LLM-контекста).
+        if message.role in (ChatMessage.Role.SYSTEM, ChatMessage.Role.TOOL):
+            continue
         role = "Пользователь" if message.role == ChatMessage.Role.USER else "Ассистент"
-        if message.role == ChatMessage.Role.SYSTEM:
-            role = "Система"
-        if message.role == ChatMessage.Role.TOOL:
-            role = "Инструмент"
         content = mask_chat_runtime_text(message.content)
         if len(content) > 220:
             content = content[:217] + "..."

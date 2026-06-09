@@ -196,6 +196,25 @@ Get-WmiObject Win32_Process -Filter "Name='python.exe'" |
 
 Первое обращение к `/ai/...` через Windows-auth (например, `curl --ntlm -u : http://stc-web/ai/chat/`) заставит IIS поднять свежие воркеры, которые прочтут обновлённый `web.config`.
 
+### Удаление чата падает с 500 из-за cross-database FK
+
+Симптом: `POST /ai/chat/<uuid>/delete/` возвращает HTTP 500, в логах Django `OperationalError: no such table: memory_memorywriterequest` (или аналогичная таблица другого cross-DB FK). В debug-странице прямо в SQLCompiler указан `using='chat'` — то есть ORM шлёт SELECT в БД чата, хотя таблица живёт в `knowledge_meta`.
+
+Причина: в multi-DB проекте `apps/ai/ChatSession` хранится в `chat` DB (роутер `apps/core/db_routers.py:50`), а модели `apps/memory/*` — в `knowledge_meta` DB. Когда `MemoryWriteRequest.session` (FK на `ChatSession`) объявлен с `on_delete=PROTECT | CASCADE | SET_NULL | SET_DEFAULT`, Django при `ChatSession.delete()` идёт в `Collector.collect()` (`django/db/models/deletion.py:305-310`) и делает SELECT по обратным FK, чтобы решить, что делать с наследниками. Этот SELECT идёт через `self.using` — алиас БД **родителя** (`chat`). В `chat` DB таблицы `memory_*` нет → `OperationalError`. Роутер при cascade-collect не вызывается — это известная особенность Django.
+
+**Единственное значение `on_delete`, которое пропускает SELECT, — `DO_NOTHING`** (`deletion.py:307-310`: `if on_delete == DO_NOTHING: continue`). Ни `SET_NULL`, ни `CASCADE`, ни `PROTECT` не помогут — все они идут через `self.related_objects()` и шлют SELECT в БД родителя.
+
+В этом деплое FK настроены так:
+
+| Модель | Поле | `on_delete` | Поведение после удаления чата |
+|---|---|---|---|
+| `MemoryWriteRequest` | `session` | `DO_NOTHING` | Строка остаётся с `session_id=<старый uuid>` — dangling reference, но UUID пригоден для аудита |
+| `MemoryKnowledgeItem` | `source_session` | `DO_NOTHING` | То же — знания переживают удаление чата by design |
+
+Если нужна семантика `SET_NULL` (обнуление `session_id` после удаления чата), её можно реализовать явно через `pre_delete` сигнал в `apps/memory/signals.py`, который шлёт `UPDATE` напрямую в нужную БД в обход cascade-collect.
+
+При добавлении **новых** cross-DB FK (`db_constraint=False`, разные DB у родителя и наследника) всегда ставьте `on_delete=models.DO_NOTHING`. Иначе при `delete()` родителя получите 500.
+
 ## Полезные команды
 
 Проверка проекта:

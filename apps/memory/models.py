@@ -1181,7 +1181,14 @@ class MemoryWriteRequest(models.Model):
     )
     session = models.ForeignKey(
         "ai.ChatSession",
-        on_delete=models.PROTECT,
+        # DO_NOTHING: only this on_delete value skips the cascade SELECT
+        # in Django's Collector.collect. SET_NULL still issues a SELECT to
+        # know which rows to UPDATE, and that SELECT runs on the parent's
+        # database (chat) — where the memory tables don't exist. The same
+        # applies to CASCADE and PROTECT. See WINDOWS_RUN.md
+        # "Cross-database FK gotcha" and apps/memory/signals.py for the
+        # pre_delete handler that achieves SET_NULL semantics explicitly.
+        on_delete=models.DO_NOTHING,
         related_name="memory_write_requests",
         blank=True,
         null=True,
@@ -1248,7 +1255,11 @@ class MemoryKnowledgeItem(models.Model):
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
     source_session = models.ForeignKey(
         "ai.ChatSession",
-        on_delete=models.PROTECT,
+        # DO_NOTHING: knowledge items outlive their source chat by design.
+        # PROTECT was crashing the cascade for the same multi-DB reason as
+        # MemoryWriteRequest.session above. See WINDOWS_RUN.md
+        # "Cross-database FK gotcha".
+        on_delete=models.DO_NOTHING,
         related_name="memory_knowledge_items",
         blank=True,
         null=True,

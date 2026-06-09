@@ -86,6 +86,10 @@ npm run copilot-runtime:start
 ```bash
 curl -fsS http://127.0.0.1:8090/health
 curl -fsS http://127.0.0.1:3100/health
+curl -fsS -X POST http://127.0.0.1:3100/copilotkit \
+  -H 'content-type: application/json' \
+  --data '{"method":"info"}'
+curl -fsS 'http://127.0.0.1:3100/copilotkit/threads?agentId=local_business'
 ```
 
 Проверить Django:

@@ -65,11 +65,28 @@ test.describe("CopilotKit AG-UI sidebar", () => {
       agentId: "local_business",
     });
 
+    const runtimeInfo = await request.post(`${copilotRuntimeUrl}/copilotkit`, {
+      data: { method: "info" },
+    });
+    await expect(runtimeInfo).toBeOK();
+    expect(await runtimeInfo.json()).toMatchObject({
+      agents: {
+        local_business: {
+          name: "local_business",
+        },
+      },
+    });
+
+    const threadsResponse = await request.get(`${copilotRuntimeUrl}/copilotkit/threads?agentId=local_business`);
+    await expect(threadsResponse).toBeOK();
+    const threadsPayload = await threadsResponse.json();
+    expect(Array.isArray(threadsPayload.threads)).toBe(true);
+
     const agentHealth = await request.get(`${agentRuntimeUrl}/health`);
     await expect(agentHealth).toBeOK();
     expect(await agentHealth.json()).toEqual({ status: "ok" });
 
-    const aguiResponse = await request.post(`${agentRuntimeUrl}/ag-ui`, {
+    const rejectedAguiResponse = await request.post(`${agentRuntimeUrl}/ag-ui`, {
       data: {
         threadId: config.thread_id,
         runId: `e2e_${Date.now()}`,
@@ -83,13 +100,16 @@ test.describe("CopilotKit AG-UI sidebar", () => {
         ],
         tools: [],
         context: [],
-        forwardedProps: config.forwarded_props,
+        forwardedProps: {
+          ...config.forwarded_props,
+          signature: "invalid",
+        },
       },
     });
-    expect(aguiResponse.status()).toBe(200);
-    const aguiBody = await aguiResponse.text();
-    expect(aguiBody).toContain('"type":"RUN_STARTED"');
-    expect(aguiBody).not.toContain("invalid_actor_signature");
+    expect(rejectedAguiResponse.status()).toBe(200);
+    const aguiBody = await rejectedAguiResponse.text();
+    expect(aguiBody).toContain('"type":"RUN_ERROR"');
+    expect(aguiBody).toContain("invalid_actor_signature");
 
     const firstCard = page.locator(".work-card:not(.work-card-empty)").first();
     await expect(firstCard).toBeVisible();

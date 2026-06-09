@@ -25,12 +25,19 @@ const runtime = new CopilotRuntime({
   },
 });
 
-const copilotHandler = createCopilotRuntimeHandler({
+const copilotSingleRouteHandler = createCopilotRuntimeHandler({
+  runtime,
+  basePath,
+  mode: "single-route",
+  cors: corsEnabled,
+});
+const copilotMultiRouteHandler = createCopilotRuntimeHandler({
   runtime,
   basePath,
   cors: corsEnabled,
 });
-const copilotNodeHandler = createCopilotNodeHandler(copilotHandler);
+const copilotSingleRouteNodeHandler = createCopilotNodeHandler(copilotSingleRouteHandler);
+const copilotMultiRouteNodeHandler = createCopilotNodeHandler(copilotMultiRouteHandler);
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -48,8 +55,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname.startsWith(basePath)) {
-    copilotNodeHandler(req, res);
+  if (url.pathname === basePath || url.pathname === `${basePath}/`) {
+    copilotSingleRouteNodeHandler(req, res);
+    return;
+  }
+
+  if (url.pathname.startsWith(`${basePath}/`)) {
+    copilotMultiRouteNodeHandler(req, res);
     return;
   }
 

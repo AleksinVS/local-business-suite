@@ -6,7 +6,7 @@
 
 ### CopilotKit и AG-UI в основном Django UI
 
-Первый рабочий срез добавлен в отдельной ветке: AG-UI endpoint, CopilotKit Runtime service, React-остров в левой AI-панели и feature flag. До включения пилота нужны финальные проверки, e2e на стенде и приемка владельцем.
+Первый рабочий срез добавлен в отдельной ветке: AG-UI endpoint, CopilotKit Runtime service, React-остров в левой AI-панели и feature flag. Локальный e2e выполнен в режиме CopilotKit и fallback-режиме. До включения пилота нужны проверка reverse proxy на целевом deployment и приемка владельцем.
 
 Контекст:
 - архитектурное решение находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
@@ -22,10 +22,10 @@
 - CopilotKit встроен как React island за `LOCAL_BUSINESS_COPILOTKIT_ENABLED`;
 - actor/session context подписывается Django и проверяется agent runtime;
 - `ui.open_right_panel` идет через AG-UI state/custom event и существующий безопасный правый сайдбар.
+- Playwright e2e покрывает CopilotKit-enabled режим и fallback-режим текущего HTMX sidebar.
 
 Оставшееся действие:
-- выполнить финальные unit/check/contract/static build проверки;
-- выполнить e2e на стенде с включенным feature flag;
+- проверить reverse proxy `/copilotkit` на целевом deployment;
 - после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ### Русификация интерфейса портала

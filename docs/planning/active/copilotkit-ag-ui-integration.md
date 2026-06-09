@@ -2,7 +2,7 @@
 
 ## Статус
 
-Active implementation. Документация и первый рабочий срез реализации добавлены в отдельной ветке.
+Active implementation. Документация, первый рабочий срез реализации и локальный Playwright e2e добавлены в отдельной ветке.
 
 Архитектурное решение: `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`.
 
@@ -126,6 +126,13 @@ Acceptance:
 - docs and `.desc.json` updated;
 - `make gen-struct` выполнен.
 
+Статус: локальный e2e выполнен в двух режимах:
+
+- `LOCAL_BUSINESS_COPILOTKIT_ENABLED=true`, `E2E_COPILOTKIT_ENABLED=true`: CopilotKit panel, signed actor config, Copilot Runtime health, Agent Runtime `/ag-ui` signed request and workorder context path;
+- `LOCAL_BUSINESS_COPILOTKIT_ENABLED=false`: fallback HTMX sidebar scenarios.
+
+Целевой reverse proxy `/copilotkit` и реальный LLM/provider остаются частью pilot-приемки на deployment.
+
 ## Проверки
 
 Плановый минимум:
@@ -136,7 +143,8 @@ python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
 npm run build:copilotkit
-npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
+E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium
+npm run test:e2e -- --project=chromium
 make gen-struct
 ```
 
@@ -148,11 +156,8 @@ make gen-struct
 - прямой `HttpAgent` в browser опасен для production;
 - устаревание API CopilotKit/AG-UI требует pinning версий.
 
-## Готовность к старту реализации
+## Оставшаяся приемка
 
-Нужно согласовать:
-
-- принимаем ли отдельный `services/copilot_runtime`;
-- где показывать React island: в текущем sidebar или на отдельной экспериментальной странице;
-- какие пользователи видят pilot;
-- какой набор e2e считать достаточным для первого включения.
+- проверить same-origin reverse proxy `/copilotkit` на целевом deployment;
+- подтвердить `COPILOTKIT_TELEMETRY_DISABLED=true` в deployment-среде;
+- выполнить приемку владельцем перед архивированием planning/workflow.

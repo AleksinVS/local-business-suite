@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
+const copilotkitEnabled = process.env.E2E_COPILOTKIT_ENABLED === "true";
 
 test.describe("context-aware sidebar AI chat", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
+  test.skip(copilotkitEnabled, "HTMX sidebar checks run only when CopilotKit sidebar is disabled.");
 
   test("loads from the left panel and tracks the opened work order", async ({ page }) => {
     await page.goto("/accounts/login/");

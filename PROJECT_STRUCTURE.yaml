@@ -355,6 +355,7 @@ scripts: # Скрипты и инструменты разработки
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
   e2e: # Playwright e2e configuration and tests
     tests: # Permanent Playwright e2e scenarios
+      copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
       health.spec.ts: file # Checks that the Django health endpoint is reachable
       notifications.spec.ts: file # Checks PWA manifest, root service worker and authenticated notification center behavior
       right_panel_ai_navigation.spec.ts: file # Checks opening module objects in the shared right panel from the AI chat page

@@ -2,7 +2,7 @@
 
 ## Статус
 
-Accepted. В ветке добавлен первый рабочий срез: AG-UI endpoint, CopilotKit Runtime service, React-остров в основной Django-оболочке и feature flag.
+Accepted. В ветке добавлен первый рабочий срез: AG-UI endpoint, CopilotKit Runtime service, React-остров в основной Django-оболочке, feature flag и Playwright e2e для CopilotKit/fallback режимов.
 
 Архитектурное решение: `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`.
 
@@ -262,7 +262,8 @@ python manage.py validate_architecture_contracts
 python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
 npm run build:copilotkit
-npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
+E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium
+npm run test:e2e -- --project=chromium
 make gen-struct
 ```
 
@@ -283,7 +284,8 @@ curl -fsS http://127.0.0.1:3100/health
 - Write tools сохраняют confirmation и audit.
 - История чата и audit остаются в Django.
 - Документация deployment и operations обновлена.
-- E2E покрывает основной сценарий: вопрос в CopilotKit panel -> tool activity -> открытие правого сайдбара -> сохранение assistant message/audit.
+- E2E покрывает первый безопасный сценарий: CopilotKit panel загружается, Django выдает подписанный actor config, Copilot Runtime и Agent Runtime отвечают health, `/ag-ui` принимает подписанный запрос, контекст открытой заявки обновляется в UI.
+- Живой LLM/tool сценарий остается smoke-приемкой после настройки реального provider.
 
 ## Отложенные решения
 

@@ -16,6 +16,8 @@
 - Добавлен Node-сервис `services/copilot_runtime/server.mjs` с CopilotKit Runtime v2 и AG-UI `HttpAgent`.
 - Добавлены npm-скрипты `build:copilotkit` и `copilot-runtime:start`.
 - Добавлен Docker build path: web-образ собирает CopilotKit bundle в Node-стадии, `copilot-runtime` запускается отдельным сервисом.
+- Добавлен Playwright e2e `scripts/e2e/tests/copilotkit_sidebar.spec.ts`.
+- Старые HTMX sidebar e2e разделены с CopilotKit-режимом через `E2E_COPILOTKIT_ENABLED`.
 - Обновлены настройки, `.env.example`, deployment, operations, ADR, planning, backlog, `.desc.json` и `PROJECT_STRUCTURE.yaml`.
 
 ## Проверки
@@ -30,17 +32,19 @@
 - `python -m unittest services.agent_runtime.tests.test_normalization -v`
 - `python manage.py test apps.ai.tests --keepdb -v 1`
 - `curl -fsS http://127.0.0.1:3100/health` при запущенном `npm run copilot-runtime:start`
+- `E2E_BASE_URL=http://127.0.0.1:8001 E2E_USERNAME=chief_manager E2E_PASSWORD=... E2E_COPILOTKIT_ENABLED=true E2E_AGENT_RUNTIME_URL=http://127.0.0.1:8090 E2E_COPILOT_RUNTIME_URL=http://127.0.0.1:3100 npm run test:e2e -- --project=chromium` - 10 passed, 4 skipped
+- `E2E_BASE_URL=http://127.0.0.1:8001 E2E_USERNAME=chief_manager E2E_PASSWORD=... E2E_AGENT_RUNTIME_URL=http://127.0.0.1:8090 E2E_COPILOT_RUNTIME_URL=http://127.0.0.1:3100 npm run test:e2e -- --project=chromium` - 13 passed, 1 skipped
 - `npm audit --audit-level=high`
 - `make gen-struct`
 - `git diff --check -- . ':(exclude)BACKLOG.md'`
 
 ## Не выполнялось
 
-- Авторизованный Playwright e2e не запускался: в текущей среде не задан стенд с `E2E_USERNAME`/`E2E_PASSWORD` и включенным `LOCAL_BUSINESS_COPILOTKIT_ENABLED=true`.
-- Реальный LLM-вызов через CopilotKit не выполнялся: это требует `OPENAI_API_KEY`/целевого provider и запущенной связки Django + agent runtime + Copilot Runtime.
+- Реальный LLM-вызов через CopilotKit не выполнялся: локальный e2e проверял загрузку UI, signed config, health обоих runtime и принятие подписанного `/ag-ui` запроса без обращения к внешнему provider.
+- Same-origin reverse proxy `/copilotkit` на целевом deployment не проверялся; локальный e2e использовал прямой `http://127.0.0.1:3100/copilotkit`.
 
 ## Остаточные риски
 
 - CopilotKit bundle крупный; `static/dist/` не хранится в Git и должен собираться через `npm run build:copilotkit` или Docker build.
 - `npm audit` оставляет low/moderate transitive уязвимости в `@copilotkit/runtime` tree; автоматическое исправление требует breaking downgrade.
-- Полная пользовательская приемка требует e2e на стенде с включенным feature flag.
+- Production-приемка требует проверки reverse proxy, реального provider и пользовательского сценария с живым LLM.

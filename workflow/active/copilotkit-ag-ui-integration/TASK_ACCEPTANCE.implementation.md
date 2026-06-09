@@ -14,10 +14,11 @@
 - React-остров включается только через `LOCAL_BUSINESS_COPILOTKIT_ENABLED`.
 - Browser не получает gateway token; actor/session payload подписывается Django и проверяется agent runtime.
 - `ui.open_right_panel` остается UI-командой и открывает существующий безопасный правый сайдбар.
+- Playwright e2e добавлен и выполнен в двух режимах: CopilotKit-enabled и fallback HTMX sidebar.
 - Deployment/operations/docs/backlog/structure обновлены.
 
 ## Условия перед pilot-включением
 
-- Выполнить авторизованный e2e на стенде.
 - Проверить reverse proxy `/copilotkit` на целевом deployment.
 - Подтвердить, что `COPILOTKIT_TELEMETRY_DISABLED=true` задан в deployment-среде.
+- Выполнить пользовательский smoke с реальным LLM/provider после настройки `OPENAI_API_KEY` или локального совместимого provider.

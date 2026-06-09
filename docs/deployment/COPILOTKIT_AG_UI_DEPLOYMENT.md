@@ -145,5 +145,6 @@ python manage.py test apps.ai.tests
 python -m unittest services.agent_runtime.tests.test_normalization -v
 npm run build:copilotkit
 node --check services/copilot_runtime/server.mjs
-npm run test:e2e -- --project=chromium --grep "copilotkit|ag-ui|sidebar"
+E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium
+npm run test:e2e -- --project=chromium
 ```

@@ -1481,6 +1481,40 @@ class MemoryChatKnowledgeTests(TestCase):
         message = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=text)
         return user, session, message
 
+    def test_chat_delete_nullifies_memory_write_request_session(self):
+        """Deleting a ChatSession must set session_id=NULL on any
+        MemoryWriteRequest rows that referenced it. The FK is DO_NOTHING
+        to bypass the cross-DB cascade SELECT (see apps/memory/signals.py
+        and WINDOWS_RUN.md "Cross-database FK gotcha"); this signal
+        re-introduces the SET_NULL cleanup explicitly."""
+        from .chat_memory import queue_memory_remember
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat()
+            result = queue_memory_remember(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id], "user_note": "x"},
+                request_id="req-delete-chat-1",
+            )
+            request = MemoryWriteRequest.objects.get(request_id=result["request_id"])
+            self.assertEqual(request.session_id, session.id)
+
+            # The chat delete must not raise, and the pre_delete
+            # handler must run the UPDATE on knowledge_meta via the
+            # router (not via the chat DB).
+            session.delete()
+
+            request.refresh_from_db()
+            self.assertIsNone(request.session_id)
+            # Row itself survives — write request history is kept.
+            self.assertEqual(
+                MemoryWriteRequest.objects.filter(
+                    request_id=result["request_id"]
+                ).count(),
+                1,
+            )
+
     def test_remember_request_queues_personal_memory_by_default(self):
         from .chat_memory import process_queued_memory_requests, queue_memory_remember
         from .retrieval import memory_search

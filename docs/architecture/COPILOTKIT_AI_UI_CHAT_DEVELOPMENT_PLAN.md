@@ -33,6 +33,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 
 Довести CopilotKit-вариант ИИ-чата от рабочего пилота до production candidate, который можно включать через `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit` и сравнивать с самописным AG-UI-compatible вариантом без расхождения backend-контрактов.
 
+Продуктовый приоритет проекта - самописный ИИ-чат. CopilotKit остается равноправным AG-UI клиентом, пилотным драйвером и источником проверенных решений для native-чата, но не становится единственным или главным backend-контрактом.
+
 ## Текущая база
 
 Уже реализовано:
@@ -122,6 +124,8 @@ LOCAL_BUSINESS_AI_UI_AGUI_PROFILE=ag-ui@0.0.55
 COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
 ```
+
+Перед изменением backend-части, влияющей на AG-UI события, actor/session payload, UI-команды, agent runtime или deployment-профиль, нужно проверить актуальность AG-UI версии. По умолчанию это предупреждение в отчете, а не обновление зависимости. Версии `@ag-ui/client`, `@copilotkit/*` и `LOCAL_BUSINESS_AI_UI_AGUI_PROFILE` менять только после согласования.
 
 Для production:
 

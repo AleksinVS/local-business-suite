@@ -4,6 +4,8 @@
 
 Accepted for pilot. Production-включение любого нового драйвера требует приемки на целевом хосте.
 
+Основной целевой продуктовый режим - `native`: самописный AG-UI-compatible чат через Django same-origin proxy. `copilotkit` остается равноправным драйвером для сравнения, приемки AG-UI совместимости и fallback-пилота.
+
 ## Процессы по драйверам
 
 ### `legacy`
@@ -63,6 +65,27 @@ Native:
 ```text
 LOCAL_BUSINESS_AI_UI_DRIVER=native
 ```
+
+## Контроль версии AG-UI
+
+Production deployment должен держать согласованными:
+
+```text
+package.json: @ag-ui/client
+package-lock.json: @ag-ui/client
+LOCAL_BUSINESS_AI_UI_AGUI_PROFILE
+protocol metadata: agui_profile
+```
+
+Перед изменением backend-контура AI UI нужно проверить актуальность AG-UI версии. Если появилась новая версия, это фиксируется как предупреждение и риск релиза. Обновление версии не входит в обычный deployment и выполняется только после согласования с владельцем.
+
+Согласованное обновление версии требует:
+
+- обновить `@ag-ui/client`, связанные `@copilotkit/*` зависимости, если это необходимо, и `LOCAL_BUSINESS_AI_UI_AGUI_PROFILE`;
+- проверить `/ag-ui` stream и protocol metadata;
+- пройти e2e matrix для `legacy`, `copilotkit`, `native`;
+- проверить rollback на `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`;
+- обновить ADR, operations guide и deployment note.
 
 ## Reverse proxy
 

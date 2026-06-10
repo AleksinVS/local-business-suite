@@ -41,7 +41,7 @@
 - `apps/ai/tool_definitions.py` — реестр AI-инструментов на стороне Django.
 - `python manage.py validate_architecture_contracts` — проверка контрактов.
 
-Пилот CopilotKit/AG-UI выключен по умолчанию и описан в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`, `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md` и `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
+Основной целевой вариант нового ИИ-чата - самописный AG-UI-compatible UI поверх общего backend-контура. CopilotKit/AG-UI выключен по умолчанию и используется как отдельный равноправный драйвер, пилот и эталон совместимости; он описан в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`, `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md` и `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`. Общая основа протокола описана в `docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md`.
 
 ## Система памяти AI
 

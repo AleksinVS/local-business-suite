@@ -8,6 +8,8 @@ Accepted for pilot. Первый срез реализован, но production-
 
 CopilotKit не встраивается в Django-процесс. Для production-кандидата используется отдельный Copilot Runtime service, который проксирует AG-UI agent из `services.agent_runtime`.
 
+Основной целевой UI проекта - самописный AG-UI-compatible чат. CopilotKit deployment остается отдельным равноправным вариантом и проверочным контуром совместимости, но не должен диктовать несовместимый backend-контракт.
+
 ## Целевые процессы
 
 ```text
@@ -43,6 +45,27 @@ LOCAL_BUSINESS_COPILOTKIT_SERVICE_TOKEN=<secret>
 ```
 
 Секреты не коммитить.
+
+## Политика обновления AG-UI/CopilotKit
+
+Перед backend-изменениями в AI UI контуре и перед production-релизом проверить согласованность:
+
+```text
+@ag-ui/client в package.json/package-lock.json
+@copilotkit/* в package.json/package-lock.json
+LOCAL_BUSINESS_AI_UI_AGUI_PROFILE
+protocol metadata agui_profile
+```
+
+Если AG-UI или CopilotKit имеют более свежую версию, это не является автоматическим основанием для обновления. По умолчанию релиз идет с закрепленной версией, а в отчете фиксируется предупреждение и риск.
+
+Обновление версии разрешено только после согласования с владельцем и требует:
+
+- обновить package lock и профиль `agui_profile`;
+- проверить совместимость `/ag-ui` events;
+- выполнить `npm run build:copilotkit`;
+- выполнить e2e для `copilotkit` и `native`;
+- обновить ADR, operations guide и deployment note.
 
 ## Linux/VPS
 

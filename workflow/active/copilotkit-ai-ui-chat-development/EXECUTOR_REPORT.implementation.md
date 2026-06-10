@@ -16,6 +16,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 - добавлено создание новой sidebar-сессии с архивацией предыдущей активной сессии;
 - CopilotKit React island получил кнопку нового чата и remount по новому `thread_id`;
 - page context стал реактивным через событие `ai-context:update`;
+- CopilotKit static bundle подключается с asset version, а service worker не кэширует `/static/dist/copilotkit/`;
 - `/ag-ui` теперь отдает AG-UI `RUN_ERROR` при отсутствующем `OPENAI_API_KEY`, а не HTTP 503 до начала stream;
 - tool trace рекурсивно маскирует sensitive args;
 - UI-команды ограничены allow-list, безопасным URL, mode/swap и размером batch;

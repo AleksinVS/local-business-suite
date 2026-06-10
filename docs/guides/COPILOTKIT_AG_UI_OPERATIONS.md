@@ -131,6 +131,8 @@ GET /ai/chat/copilotkit/
 
 Старый полноэкранный Django chat detail не используется как основной AI-chat entrypoint в CopilotKit-режиме.
 
+CopilotKit bundle подключается с asset version query string. Это обязательно, потому что PWA service worker может держать старые `/static/` ответы в браузере пользователя. Сам service worker не должен кэшировать `/static/dist/copilotkit/`.
+
 Новый чистый sidebar thread создается через:
 
 ```text

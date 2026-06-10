@@ -97,6 +97,8 @@ static/dist/copilotkit/copilotkit-island.js
 static/dist/copilotkit/copilotkit-island.css
 ```
 
+HTML подключает эти файлы с query string версии asset. Service worker должен пропускать `/static/dist/copilotkit/` без cache-first обработки, иначе браузер может показывать старый React island после deployment.
+
 Локальная сборка:
 
 ```bash

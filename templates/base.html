@@ -10,7 +10,7 @@
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
     {% if copilotkit_enabled %}
-      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}">
+      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}?v={{ copilotkit_asset_version }}">
     {% elif native_ai_ui_enabled %}
       <link rel="stylesheet" href="{% static 'src/ai_ui/native_ai.css' %}">
     {% endif %}
@@ -377,7 +377,7 @@
     <script src="{% static 'src/js/right_panel.js' %}"></script>
     <script src="{% static 'src/js/sidebar_chat.js' %}"></script>
     {% if copilotkit_enabled %}
-      <script type="module" src="{% static 'dist/copilotkit/copilotkit-island.js' %}"></script>
+      <script type="module" src="{% static 'dist/copilotkit/copilotkit-island.js' %}?v={{ copilotkit_asset_version }}"></script>
     {% elif native_ai_ui_enabled %}
       <script src="{% static 'src/ai_ui/native_ai.js' %}"></script>
     {% endif %}

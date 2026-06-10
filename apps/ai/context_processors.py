@@ -35,5 +35,6 @@ def sidebar_ai_chat(request):
         "native_ai_ui_enabled": native_ai_ui_enabled,
         "copilotkit_runtime_url": settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
         "copilotkit_agent_id": settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+        "copilotkit_asset_version": "20260610-copilotkit-page",
         "base_ai_context_json": json.dumps(_request_page_context(request), ensure_ascii=False),
     }

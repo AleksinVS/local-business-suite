@@ -789,6 +789,8 @@ class AIViewsTests(TestCase):
         self.assertContains(page_response, 'id="copilotkit-page-root"')
         self.assertContains(page_response, 'data-copilotkit-root="true"')
         self.assertContains(page_response, 'data-new-session-url="' + reverse("ai:ui_session_new") + '"')
+        self.assertContains(page_response, "copilotkit-island.js?v=20260610-copilotkit-page")
+        self.assertContains(page_response, "copilotkit-island.css?v=20260610-copilotkit-page")
         self.assertNotContains(page_response, 'class="ai-session-sidebar"')
         self.assertNotContains(page_response, 'id="sidebar-ai-chat"')
 

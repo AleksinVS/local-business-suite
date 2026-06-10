@@ -11,6 +11,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 ## Изменения
 
 - добавлен endpoint `POST /ai/ui/session/new/`;
+- добавлена CopilotKit-страница `GET /ai/chat/copilotkit/`;
+- `/ai/chat/` в режиме `copilotkit` больше не ведет на старый Django chat detail;
 - добавлено создание новой sidebar-сессии с архивацией предыдущей активной сессии;
 - CopilotKit React island получил кнопку нового чата и remount по новому `thread_id`;
 - page context стал реактивным через событие `ai-context:update`;
@@ -25,6 +27,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 - `apps/ai/views.py`;
 - `apps/ai/urls.py`;
 - `templates/base.html`;
+- `templates/ai/copilotkit_chat.html`;
 - `static/src/copilotkit/main.jsx`;
 - `static/src/copilotkit/copilotkit.css`;
 - `services/agent_runtime/app.py`;
@@ -63,7 +66,7 @@ git diff --check -- . ':(exclude)BACKLOG.md'
 
 - `apps.ai.tests`: 82 tests OK;
 - `services.agent_runtime.tests.test_normalization`: 45 tests OK;
-- CopilotKit Playwright e2e: 1 passed;
+- CopilotKit Playwright e2e: 2 passed;
 - Django, Agent Runtime и Copilot Runtime health endpoints отвечают локально.
 
 ## Остаточный риск

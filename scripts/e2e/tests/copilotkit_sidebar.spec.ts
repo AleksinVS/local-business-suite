@@ -143,6 +143,17 @@ test.describe("CopilotKit AG-UI sidebar", () => {
     expect(detailContext?.envelope?.selection?.object_type).toBe("workorder");
     expect(detailContext?.envelope?.selection?.object_id).toBeTruthy();
   });
+
+  test("opens CopilotKit page from the AI chat entrypoint", async ({ page }) => {
+    await login(page);
+
+    await page.goto("/ai/chat/");
+    await expect(page).toHaveURL(/\/ai\/chat\/copilotkit\/$/);
+    await expect(page.locator("#copilotkit-page-root")).toBeVisible();
+    await expect(page.locator("#sidebar-ai-chat")).toHaveCount(0);
+    await expect(page.locator(".ai-session-sidebar")).toHaveCount(0);
+    await expect(page.locator("#copilotkit-page-root").getByRole("textbox")).toBeVisible();
+  });
 });
 
 declare global {

@@ -423,6 +423,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     partials: # Переиспользуемые части AI-интерфейса
       sidebar_chat.html: file # Компактная поверхность AI-чата для левой боковой панели
     chat_detail.html: file # Основной шаблон чата (HTMX streaming, sidebar, commands)
+    copilotkit_chat.html: file # Страница CopilotKit-чата для режима LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
     hub.html: file # Панель управления AI (инструменты, типы задач, сессии)
   analytics: # Шаблоны аналитических дашбордов
     dashboard.html: file # Дашборд аналитики

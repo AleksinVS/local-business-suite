@@ -63,3 +63,17 @@
   font-size: 0.86rem;
   line-height: 1.35;
 }
+
+.copilotkit-page-shell {
+  min-height: calc(100vh - 7rem);
+  height: calc(100vh - 7rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.copilotkit-page-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}

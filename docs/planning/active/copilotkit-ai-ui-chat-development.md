@@ -81,6 +81,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 
 - Django остается владельцем `ChatSession` и `ChatMessage`;
 - новый CopilotKit thread создается через `POST /ai/ui/session/new/`;
+- основной вход `/ai/chat/` в режиме `copilotkit` ведет на CopilotKit-страницу;
 - предыдущая sidebar-сессия архивируется и не смешивается с новой.
 
 ### 3. AG-UI fidelity и protocol metadata

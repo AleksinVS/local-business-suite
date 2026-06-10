@@ -46,6 +46,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 - общий protocol layer `services/agent_runtime/protocols/`;
 - e2e smoke для режима `copilotkit`.
 - endpoint `POST /ai/ui/session/new/` для чистого CopilotKit thread;
+- замена основного входа `/ai/chat/` на CopilotKit-страницу в режиме `copilotkit`;
 - реактивная передача page context в CopilotKit properties;
 - AG-UI `RUN_ERROR` при отсутствующем LLM API key вместо HTTP 503;
 - рекурсивная маскировка sensitive tool args и более строгая нормализация UI-команд.

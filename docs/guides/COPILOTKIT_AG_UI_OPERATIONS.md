@@ -117,6 +117,20 @@ LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=http://127.0.0.1:3100/copilotkit
 GET /ai/chat/copilotkit/config/
 ```
 
+Основной пользовательский вход:
+
+```text
+GET /ai/chat/
+```
+
+В режиме `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit` этот вход перенаправляет на:
+
+```text
+GET /ai/chat/copilotkit/
+```
+
+Старый полноэкранный Django chat detail не используется как основной AI-chat entrypoint в CopilotKit-режиме.
+
 Новый чистый sidebar thread создается через:
 
 ```text

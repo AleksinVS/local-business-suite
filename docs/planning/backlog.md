@@ -6,7 +6,7 @@
 
 ### Разработка ИИ-чата в режиме CopilotKit UI
 
-Создан проектный и исполнительный контур для доведения CopilotKit-варианта ИИ-чата до production candidate в основном Django UI. Первый runtime hardening срез реализован: новый CopilotKit thread, реактивный page context, AG-UI `RUN_ERROR` при отсутствующем LLM key, server-side нормализация UI-команд и e2e smoke для нового чата.
+Создан проектный и исполнительный контур для доведения CopilotKit-варианта ИИ-чата до production candidate в основном Django UI. Первый runtime hardening срез реализован: новый CopilotKit thread, основной вход `/ai/chat/` на CopilotKit-страницу, реактивный page context, AG-UI `RUN_ERROR` при отсутствующем LLM key, server-side нормализация UI-команд и e2e smoke для нового чата.
 
 Контекст:
 - целевой режим запуска: `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`;

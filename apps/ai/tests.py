@@ -773,6 +773,25 @@ class AIViewsTests(TestCase):
         self.assertContains(detail_response, 'class="ai-session-sidebar"')
         self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
 
+    def test_copilotkit_driver_replaces_full_page_chat_entrypoint(self):
+        self.client.force_login(self.customer)
+        with self.settings(
+            LOCAL_BUSINESS_AI_UI_DRIVER="copilotkit",
+            LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT=True,
+            LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL="/copilotkit",
+        ):
+            response = self.client.get(reverse("ai:chat_index"))
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response["Location"], reverse("ai:copilotkit_chat_page"))
+            page_response = self.client.get(response["Location"])
+
+        self.assertEqual(page_response.status_code, 200)
+        self.assertContains(page_response, 'id="copilotkit-page-root"')
+        self.assertContains(page_response, 'data-copilotkit-root="true"')
+        self.assertContains(page_response, 'data-new-session-url="' + reverse("ai:ui_session_new") + '"')
+        self.assertNotContains(page_response, 'class="ai-session-sidebar"')
+        self.assertNotContains(page_response, 'id="sidebar-ai-chat"')
+
     def test_sidebar_chat_clear_deletes_sidebar_messages_and_summary(self):
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(

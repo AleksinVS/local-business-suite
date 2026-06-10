@@ -7,6 +7,7 @@
 ## Закрытые критерии
 
 - `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit` получает управляемый новый sidebar thread.
+- Основной пользовательский вход `/ai/chat/` открывает CopilotKit-страницу, а не старый chat detail.
 - Django остается владельцем `ChatSession`.
 - Предыдущая активная sidebar-сессия архивируется при создании новой.
 - Page context обновляется в CopilotKit properties после изменения страницы или правой панели.

@@ -194,10 +194,7 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
   );
 }
 
-function boot() {
-  const rootNode = document.getElementById("copilotkit-sidebar-root");
-  if (!rootNode) return;
-
+function mount(rootNode) {
   const configUrl = rootNode.dataset.configUrl;
   if (!configUrl) {
     rootNode.replaceChildren();
@@ -213,6 +210,19 @@ function boot() {
       fallbackAgentId={rootNode.dataset.agentId || "local_business"}
     />,
   );
+}
+
+function boot() {
+  const roots = [
+    ...document.querySelectorAll('[data-copilotkit-root="true"]'),
+    ...document.querySelectorAll("#copilotkit-sidebar-root"),
+  ];
+  const seen = new Set();
+  roots.forEach((rootNode) => {
+    if (!rootNode || seen.has(rootNode)) return;
+    seen.add(rootNode);
+    mount(rootNode);
+  });
 }
 
 if (document.readyState === "loading") {

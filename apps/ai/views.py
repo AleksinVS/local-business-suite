@@ -304,6 +304,8 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
     permanent = False
 
     def get_redirect_url(self, *args, **kwargs):
+        if configured_ai_ui_driver() == DRIVER_COPILOTKIT:
+            return reverse("ai:copilotkit_chat_page")
         create_new = self.request.GET.get("new") == "1"
         if not create_new:
             session = (
@@ -319,6 +321,15 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
                 return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
         session = ChatSession.objects.create(user=self.request.user, title="Новый чат")
         return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
+
+
+class AICopilotKitChatPageView(LoginRequiredMixin, TemplateView):
+    template_name = "ai/copilotkit_chat.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if configured_ai_ui_driver() != DRIVER_COPILOTKIT:
+            return redirect("ai:chat_index")
+        return super().dispatch(request, *args, **kwargs)
 
 
 class AIChatDetailView(LoginRequiredMixin, DetailView):

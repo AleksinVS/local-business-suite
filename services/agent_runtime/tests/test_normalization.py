@@ -647,6 +647,33 @@ class TestAGUIAdapter(unittest.TestCase):
         args_event = next(event for event in events if event["type"] == "TOOL_CALL_ARGS")
         self.assertEqual(json.loads(args_event["delta"]), {"workorder_id": 42, "api_token": "[redacted]"})
 
+    def test_tool_trace_redacts_nested_sensitive_args(self):
+        from services.agent_runtime.ag_ui_adapter import tool_trace_events
+
+        events = list(
+            tool_trace_events(
+                [
+                    {
+                        "tool": "demo.tool",
+                        "args": {
+                            "safe": "value",
+                            "nested": {"session_cookie": "secret-cookie", "items": [{"api_key": "secret-key"}]},
+                        },
+                    }
+                ],
+                parent_message_id="msg-1",
+            )
+        )
+
+        args_event = next(event for event in events if event["type"] == "TOOL_CALL_ARGS")
+        self.assertEqual(
+            json.loads(args_event["delta"]),
+            {
+                "safe": "value",
+                "nested": {"session_cookie": "[redacted]", "items": [{"api_key": "[redacted]"}]},
+            },
+        )
+
     def test_ui_command_maps_to_state_delta_and_custom_event(self):
         from services.agent_runtime.ag_ui_adapter import ui_command_events
 
@@ -673,6 +700,60 @@ class TestAGUIAdapter(unittest.TestCase):
         self.assertEqual(events[0]["delta"][0]["value"][0]["version"], "1.0")
         self.assertEqual(events[0]["delta"][0]["value"][0]["htmx_url"], "/workorders/42/")
         self.assertEqual(events[1]["name"], "local_business.ui_command")
+
+    def test_ui_command_rejects_external_urls_and_clamps_mode(self):
+        from services.agent_runtime.ag_ui_adapter import ui_command_events
+
+        events = list(
+            ui_command_events(
+                [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": 42,
+                        "mode": "javascript",
+                        "swap": "outerHTML",
+                        "htmx_url": "https://example.invalid/workorders/42/",
+                    },
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": 43,
+                        "mode": "javascript",
+                        "swap": "outerHTML",
+                        "htmx_url": "/workorders/43/",
+                    },
+                ]
+            )
+        )
+
+        self.assertEqual([event["type"] for event in events], ["STATE_DELTA", "CUSTOM"])
+        command = events[0]["delta"][0]["value"][0]
+        self.assertEqual(command["object_id"], "43")
+        self.assertEqual(command["mode"], "view")
+        self.assertEqual(command["swap"], "innerHTML")
+
+    def test_ui_command_limits_batch_size(self):
+        from services.agent_runtime.ag_ui_adapter import ui_command_events
+
+        events = list(
+            ui_command_events(
+                [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": index,
+                        "htmx_url": f"/workorders/{index}/",
+                    }
+                    for index in range(12)
+                ]
+            )
+        )
+
+        self.assertEqual(len(events[0]["delta"][0]["value"]), 8)
 
 
 class TestAGUIRuntimeEndpoint(unittest.TestCase):
@@ -797,6 +878,47 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
 
         self.assertEqual(events[0]["type"], "RUN_ERROR")
         self.assertEqual(events[0]["code"], "invalid_actor_signature")
+        run_agent_mock.assert_not_called()
+
+    def test_ag_ui_run_returns_run_error_when_llm_key_is_missing(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-no-key",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка без ключа"}],
+            forwardedProps=self._signed_forwarded_props(
+                {
+                    "session_id": "sidebar-session",
+                    "model_id": "test-model",
+                    "origin_channel": "copilotkit",
+                    "ui_driver": "copilotkit",
+                    "actor_version": "copilotkit-ag-ui-v1",
+                    "actor": {
+                        "user_id": 17,
+                        "username": "doctor",
+                        "roles": ["engineer"],
+                        "is_superuser": False,
+                        "channel": "sidebar",
+                        "source": "django-copilotkit",
+                        "origin_channel": "copilotkit",
+                        "actor_version": "copilotkit-ag-ui-v1",
+                    },
+                },
+            ),
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual([event["type"] for event in events], ["RUN_STARTED", "CUSTOM", "RUN_ERROR"])
+        self.assertEqual(events[1]["name"], "local_business.protocol")
+        self.assertEqual(events[2]["code"], "service_not_configured")
         run_agent_mock.assert_not_called()
 
 

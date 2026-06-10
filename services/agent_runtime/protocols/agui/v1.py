@@ -40,16 +40,22 @@ def text_message_events(chunks: Iterable[str], *, message_id: str | None = None)
 
 
 def safe_tool_args(args: Any) -> dict[str, Any]:
-    if not isinstance(args, dict):
-        return {}
-    safe: dict[str, Any] = {}
-    for key, value in args.items():
-        lowered = str(key).lower()
-        if any(token in lowered for token in ("token", "secret", "password", "cookie", "credential")):
-            safe[key] = "[redacted]"
-        else:
-            safe[key] = value
-    return safe
+    return redact_sensitive_value(args) if isinstance(args, dict) else {}
+
+
+def redact_sensitive_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        safe: dict[str, Any] = {}
+        for key, nested in value.items():
+            lowered = str(key).lower()
+            if any(token in lowered for token in ("token", "secret", "password", "cookie", "credential", "api_key")):
+                safe[key] = "[redacted]"
+            else:
+                safe[key] = redact_sensitive_value(nested)
+        return safe
+    if isinstance(value, list):
+        return [redact_sensitive_value(item) for item in value]
+    return value
 
 
 def tool_trace_events(

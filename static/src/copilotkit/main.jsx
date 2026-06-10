@@ -24,6 +24,23 @@ function currentPageContext() {
   return current && current.envelope ? current : {};
 }
 
+function csrfToken() {
+  return window.__pageContextConfig?.csrfToken || "";
+}
+
+function usePageContextSnapshot() {
+  const [snapshot, setSnapshot] = useState(() => currentPageContext());
+
+  useEffect(() => {
+    const refresh = () => setSnapshot(currentPageContext());
+    window.addEventListener("ai-context:update", refresh);
+    refresh();
+    return () => window.removeEventListener("ai-context:update", refresh);
+  }, []);
+
+  return snapshot;
+}
+
 function normalizeRightPanelCommand(command) {
   if (!command || command.type !== "open_right_panel") return null;
   const htmxUrl = String(command.htmx_url || command.url || "").trim();
@@ -66,12 +83,14 @@ function CommandBridge({ agentId }) {
   return null;
 }
 
-function CopilotKitIsland({ configUrl, fallbackRuntimeUrl, fallbackAgentId }) {
+function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallbackAgentId }) {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pageContext = usePageContextSnapshot();
 
-  useEffect(() => {
-    fetch(configUrl, {
+  const loadConfig = useMemo(() => {
+    return () => fetch(configUrl, {
       method: "GET",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -89,13 +108,45 @@ function CopilotKitIsland({ configUrl, fallbackRuntimeUrl, fallbackAgentId }) {
       });
   }, [configUrl]);
 
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  function startNewChat() {
+    if (!newSessionUrl || busy) return;
+    setBusy(true);
+    setError("");
+    fetch(newSessionUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken(),
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: "{}",
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Не удалось начать новый чат.");
+        return response.json();
+      })
+      .then((payload) => {
+        if (!payload.enabled) throw new Error(payload.error || "AI UI отключен.");
+        setConfig(payload);
+      })
+      .catch((fetchError) => {
+        setError(fetchError.message || "Не удалось начать новый чат.");
+      })
+      .finally(() => setBusy(false));
+  }
+
   const properties = useMemo(() => {
     if (!config) return {};
     return {
       ...(config.forwarded_props || {}),
-      page_context: currentPageContext(),
+      page_context: pageContext,
     };
-  }, [config]);
+  }, [config, pageContext]);
 
   if (error) return <div className="copilotkit-error">{error}</div>;
   if (!config) return <div className="sidebar-chat-loading">Загрузка чата...</div>;
@@ -106,7 +157,23 @@ function CopilotKitIsland({ configUrl, fallbackRuntimeUrl, fallbackAgentId }) {
 
   return (
     <div className="copilotkit-embed">
+      <div className="copilotkit-toolbar">
+        <button
+          type="button"
+          className="copilotkit-new-chat"
+          onClick={startNewChat}
+          disabled={busy}
+          title="Новый чат"
+          aria-label="Новый чат"
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+        <span className="copilotkit-session-marker" aria-live="polite">
+          {busy ? "Создание..." : ""}
+        </span>
+      </div>
       <CopilotKit
+        key={config.thread_id}
         runtimeUrl={runtimeUrl}
         agent={agentId}
         threadId={config.thread_id}
@@ -141,6 +208,7 @@ function boot() {
   createRoot(rootNode).render(
     <CopilotKitIsland
       configUrl={configUrl}
+      newSessionUrl={rootNode.dataset.newSessionUrl || ""}
       fallbackRuntimeUrl={rootNode.dataset.runtimeUrl || "/copilotkit"}
       fallbackAgentId={rootNode.dataset.agentId || "local_business"}
     />,

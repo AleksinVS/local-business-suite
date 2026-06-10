@@ -58,6 +58,21 @@ test.describe("CopilotKit AG-UI sidebar", () => {
     expect(rootDataset.runtimeUrl).toBe(config.runtime_url);
     expect(rootDataset.agentId).toBe(config.agent_id);
 
+    const newSessionResponsePromise = page.waitForResponse((response) => (
+      response.url().includes("/ai/ui/session/new/")
+      && response.request().method() === "POST"
+    ));
+    await sidebarRoot.getByTitle("Новый чат").click();
+    const newSessionResponse = await newSessionResponsePromise;
+    expect(newSessionResponse.status()).toBe(200);
+    const newSession = await newSessionResponse.json();
+    expect(newSession.enabled).toBe(true);
+    expect(newSession.driver).toBe("copilotkit");
+    expect(newSession.thread_id).toBeTruthy();
+    expect(newSession.thread_id).not.toBe(config.thread_id);
+    expect(newSession.forwarded_props?.session_id).toBe(newSession.thread_id);
+    expect(newSession.forwarded_props?.signature).toMatch(/^[a-f0-9]{64}$/);
+
     const copilotHealth = await request.get(`${copilotRuntimeUrl}/health`);
     await expect(copilotHealth).toBeOK();
     expect(await copilotHealth.json()).toMatchObject({

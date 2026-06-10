@@ -164,6 +164,36 @@ def get_or_create_sidebar_session(user):
     )
 
 
+def create_new_sidebar_session(user):
+    previous = (
+        ChatSession.objects.filter(
+            user=user,
+            channel=ChatSession.Channel.SIDEBAR,
+            status=ChatSession.Status.ACTIVE,
+        )
+        .order_by("-updated_at", "-id")
+        .first()
+    )
+    metadata = {"surface": CHAT_SURFACE_SIDEBAR}
+    if previous:
+        previous_metadata = previous.metadata or {}
+        model_id = previous_metadata.get("model_id")
+        if model_id:
+            metadata["model_id"] = model_id
+        metadata["previous_sidebar_session_id"] = str(previous.external_id)
+        ChatSession.objects.filter(
+            user=user,
+            channel=ChatSession.Channel.SIDEBAR,
+            status=ChatSession.Status.ACTIVE,
+        ).update(status=ChatSession.Status.ARCHIVED)
+    return ChatSession.objects.create(
+        user=user,
+        channel=ChatSession.Channel.SIDEBAR,
+        title="Боковой чат",
+        metadata=metadata,
+    )
+
+
 def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     message = ChatMessage.objects.create(
         session=session,

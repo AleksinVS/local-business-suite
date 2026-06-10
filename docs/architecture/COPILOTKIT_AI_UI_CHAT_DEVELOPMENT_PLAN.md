@@ -2,7 +2,7 @@
 
 ## Статус
 
-Active planning.
+Active implementation. Первый runtime hardening срез реализует новый CopilotKit thread, реактивный page context, безопасный AG-UI error path и усиленную нормализацию UI-команд.
 
 Дата: 2026-06-10.
 
@@ -45,8 +45,12 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 - общий слой `apps/ai/ui_runtime/`;
 - общий protocol layer `services/agent_runtime/protocols/`;
 - e2e smoke для режима `copilotkit`.
+- endpoint `POST /ai/ui/session/new/` для чистого CopilotKit thread;
+- реактивная передача page context в CopilotKit properties;
+- AG-UI `RUN_ERROR` при отсутствующем LLM API key вместо HTTP 503;
+- рекурсивная маскировка sensitive tool args и более строгая нормализация UI-команд.
 
-Оставшийся разрыв: текущий срез проверяет жизнеспособность интеграции, но еще не задает полный продуктовый контракт ИИ-чата: новая беседа, история, контекст страницы, потоковые ошибки, tool trace, подтверждения действий, наблюдаемость и production-приемка.
+Оставшийся разрыв: текущий срез закрывает базовую управляемость CopilotKit-чата, но production-кандидат еще требует полной e2e-приемки на целевом deployment, проверки reverse proxy/SSE timeout и ручной пользовательской приемки.
 
 ## Целевое поведение
 
@@ -129,6 +133,8 @@ COPILOTKIT_TELEMETRY_DISABLED=true
 
 ### 1. UX-контракт CopilotKit-чата
 
+Статус: первый срез выполнен.
+
 Зафиксировать и реализовать минимальное ожидаемое поведение:
 
 - новый чат;
@@ -141,6 +147,8 @@ COPILOTKIT_TELEMETRY_DISABLED=true
 
 ### 2. Сессии, история и reload
 
+Статус: первый срез выполнен для нового CopilotKit thread; расширенный просмотр истории остается отдельным продуктовым улучшением.
+
 Проверить, что CopilotKit mode не создает разнобой с Django `ChatSession`:
 
 - новая беседа не продолжает старую без явного выбора;
@@ -149,6 +157,8 @@ COPILOTKIT_TELEMETRY_DISABLED=true
 - actor token TTL не ломает длинную сессию без понятной ошибки.
 
 ### 3. AG-UI события и расширения
+
+Статус: первый срез выполнен.
 
 Уточнить стабильный контракт событий:
 
@@ -159,6 +169,8 @@ COPILOTKIT_TELEMETRY_DISABLED=true
 
 ### 4. UI-команды и правый сайдбар
 
+Статус: первый срез выполнен.
+
 Укрепить безопасный путь действий:
 
 - единый нормализатор UI-команд;
@@ -168,6 +180,8 @@ COPILOTKIT_TELEMETRY_DISABLED=true
 - понятный отказ при отсутствии прав.
 
 ### 5. Безопасность и наблюдаемость
+
+Статус: первый срез выполнен для browser state/tool trace/LLM key error path; deployment-проверка остается обязательной.
 
 Проверить:
 

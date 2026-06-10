@@ -182,9 +182,6 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
     }
     logger.info("Agent runtime AG-UI request: %s", log_context)
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
-
     async def event_generator():
         message_id = f"msg_{run_input.runId}"
         try:
@@ -194,6 +191,14 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                     driver=actor_payload.ui_driver or actor_payload.origin_channel
                 )
             )
+            if not os.environ.get("OPENAI_API_KEY"):
+                yield sse_event(
+                    run_error_event(
+                        "ИИ-сервис не настроен: отсутствует ключ LLM-провайдера.",
+                        code="service_not_configured",
+                    )
+                )
+                return
             result = run_agent(
                 actor=actor,
                 session_id=actor_payload.session_id or run_input.threadId,

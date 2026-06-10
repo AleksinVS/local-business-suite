@@ -109,7 +109,36 @@ npm run build:copilotkit
 LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=http://127.0.0.1:3100/copilotkit
 ```
 
+## Управление сессией
+
+Основной config endpoint для CopilotKit-режима:
+
+```text
+GET /ai/chat/copilotkit/config/
+```
+
+Новый чистый sidebar thread создается через:
+
+```text
+POST /ai/ui/session/new/
+```
+
+Поведение:
+
+- предыдущая активная sidebar-сессия пользователя архивируется;
+- новая сессия получает новый `thread_id`;
+- выбранный `model_id` переносится из предыдущей sidebar-сессии;
+- история остается в Django, CopilotKit не становится хранилищем диалога.
+
 ## Smoke-сценарии
+
+### Новый чат
+
+1. Открыть страницу с CopilotKit panel.
+2. Нажать кнопку нового чата.
+3. Проверить, что `POST /ai/ui/session/new/` вернул новый `thread_id`.
+4. Отправить первое сообщение.
+5. Проверить, что новая беседа не содержит сообщения предыдущей sidebar-сессии.
 
 ### Текстовый ответ
 

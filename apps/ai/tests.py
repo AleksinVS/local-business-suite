@@ -105,6 +105,51 @@ class AIViewsTests(TestCase):
             ).exists()
         )
 
+    def test_ai_ui_new_session_creates_clean_copilotkit_thread(self):
+        from .views import sign_copilotkit_actor_payload
+
+        self.client.force_login(self.customer)
+        existing = ChatSession.objects.create(
+            user=self.customer,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Старый боковой чат",
+            metadata={"surface": "sidebar", "model_id": "test-model"},
+        )
+        ChatMessage.objects.create(
+            session=existing,
+            role=ChatMessage.Role.USER,
+            content="Старое сообщение",
+        )
+
+        with self.settings(
+            LOCAL_BUSINESS_AI_UI_DRIVER="copilotkit",
+            LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT=True,
+            LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL="/copilotkit",
+            LOCAL_BUSINESS_COPILOTKIT_AGENT_ID="local_business",
+        ):
+            response = self.client.post(
+                reverse("ai:ui_session_new"),
+                data="{}",
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        forwarded = payload["forwarded_props"]
+        existing.refresh_from_db()
+        new_session = ChatSession.objects.get(external_id=payload["thread_id"])
+        self.assertEqual(existing.status, ChatSession.Status.ARCHIVED)
+        self.assertEqual(new_session.status, ChatSession.Status.ACTIVE)
+        self.assertEqual(new_session.channel, ChatSession.Channel.SIDEBAR)
+        self.assertEqual(new_session.metadata["model_id"], "test-model")
+        self.assertEqual(new_session.metadata["previous_sidebar_session_id"], str(existing.external_id))
+        self.assertEqual(new_session.messages.count(), 0)
+        self.assertNotEqual(str(existing.external_id), payload["thread_id"])
+        self.assertEqual(forwarded["session_id"], payload["thread_id"])
+        self.assertEqual(forwarded["ui_driver"], "copilotkit")
+        self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
+
     def test_native_ai_ui_config_returns_signed_actor_payload(self):
         from .views import sign_copilotkit_actor_payload
 

@@ -530,7 +530,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Машиночитаемый план исполнения для разработки CopilotKit AI UI chat
       BLOCK_BRIEF.md: file # Краткое описание цели, границ, scope и приемки workflow-блока
       EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза
+      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого runtime hardening среза
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза
+      TASK_ACCEPTANCE.implementation.md: file # Приемка первого runtime hardening среза
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

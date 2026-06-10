@@ -35,6 +35,7 @@ from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import (
     append_chat_message,
     compact_sidebar_session,
+    create_new_sidebar_session,
     generate_session_title,
     get_or_create_sidebar_session,
     normalize_session_external_id,
@@ -473,6 +474,28 @@ class AICopilotKitConfigView(LoginRequiredMixin, View):
                 user=request.user,
                 driver=DRIVER_COPILOTKIT,
                 runtime_url=settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
+                agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+            )
+        )
+
+
+class AIUISidebarSessionNewView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        driver = configured_ai_ui_driver()
+        if driver not in {DRIVER_COPILOTKIT, DRIVER_NATIVE}:
+            return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
+
+        create_new_sidebar_session(request.user)
+        runtime_url = settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL
+        if driver == DRIVER_NATIVE:
+            runtime_url = reverse("ai:ui_ag_ui_run")
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=driver,
+                runtime_url=runtime_url,
                 agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
             )
         )

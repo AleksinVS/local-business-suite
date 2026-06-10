@@ -2,7 +2,7 @@
 
 ## Статус
 
-Active planning.
+Active implementation. Первый runtime hardening срез реализован в ветке `feature/copilotkit-ag-ui-integration`.
 
 Целевой режим:
 
@@ -65,27 +65,27 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 
 ### 1. UX-контракт
 
-Статус: запланировано.
+Статус: первый срез выполнен.
 
 Результат:
 
 - описаны состояния чата;
 - новый чат отделен от текущей сессии;
-- ошибки и loading-state покрыты e2e.
+- ошибки и loading-state покрыты unit/e2e smoke.
 
 ### 2. Сессии и история
 
-Статус: запланировано.
+Статус: первый срез выполнен.
 
 Результат:
 
 - Django остается владельцем `ChatSession` и `ChatMessage`;
-- reload не создает неожиданный fork истории;
-- actor token TTL обрабатывается предсказуемо.
+- новый CopilotKit thread создается через `POST /ai/ui/session/new/`;
+- предыдущая sidebar-сессия архивируется и не смешивается с новой.
 
 ### 3. AG-UI fidelity и protocol metadata
 
-Статус: запланировано.
+Статус: первый срез выполнен.
 
 Результат:
 
@@ -95,23 +95,24 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 
 ### 4. UI-команды
 
-Статус: запланировано.
+Статус: первый срез выполнен.
 
 Результат:
 
 - `ui.open_right_panel` нормализуется на сервере;
 - frontend выполняет только allow-listed команды;
-- отказ по правам понятен пользователю и виден в audit.
+- unsafe URL/swap/mode отбрасываются или приводятся к безопасному значению.
 
 ### 5. Security, deployment, observability
 
-Статус: запланировано.
+Статус: частично выполнено.
 
 Результат:
 
 - секреты не попадают в browser state;
 - telemetry disabled by default;
-- reverse proxy и rollback проверены.
+- tool trace рекурсивно маскирует sensitive args;
+- reverse proxy и rollback на целевом deployment еще требуют приемки.
 
 ### 6. Приемка
 

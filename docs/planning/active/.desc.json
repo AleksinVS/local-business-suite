@@ -17,5 +17,6 @@
   "memory-file-source-auto-organization.md": "Активный план автоупорядочивания файловых источников",
   "desktop-notifications-pwa-tauri.md": "Активный план PWA-first уведомлений и опционального Tauri-клиента",
   "copilotkit-ag-ui-integration.md": "Активный план интеграции CopilotKit и AG-UI в основной Django UI",
-  "ai-ui-protocol-foundation.md": "Активный план версионируемой основы AI UI протоколов"
+  "ai-ui-protocol-foundation.md": "Активный план версионируемой основы AI UI протоколов",
+  "copilotkit-ai-ui-chat-development.md": "Активный план разработки ИИ-чата в режиме CopilotKit UI"
 }

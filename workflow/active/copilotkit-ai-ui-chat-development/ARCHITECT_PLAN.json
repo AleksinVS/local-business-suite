@@ -1,0 +1,64 @@
+{
+  "block_id": "copilotkit-ai-ui-chat-development",
+  "status": "active_planning",
+  "created_at": "2026-06-10",
+  "driver": "copilotkit",
+  "target_runtime_setting": "LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit",
+  "architecture_sources": [
+    "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md",
+    "docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md",
+    "docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md"
+  ],
+  "goal": "Build a production-candidate CopilotKit AI chat inside the main Django UI while keeping Django as the owner of sessions, permissions, history, audit and confirmation.",
+  "execution_order": [
+    "01-copilotkit-chat-ux-contract",
+    "02-session-history-and-reload",
+    "03-ag-ui-event-fidelity",
+    "04-ui-commands-and-right-panel",
+    "05-security-observability-deployment",
+    "06-e2e-acceptance"
+  ],
+  "global_constraints": [
+    "Django remains the system of record for session, permissions, chat history, audit and confirmation.",
+    "CopilotKit-specific code stays inside the CopilotKit driver and Copilot Runtime service.",
+    "services.agent_runtime.protocols must stay usable by future native AG-UI-compatible UI.",
+    "Browser clients must not receive session cookies, Django AI gateway tokens, raw actor context, raw PII, raw UNC paths or full DOM payloads through AG-UI state.",
+    "UI commands must be namespaced, versioned and allow-listed.",
+    "Domain writes must go through Django permissions and confirmation flow.",
+    "Legacy driver must remain a rollback path.",
+    "Temporary artifacts belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit activates the CopilotKit chat in the main Django UI.",
+    "Starting a new chat creates or selects a clean Django chat session.",
+    "The page context envelope is applied without leaking raw sensitive data.",
+    "AG-UI streams contain protocol metadata and map failures to RUN_ERROR.",
+    "ui.open_right_panel is normalized once and executed only through the safe frontend bridge.",
+    "Chat history and AgentActionLog remain in Django.",
+    "Telemetry and hosted persistence remain disabled unless a separate decision changes this.",
+    "E2E covers the main CopilotKit chat scenario and rollback remains available."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run build:copilotkit",
+    "node --check services/copilot_runtime/server.mjs",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\"",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "implementation_notes": [
+    "Land shared protocol fixes outside driver-specific branches where possible.",
+    "Keep compatibility path /localBusinessUiCommands only while existing CopilotKit island needs it.",
+    "Prefer additive AG-UI extensions under local_business.* over breaking event shapes.",
+    "Use existing Django chat and audit models before adding persistence.",
+    "Document production differences in deployment notes before owner acceptance."
+  ]
+}

@@ -4,6 +4,23 @@
 
 ## Active
 
+### Разработка ИИ-чата в режиме CopilotKit UI
+
+Создан проектный и исполнительный контур для доведения CopilotKit-варианта ИИ-чата до production candidate в основном Django UI.
+
+Контекст:
+- целевой режим запуска: `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`;
+- архитектурное решение CopilotKit/AG-UI находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
+- архитектурное решение по общей protocol foundation находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md`;
+- активный план находится в `docs/planning/active/copilotkit-ai-ui-chat-development.md`;
+- workflow package находится в `workflow/active/copilotkit-ai-ui-chat-development/`.
+
+Оставшееся действие:
+- реализовать task packets по UX, сессиям, AG-UI событиям, UI-командам, security/deployment и e2e-приемке;
+- выполнить e2e в режиме `copilotkit` на запущенных Django, Agent Runtime и Copilot Runtime;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Версионируемая основа AI UI протоколов
 
 Первый реализационный срез общей основы выполнен в отдельной ветке. Теперь два варианта интерфейса могут развиваться поверх общего слоя: CopilotKit/AG-UI и самописный AG-UI-compatible UI. Вынесены actor/session context, подпись, UI-команды, protocol metadata и выбор UI-драйвера.

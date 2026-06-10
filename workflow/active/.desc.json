@@ -17,5 +17,6 @@
   "memory-file-source-auto-organization": "Workflow: автоупорядочивание файловых источников",
   "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
   "copilotkit-ag-ui-integration": "Workflow: CopilotKit и AG-UI в основном Django UI",
-  "ai-ui-protocol-foundation": "Workflow: версионируемая основа AI UI протоколов"
+  "ai-ui-protocol-foundation": "Workflow: версионируемая основа AI UI протоколов",
+  "copilotkit-ai-ui-chat-development": "Workflow: разработка ИИ-чата в режиме CopilotKit UI"
 }

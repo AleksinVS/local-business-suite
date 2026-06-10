@@ -1,0 +1,40 @@
+{
+  "task_id": "05-security-observability-deployment",
+  "title": "Close security, observability and deployment checks",
+  "status": "planned",
+  "read_scope": [
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "apps/ai/ui_runtime/",
+    "services/copilot_runtime/",
+    "services/agent_runtime/"
+  ],
+  "write_scope": [
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "apps/ai/ui_runtime/",
+    "services/copilot_runtime/",
+    "services/agent_runtime/tests/"
+  ],
+  "goals": [
+    "Prevent secret and sensitive payload leaks through browser state, logs and tool trace.",
+    "Ensure operator-visible request id, run id and conversation id are available.",
+    "Document production environment variables, reverse proxy rules and rollback."
+  ],
+  "non_goals": [
+    "Do not commit host-specific secrets or compose files.",
+    "Do not enable Copilot Cloud persistence or telemetry by default."
+  ],
+  "acceptance": [
+    "Browser-visible state excludes session cookie, gateway token, raw actor context, raw PII, UNC paths and full DOM.",
+    "CopilotKit telemetry is disabled by default.",
+    "Deployment docs include /copilotkit reverse proxy and timeout checks.",
+    "Rollback to LOCAL_BUSINESS_AI_UI_DRIVER=legacy is documented and tested."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "node --check services/copilot_runtime/server.mjs",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

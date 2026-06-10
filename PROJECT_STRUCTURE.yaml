@@ -280,6 +280,7 @@ docs: # Документация проекта
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
     blueprint.md: file # Blueprint — детальный план системы
     COPILOTKIT_AG_UI_INTEGRATION_PLAN.md: file # План интеграции CopilotKit и AG-UI в основной Django UI
+    COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md: file # План разработки ИИ-чата в режиме CopilotKit UI
     DESIGN_PATTERNS_REVIEW_2026-06-01.md: file # Анализ полезных паттернов проектирования для текущей архитектуры
     DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
     INTEGRATIONS.md: file # Интеграции с внешними системами
@@ -340,6 +341,7 @@ docs: # Документация проекта
       architecture-review-remediation-2026-06-01.md: file # Активный план исправлений по архитектурному ревью 2026-06-01
       context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
       copilotkit-ag-ui-integration.md: file # Активный план интеграции CopilotKit и AG-UI в основной Django UI
+      copilotkit-ai-ui-chat-development.md: file # Активный план разработки ИИ-чата в режиме CopilotKit UI
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
@@ -523,6 +525,12 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого среза реализации CopilotKit/AG-UI
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза CopilotKit/AG-UI
       TASK_ACCEPTANCE.implementation.md: file # Приемка первого среза реализации CopilotKit/AG-UI
+    copilotkit-ai-ui-chat-development: # Workflow: разработка ИИ-чата в режиме CopilotKit UI
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Машиночитаемый план исполнения для разработки CopilotKit AI UI chat
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ, scope и приемки workflow-блока
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

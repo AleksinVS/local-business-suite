@@ -18,5 +18,6 @@
   "desktop-notifications-pwa-tauri.md": "Активный план PWA-first уведомлений и опционального Tauri-клиента",
   "copilotkit-ag-ui-integration.md": "Активный план интеграции CopilotKit и AG-UI в основной Django UI",
   "ai-ui-protocol-foundation.md": "Активный план версионируемой основы AI UI протоколов",
-  "copilotkit-ai-ui-chat-development.md": "Активный план разработки ИИ-чата в режиме CopilotKit UI"
+  "copilotkit-ai-ui-chat-development.md": "Активный план разработки ИИ-чата в режиме CopilotKit UI",
+  "native-ag-ui-chat-development.md": "Активный план разработки самописного AG-UI ИИ-чата"
 }

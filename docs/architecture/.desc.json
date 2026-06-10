@@ -27,5 +27,6 @@
   "SETTINGS_CENTER_IMPLEMENTATION_PLAN.md": "План реализации Settings Center, GUI настроек и контекстной справки",
   "COPILOTKIT_AG_UI_INTEGRATION_PLAN.md": "План интеграции CopilotKit и AG-UI в основной Django UI",
   "AI_UI_PROTOCOL_FOUNDATION_PLAN.md": "План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса",
-  "COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md": "План разработки ИИ-чата в режиме CopilotKit UI"
+  "COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md": "План разработки ИИ-чата в режиме CopilotKit UI",
+  "NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md": "План разработки основного самописного AG-UI ИИ-чата"
 }

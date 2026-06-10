@@ -4,6 +4,23 @@
 
 ## Active
 
+### Разработка самописного AG-UI ИИ-чата
+
+Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e.
+
+Контекст:
+- основной целевой UI: самописный AG-UI-compatible чат;
+- архитектурное решение находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md`;
+- активный план находится в `docs/planning/active/native-ag-ui-chat-development.md`;
+- workflow package находится в `workflow/active/native-ag-ui-chat-development/`.
+
+Оставшееся действие:
+- выполнить пользовательскую приемку native-чата;
+- отдельно согласовать, обновлять ли `@ag-ui/client` с `0.0.55` до `0.0.56`;
+- проверить `legacy`, `copilotkit`, `native` smoke перед слиянием;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Разработка ИИ-чата в режиме CopilotKit UI
 
 Создан проектный и исполнительный контур для доведения CopilotKit-варианта ИИ-чата до production candidate в основном Django UI. Первый runtime hardening срез реализован: новый CopilotKit thread, основной вход `/ai/chat/` на CopilotKit-страницу, реактивный page context, AG-UI `RUN_ERROR` при отсутствующем LLM key, server-side нормализация UI-команд и e2e smoke для нового чата.

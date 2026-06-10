@@ -11,6 +11,10 @@
   padding: 0.75rem 0.85rem;
   border-bottom: 1px solid var(--border);
   background: #fbfdff;
+  display: grid;
+  grid-template-columns: 1fr 32px;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .native-ai-ui-title {
@@ -19,6 +23,35 @@
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.native-ai-ui-icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.native-ai-ui-status {
+  min-height: 0;
+  padding: 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.3;
+  background: #fbfdff;
+}
+
+.native-ai-ui-status:not(:empty) {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.native-ai-ui-status[data-tone="error"] {
+  color: #991b1b;
+  background: #fef2f2;
 }
 
 .native-ai-ui-messages {
@@ -77,6 +110,12 @@
 
 .native-ai-ui-message.is-pending .native-ai-ui-bubble {
   opacity: 0.72;
+}
+
+.native-ai-ui-message.is-error .native-ai-ui-bubble {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
 }
 
 .native-ai-ui-form {

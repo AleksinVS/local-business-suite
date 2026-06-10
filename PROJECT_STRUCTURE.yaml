@@ -298,6 +298,7 @@ docs: # Документация проекта
     MEMORY_MVP_SIMPLIFICATION_PLAN.md: file # План упрощения MVP-архитектуры памяти
     MEMORY_SERVICE_IMPLEMENTATION_PLAN.md: file # План реализации сервиса памяти СоСНА
     MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md: file # План trusted sources, claim/belief layer и lightweight retrieval orchestration
+    NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md: file # План разработки основного самописного AG-UI ИИ-чата
     OBSERVABILITY_BASELINE.md: file # Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report
     POLICY_MODEL.md: file # Модель политик доступа
     PWA_AND_TAURI_NOTIFICATIONS_PLAN.md: file # План PWA-first уведомлений и опционального Tauri-клиента
@@ -351,6 +352,7 @@ docs: # Документация проекта
       memory-file-source-auto-organization.md: file # Активный план автоупорядочивания файловых источников
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       module-registered-agent-skills-and-mcp-facade.md: file # Активный план модульных AI skills и registry-driven MCP-фасада
+      native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
       README.md: file # Правила для активных planning-файлов
       settings-center-gui.md: file # Активный план Settings Center, GUI настроек и контекстной справки
       universal-right-drawer-ai-navigation.md: file # Активный план универсального открытия правого сайдбара ИИ-ботом
@@ -417,7 +419,7 @@ static: # Исходные статические ресурсы (CSS, JS)
       copilotkit.css: file # Локальные стили встраивания CopilotKit в левую панель портала
       main.jsx: file # Точка входа React-острова CopilotKit
   manifest.webmanifest: file # PWA manifest портала
-  service-worker.js: file # Service worker PWA без кэширования защищенных HTML/API и CopilotKit dist bundle
+  service-worker.js: file # Service worker PWA без кэширования защищенных HTML/API, CopilotKit dist bundle и native AI UI bundle
 templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   ai: # Шаблоны чат-интерфейса AI
     partials: # Переиспользуемые части AI-интерфейса
@@ -589,6 +591,14 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.implementation.md: file # Отчет исполнения реализации module skills, admin skill creator и MCP resources
       RETROSPECTIVE.md: file # Ретроспектива реализации module skills и MCP-фасада
       TASK_ACCEPTANCE.implementation.md: file # Приемка реализации module skills, runtime skill authoring и e2e-документации
+    native-ag-ui-chat-development: # Workflow: разработка самописного AG-UI ИИ-чата
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для native AG-UI чата
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки native AG-UI чата
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза native AG-UI чата
+      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого реализационного среза native AG-UI чата
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза native AG-UI чата
+      TASK_ACCEPTANCE.implementation.md: file # Приемка первого реализационного среза native AG-UI чата
     settings-center-gui: # Workflow: Settings Center, GUI настроек и контекстная справка
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets

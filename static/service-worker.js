@@ -1,4 +1,4 @@
-const CACHE_VERSION = "local-business-suite-pwa-v2";
+const CACHE_VERSION = "local-business-suite-pwa-v3";
 const STATIC_CACHE = `${CACHE_VERSION}:static`;
 const STATIC_ASSETS = [
   "/static/src/css/app.css",
@@ -28,6 +28,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith("/static/")) return;
   if (url.pathname.startsWith("/static/dist/copilotkit/")) return;
+  if (url.pathname.startsWith("/static/src/ai_ui/")) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {

@@ -167,6 +167,33 @@ class AIViewsTests(TestCase):
         self.assertEqual(forwarded["actor"]["source"], "django-native-ai-ui")
         self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
 
+    def test_native_ai_ui_new_session_returns_native_thread(self):
+        self.client.force_login(self.customer)
+        existing = ChatSession.objects.create(
+            user=self.customer,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Старый native чат",
+            metadata={"surface": "sidebar", "model_id": "test-model"},
+        )
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
+            response = self.client.post(
+                reverse("ai:ui_session_new"),
+                data="{}",
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        existing.refresh_from_db()
+        new_session = ChatSession.objects.get(external_id=payload["thread_id"])
+        self.assertEqual(existing.status, ChatSession.Status.ARCHIVED)
+        self.assertEqual(new_session.channel, ChatSession.Channel.SIDEBAR)
+        self.assertEqual(new_session.metadata["model_id"], "test-model")
+        self.assertEqual(payload["driver"], "native")
+        self.assertEqual(payload["runtime_url"], reverse("ai:ui_ag_ui_run"))
+        self.assertEqual(payload["forwarded_props"]["ui_driver"], "native")
+
     def test_native_ai_ui_proxy_overwrites_client_actor_payload(self):
         self.client.force_login(self.customer)
         with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"), patch("apps.ai.views.AgentRuntimeClient") as client_class:
@@ -182,7 +209,14 @@ class AIViewsTests(TestCase):
                         "forwardedProps": {
                             "actor": {"user_id": self.manager.id},
                             "signature": "invalid",
-                            "page_context": {"envelope": {"page": {"module": "workorders"}}},
+                            "page_context": {
+                                "context_hint": "workorders / board",
+                                "envelope": {
+                                    "schema_version": "1",
+                                    "window_id": "native-test-window",
+                                    "page": {"module": "workorders", "view": "board", "path": "/workorders/"},
+                                },
+                            },
                         },
                     }
                 ),
@@ -198,8 +232,50 @@ class AIViewsTests(TestCase):
         self.assertNotEqual(run_payload["threadId"], "forged-thread")
         self.assertEqual(forwarded["actor"]["user_id"], self.customer.id)
         self.assertEqual(forwarded["ui_driver"], "native")
-        self.assertEqual(forwarded["page_context"]["envelope"]["page"]["module"], "workorders")
+        self.assertEqual(forwarded["actor"]["conversation_id"], ChatSession.objects.get(external_id=run_payload["threadId"]).metadata["conversation_id"])
+        self.assertEqual(forwarded["page_context"]["page_context_status"], "bound")
+        self.assertEqual(forwarded["page_context"]["digest"]["module"], "workorders")
         self.assertRegex(forwarded["signature"], r"^[a-f0-9]{64}$")
+        session = ChatSession.objects.get(external_id=run_payload["threadId"])
+        self.assertEqual(session.messages.filter(role=ChatMessage.Role.USER, content="Проверка").count(), 1)
+
+    def test_native_ai_ui_proxy_persists_assistant_message_from_agui_stream(self):
+        self.client.force_login(self.customer)
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"), patch("apps.ai.views.AgentRuntimeClient") as client_class:
+            client = client_class.return_value
+            client.ag_ui_stream.return_value = [
+                'data: {"type":"RUN_STARTED","threadId":"thread","runId":"run"}\n\n',
+                'data: {"type":"TEXT_MESSAGE_START","messageId":"msg","role":"assistant"}\n\n',
+                'data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg","delta":"Ответ"}\n\n',
+                'data: {"type":"TOOL_CALL_START","toolCallId":"tool-1","toolCallName":"workorders.open_right_panel"}\n\n',
+                'data: {"type":"TOOL_CALL_END","toolCallId":"tool-1"}\n\n',
+                'data: {"type":"STATE_DELTA","delta":[{"op":"replace","path":"/localBusiness/uiCommands","value":[{"type":"open_right_panel","htmx_url":"/workorders/1/","target":"#global-right-panel-content"}]}]}\n\n',
+                'data: {"type":"RUN_FINISHED","threadId":"thread","runId":"run"}\n\n',
+            ]
+            response = self.client.post(
+                reverse("ai:ui_ag_ui_run"),
+                data=json.dumps(
+                    {
+                        "runId": "run-2",
+                        "messages": [{"id": "u1", "role": "user", "content": "Открой заявку"}],
+                        "forwardedProps": {},
+                    }
+                ),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            body = b"".join(response.streaming_content).decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("TEXT_MESSAGE_CONTENT", body)
+        session = ChatSession.objects.get(user=self.customer, channel=ChatSession.Channel.SIDEBAR)
+        messages = list(session.messages.order_by("created_at", "id"))
+        self.assertEqual(messages[0].role, ChatMessage.Role.USER)
+        self.assertEqual(messages[0].content, "Открой заявку")
+        self.assertEqual(messages[1].role, ChatMessage.Role.ASSISTANT)
+        self.assertEqual(messages[1].content, "Ответ")
+        self.assertEqual(messages[1].metadata["tool_trace"][0]["tool"], "workorders.open_right_panel")
+        self.assertEqual(messages[1].metadata["ui_commands"][0]["type"], "open_right_panel")
 
     def test_tool_gateway_rejects_invalid_token(self):
         response = self.client.post(
@@ -793,6 +869,20 @@ class AIViewsTests(TestCase):
         self.assertContains(page_response, "copilotkit-island.css?v=20260610-copilotkit-page")
         self.assertNotContains(page_response, 'class="ai-session-sidebar"')
         self.assertNotContains(page_response, 'id="sidebar-ai-chat"')
+
+    def test_native_driver_mounts_native_sidebar_assets_and_config(self):
+        self.client.force_login(self.customer)
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
+            response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="native-ai-sidebar-root"')
+        self.assertContains(response, 'data-config-url="' + reverse("ai:ui_config") + '"')
+        self.assertContains(response, 'data-new-session-url="' + reverse("ai:ui_session_new") + '"')
+        self.assertContains(response, "native_ai.css?v=20260610-native-ag-ui-chat")
+        self.assertContains(response, "native_ai.js?v=20260610-native-ag-ui-chat")
+        self.assertNotContains(response, 'id="copilotkit-sidebar-root"')
+        self.assertNotContains(response, reverse("ai:copilotkit_config"))
 
     def test_sidebar_chat_clear_deletes_sidebar_messages_and_summary(self):
         self.client.force_login(self.customer)

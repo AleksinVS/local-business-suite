@@ -20,7 +20,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=native
 
 - `legacy` - текущий HTMX sidebar;
 - `copilotkit` - React island + Copilot Runtime `/copilotkit`;
-- `native` - самописный sidebar + Django proxy `/ai/ui/ag-ui/run/`.
+- `native` - основной самописный sidebar + Django proxy `/ai/ui/ag-ui/run/`.
 
 Старый флаг `LOCAL_BUSINESS_COPILOTKIT_ENABLED=true` сохраняет совместимость и включает CopilotKit, если `LOCAL_BUSINESS_AI_UI_DRIVER` не задан явно.
 
@@ -43,6 +43,36 @@ rg -n "LOCAL_BUSINESS_AI_UI_AGUI_PROFILE|ag-ui@" config docs package.json packag
 - менять wire contract событий только потому, что вышла новая версия.
 
 После согласованного обновления версии обязательны unit/integration/e2e проверки по `legacy`, `copilotkit`, `native` и обновление ADR/guides/deployment.
+
+## Native AG-UI chat
+
+Native UI работает без Copilot Runtime:
+
+```text
+browser native sidebar -> Django /ai/ui/ag-ui/run/ -> agent_runtime /ag-ui
+```
+
+Поддерживаемое поведение:
+
+- config через `GET /ai/ui/config/`;
+- новый чат через `POST /ai/ui/session/new/`;
+- stream parsing для `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR`;
+- сборка assistant message из `TEXT_MESSAGE_*`;
+- compact tool trace из `TOOL_CALL_*` без raw sensitive payload;
+- выполнение `STATE_DELTA /localBusiness/uiCommands` и `CUSTOM local_business.ui_command`;
+- дедупликация UI-команд на клиенте;
+- page context bridge через `LocalBusinessPageContext`;
+- сохранение user/assistant сообщений в Django `ChatSession`;
+- fallback на `legacy` через `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`.
+
+Native assets подключаются с version query string:
+
+```text
+/static/src/ai_ui/native_ai.css?v=<version>
+/static/src/ai_ui/native_ai.js?v=<version>
+```
+
+Service worker не должен cache-first обрабатывать `/static/src/ai_ui/`, иначе браузер может держать старый JS после deployment.
 
 ## Protocol contract
 

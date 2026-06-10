@@ -110,6 +110,25 @@ Native:
 
 Для native отдельный внешний route к `agent_runtime` не нужен.
 
+## Static/PWA для native UI
+
+Native AI UI использует исходные static assets:
+
+```text
+/static/src/ai_ui/native_ai.css
+/static/src/ai_ui/native_ai.js
+```
+
+HTML должен подключать их с version query string. Root service worker должен пропускать `/static/src/ai_ui/` без cache-first обработки. Это нужно, чтобы после deployment браузер не оставался на старом AG-UI reducer.
+
+При production-включении `native` проверить:
+
+- `/ai/ui/config/` доступен authenticated-пользователю;
+- `/ai/ui/session/new/` создает новый sidebar thread;
+- `/ai/ui/ag-ui/run/` stream не буферизуется reverse proxy;
+- user/assistant messages сохраняются в Django `ChatSession`;
+- browser не получает прямой доступ к `agent_runtime`.
+
 ## Rollback
 
 ```text

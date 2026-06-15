@@ -18,11 +18,12 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 
 В ADR-0028 зафиксировано, что основной целевой ИИ-чат проекта - самописный AG-UI-compatible UI. CopilotKit остается равноправным драйвером и референсом.
 
-Проверка версий 2026-06-10:
+Проверка версий 2026-06-15:
 
 - в проекте `@ag-ui/client=0.0.55`;
-- latest npm `@ag-ui/client=0.0.56`;
-- CopilotKit latest совпадает с закрепленной `1.59.5`.
+- latest npm `@ag-ui/client=0.0.57`;
+- в проекте `@copilotkit/runtime=1.59.5`;
+- latest npm `@copilotkit/runtime=1.60.1`.
 
 Обновление версии AG-UI не входит в scope и требует отдельного согласования.
 
@@ -94,6 +95,33 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 
 Добавить/обновить unit и e2e проверки. Зафиксировать результаты в workflow.
 
+### 7. UX parity со старым чатом
+
+Статус: готова исполнительная документация, реализация не начата.
+
+Цель - довести `native` до возможностей старого Django/HTMX чата, не возвращая старую архитектуру и не делая CopilotKit обязательной зависимостью.
+
+Работа разбита на task packets:
+
+- `05-sidebar-history-model-and-clear-parity` - история после reload, выбор модели, очистка с подтверждением, timestamps, ссылка на полный чат;
+- `06-native-full-page-session-management` - полноценная native-страница чата, список сессий, переключение, переименование и удаление;
+- `07-native-rich-input-markdown-commands-attachments` - Markdown, slash-команды, меню команд, autocomplete и вложения;
+- `08-native-ux-parity-e2e-acceptance` - e2e matrix, rollback smoke и финальная приемка.
+
+Parity baseline:
+
+| Возможность старого чата | Native target |
+| --- | --- |
+| Последние сообщения sidebar после reload | Загружать из `/ai/ui/config/` безопасный список сообщений |
+| Выбор модели в sidebar | Использовать общий список моделей и обновлять `ChatSession.metadata.model_id` |
+| Очистка sidebar-чата | Same-origin endpoint с подтверждением в UI |
+| Переход в полный чат | Кнопка/ссылка на native full-page chat текущей сессии |
+| Список сессий полной страницы | Native full-page session list с правами текущего пользователя |
+| Переименование/удаление чата | Переиспользовать существующие Django views/services или нейтральные endpoints |
+| Markdown assistant messages | Безопасный rendering без XSS и без внешнего CDN в production |
+| Slash-команды | Передавать predefined/custom commands в native config |
+| Вложения | Переиспользовать `ChatAttachment`, текущие upload limits и Django auth |
+
 ## Acceptance checks
 
 - `native` root берет config с `/ai/ui/config/`.
@@ -103,6 +131,7 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 - `STATE_DELTA /localBusiness/uiCommands` открывает правую панель один раз.
 - `RUN_ERROR` показывает ошибку и разблокирует форму.
 - Unknown AG-UI event игнорируется.
+- UX parity task packets существуют и готовы к реализации.
 - Документация и структура актуальны.
 
 ## Результат первого среза
@@ -132,6 +161,7 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 .venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v
 node --check static/src/ai_ui/native_ai.js
 E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep "native AG-UI-compatible"
+E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep "native chat UX parity"
 make gen-struct
 git diff --check -- . ':(exclude)BACKLOG.md'
 ```

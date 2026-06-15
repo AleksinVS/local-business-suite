@@ -6,7 +6,7 @@
 
 ### Разработка самописного AG-UI ИИ-чата
 
-Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e. Подготовлена исполнительная документация для доведения native UX до старого Django/HTMX чата.
+Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e. Task packet `05-sidebar-history-model-and-clear-parity` выполнен: боковая панель восстанавливает историю, показывает времена сообщений, поддерживает выбор модели, очистку и переход в полный чат.
 
 Контекст:
 - основной целевой UI: самописный AG-UI-compatible чат;
@@ -16,8 +16,9 @@
 - workflow package находится в `workflow/active/native-ag-ui-chat-development/`.
 
 Оставшееся действие:
-- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/05-sidebar-history-model-and-clear-parity.json`;
-- затем реализовать full-page/session management, rich input и e2e acceptance task packets;
+- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/06-native-full-page-session-management.json`;
+- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/07-native-rich-input-markdown-commands-attachments.json`;
+- выполнить `workflow/active/native-ag-ui-chat-development/task-packets/08-native-ux-parity-e2e-acceptance.json`;
 - отдельно согласовать, обновлять ли `@ag-ui/client` с `0.0.55` до `0.0.57`;
 - проверить `legacy`, `copilotkit`, `native` smoke перед слиянием;
 - после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.

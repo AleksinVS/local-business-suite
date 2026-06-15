@@ -194,6 +194,20 @@ def create_new_sidebar_session(user):
     )
 
 
+def clear_sidebar_session(session):
+    if session.channel != ChatSession.Channel.SIDEBAR:
+        raise ValidationError("Очистка доступна только для бокового чата.")
+    session.messages.all().delete()
+    session.metadata = {
+        key: value
+        for key, value in (session.metadata or {}).items()
+        if key != "sidebar_summary"
+    }
+    session.last_message_at = None
+    session.save(update_fields=["metadata", "last_message_at", "updated_at"])
+    return session
+
+
 def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     message = ChatMessage.objects.create(
         session=session,

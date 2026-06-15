@@ -175,6 +175,50 @@ class AIViewsTests(TestCase):
         self.assertEqual(forwarded["actor"]["source"], "django-native-ai-ui")
         self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
 
+    def test_native_ai_ui_config_includes_sidebar_history_models_and_urls(self):
+        self.client.force_login(self.customer)
+        models = [
+            {"id": "test-model", "name": "Test Model", "default": False},
+            {"id": "fallback-model", "name": "Fallback Model", "default": True},
+        ]
+        session = ChatSession.objects.create(
+            user=self.customer,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Боковой чат",
+            metadata={"surface": "sidebar", "model_id": "test-model"},
+        )
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Старый вопрос")
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.ASSISTANT,
+            content="Старый ответ",
+            metadata={"error": True},
+        )
+
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native", LOCAL_BUSINESS_AI_MODELS=models):
+            response = self.client.get(reverse("ai:ui_config"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["thread_id"], str(session.external_id))
+        self.assertEqual(payload["current_model_id"], "test-model")
+        self.assertEqual(payload["messages"][0]["role"], ChatMessage.Role.USER)
+        self.assertEqual(payload["messages"][0]["content"], "Старый вопрос")
+        self.assertEqual(payload["messages"][1]["content"], "Старый ответ")
+        self.assertTrue(payload["messages"][1]["error"])
+        self.assertRegex(payload["messages"][0]["created_at_display"], r"^\d{2}:\d{2}$")
+        self.assertEqual(payload["models"][0]["id"], "test-model")
+        self.assertTrue(payload["models"][0]["selected"])
+        self.assertEqual(
+            payload["urls"]["model_update_url"],
+            reverse("ai:chat_update_model", kwargs={"external_id": session.external_id}),
+        )
+        self.assertEqual(payload["urls"]["clear_session_url"], reverse("ai:ui_session_clear"))
+        self.assertEqual(
+            payload["urls"]["full_chat_url"],
+            reverse("ai:chat_detail", kwargs={"external_id": session.external_id}),
+        )
+
     def test_native_ai_ui_new_session_returns_native_thread(self):
         self.client.force_login(self.customer)
         existing = ChatSession.objects.create(
@@ -201,6 +245,38 @@ class AIViewsTests(TestCase):
         self.assertEqual(payload["driver"], "native")
         self.assertEqual(payload["runtime_url"], reverse("ai:ui_ag_ui_run"))
         self.assertEqual(payload["forwarded_props"]["ui_driver"], "native")
+
+    def test_native_ai_ui_clear_session_returns_clean_config(self):
+        self.client.force_login(self.customer)
+        models = [{"id": "test-model", "name": "Test Model", "default": True}]
+        session = ChatSession.objects.create(
+            user=self.customer,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Боковой чат",
+            metadata={"surface": "sidebar", "model_id": "test-model", "sidebar_summary": {"text": "старое резюме"}},
+            last_message_at=timezone.now(),
+        )
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Старый вопрос")
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.ASSISTANT, content="Старый ответ")
+
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native", LOCAL_BUSINESS_AI_MODELS=models):
+            response = self.client.post(
+                reverse("ai:ui_session_clear"),
+                data="{}",
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["thread_id"], str(session.external_id))
+        self.assertEqual(payload["messages"], [])
+        self.assertEqual(payload["current_model_id"], "test-model")
+        self.assertEqual(ChatMessage.objects.filter(session=session).count(), 0)
+        session.refresh_from_db()
+        self.assertIsNone(session.last_message_at)
+        self.assertEqual(session.metadata.get("model_id"), "test-model")
+        self.assertNotIn("sidebar_summary", session.metadata)
 
     def test_native_ai_ui_proxy_overwrites_client_actor_payload(self):
         self.client.force_login(self.customer)

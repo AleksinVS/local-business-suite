@@ -58,6 +58,10 @@ browser native sidebar -> Django /ai/ui/ag-ui/run/ -> agent_runtime /ag-ui
 
 - config через `GET /ai/ui/config/`;
 - новый чат через `POST /ai/ui/session/new/`;
+- загрузка последних сообщений sidebar-сессии из Django history;
+- выбор модели из `LOCAL_BUSINESS_AI_MODELS`;
+- очистка текущего sidebar-чата через `POST /ai/ui/session/clear/`;
+- ссылка на полный чат текущей сессии;
 - stream parsing для `RUN_STARTED`, `RUN_FINISHED`, `RUN_ERROR`;
 - сборка assistant message из `TEXT_MESSAGE_*`;
 - compact tool trace из `TOOL_CALL_*` без raw sensitive payload;
@@ -142,6 +146,7 @@ node --check services/copilot_runtime/server.mjs
 E2E_AI_UI_DRIVER=legacy npm run test:e2e -- --project=chromium --grep "context-aware sidebar"
 E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep "CopilotKit"
 E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep "native AG-UI-compatible"
+E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep "native chat UX parity"
 ```
 
 ## Rollback

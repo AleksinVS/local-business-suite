@@ -190,13 +190,15 @@ Native UI должен слушать `ai-context:update` и брать свеж
 - CopilotKit и legacy режимы не меняются.
 - E2E покрывает основной native сценарий.
 
-## Следующий срез: UX parity со старым чатом
+## UX parity со старым чатом
 
-Цель следующего среза - сделать `native` не только технически AG-UI-compatible, но и функционально сопоставимым со старым Django/HTMX чатом.
+Цель - сделать `native` не только технически AG-UI-compatible, но и функционально сопоставимым со старым Django/HTMX чатом.
 
 ### Baseline старого sidebar
 
-Native sidebar должен получить:
+Статус: выполнено в task packet `05-sidebar-history-model-and-clear-parity`.
+
+Native sidebar получил:
 
 - загрузку последних сообщений активной sidebar-сессии при открытии страницы;
 - выбор модели из `LOCAL_BUSINESS_AI_MODELS`;
@@ -206,6 +208,8 @@ Native sidebar должен получить:
 - сохранение текущих гарантий page context, audit, actor signing и safe UI commands.
 
 ### Baseline старой полной страницы
+
+Статус: ожидает реализации в task packets `06`, `07`, `08`.
 
 Native full-page chat должен получить:
 

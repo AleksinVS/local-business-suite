@@ -16,7 +16,7 @@ test.describe("native AG-UI-compatible sidebar", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
   test.skip(aiUiDriver !== "native", "Native AI UI checks run only when E2E_AI_UI_DRIVER=native.");
 
-  test("loads native sidebar config, starts a new chat and handles AG-UI events", async ({ page }) => {
+  test("native chat UX parity: loads config, starts a new chat and handles AG-UI events", async ({ page }) => {
     let aguiRequestSeen = false;
     let newThreadId = "";
     let panelLoads = 0;
@@ -89,12 +89,34 @@ test.describe("native AG-UI-compatible sidebar", () => {
     expect(config.runtime_url).toBe("/ai/ui/ag-ui/run/");
     expect(config.forwarded_props?.ui_driver).toBe("native");
     expect(config.forwarded_props?.signature).toMatch(/^[a-f0-9]{64}$/);
+    expect(config.urls?.clear_session_url).toBe("/ai/ui/session/clear/");
+    expect(config.urls?.full_chat_url).toContain("/ai/chat/");
+    expect(config.urls?.model_update_url).toContain("/ai/chat/");
+    expect(config.models?.length).toBeGreaterThan(0);
 
     const root = page.locator("#native-ai-sidebar-root");
     await expect(root).toBeVisible();
     await expect(page.locator('script[src*="native_ai.js?v=20260610-native-ag-ui-chat"]')).toHaveCount(1);
     await expect(page.locator("#copilotkit-sidebar-root")).toHaveCount(0);
     await expect(page.locator("#sidebar-ai-chat")).toHaveCount(0);
+    await expect(root.getByRole("button", { name: "Очистить чат" })).toBeVisible();
+    await expect(root.getByRole("link", { name: "Открыть полный чат" })).toHaveAttribute("href", config.urls.full_chat_url);
+
+    const modelSelect = root.locator("[data-native-ai-model]");
+    await expect(modelSelect).toBeVisible();
+    const selectedModel = await modelSelect.inputValue();
+    const nextModel = config.models.find((model) => model.id && model.id !== selectedModel);
+    if (nextModel) {
+      const modelUpdateResponse = page.waitForResponse((response) => (
+        response.url().includes("/ai/chat/")
+        && response.url().includes("/model/")
+        && response.request().method() === "POST"
+        && response.status() === 200
+      ));
+      await modelSelect.selectOption(nextModel.id);
+      const modelUpdatePayload = await (await modelUpdateResponse).json();
+      expect(modelUpdatePayload.model_id).toBe(nextModel.id);
+    }
 
     const newSessionResponse = page.waitForResponse((response) => (
       response.url().includes("/ai/ui/session/new/")
@@ -105,17 +127,30 @@ test.describe("native AG-UI-compatible sidebar", () => {
     const newSessionPayload = await (await newSessionResponse).json();
     newThreadId = newSessionPayload.thread_id;
     expect(newSessionPayload.driver).toBe("native");
+    if (nextModel) expect(newSessionPayload.current_model_id).toBe(nextModel.id);
 
     const input = root.locator("textarea");
     await input.fill("Коротко ответь: ok");
     await input.press("Enter");
 
     await expect(root.locator(".native-ai-ui-message.is-assistant .native-ai-ui-bubble").last()).toHaveText("ok");
+    await expect(root.locator(".native-ai-ui-message.is-user time").last()).toHaveText(/\d{2}:\d{2}/);
     await expect(root.locator(".native-ai-ui-message.is-tool .native-ai-ui-bubble").last()).toHaveText("Результат получен");
     await expect(page.locator("#global-right-panel.active")).toBeVisible();
     await expect(page.locator("#global-right-panel-content")).toContainText("Native panel opened");
     expect(aguiRequestSeen).toBe(true);
     expect(panelLoads).toBe(1);
+
+    const clearSessionResponse = page.waitForResponse((response) => (
+      response.url().includes("/ai/ui/session/clear/")
+      && response.request().method() === "POST"
+      && response.status() === 200
+    ));
+    page.once("dialog", (dialog) => dialog.accept());
+    await root.getByRole("button", { name: "Очистить чат" }).click();
+    const clearPayload = await (await clearSessionResponse).json();
+    expect(clearPayload.messages).toEqual([]);
+    await expect(root.locator(".native-ai-ui-message")).toHaveCount(0);
   });
 
   test("shows RUN_ERROR without leaving the form locked", async ({ page }) => {

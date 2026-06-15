@@ -97,13 +97,13 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 
 ### 7. UX parity со старым чатом
 
-Статус: готова исполнительная документация, реализация не начата.
+Статус: sidebar parity выполнен, full-page/rich input parity ожидают реализации.
 
 Цель - довести `native` до возможностей старого Django/HTMX чата, не возвращая старую архитектуру и не делая CopilotKit обязательной зависимостью.
 
 Работа разбита на task packets:
 
-- `05-sidebar-history-model-and-clear-parity` - история после reload, выбор модели, очистка с подтверждением, timestamps, ссылка на полный чат;
+- `05-sidebar-history-model-and-clear-parity` - выполнено: история после reload, выбор модели, очистка с подтверждением, timestamps, ссылка на полный чат;
 - `06-native-full-page-session-management` - полноценная native-страница чата, список сессий, переключение, переименование и удаление;
 - `07-native-rich-input-markdown-commands-attachments` - Markdown, slash-команды, меню команд, autocomplete и вложения;
 - `08-native-ux-parity-e2e-acceptance` - e2e matrix, rollback smoke и финальная приемка.
@@ -148,7 +148,10 @@ Parity baseline:
 
 Осталось после приемки:
 
-- решить, обновлять ли `@ag-ui/client` с `0.0.55` на `0.0.56`;
+- реализовать `06-native-full-page-session-management`;
+- реализовать `07-native-rich-input-markdown-commands-attachments`;
+- выполнить `08-native-ux-parity-e2e-acceptance`;
+- решить, обновлять ли `@ag-ui/client` с `0.0.55` на `0.0.57`;
 - выполнить production smoke на целевом reverse proxy/SSE timeout;
 - после приемки перенести план и workflow в архив.
 

@@ -8,5 +8,7 @@
   "EXECUTOR_REPORT.implementation.md": "Отчет исполнения первого реализационного среза native AG-UI чата",
   "TASK_ACCEPTANCE.implementation.md": "Приемка первого реализационного среза native AG-UI чата",
   "EXECUTOR_REPORT.ux-parity-planning.md": "Отчет подготовки исполнительной документации UX parity native-чата",
-  "TASK_ACCEPTANCE.ux-parity-planning.md": "Приемка исполнительной документации UX parity native-чата"
+  "TASK_ACCEPTANCE.ux-parity-planning.md": "Приемка исполнительной документации UX parity native-чата",
+  "EXECUTOR_REPORT.sidebar-parity.md": "Отчет исполнения sidebar parity native-чата: история, модель, очистка и полный чат",
+  "TASK_ACCEPTANCE.sidebar-parity.md": "Приемка sidebar parity native-чата"
 }

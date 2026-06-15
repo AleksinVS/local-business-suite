@@ -41,13 +41,15 @@ Copilot Runtime не нужен. Браузер работает same-origin с 
 Общие:
 
 ```text
-LOCAL_BUSINESS_AI_UI_DRIVER=legacy
+LOCAL_BUSINESS_AI_UI_DRIVER=native
 LOCAL_BUSINESS_AI_UI_PROTOCOL_VERSION=1.0
 LOCAL_BUSINESS_AI_UI_AGUI_PROFILE=ag-ui@0.0.55
 LOCAL_BUSINESS_AI_UI_ACTOR_TOKEN_TTL_SECONDS=900
 LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
 LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL=http://agent-runtime:8090/ag-ui
 ```
+
+Если `LOCAL_BUSINESS_AI_UI_DRIVER` отсутствует, Django также выбирает `native`. `legacy` задается явно только для rollback.
 
 CopilotKit:
 

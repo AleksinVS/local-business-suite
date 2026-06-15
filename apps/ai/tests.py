@@ -27,6 +27,7 @@ from .page_context import update_window_context_snapshot
 from .runtime_client import AgentRuntimeError
 from .services import normalize_session_external_id
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
+from .ui_runtime.drivers import configured_ai_ui_driver
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
@@ -104,6 +105,13 @@ class AIViewsTests(TestCase):
                 channel=ChatSession.Channel.SIDEBAR,
             ).exists()
         )
+
+    def test_default_ai_ui_driver_is_native(self):
+        self.assertEqual(configured_ai_ui_driver(), "native")
+
+    def test_legacy_copilotkit_flag_still_enables_copilotkit_when_driver_is_implicit(self):
+        with self.settings(LOCAL_BUSINESS_COPILOTKIT_ENABLED=True):
+            self.assertEqual(configured_ai_ui_driver(), "copilotkit")
 
     def test_ai_ui_new_session_creates_clean_copilotkit_thread(self):
         from .views import sign_copilotkit_actor_payload
@@ -870,10 +878,9 @@ class AIViewsTests(TestCase):
         self.assertNotContains(page_response, 'class="ai-session-sidebar"')
         self.assertNotContains(page_response, 'id="sidebar-ai-chat"')
 
-    def test_native_driver_mounts_native_sidebar_assets_and_config(self):
+    def test_default_driver_mounts_native_sidebar_assets_and_config(self):
         self.client.force_login(self.customer)
-        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
-            response = self.client.get(reverse("workorders:board"))
+        response = self.client.get(reverse("workorders:board"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="native-ai-sidebar-root"')

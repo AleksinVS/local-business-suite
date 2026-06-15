@@ -464,7 +464,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER = _LOCAL_BUSINESS_AI_UI_DRIVER_ENV
 if not LOCAL_BUSINESS_AI_UI_DRIVER and LOCAL_BUSINESS_COPILOTKIT_ENABLED:
     LOCAL_BUSINESS_AI_UI_DRIVER = "copilotkit"
 if not LOCAL_BUSINESS_AI_UI_DRIVER:
-    LOCAL_BUSINESS_AI_UI_DRIVER = "legacy"
+    LOCAL_BUSINESS_AI_UI_DRIVER = "native"
 if LOCAL_BUSINESS_AI_UI_DRIVER not in {"legacy", "copilotkit", "native"}:
     raise ImproperlyConfigured(
         "LOCAL_BUSINESS_AI_UI_DRIVER must be one of: legacy, copilotkit, native"

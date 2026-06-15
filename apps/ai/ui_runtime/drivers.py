@@ -18,14 +18,12 @@ def normalize_ai_ui_driver(value: str | None) -> str:
 
 def configured_ai_ui_driver() -> str:
     configured = getattr(settings, "LOCAL_BUSINESS_AI_UI_DRIVER", "")
-    if configured and (
-        configured != DRIVER_LEGACY
-        or getattr(settings, "LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT", False)
-    ):
-        return normalize_ai_ui_driver(configured)
-    if getattr(settings, "LOCAL_BUSINESS_COPILOTKIT_ENABLED", False):
+    explicit = getattr(settings, "LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT", False)
+    if getattr(settings, "LOCAL_BUSINESS_COPILOTKIT_ENABLED", False) and not explicit:
         return DRIVER_COPILOTKIT
-    return DRIVER_LEGACY
+    if configured:
+        return normalize_ai_ui_driver(configured)
+    return DRIVER_NATIVE
 
 
 def authenticated_ai_ui_driver(user) -> str:

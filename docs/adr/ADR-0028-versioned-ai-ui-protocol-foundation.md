@@ -167,6 +167,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=legacy|copilotkit|native
 - `copilotkit` - CopilotKit React island и Copilot Runtime service;
 - `native` - самописный UI, предпочтительно AG-UI-compatible без Copilot Runtime.
 
+По умолчанию без `LOCAL_BUSINESS_AI_UI_DRIVER` активен `native`. `legacy` остается явным rollback-режимом.
+
 CopilotKit-специфичные настройки остаются отдельными и действуют только для драйвера `copilotkit`.
 
 ## Границы безопасности
@@ -222,7 +224,7 @@ CopilotKit-специфичные настройки остаются отдел
 - старый путь `/localBusinessUiCommands` сохранен как временная совместимость;
 - CopilotKit config endpoint переведен на общий config builder;
 - добавлен native AG-UI-compatible sidebar через Django same-origin proxy `/ai/ui/ag-ui/run/`;
-- добавлена настройка `LOCAL_BUSINESS_AI_UI_DRIVER=legacy|copilotkit|native`.
+- добавлена настройка `LOCAL_BUSINESS_AI_UI_DRIVER=legacy|copilotkit|native`, режим по умолчанию - `native`.
 
 ## Требования к реализации
 

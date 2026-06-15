@@ -22,6 +22,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=native
 - `copilotkit` - React island + Copilot Runtime `/copilotkit`;
 - `native` - основной самописный sidebar + Django proxy `/ai/ui/ag-ui/run/`.
 
+Если `LOCAL_BUSINESS_AI_UI_DRIVER` не задан, активен `native`.
+
 Старый флаг `LOCAL_BUSINESS_COPILOTKIT_ENABLED=true` сохраняет совместимость и включает CopilotKit, если `LOCAL_BUSINESS_AI_UI_DRIVER` не задан явно.
 
 ## Проверка версии AG-UI
@@ -109,9 +111,11 @@ npm run copilot-runtime:start
 Native:
 
 ```bash
-LOCAL_BUSINESS_AI_UI_DRIVER=native .venv/bin/python manage.py runserver 127.0.0.1:8001
+.venv/bin/python manage.py runserver 127.0.0.1:8001
 uvicorn services.agent_runtime.app:app --host 127.0.0.1 --port 8090
 ```
+
+Явная запись `LOCAL_BUSINESS_AI_UI_DRIVER=native` допустима, но для базового запуска не обязательна.
 
 ## Smoke checks
 

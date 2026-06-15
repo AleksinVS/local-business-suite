@@ -25,7 +25,7 @@ reverse proxy: Caddy/IIS
 
 ```text
 LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
-LOCAL_BUSINESS_AI_UI_DRIVER=legacy
+LOCAL_BUSINESS_AI_UI_DRIVER=native
 LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL=/copilotkit
 LOCAL_BUSINESS_COPILOTKIT_AGENT_ID=local_business
 LOCAL_BUSINESS_COPILOTKIT_ACTOR_TOKEN_TTL_SECONDS=900
@@ -37,6 +37,8 @@ COPILOTKIT_BASE_PATH=/copilotkit
 COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
 ```
+
+Глобальный режим по умолчанию проекта - `native`. Для включения CopilotKit deployment нужно явно поставить `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`; `legacy` используется только как rollback.
 
 Для service-to-service auth добавить отдельный секрет в приватный deployment repo:
 

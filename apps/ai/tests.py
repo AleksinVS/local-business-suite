@@ -933,6 +933,47 @@ class AIViewsTests(TestCase):
         self.assertContains(detail_response, 'class="ai-session-sidebar"')
         self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
 
+    def test_chat_delete_archives_session_with_memory_links(self):
+        from apps.memory.models import MemoryWriteRequest
+
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Удаляемый чат")
+        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Запомни это")
+        MemoryWriteRequest.objects.create(
+            actor=self.customer,
+            session=session,
+            target_scope=MemoryWriteRequest.TargetScope.PERSONAL,
+            user_note="Связь с памятью должна сохраниться",
+        )
+
+        response = self.client.post(
+            reverse("ai:chat_delete", kwargs={"external_id": session.external_id}),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        session.refresh_from_db()
+        self.assertEqual(session.status, ChatSession.Status.ARCHIVED)
+        self.assertEqual(session.metadata["archive_reason"], "user_deleted")
+        self.assertTrue(session.messages.exists())
+        self.assertTrue(MemoryWriteRequest.objects.filter(session=session).exists())
+
+    def test_chat_sidebar_lists_only_active_sessions(self):
+        self.client.force_login(self.customer)
+        active = ChatSession.objects.create(user=self.customer, title="Активный чат")
+        ChatSession.objects.create(
+            user=self.customer,
+            title="Архивный чат",
+            status=ChatSession.Status.ARCHIVED,
+        )
+
+        response = self.client.get(reverse("ai:chat_detail", kwargs={"external_id": active.external_id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Активный чат")
+        self.assertNotContains(response, "Архивный чат")
+
     def test_copilotkit_driver_replaces_full_page_chat_entrypoint(self):
         self.client.force_login(self.customer)
         with self.settings(

@@ -34,6 +34,7 @@ from .page_context import (
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import (
     append_chat_message,
+    archive_chat_session,
     clear_sidebar_session,
     compact_sidebar_session,
     create_new_sidebar_session,
@@ -454,11 +455,17 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "chat_session"
 
     def get_queryset(self):
-        return ChatSession.objects.filter(user=self.request.user).prefetch_related("messages", "messages__attachments")
+        return ChatSession.objects.filter(
+            user=self.request.user,
+            status=ChatSession.Status.ACTIVE,
+        ).prefetch_related("messages", "messages__attachments")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["chat_sessions"] = ChatSession.objects.filter(user=self.request.user).order_by("-updated_at", "-id")[:20]
+        context["chat_sessions"] = ChatSession.objects.filter(
+            user=self.request.user,
+            status=ChatSession.Status.ACTIVE,
+        ).order_by("-updated_at", "-id")[:20]
         context["form"] = AIChatInputForm()
         context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
         context["current_model_id"] = self.object.metadata.get("model_id", "")
@@ -1167,7 +1174,7 @@ class AIChatGenerateTitleView(LoginRequiredMixin, View):
 class AIChatDeleteView(LoginRequiredMixin, View):
     def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        session.delete()
+        archive_chat_session(session, reason="user_deleted")
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"status": "ok"})
         return redirect("ai:chat_index")

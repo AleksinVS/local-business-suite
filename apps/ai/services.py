@@ -208,6 +208,18 @@ def clear_sidebar_session(session):
     return session
 
 
+def archive_chat_session(session, *, reason="user_deleted"):
+    metadata = {
+        **(session.metadata or {}),
+        "archive_reason": reason,
+        "archived_at": timezone.now().isoformat(),
+    }
+    session.status = ChatSession.Status.ARCHIVED
+    session.metadata = metadata
+    session.save(update_fields=["status", "metadata", "updated_at"])
+    return session
+
+
 def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     message = ChatMessage.objects.create(
         session=session,

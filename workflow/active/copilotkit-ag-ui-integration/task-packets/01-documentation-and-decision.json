@@ -1,0 +1,46 @@
+{
+  "task_id": "01-documentation-and-decision",
+  "title": "ADR and planning documentation for CopilotKit/AG-UI integration",
+  "status": "completed_documentation",
+  "goal": "Create the architectural and execution documentation needed before implementation starts.",
+  "read_scope": [
+    "README.md",
+    "AGENTS.md",
+    "docs/adr/",
+    "docs/architecture/",
+    "docs/planning/",
+    "workflow/active/",
+    "services/agent_runtime/README.md",
+    "apps/ai/runtime_client.py",
+    "apps/ai/views.py",
+    "static/src/js/ai_chat.js"
+  ],
+  "write_scope": [
+    "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
+    "docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "docs/planning/active/copilotkit-ag-ui-integration.md",
+    "workflow/active/copilotkit-ag-ui-integration/",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not implement code in this task.",
+    "Do not add package dependencies in this task.",
+    "Do not change contracts/ai runtime behavior in this task."
+  ],
+  "acceptance": [
+    "ADR states the decision and alternatives.",
+    "Architecture plan describes target topology, phases, risks and checks.",
+    "Operations and deployment docs describe enablement and rollback.",
+    "Workflow package contains task packets for the implementation slices.",
+    "Planning and .desc.json files are updated.",
+    "PROJECT_STRUCTURE.yaml is regenerated."
+  ],
+  "verification": [
+    "python manage.py validate_architecture_contracts",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

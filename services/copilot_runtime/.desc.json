@@ -1,0 +1,5 @@
+{
+  ".": "CopilotKit Runtime: Node-сервис, связывающий React CopilotKit UI с Python AG-UI agent runtime",
+  "Dockerfile": "Контейнер Node.js для CopilotKit Runtime",
+  "server.mjs": "HTTP-сервер CopilotKit Runtime v2 с AG-UI HttpAgent"
+}

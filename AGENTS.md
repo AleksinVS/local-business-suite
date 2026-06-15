@@ -156,6 +156,18 @@ This project is both a **production system** and a **learning platform** for the
 - **Контракты:** `contracts/` (дефолты) и `data/contracts/` (рантайм).
 - **Валидация:** `python manage.py validate_architecture_contracts`.
 
+## AI UI и AG-UI
+
+Основной целевой вариант пользовательского ИИ-чата - самописный интерфейс проекта. Он должен оставаться равноправным клиентом AG-UI: использовать тот же серверный контур `apps.ai.ui_runtime`, `services.agent_runtime.protocols`, права, audit, историю и безопасные UI-команды, что и CopilotKit-драйвер. CopilotKit используется как отдельный драйвер, эталон совместимости и источник проверенных UX/runtime-паттернов, но не как владелец бизнес-логики.
+
+При любых изменениях серверной части, которые затрагивают AG-UI контур (`apps/ai/ui_runtime/`, `services/agent_runtime/`, `services/agent_runtime/protocols/`, Django AI gateway, AI tools, proxy endpoints, deployment-профили AI UI), агент обязан проверить, не устарела ли зафиксированная версия AG-UI:
+
+- сверить `@ag-ui/client` в `package.json`/`package-lock.json` и `LOCAL_BUSINESS_AI_UI_AGUI_PROFILE` в документации и настройках;
+- при необходимости посмотреть актуальные release notes или официальную документацию AG-UI/CopilotKit;
+- по умолчанию не обновлять зависимости и wire contract, а только явно предупредить владельца в отчете;
+- обновлять версию AG-UI, CopilotKit или `agui_profile` только после согласования с владельцем;
+- при согласованном обновлении версии выполнить ADR/документацию, unit/integration/e2e по AI UI matrix и проверку rollback.
+
 ## AI Memory Ingestion & Graph Bootstrapping
 
 При задачах по ingestion корпоративных документов и bootstrapping схемы графа сначала сверять:

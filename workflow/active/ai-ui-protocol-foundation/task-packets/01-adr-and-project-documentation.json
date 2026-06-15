@@ -1,0 +1,29 @@
+{
+  "task_id": "01-adr-and-project-documentation",
+  "title": "ADR and project documentation for versioned AI UI protocol foundation",
+  "status": "completed_in_documentation_slice",
+  "objective": "Document the architectural decision and implementation plan for shared AI UI protocol contracts used by CopilotKit and native UI drivers.",
+  "write_scope": [
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md",
+    "docs/planning/active/ai-ui-protocol-foundation.md",
+    "workflow/active/ai-ui-protocol-foundation/",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not change runtime code in this task.",
+    "Do not archive the existing CopilotKit workflow.",
+    "Do not modify deployment secrets or runtime data."
+  ],
+  "acceptance_checks": [
+    "ADR explains versioning, extensions and driver boundaries.",
+    "Architecture plan describes module structure and stages.",
+    "Workflow block contains task packets for implementation.",
+    "Project structure metadata is updated."
+  ],
+  "verification_commands": [
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

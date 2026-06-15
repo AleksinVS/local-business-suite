@@ -50,6 +50,29 @@
     return div.innerHTML;
   }
 
+  function parseJsonResponse(response) {
+    return response.text().then(function(text) {
+      var data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (err) {
+          data = {};
+        }
+      }
+      if (!response.ok) {
+        var error = new Error(data.error || 'Сервер вернул ошибку ' + response.status + '.');
+        error.userMessage = error.message;
+        throw error;
+      }
+      return data;
+    });
+  }
+
+  function alertRequestError(error, fallbackMessage) {
+    alert((error && error.userMessage) || fallbackMessage);
+  }
+
   // Don't abort streams on visibility change — Django saves to DB
   document.addEventListener('visibilitychange', function() {
     // intentionally empty — stream continues in background
@@ -639,14 +662,14 @@
         'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify({ title: newTitle }),
-    }).then(function(response) { return response.json(); }).then(function(data) {
+    }).then(parseJsonResponse).then(function(data) {
       if (data.status === 'ok') {
         updateTitleUI(data.title);
         window.cancelEditTitle();
       } else {
         alert('Ошибка: ' + (data.error || 'Не удалось переименовать'));
       }
-    }).catch(function() { alert('Ошибка соединения.'); });
+    }).catch(function(error) { alertRequestError(error, 'Ошибка соединения.'); });
   };
 
   window.cancelEditTitle = function() {
@@ -680,13 +703,13 @@
         'X-CSRFToken': window.__chatConfig.csrfToken,
         'X-Requested-With': 'XMLHttpRequest',
       },
-    }).then(function(response) { return response.json(); }).then(function(data) {
+    }).then(parseJsonResponse).then(function(data) {
       if (data.status === 'ok') {
         window.location.href = window.__chatConfig.chatIndexUrl + '?new=1';
       } else {
-        alert('Ошибка удаления чата.');
+        alert('Ошибка удаления чата: ' + (data.error || 'не удалось выполнить операцию.'));
       }
-    }).catch(function() { alert('Ошибка соединения.'); });
+    }).catch(function(error) { alertRequestError(error, 'Ошибка соединения.'); });
   };
 
   window.deleteChat = function(externalId, btn) {
@@ -697,7 +720,7 @@
         'X-CSRFToken': window.__chatConfig.csrfToken,
         'X-Requested-With': 'XMLHttpRequest',
       },
-    }).then(function(response) { return response.json(); }).then(function(data) {
+    }).then(parseJsonResponse).then(function(data) {
       if (data.status === 'ok') {
         var row = btn.closest('.group');
         if (row) row.remove();
@@ -705,8 +728,8 @@
           window.location.href = window.__chatConfig.chatIndexUrl + '?new=1';
         }
       } else {
-        alert('Ошибка удаления чата.');
+        alert('Ошибка удаления чата: ' + (data.error || 'не удалось выполнить операцию.'));
       }
-    }).catch(function() { alert('Ошибка соединения.'); });
+    }).catch(function(error) { alertRequestError(error, 'Ошибка соединения.'); });
   };
 })();

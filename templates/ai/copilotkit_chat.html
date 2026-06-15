@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}ИИ-чат · {{ app_display_name }}{% endblock %}
+
+{% block sidebar_panel %}
+  <div class="sidebar-chat-loading"></div>
+{% endblock %}
+
+{% block content %}
+  <section class="copilotkit-page-shell">
+    <div
+      id="copilotkit-page-root"
+      class="copilotkit-sidebar-root copilotkit-page-root"
+      data-copilotkit-root="true"
+      data-config-url="{% url 'ai:copilotkit_config' %}"
+      data-new-session-url="{% url 'ai:ui_session_new' %}"
+      data-runtime-url="{{ copilotkit_runtime_url }}"
+      data-agent-id="{{ copilotkit_agent_id }}"
+    >
+      <div class="sidebar-chat-loading">Загрузка чата...</div>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,53 @@
+{
+  "task_id": "06-native-full-page-session-management",
+  "title": "Native full-page chat parity: sessions, titles and deletion",
+  "type": "implementation",
+  "objective": "Сделать основной вход /ai/chat/ в native-режиме полноценной страницей чата с возможностями старой полной страницы.",
+  "read_scope": [
+    "templates/ai/chat_detail.html",
+    "static/src/js/ai_chat.js",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "apps/ai/services.py",
+    "apps/ai/tests.py"
+  ],
+  "write_scope": [
+    "templates/ai/",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "apps/ai/ui_runtime/config.py",
+    "apps/ai/tests.py",
+    "scripts/e2e/tests/native_ai_ui.spec.ts"
+  ],
+  "instructions": [
+    "Спроектировать native full-page режим как переиспользование того же runtime/config, что и sidebar, без отдельного несовместимого протокола.",
+    "В режиме LOCAL_BUSINESS_AI_UI_DRIVER=native основной вход /ai/chat/ должен вести на native full-page чат или явно согласованный transitional route.",
+    "Отобразить список последних ChatSession пользователя: title, updated_at, active state, переход к сессии.",
+    "Поддержать создание новой сессии, выбор существующей сессии, удаление с подтверждением и редактирование названия.",
+    "При переключении сессии обновлять thread_id, forwarded_props, историю и model_id без смешивания сообщений разных сессий.",
+    "Сохранить доступ к legacy full-page при LOCAL_BUSINESS_AI_UI_DRIVER=legacy для rollback.",
+    "Не дублировать бизнес-логику старой страницы; общие операции должны жить в Django views/services."
+  ],
+  "acceptance": [
+    "В native-режиме пользователь видит список своих чатов и может открыть любой свой чат.",
+    "Пользователь не видит и не может открыть/удалить чужие ChatSession.",
+    "Создание, переименование и удаление чата работают без потери audit/history semantics.",
+    "Перезагрузка полной страницы восстанавливает выбранную сессию и историю.",
+    "Sidebar и full-page используют совместимые config/session payload и один backend-контур."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native full-page chat\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "non_goals": [
+    "Не удалять старую полную страницу до приемки и rollback-проверки.",
+    "Не добавлять новый frontend framework.",
+    "Не менять policy model и права доступа."
+  ]
+}

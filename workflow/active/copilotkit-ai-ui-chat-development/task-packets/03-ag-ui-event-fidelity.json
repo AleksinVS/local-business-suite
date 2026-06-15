@@ -1,0 +1,36 @@
+{
+  "task_id": "03-ag-ui-event-fidelity",
+  "title": "Harden AG-UI event fidelity and local protocol metadata",
+  "status": "planned",
+  "read_scope": [
+    "services/agent_runtime/protocols/",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/tests/",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md"
+  ],
+  "write_scope": [
+    "services/agent_runtime/protocols/",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/tests/",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md"
+  ],
+  "goals": [
+    "Keep AG-UI events stable for CopilotKit and future native UI.",
+    "Ensure runtime failures become RUN_ERROR events.",
+    "Preserve local_business.protocol metadata and namespaced local extensions."
+  ],
+  "non_goals": [
+    "Do not introduce CopilotKit-specific concepts into the common protocol package.",
+    "Do not break /chat or /chat/stream compatibility."
+  ],
+  "acceptance": [
+    "AG-UI streams include protocol metadata.",
+    "TEXT_MESSAGE, TOOL_CALL, STATE_DELTA, CUSTOM, RUN_FINISHED and RUN_ERROR paths are tested.",
+    "Unknown local extensions can be ignored by clients safely.",
+    "Common tests pass without requiring CopilotKit Runtime."
+  ],
+  "verification": [
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "python manage.py test apps.ai.tests"
+  ]
+}

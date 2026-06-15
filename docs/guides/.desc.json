@@ -1,5 +1,6 @@
 {
   ".": "Руководства разработчика",
+  "AI_UI_PROTOCOL_OPERATIONS.md": "Операционный guide по общему AI UI protocol foundation и драйверам legacy/copilotkit/native",
   "AI_SIDEBAR_CHAT.md": "Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings",
   "AI_SKILLS_OPERATIONS.md": "Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources",
   "CHANGE_PATTERNS.md": "Паттерны внесения изменений",
@@ -14,6 +15,7 @@
   "TEST_ACCELERATION.md": "Практический guide по ускорению тестов без снижения покрытия",
   "TESTING_POLICY.md": "Политика тестирования, матрица обязательных проверок и независимая проверка субагентом",
   "WORKER_AND_QUEUE_OPERATIONS.md": "Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости",
+  "COPILOTKIT_AG_UI_OPERATIONS.md": "Операционный guide по включению, проверке, разбору ошибок и rollback CopilotKit/AG-UI",
   "PROJECT_REVIEW.md": "Чек-лист ревью проекта",
   "ARCHITECTURE_REVIEW_2026-06-01.md": "Архитектурное ревью проекта от 2026-06-01 и план рекомендуемых исправлений",
   "PROJECT_STRUCTURE_SYSTEM.md": "Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)"

@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для разработки ИИ-чата в режиме CopilotKit UI",
+  "01-copilotkit-chat-ux-contract.json": "UX-контракт и состояния CopilotKit-чата",
+  "02-session-history-and-reload.json": "Сессии, история, reload и actor token lifecycle",
+  "03-ag-ui-event-fidelity.json": "Точность AG-UI событий, metadata и обработка ошибок",
+  "04-ui-commands-and-right-panel.json": "UI-команды, правый сайдбар, allow-list и audit",
+  "05-security-observability-deployment.json": "Безопасность, наблюдаемость, deployment и rollback",
+  "06-e2e-acceptance.json": "Сквозная проверка и приемка production candidate"
+}

@@ -51,7 +51,14 @@ test.describe("notifications PWA", () => {
       await expect.poll(() => page.evaluate(() => window.__notificationPermissionCalls)).toBe(0);
       await page.getByRole("button", { name: "Уведомления" }).click();
       await expect(page.locator("#notification-dropdown")).toBeVisible();
-      await expect(page.locator("#notification-enable-button")).toBeVisible();
+      await expect(page.locator("#notification-permission-panel")).toBeVisible();
+      const permission = await page.evaluate(() => Notification.permission);
+      if (permission === "denied") {
+        await expect(page.locator("#notification-permission-text")).toContainText("Браузер запретил уведомления.");
+        await expect(page.locator("#notification-enable-button")).toBeHidden();
+      } else {
+        await expect(page.locator("#notification-enable-button")).toBeVisible();
+      }
     });
   });
 });

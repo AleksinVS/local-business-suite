@@ -5,8 +5,11 @@ Or: python -m unittest services.agent_runtime.tests.test_normalization -v
 """
 
 import asyncio
+import hashlib
+import hmac
 import json
 import os
+import time
 import unittest
 from unittest.mock import patch
 
@@ -594,6 +597,329 @@ class TestRuntimeSafeLogging(unittest.TestCase):
         self.assertNotIn(payload.prompt, log_output)
         self.assertEqual(raised.exception.detail["error"], "agent_runtime_error")
         self.assertNotIn("leaked prompt text", json.dumps(raised.exception.detail))
+
+
+class TestAGUIAdapter(unittest.TestCase):
+    """Verify AG-UI event mapping for CopilotKit-compatible clients."""
+
+    def test_run_input_extracts_latest_user_prompt_and_history(self):
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="thread-1",
+            runId="run-1",
+            messages=[
+                {"id": "u1", "role": "user", "content": "Первый вопрос"},
+                {"id": "a1", "role": "assistant", "content": "Первый ответ"},
+                {"id": "u2", "role": "user", "content": [{"type": "text", "text": "Новый вопрос"}]},
+            ],
+        )
+
+        self.assertEqual(run_input.latest_user_text(), "Новый вопрос")
+        history = run_input.history_messages()
+        self.assertEqual([(item.role, item.content) for item in history], [("user", "Первый вопрос"), ("assistant", "Первый ответ")])
+
+    def test_text_events_have_required_ag_ui_order(self):
+        from services.agent_runtime.ag_ui_adapter import text_message_events
+
+        events = list(text_message_events(["Привет", "", " мир"], message_id="msg-1"))
+
+        self.assertEqual([event["type"] for event in events], ["TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END"])
+        self.assertEqual(events[0]["messageId"], "msg-1")
+        self.assertEqual(events[1]["delta"], "Привет")
+        self.assertEqual(events[2]["delta"], " мир")
+
+    def test_tool_trace_redacts_sensitive_args(self):
+        from services.agent_runtime.ag_ui_adapter import tool_trace_events
+
+        events = list(
+            tool_trace_events(
+                [
+                    {
+                        "tool": "demo.tool",
+                        "args": {"workorder_id": 42, "api_token": "secret-token"},
+                    }
+                ],
+                parent_message_id="msg-1",
+            )
+        )
+
+        args_event = next(event for event in events if event["type"] == "TOOL_CALL_ARGS")
+        self.assertEqual(json.loads(args_event["delta"]), {"workorder_id": 42, "api_token": "[redacted]"})
+
+    def test_tool_trace_redacts_nested_sensitive_args(self):
+        from services.agent_runtime.ag_ui_adapter import tool_trace_events
+
+        events = list(
+            tool_trace_events(
+                [
+                    {
+                        "tool": "demo.tool",
+                        "args": {
+                            "safe": "value",
+                            "nested": {"session_cookie": "secret-cookie", "items": [{"api_key": "secret-key"}]},
+                        },
+                    }
+                ],
+                parent_message_id="msg-1",
+            )
+        )
+
+        args_event = next(event for event in events if event["type"] == "TOOL_CALL_ARGS")
+        self.assertEqual(
+            json.loads(args_event["delta"]),
+            {
+                "safe": "value",
+                "nested": {"session_cookie": "[redacted]", "items": [{"api_key": "[redacted]"}]},
+            },
+        )
+
+    def test_ui_command_maps_to_state_delta_and_custom_event(self):
+        from services.agent_runtime.ag_ui_adapter import ui_command_events
+
+        events = list(
+            ui_command_events(
+                [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": 42,
+                        "mode": "view",
+                        "htmx_url": "/workorders/42/",
+                        "unsafe": "ignored",
+                    }
+                ]
+            )
+        )
+
+        self.assertEqual([event["type"] for event in events], ["STATE_DELTA", "CUSTOM"])
+        self.assertEqual(events[0]["delta"][0]["path"], "/localBusiness/uiCommands")
+        self.assertEqual(events[0]["delta"][1]["path"], "/localBusinessUiCommands")
+        self.assertNotIn("unsafe", events[0]["delta"][0]["value"][0])
+        self.assertEqual(events[0]["delta"][0]["value"][0]["version"], "1.0")
+        self.assertEqual(events[0]["delta"][0]["value"][0]["htmx_url"], "/workorders/42/")
+        self.assertEqual(events[1]["name"], "local_business.ui_command")
+
+    def test_ui_command_rejects_external_urls_and_clamps_mode(self):
+        from services.agent_runtime.ag_ui_adapter import ui_command_events
+
+        events = list(
+            ui_command_events(
+                [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": 42,
+                        "mode": "javascript",
+                        "swap": "outerHTML",
+                        "htmx_url": "https://example.invalid/workorders/42/",
+                    },
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": 43,
+                        "mode": "javascript",
+                        "swap": "outerHTML",
+                        "htmx_url": "/workorders/43/",
+                    },
+                ]
+            )
+        )
+
+        self.assertEqual([event["type"] for event in events], ["STATE_DELTA", "CUSTOM"])
+        command = events[0]["delta"][0]["value"][0]
+        self.assertEqual(command["object_id"], "43")
+        self.assertEqual(command["mode"], "view")
+        self.assertEqual(command["swap"], "innerHTML")
+
+    def test_ui_command_limits_batch_size(self):
+        from services.agent_runtime.ag_ui_adapter import ui_command_events
+
+        events = list(
+            ui_command_events(
+                [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": index,
+                        "htmx_url": f"/workorders/{index}/",
+                    }
+                    for index in range(12)
+                ]
+            )
+        )
+
+        self.assertEqual(len(events[0]["delta"][0]["value"]), 8)
+
+
+class TestAGUIRuntimeEndpoint(unittest.TestCase):
+    """Verify the FastAPI AG-UI endpoint wraps the existing runtime safely."""
+
+    def _signed_forwarded_props(self, payload, token="test-gateway-token"):
+        from services.agent_runtime.app import _agui_signature_payload
+        from services.agent_runtime.schemas import AGUIActorPayload
+
+        payload = {**payload, "issued_at": int(time.time())}
+        actor_payload = AGUIActorPayload.model_validate(payload)
+        payload["signature"] = hmac.new(
+            token.encode("utf-8"),
+            _agui_signature_payload(actor_payload).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return payload
+
+    async def _collect_events(self, response):
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk)
+        events = []
+        for block in "".join(chunks).split("\n\n"):
+            if not block.startswith("data: "):
+                continue
+            events.append(json.loads(block[6:]))
+        return events
+
+    def test_ag_ui_run_streams_standard_events(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-1",
+            messages=[{"id": "u1", "role": "user", "content": "Открой заявку 42"}],
+            forwardedProps=self._signed_forwarded_props(
+                {
+                    "session_id": "sidebar-session",
+                    "model_id": "test-model",
+                    "origin_channel": "copilotkit",
+                    "actor_version": "copilotkit-ag-ui-v1",
+                    "actor": {
+                        "user_id": 17,
+                        "username": "doctor",
+                        "roles": ["engineer"],
+                        "is_superuser": False,
+                        "channel": "sidebar",
+                        "source": "django-copilotkit",
+                        "origin_channel": "copilotkit",
+                        "actor_version": "copilotkit-ag-ui-v1",
+                    },
+                },
+            ),
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch(
+            "services.agent_runtime.app.run_agent",
+            return_value={
+                "assistant_message": "Открываю заявку.",
+                "tool_trace": [{"tool": "ui.open_right_panel", "args": {"object_id": "42"}}],
+                "ui_commands": [
+                    {
+                        "type": "open_right_panel",
+                        "source_code": "workorders",
+                        "object_type": "workorder",
+                        "object_id": "42",
+                        "mode": "view",
+                        "htmx_url": "/workorders/42/",
+                    }
+                ],
+            },
+        ) as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual(events[0]["type"], "RUN_STARTED")
+        self.assertEqual(events[1]["type"], "CUSTOM")
+        self.assertEqual(events[1]["name"], "local_business.protocol")
+        self.assertEqual(events[1]["value"]["local_business_protocol"], "1.0")
+        self.assertIn("TEXT_MESSAGE_START", [event["type"] for event in events])
+        self.assertIn("TEXT_MESSAGE_CONTENT", [event["type"] for event in events])
+        self.assertIn("TOOL_CALL_START", [event["type"] for event in events])
+        self.assertIn("STATE_DELTA", [event["type"] for event in events])
+        self.assertEqual(events[-1]["type"], "RUN_FINISHED")
+        run_agent_mock.assert_called_once()
+        self.assertEqual(run_agent_mock.call_args.kwargs["prompt"], "Открой заявку 42")
+        self.assertEqual(run_agent_mock.call_args.kwargs["session_id"], "sidebar-session")
+
+    def test_ag_ui_run_rejects_missing_actor_signature(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-2",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка"}],
+            forwardedProps={
+                "session_id": "sidebar-session",
+                "origin_channel": "copilotkit",
+                "actor": {
+                    "user_id": 17,
+                    "username": "doctor",
+                    "roles": [],
+                    "is_superuser": False,
+                    "channel": "sidebar",
+                    "source": "django-copilotkit",
+                },
+            },
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual(events[0]["type"], "RUN_ERROR")
+        self.assertEqual(events[0]["code"], "invalid_actor_signature")
+        run_agent_mock.assert_not_called()
+
+    def test_ag_ui_run_returns_run_error_when_llm_key_is_missing(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-no-key",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка без ключа"}],
+            forwardedProps=self._signed_forwarded_props(
+                {
+                    "session_id": "sidebar-session",
+                    "model_id": "test-model",
+                    "origin_channel": "copilotkit",
+                    "ui_driver": "copilotkit",
+                    "actor_version": "copilotkit-ag-ui-v1",
+                    "actor": {
+                        "user_id": 17,
+                        "username": "doctor",
+                        "roles": ["engineer"],
+                        "is_superuser": False,
+                        "channel": "sidebar",
+                        "source": "django-copilotkit",
+                        "origin_channel": "copilotkit",
+                        "actor_version": "copilotkit-ag-ui-v1",
+                    },
+                },
+            ),
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual([event["type"] for event in events], ["RUN_STARTED", "CUSTOM", "RUN_ERROR"])
+        self.assertEqual(events[1]["name"], "local_business.protocol")
+        self.assertEqual(events[2]["code"], "service_not_configured")
+        run_agent_mock.assert_not_called()
 
 
 class TestMCPResources(unittest.TestCase):

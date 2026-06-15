@@ -25,5 +25,7 @@
   "ADR-0023-workorder-tree-view-and-customer-branch-access.md": "ADR: Дерево заявок и доступ заказчика по ветке отделения",
   "ADR-0024-service-extraction-readiness.md": "ADR: Готовность к выносу сервисов без смены основного стека",
   "ADR-0025-file-source-auto-organization.md": "ADR: Автоупорядочивание файловых источников через виртуальные структуры и управляемый перенос",
-  "ADR-0026-pwa-first-and-optional-tauri-notifications.md": "ADR: PWA-first уведомления без стороннего Web Push и опциональный Tauri-клиент"
+  "ADR-0026-pwa-first-and-optional-tauri-notifications.md": "ADR: PWA-first уведомления без стороннего Web Push и опциональный Tauri-клиент",
+  "ADR-0027-copilotkit-ag-ui-django-integration.md": "ADR: CopilotKit и AG-UI как дополнительный интерфейс ИИ-чата в Django UI",
+  "ADR-0028-versioned-ai-ui-protocol-foundation.md": "ADR: Версионируемая основа AI UI протоколов для CopilotKit и самописного интерфейса"
 }

@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для интеграции CopilotKit и AG-UI",
+  "01-documentation-and-decision.json": "ADR, проектная документация и planning для CopilotKit/AG-UI",
+  "02-agent-runtime-ag-ui-adapter.json": "AG-UI endpoint и event mapper в agent runtime",
+  "03-copilot-runtime-service.json": "Отдельный server-side Copilot Runtime service",
+  "04-react-island-django-ui.json": "React island с CopilotKit в существующем Django UI",
+  "05-security-audit-and-deployment.json": "Security, audit и deployment hardening",
+  "06-e2e-docs-and-acceptance.json": "E2E, обновление документации и приемка"
+}

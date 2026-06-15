@@ -7,6 +7,12 @@ from .views import (
     AIChatIndexView,
     AIChatMessageCreateView,
     AIChatMessageStreamView,
+    AICopilotKitChatPageView,
+    AIUIAGUIRunProxyView,
+    AIUIConfigView,
+    AIUISidebarSessionClearView,
+    AIUISidebarSessionNewView,
+    AICopilotKitConfigView,
     AIPageContextUpdateView,
     AISidebarChatView,
     AISidebarChatClearView,
@@ -26,8 +32,14 @@ app_name = "ai"
 
 urlpatterns = [
     path("chat/", AIChatIndexView.as_view(), name="chat_index"),
+    path("chat/copilotkit/", AICopilotKitChatPageView.as_view(), name="copilotkit_chat_page"),
     path("chat/sidebar/", AISidebarChatView.as_view(), name="sidebar_chat"),
     path("chat/sidebar/clear/", AISidebarChatClearView.as_view(), name="sidebar_chat_clear"),
+    path("ui/config/", AIUIConfigView.as_view(), name="ui_config"),
+    path("ui/session/new/", AIUISidebarSessionNewView.as_view(), name="ui_session_new"),
+    path("ui/session/clear/", AIUISidebarSessionClearView.as_view(), name="ui_session_clear"),
+    path("ui/ag-ui/run/", AIUIAGUIRunProxyView.as_view(), name="ui_ag_ui_run"),
+    path("chat/copilotkit/config/", AICopilotKitConfigView.as_view(), name="copilotkit_config"),
     path("context/window/", AIPageContextUpdateView.as_view(), name="page_context_update"),
     path("chat/<uuid:external_id>/", AIChatDetailView.as_view(), name="chat_detail"),
     path(

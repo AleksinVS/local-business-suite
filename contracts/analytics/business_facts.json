@@ -30,7 +30,7 @@
     "code": "deadline_committed",
     "title": "Срок обязательства зафиксирован",
     "owner": "operations",
-    "description": "Из источника извлечен срок или обязательство."
+    "description": "Из источника извлечен срок или обязательство.",
     "dimensions": ["department", "commitment_type"],
     "measures": ["commitments"],
     "sensitivity": "confidential"

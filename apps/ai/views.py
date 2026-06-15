@@ -34,13 +34,19 @@ from .page_context import (
 from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import (
     append_chat_message,
+    archive_chat_session,
+    clear_sidebar_session,
     compact_sidebar_session,
+    create_new_sidebar_session,
     generate_session_title,
     get_or_create_sidebar_session,
     normalize_session_external_id,
     serialize_session_history,
 )
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
+from .ui_runtime.actor import build_actor_payload, sign_actor_payload, signature_payload
+from .ui_runtime.config import build_sidebar_ai_ui_config
+from .ui_runtime.drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_ui_driver
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +184,14 @@ def gateway_token_is_valid(request):
     return bool(expected_token) and hmac.compare_digest(gateway_token, expected_token)
 
 
+def copilotkit_signature_payload(payload):
+    return signature_payload(payload)
+
+
+def sign_copilotkit_actor_payload(payload):
+    return sign_actor_payload(payload)
+
+
 def reject_invalid_gateway_token(request):
     if not gateway_token_is_valid(request):
         return HttpResponseForbidden("Токен шлюза ИИ недействителен.")
@@ -260,6 +274,119 @@ def context_trace_metadata(user_msg):
         "object_id_hash": digest.get("object_id_hash", ""),
     }
 
+
+def latest_agui_user_text(messages):
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content", "")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text") or ""))
+            return "".join(parts).strip()
+    return ""
+
+
+def agui_messages_from_history(history):
+    messages = []
+    for index, message in enumerate(history):
+        role = message.get("role")
+        if role not in {"system", "user", "assistant", "tool"}:
+            continue
+        messages.append(
+            {
+                "id": f"history_{index}",
+                "role": role,
+                "content": str(message.get("content") or ""),
+                "name": str(message.get("tool_name") or ""),
+            }
+        )
+    return messages
+
+
+def parse_agui_sse_events(buffer, chunk):
+    combined = (buffer or "") + (chunk or "")
+    combined = combined.replace("\r\n", "\n")
+    blocks = combined.split("\n\n")
+    remainder = blocks.pop() or ""
+    events = []
+    for block in blocks:
+        data_lines = []
+        for line in block.split("\n"):
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+        data = "\n".join(data_lines).strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            event = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events, remainder
+
+
+def collect_agui_event(event, collector):
+    event_type = event.get("type")
+    if event_type == "TEXT_MESSAGE_CONTENT":
+        collector["content"].append(str(event.get("delta") or ""))
+        return
+    if event_type == "RUN_ERROR":
+        collector["error"] = {
+            "message": str(event.get("message") or "ИИ-сервис вернул ошибку."),
+            "code": str(event.get("code") or "agent_runtime_error"),
+        }
+        return
+    if event_type == "TOOL_CALL_START":
+        tool_call_id = str(event.get("toolCallId") or f"tool_{len(collector['tool_trace']) + 1}")
+        collector["tools_by_id"][tool_call_id] = {
+            "tool_call_id": tool_call_id,
+            "tool": str(event.get("toolCallName") or "tool"),
+            "status": "started",
+        }
+        collector["tool_trace"].append(collector["tools_by_id"][tool_call_id])
+        return
+    if event_type == "TOOL_CALL_ARGS":
+        tool_call_id = str(event.get("toolCallId") or "")
+        trace = collector["tools_by_id"].get(tool_call_id)
+        if trace:
+            trace["status"] = "args_received"
+        return
+    if event_type == "TOOL_CALL_END":
+        tool_call_id = str(event.get("toolCallId") or "")
+        trace = collector["tools_by_id"].get(tool_call_id)
+        if trace:
+            trace["status"] = "completed"
+        return
+    if event_type == "TOOL_CALL_RESULT":
+        tool_call_id = str(event.get("toolCallId") or "")
+        trace = collector["tools_by_id"].get(tool_call_id)
+        if trace:
+            trace["status"] = "result_received"
+        return
+    if event_type == "STATE_DELTA":
+        for operation in event.get("delta") if isinstance(event.get("delta"), list) else []:
+            if not isinstance(operation, dict):
+                continue
+            if operation.get("path") not in {"/localBusiness/uiCommands", "/localBusinessUiCommands"}:
+                continue
+            value = operation.get("value")
+            if isinstance(value, list):
+                collector["ui_commands"].extend(item for item in value if isinstance(item, dict))
+        return
+    if event_type == "CUSTOM" and event.get("name") == "local_business.ui_command":
+        value = event.get("value")
+        if isinstance(value, dict):
+            collector["ui_commands"].append(value)
+
+
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_manage_inventory(self.request.user)
@@ -292,6 +419,8 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
     permanent = False
 
     def get_redirect_url(self, *args, **kwargs):
+        if configured_ai_ui_driver() == DRIVER_COPILOTKIT:
+            return reverse("ai:copilotkit_chat_page")
         create_new = self.request.GET.get("new") == "1"
         if not create_new:
             session = (
@@ -309,6 +438,15 @@ class AIChatIndexView(LoginRequiredMixin, RedirectView):
         return reverse("ai:chat_detail", kwargs={"external_id": session.external_id})
 
 
+class AICopilotKitChatPageView(LoginRequiredMixin, TemplateView):
+    template_name = "ai/copilotkit_chat.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if configured_ai_ui_driver() != DRIVER_COPILOTKIT:
+            return redirect("ai:chat_index")
+        return super().dispatch(request, *args, **kwargs)
+
+
 class AIChatDetailView(LoginRequiredMixin, DetailView):
     model = ChatSession
     slug_field = "external_id"
@@ -317,11 +455,17 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "chat_session"
 
     def get_queryset(self):
-        return ChatSession.objects.filter(user=self.request.user).prefetch_related("messages", "messages__attachments")
+        return ChatSession.objects.filter(
+            user=self.request.user,
+            status=ChatSession.Status.ACTIVE,
+        ).prefetch_related("messages", "messages__attachments")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["chat_sessions"] = ChatSession.objects.filter(user=self.request.user).order_by("-updated_at", "-id")[:20]
+        context["chat_sessions"] = ChatSession.objects.filter(
+            user=self.request.user,
+            status=ChatSession.Status.ACTIVE,
+        ).order_by("-updated_at", "-id")[:20]
         context["form"] = AIChatInputForm()
         context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
         context["current_model_id"] = self.object.metadata.get("model_id", "")
@@ -369,14 +513,7 @@ class AISidebarChatClearView(LoginRequiredMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         session = get_or_create_sidebar_session(request.user)
-        session.messages.all().delete()
-        session.metadata = {
-            key: value
-            for key, value in (session.metadata or {}).items()
-            if key != "sidebar_summary"
-        }
-        session.last_message_at = None
-        session.save(update_fields=["metadata", "last_message_at", "updated_at"])
+        clear_sidebar_session(session)
         return self.render_to_response(self.get_context_data())
 
     def get_context_data(self, **kwargs):
@@ -429,6 +566,278 @@ class AIPageContextUpdateView(LoginRequiredMixin, View):
                 "context_hint": snapshot.resolved_summary.get("context_hint", ""),
             }
         )
+
+
+class AIUIConfigView(LoginRequiredMixin, View):
+    http_method_names = ["get"]
+
+    def get(self, request):
+        driver = configured_ai_ui_driver()
+        if driver not in {DRIVER_COPILOTKIT, DRIVER_NATIVE}:
+            return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
+        runtime_url = ""
+        if driver == DRIVER_NATIVE:
+            runtime_url = reverse("ai:ui_ag_ui_run")
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=driver,
+                runtime_url=runtime_url,
+            )
+        )
+
+
+class AICopilotKitConfigView(LoginRequiredMixin, View):
+    http_method_names = ["get"]
+
+    def get(self, request):
+        if configured_ai_ui_driver() != DRIVER_COPILOTKIT:
+            return JsonResponse({"enabled": False, "error": "CopilotKit отключен."}, status=404)
+
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=DRIVER_COPILOTKIT,
+                runtime_url=settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
+                agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+            )
+        )
+
+
+class AIUISidebarSessionNewView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        driver = configured_ai_ui_driver()
+        if driver not in {DRIVER_COPILOTKIT, DRIVER_NATIVE}:
+            return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
+
+        create_new_sidebar_session(request.user)
+        runtime_url = settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL
+        if driver == DRIVER_NATIVE:
+            runtime_url = reverse("ai:ui_ag_ui_run")
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=driver,
+                runtime_url=runtime_url,
+                agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+            )
+        )
+
+
+class AIUISidebarSessionClearView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        driver = configured_ai_ui_driver()
+        if driver not in {DRIVER_COPILOTKIT, DRIVER_NATIVE}:
+            return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
+
+        session = get_or_create_sidebar_session(request.user)
+        clear_sidebar_session(session)
+        runtime_url = settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL
+        if driver == DRIVER_NATIVE:
+            runtime_url = reverse("ai:ui_ag_ui_run")
+        return JsonResponse(
+            build_sidebar_ai_ui_config(
+                user=request.user,
+                driver=driver,
+                runtime_url=runtime_url,
+                agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+            )
+        )
+
+
+class AIUIAGUIRunProxyView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request):
+        if configured_ai_ui_driver() != DRIVER_NATIVE:
+            return JsonResponse({"error": "Native AI UI отключен."}, status=404)
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
+
+        session = get_or_create_sidebar_session(request.user)
+        model_id = (session.metadata or {}).get("model_id", "")
+        conversation_id = (session.metadata or {}).get("conversation_id") or str(uuid.uuid4())
+        request_id = str(uuid.uuid4())
+        client_messages = body.get("messages") if isinstance(body.get("messages"), list) else []
+        prompt = latest_agui_user_text(client_messages)
+        chat_settings = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
+        if len(prompt) > max_prompt_chars:
+            prompt = prompt[:max_prompt_chars]
+        forwarded = body.get("forwardedProps") if isinstance(body.get("forwardedProps"), dict) else {}
+        page_context = forwarded.get("page_context") if isinstance(forwarded.get("page_context"), dict) else {}
+        user_msg = None
+        runtime_page_context = {}
+        if prompt:
+            user_msg = append_chat_message(
+                session=session,
+                role=ChatMessage.Role.USER,
+                content=prompt,
+                metadata={
+                    "conversation_id": conversation_id,
+                    "request_id": request_id,
+                    "origin_channel": ChatSession.Channel.SIDEBAR,
+                    "surface": CHAT_SURFACE_SIDEBAR,
+                },
+            )
+            envelope = page_context.get("envelope") if isinstance(page_context.get("envelope"), dict) else {}
+            if envelope:
+                context_result = update_window_context_snapshot(request.user, envelope)
+                bind_page_context_to_message(
+                    user=request.user,
+                    message=user_msg,
+                    window_id=context_result.snapshot.window_id,
+                    context_version=context_result.snapshot.context_version,
+                    context_hint=page_context.get("context_hint", ""),
+                )
+                runtime_page_context = build_runtime_page_context(user_msg)
+
+        actor_payload = build_actor_payload(
+            user=request.user,
+            session=session,
+            driver=DRIVER_NATIVE,
+            model_id=model_id,
+            page_context=runtime_page_context,
+        )
+        actor_payload["actor"]["conversation_id"] = conversation_id
+        actor_payload["actor"]["request_id"] = request_id
+        actor_payload["actor"]["origin_channel"] = DRIVER_NATIVE
+        actor_payload["actor"]["actor_version"] = actor_payload.get("actor_version", "")
+        runtime_messages = agui_messages_from_history(serialize_session_history(session)) if prompt else client_messages
+        run_payload = {
+            "threadId": str(session.external_id),
+            "runId": str(body.get("runId") or f"run_{uuid.uuid4().hex}"),
+            "parentRunId": str(body.get("parentRunId") or ""),
+            "state": body.get("state") if isinstance(body.get("state"), dict) else {},
+            "messages": runtime_messages,
+            "tools": [],
+            "context": body.get("context") if isinstance(body.get("context"), list) else [],
+            "forwardedProps": actor_payload,
+            "resume": body.get("resume") if isinstance(body.get("resume"), list) else [],
+        }
+
+        def stream_generator():
+            collector = {
+                "content": [],
+                "tool_trace": [],
+                "tools_by_id": {},
+                "ui_commands": [],
+                "error": None,
+            }
+            sse_buffer = ""
+            try:
+                for chunk in AgentRuntimeClient().ag_ui_stream(run_payload):
+                    events, sse_buffer = parse_agui_sse_events(sse_buffer, chunk)
+                    for event in events:
+                        collect_agui_event(event, collector)
+                    yield chunk
+                events, sse_buffer = parse_agui_sse_events(sse_buffer, "\n\n")
+                for event in events:
+                    collect_agui_event(event, collector)
+            except Exception as exc:
+                if user_msg:
+                    append_chat_message(
+                        session=session,
+                        role=ChatMessage.Role.ASSISTANT,
+                        content="ИИ-сервис вернул ошибку.",
+                        metadata={
+                            "error": True,
+                            "error_code": "agent_runtime_error",
+                            "conversation_id": conversation_id,
+                            "request_id": request_id,
+                            "runtime_method": "ag_ui",
+                            **context_trace_metadata(user_msg),
+                        },
+                    )
+                    session.metadata = {
+                        **(session.metadata or {}),
+                        "conversation_id": conversation_id,
+                        "request_ids": [*(session.metadata or {}).get("request_ids", []), request_id],
+                        "last_error_request_id": request_id,
+                        "last_error_code": "agent_runtime_error",
+                    }
+                    session.save(update_fields=["metadata", "updated_at"])
+                logger.warning(
+                    "Native AI UI AG-UI proxy failed: user_id=%s session=%s error_type=%s",
+                    request.user.id,
+                    session.external_id,
+                    exc.__class__.__name__,
+                )
+                yield "data: " + json.dumps(
+                    {
+                        "type": "RUN_ERROR",
+                        "message": "ИИ-сервис вернул ошибку.",
+                        "code": "agent_runtime_error",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ) + "\n\n"
+                return
+
+            content = "".join(collector["content"]).strip()
+            request_ids = list((session.metadata or {}).get("request_ids", []))
+            if request_id not in request_ids:
+                request_ids.append(request_id)
+            if collector["error"]:
+                if user_msg:
+                    append_chat_message(
+                        session=session,
+                        role=ChatMessage.Role.ASSISTANT,
+                        content=collector["error"]["message"],
+                        metadata={
+                            "error": True,
+                            "error_code": collector["error"]["code"],
+                            "conversation_id": conversation_id,
+                            "request_id": request_id,
+                            "runtime_method": "ag_ui",
+                            **context_trace_metadata(user_msg),
+                        },
+                    )
+            elif content and user_msg:
+                seen_commands = set()
+                ui_commands = []
+                for command in collector["ui_commands"]:
+                    key = json.dumps(command, ensure_ascii=False, sort_keys=True)
+                    if key in seen_commands:
+                        continue
+                    seen_commands.add(key)
+                    ui_commands.append(command)
+                append_chat_message(
+                    session=session,
+                    role=ChatMessage.Role.ASSISTANT,
+                    content=content,
+                    metadata={
+                        "tool_trace": collector["tool_trace"],
+                        "ui_commands": ui_commands,
+                        "conversation_id": conversation_id,
+                        "request_id": request_id,
+                        "streamed": True,
+                        "runtime_method": "ag_ui",
+                        **context_trace_metadata(user_msg),
+                    },
+                )
+                compact_sidebar_session(session)
+
+            session.metadata = {
+                **(session.metadata or {}),
+                "conversation_id": conversation_id,
+                "request_ids": request_ids,
+            }
+            if collector["error"]:
+                session.metadata["last_error_request_id"] = request_id
+                session.metadata["last_error_code"] = collector["error"]["code"]
+            session.save(update_fields=["metadata", "updated_at"])
+
+        response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
 
 class AIChatMessageCreateView(LoginRequiredMixin, View):
@@ -765,7 +1174,7 @@ class AIChatGenerateTitleView(LoginRequiredMixin, View):
 class AIChatDeleteView(LoginRequiredMixin, View):
     def post(self, request, external_id):
         session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        session.delete()
+        archive_chat_session(session, reason="user_deleted")
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"status": "ok"})
         return redirect("ai:chat_index")

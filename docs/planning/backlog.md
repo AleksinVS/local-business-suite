@@ -4,6 +4,82 @@
 
 ## Active
 
+### Разработка самописного AG-UI ИИ-чата
+
+Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e. Task packet `05-sidebar-history-model-and-clear-parity` выполнен: боковая панель восстанавливает историю, показывает времена сообщений, поддерживает выбор модели, очистку и переход в полный чат.
+
+Контекст:
+- основной целевой UI: самописный AG-UI-compatible чат;
+- архитектурное решение находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md`;
+- активный план находится в `docs/planning/active/native-ag-ui-chat-development.md`;
+- workflow package находится в `workflow/active/native-ag-ui-chat-development/`.
+
+Оставшееся действие:
+- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/06-native-full-page-session-management.json`;
+- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/07-native-rich-input-markdown-commands-attachments.json`;
+- выполнить `workflow/active/native-ag-ui-chat-development/task-packets/08-native-ux-parity-e2e-acceptance.json`;
+- отдельно согласовать, обновлять ли `@ag-ui/client` с `0.0.55` до `0.0.57`;
+- проверить `legacy`, `copilotkit`, `native` smoke перед слиянием;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
+### Разработка ИИ-чата в режиме CopilotKit UI
+
+Создан проектный и исполнительный контур для доведения CopilotKit-варианта ИИ-чата до production candidate в основном Django UI. Первый runtime hardening срез реализован: новый CopilotKit thread, основной вход `/ai/chat/` на CopilotKit-страницу, реактивный page context, AG-UI `RUN_ERROR` при отсутствующем LLM key, server-side нормализация UI-команд и e2e smoke для нового чата.
+
+Контекст:
+- целевой режим запуска: `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`;
+- архитектурное решение CopilotKit/AG-UI находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
+- архитектурное решение по общей protocol foundation находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md`;
+- активный план находится в `docs/planning/active/copilotkit-ai-ui-chat-development.md`;
+- workflow package находится в `workflow/active/copilotkit-ai-ui-chat-development/`.
+
+Оставшееся действие:
+- проверить prompt/response сценарий при настроенном LLM API key;
+- проверить reverse proxy `/copilotkit` и SSE timeout на целевом deployment;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
+### Версионируемая основа AI UI протоколов
+
+Первый реализационный срез общей основы выполнен в отдельной ветке. Теперь два варианта интерфейса могут развиваться поверх общего слоя: самописный AG-UI-compatible UI как основной целевой чат и CopilotKit/AG-UI как равноправный драйвер/референс. Вынесены actor/session context, подпись, UI-команды, protocol metadata и выбор UI-драйвера.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- проектный план находится в `docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md`;
+- активный план находится в `docs/planning/active/ai-ui-protocol-foundation.md`;
+- workflow package находится в `workflow/active/ai-ui-protocol-foundation/`.
+
+Оставшееся действие:
+- выполнить полный e2e для `legacy`, `copilotkit` и `native` после перезапуска сервисов с нужными env;
+- при backend-изменениях AG-UI контура проверять актуальность `@ag-ui/client`/`agui_profile` и по умолчанию только предупреждать о новой версии без обновления зависимостей;
+- проверить reverse proxy и timeout на целевом deployment;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
+### CopilotKit и AG-UI в основном Django UI
+
+Первый рабочий срез добавлен в отдельной ветке: AG-UI endpoint, CopilotKit Runtime service, React-остров в левой AI-панели и feature flag. Локальный e2e выполнен в режиме CopilotKit и fallback-режиме. До включения пилота нужны проверка reverse proxy на целевом deployment и приемка владельцем.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`;
+- проектный план находится в `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`;
+- активный план находится в `docs/planning/active/copilotkit-ag-ui-integration.md`;
+- workflow package находится в `workflow/active/copilotkit-ag-ui-integration/`;
+- операционный guide находится в `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md`;
+- deployment note находится в `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`.
+
+Статус реализации:
+- добавлен `/ag-ui` в `services.agent_runtime` без изменения текущих `/chat` и `/chat/stream`;
+- добавлен `services/copilot_runtime` как server-side Copilot Runtime service;
+- CopilotKit встроен как React island за `LOCAL_BUSINESS_COPILOTKIT_ENABLED`;
+- actor/session context подписывается Django и проверяется agent runtime;
+- `ui.open_right_panel` идет через AG-UI state/custom event и существующий безопасный правый сайдбар.
+- Playwright e2e покрывает CopilotKit-enabled режим и fallback-режим текущего HTMX sidebar.
+
+Оставшееся действие:
+- проверить reverse proxy `/copilotkit` на целевом deployment;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Русификация интерфейса портала
 
 MVP реализован и ожидает приемку владельцем. Видимые элементы UI переведены на русский, путь к будущей архитектуре локализации зафиксирован без внедрения полноценного многоязычного runtime в текущем срезе.

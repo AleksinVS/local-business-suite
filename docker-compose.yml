@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       LOCAL_BUSINESS_AGENT_RUNTIME_URL: http://agent-runtime:8090
+      LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL: /copilotkit
     volumes:
       - ./data:/app/data
   agent-runtime:
@@ -21,3 +22,18 @@ services:
       - web
     ports:
       - "8090:8090"
+  copilot-runtime:
+    build:
+      context: .
+      dockerfile: services/copilot_runtime/Dockerfile
+    env_file:
+      - .env
+    environment:
+      LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL: http://agent-runtime:8090/ag-ui
+      COPILOTKIT_BASE_PATH: /copilotkit
+      COPILOTKIT_RUNTIME_PORT: 3100
+      COPILOTKIT_TELEMETRY_DISABLED: "true"
+    depends_on:
+      - agent-runtime
+    ports:
+      - "3100:3100"

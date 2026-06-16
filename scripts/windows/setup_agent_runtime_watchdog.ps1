@@ -75,15 +75,18 @@ $arguments = @"
 "@.Trim()
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
 
-# AtStartup trigger with a 2-minute (or custom) repetition pattern. If
-# the machine reboots the watchdog will fire shortly after boot and
-# then keep checking every N minutes. The Repetition property must be
-# assigned AFTER New-ScheduledTaskTrigger returns, otherwise the
-# CIM creation does not accept it as a constructor argument.
-$trigger = New-ScheduledTaskTrigger -AtStartup
-$trigger.Repetition = (New-CimInstance -ClassName MSFT_TaskRepetitionPattern `
-    -Namespace "Root\Microsoft\Windows\TaskScheduler" `
-    -Property @{ Interval = "PT${RepetitionMinutes}M" } -ClientOnly)
+# Repeating trigger. We use -Once -At (now) with -RepetitionInterval
+# and -RepetitionDuration because that combination reliably creates a
+# trigger that fires, then repeats every N minutes for N days. The
+# pattern that was here before — -AtStartup followed by an after-the-fact
+# assignment of the Repetition property — registered the task but left
+# the trigger with an empty Repetition.Interval, so the trigger fired
+# exactly twice (at boot) and then silently stopped. StartWhenAvailable
+# in $settings below makes the task fire after a missed trigger (e.g.
+# the machine was off when the next repetition was due).
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+    -RepetitionInterval (New-TimeSpan -Minutes $RepetitionMinutes) `
+    -RepetitionDuration (New-TimeSpan -Days 365)
 
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 

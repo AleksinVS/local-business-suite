@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
 from django.db.models import Q
@@ -16,7 +18,9 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
     model = MedicalDevice
     template_name = "inventory/device_list.html"
     context_object_name = "devices"
-    paginate_by = 20
+    # Группировка по подразделениям требует рендерить все отфильтрованные
+    # изделия на одной странице, чтобы группы не «разрезались» пагинацией.
+    paginator = None
 
     def get_queryset(self):
         queryset = MedicalDevice.objects.order_by("name", "inventory_number", "id")
@@ -62,6 +66,27 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
             "archived": self.request.GET.get("archived", ""),
         }
         context["can_manage_inventory"] = can_manage_inventory(self.request.user)
+
+        # Группировка отфильтрованных изделий по подразделению.
+        # OrderedDict сохраняет порядок первого появления; финальная сортировка
+        # по полному иерархическому имени даёт детерминированный порядок групп.
+        devices = list(self.object_list)
+        groups_map = OrderedDict()
+        for device in devices:
+            department = device.department
+            if department.id not in groups_map:
+                groups_map[department.id] = {
+                    "department": department,
+                    "devices": [],
+                }
+            groups_map[department.id]["devices"].append(device)
+
+        grouped_devices = sorted(
+            groups_map.values(),
+            key=lambda g: (g["department"].full_name, g["department"].id),
+        )
+        context["grouped_devices"] = grouped_devices
+        context["total_devices"] = len(devices)
         return context
 
 

@@ -38,52 +38,71 @@
       </label>
       <button type="submit" class="btn btn-outline">Применить</button>
     </form>
+    <div class="group-controls" data-inventory-groups>
+      <span class="group-controls-count" aria-live="polite">Найдено: {{ total_devices }}</span>
+      <button type="button" class="btn btn-outline" data-inventory-action="expand">Развернуть все</button>
+      <button type="button" class="btn btn-outline" data-inventory-action="collapse">Свернуть все</button>
+    </div>
   </div>
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>Наименование</th>
-          <th>Тип</th>
-          <th>Рег. №</th>
-          <th>Подразделение</th>
-          <th>Размещение</th>
-          <th>Серийный №</th>
-          <th>Статус</th>
-          <th>Действия</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for device in devices %}
-          <tr>
-            <td><a href="{% url 'inventory:detail' device.pk %}">{{ device.name }}</a></td>
-            <td>{{ device.device_type|default:"—" }}</td>
-            <td>{{ device.registration_certificate_number|default:"—" }}</td>
-            <td>{{ device.department }}</td>
-            <td>{{ device.address|default:"—"|linebreaksbr }}</td>
-            <td>{% if device.serial_number %}{{ device.serial_number }}{% else %}—{% endif %}</td>
-            <td>{{ device.get_operational_status_display }}</td>
-            <td>
-              {% if device.is_archived %}
-                <span class="subtitle">В архиве</span>
-              {% elif can_manage_inventory %}
-                <div class="table-actions">
-                  <a href="{% url 'inventory:edit' device.pk %}" class="btn btn-outline">Изменить</a>
-                  <form action="{% url 'inventory:archive' device.pk %}" method="post">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline">Архивировать</button>
-                  </form>
-                </div>
-              {% else %}
-                <span class="subtitle">Просмотр</span>
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="8" class="empty-state">Записи не найдены.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+
+  {% if grouped_devices %}
+    <div class="device-groups">
+      {% for group in grouped_devices %}
+        <details class="device-group" data-department-id="{{ group.department.id }}" open>
+          <summary class="device-group-summary">
+            <span class="device-group-caret" aria-hidden="true">▾</span>
+            <span class="device-group-title">{{ group.department.full_name }}</span>
+            <span class="device-group-count">{{ group.devices|length }}</span>
+          </summary>
+          <div class="table-container device-group-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th>Тип</th>
+                  <th>Рег. №</th>
+                  <th>Размещение</th>
+                  <th>Серийный №</th>
+                  <th>Статус</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for device in group.devices %}
+                  <tr>
+                    <td><a href="{% url 'inventory:detail' device.pk %}">{{ device.name }}</a></td>
+                    <td>{{ device.device_type|default:"—" }}</td>
+                    <td>{{ device.registration_certificate_number|default:"—" }}</td>
+                    <td>{{ device.address|default:"—"|linebreaksbr }}</td>
+                    <td>{% if device.serial_number %}{{ device.serial_number }}{% else %}—{% endif %}</td>
+                    <td>{{ device.get_operational_status_display }}</td>
+                    <td>
+                      {% if device.is_archived %}
+                        <span class="subtitle">В архиве</span>
+                      {% elif can_manage_inventory %}
+                        <div class="table-actions">
+                          <a href="{% url 'inventory:edit' device.pk %}" class="btn btn-outline">Изменить</a>
+                          <form action="{% url 'inventory:archive' device.pk %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline">Архивировать</button>
+                          </form>
+                        </div>
+                      {% else %}
+                        <span class="subtitle">Просмотр</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <p>Записи не найдены.</p>
+    </div>
+  {% endif %}
 </section>
 {% endblock %}

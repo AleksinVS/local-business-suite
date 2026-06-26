@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, ListView, UpdateView
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from .forms import MedicalDeviceForm
 from .models import MedicalDevice, OperationalStatus
@@ -19,7 +19,7 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        queryset = MedicalDevice.objects.order_by("name", "serial_number")
+        queryset = MedicalDevice.objects.order_by("name", "inventory_number", "id")
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("operational_status", "").strip()
@@ -31,11 +31,15 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
         if q:
             queryset = queryset.filter(
                 Q(name__icontains=q)
+                | Q(device_type__icontains=q)
                 | Q(manufacturer__icontains=q)
+                | Q(production_country__icontains=q)
                 | Q(model__icontains=q)
                 | Q(serial_number__icontains=q)
                 | Q(inventory_number__icontains=q)
+                | Q(registration_certificate_number__icontains=q)
                 | Q(location__icontains=q)
+                | Q(address__icontains=q)
             )
         if department:
             selected_department = Department.objects.filter(pk=department).first()
@@ -69,6 +73,20 @@ class MedicalDeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
 
     def test_func(self):
         return can_manage_inventory(self.request.user)
+
+
+class MedicalDeviceDetailView(LoginRequiredMixin, DetailView):
+    model = MedicalDevice
+    template_name = "inventory/device_detail.html"
+    context_object_name = "device"
+
+    def get_queryset(self):
+        return MedicalDevice.objects.select_related("department")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_manage_inventory"] = can_manage_inventory(self.request.user)
+        return context
 
 
 class MedicalDeviceUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):

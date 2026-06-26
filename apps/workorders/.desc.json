@@ -16,5 +16,6 @@
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",
   "signals.py": "Сигналы Django",
-  "tests.py": "Тесты приложения"
+  "tests.py": "Тесты приложения",
+  "management/": "Django management-команды приложения (например, сидинг канбан-доски)"
 }

@@ -3022,6 +3022,58 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+/* Form Sections — used by grouped forms (e.g. inventory/device_form.html) */
+.form-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 0;
+  background: var(--surface);
+}
+
+.form-section legend {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.form-section .input-group input[type="text"],
+.form-section .input-group input[type="number"],
+.form-section .input-group input[type="date"],
+.form-section .input-group select,
+.form-section .input-group textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.form-section .input-group .helptext,
+.form-section .input-group .form-text {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.form-section .input-group .error,
+.form-section .input-group .errorlist {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
 .memory-review-tabs {
   display: flex;
   flex-wrap: wrap;

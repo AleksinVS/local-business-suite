@@ -27,3 +27,4 @@ node_modules/
 clients/*/dist/
 playwright-report/
 test-results/
+.playwright-mcp/

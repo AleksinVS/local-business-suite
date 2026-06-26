@@ -12,7 +12,7 @@
     <form method="get" class="filters">
       <div class="input-group">
         <label for="searchInput">Поиск</label>
-        <input type="search" id="searchInput" name="q" value="{{ filters.q }}" placeholder="Поиск по названию, модели, серийному номеру">
+        <input type="search" id="searchInput" name="q" value="{{ filters.q }}" placeholder="Поиск по названию, модели, серийному номеру, рег. номеру">
       </div>
       <div class="input-group">
         <label for="deptSelect">Подразделение</label>
@@ -42,22 +42,33 @@
   <div class="table-container">
     <table>
       <thead>
-        <tr><th>Наименование</th><th>Подразделение</th><th>Локация</th><th>Серийный номер</th><th>Статус</th><th>Действия</th></tr>
+        <tr>
+          <th>Наименование</th>
+          <th>Тип</th>
+          <th>Рег. №</th>
+          <th>Подразделение</th>
+          <th>Размещение</th>
+          <th>Серийный №</th>
+          <th>Статус</th>
+          <th>Действия</th>
+        </tr>
       </thead>
       <tbody>
         {% for device in devices %}
           <tr>
-            <td>{{ device.name }}</td>
+            <td><a href="{% url 'inventory:detail' device.pk %}">{{ device.name }}</a></td>
+            <td>{{ device.device_type|default:"—" }}</td>
+            <td>{{ device.registration_certificate_number|default:"—" }}</td>
             <td>{{ device.department }}</td>
-            <td>{{ device.location }}</td>
-            <td>{{ device.serial_number }}</td>
+            <td>{{ device.address|default:"—"|linebreaksbr }}</td>
+            <td>{% if device.serial_number %}{{ device.serial_number }}{% else %}—{% endif %}</td>
             <td>{{ device.get_operational_status_display }}</td>
             <td>
               {% if device.is_archived %}
                 <span class="subtitle">В архиве</span>
               {% elif can_manage_inventory %}
                 <div class="table-actions">
-                  <a href="{% url 'inventory:edit' device.pk %}" class="btn btn-outline">Редактировать</a>
+                  <a href="{% url 'inventory:edit' device.pk %}" class="btn btn-outline">Изменить</a>
                   <form action="{% url 'inventory:archive' device.pk %}" method="post">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline">Архивировать</button>
@@ -69,7 +80,7 @@
             </td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="empty-state">Записи не найдены.</td></tr>
+          <tr><td colspan="8" class="empty-state">Записи не найдены.</td></tr>
         {% endfor %}
       </tbody>
     </table>

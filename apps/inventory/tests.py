@@ -305,13 +305,16 @@ class MedicalDeviceGroupingTests(TestCase):
         response = self.client.get(reverse("inventory:list"), {"archived": "1"})
         self.assertContains(response, self.device_a.name)
 
-    def test_groups_open_by_default(self):
+    def test_groups_collapsed_by_default(self):
         self.client.force_login(self.manager)
         response = self.client.get(reverse("inventory:list"))
         self.assertEqual(response.status_code, 200)
-        # Атрибут open присутствует у каждой группы (рендеринг рядом с class).
-        self.assertContains(response, '<details class="device-group" data-department-id', status_code=200)
-        self.assertContains(response, " open>", count=4)
+        # По умолчанию <details> рендерятся БЕЗ атрибута open — все свёрнуты.
+        self.assertContains(
+            response, '<details class="device-group" data-department-id="', count=4
+        )
+        # Маркер « open>» не должен встречаться в разметке групп.
+        self.assertNotContains(response, '<details class="device-group" data-department-id="1" open>')
 
     def test_mass_controls_rendered(self):
         self.client.force_login(self.manager)

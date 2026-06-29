@@ -48,9 +48,8 @@
   {% if grouped_devices %}
     <div class="device-groups">
       {% for group in grouped_devices %}
-        <details class="device-group" data-department-id="{{ group.department.id }}" open>
+        <details class="device-group" data-department-id="{{ group.department.id }}">
           <summary class="device-group-summary">
-            <span class="device-group-caret" aria-hidden="true">▾</span>
             <span class="device-group-title">{{ group.department.full_name }}</span>
             <span class="device-group-count">{{ group.devices|length }}</span>
           </summary>

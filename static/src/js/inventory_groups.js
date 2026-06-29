@@ -49,7 +49,8 @@
       } else if (typeof state[group.dataset.departmentId] === "boolean") {
         open = state[group.dataset.departmentId];
       } else {
-        open = true;
+        // По умолчанию группы свёрнуты.
+        open = false;
       }
       group.open = open;
     });

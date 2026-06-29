@@ -3305,10 +3305,11 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 1.25rem;
+  padding: 0.85rem 1.25rem 0.85rem 2.5rem;
   background: var(--surface);
   transition: background var(--transition, 0.15s ease);
   user-select: none;
+  position: relative;
 }
 
 .device-group > summary:hover {
@@ -3323,16 +3324,19 @@ textarea:focus {
   content: "";
 }
 
-.device-group-caret {
-  display: inline-block;
+.device-group > summary::after {
+  content: "▾";
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
   color: var(--text-muted, #64748b);
   font-size: 0.85rem;
   transition: transform var(--transition, 0.15s ease);
-  width: 1ch;
 }
 
-.device-group:not([open]) > summary .device-group-caret {
-  transform: rotate(-90deg);
+.device-group[open] > summary::after {
+  transform: translateY(-50%) rotate(0deg);
 }
 
 .device-group-title {

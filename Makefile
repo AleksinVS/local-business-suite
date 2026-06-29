@@ -13,6 +13,7 @@ install: venv
 
 check:
 	$(PYTHON) manage.py check
+	$(PYTHON) manage.py check_staticfiles --fail
 
 test:
 	$(PYTHON) manage.py test $(TEST_SCOPE) $(TEST_FLAGS)

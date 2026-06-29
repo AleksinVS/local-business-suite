@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
@@ -806,3 +806,112 @@ class DemoSeedCommandTests(TestCase):
         call_command("seed_hospital_demo")
         self.assertTrue(Department.objects.filter(name="Стационар").exists())
         self.assertTrue(User.objects.filter(username="chief_manager").exists())
+
+
+class CheckStaticfilesCommandTests(TestCase):
+    """Покрывает ``manage.py check_staticfiles`` в режиме ``--source-dir``.
+
+    Команда смотрит на ``settings.BASE_DIR / static/src`` и
+    ``settings.STATIC_ROOT`` — мы подменяем оба пути на временные директории
+    и проверяем три сценария: согласовано, расхождение, legacy-артефакт.
+    """
+
+    def setUp(self):
+        import shutil
+
+        self._temp = tempfile.TemporaryDirectory()
+        self.root = Path(self._temp.name)
+        # Команда строит ``static_src`` как ``BASE_DIR / static / src``,
+        # а mirror — как ``STATIC_ROOT / src``. Подменяем ``BASE_DIR`` и
+        # ``STATIC_ROOT`` соответственно.
+        self.src = self.root / "static" / "src"
+        self.dst = self.root / "staticfiles"
+        # Источник и зеркало создаём сразу оба, чтобы даже тесты, которые
+        # пишут только в ``src/``, не падали на «staticfiles/src/ отсутствует».
+        self.src.mkdir(parents=True)
+        self.dst.mkdir(parents=True)
+        (self.dst / "src").mkdir(parents=True, exist_ok=True)
+        self.addCleanup(self._temp.cleanup)
+        self.addCleanup(lambda: shutil.rmtree(self.src, ignore_errors=True))
+        self.addCleanup(lambda: shutil.rmtree(self.dst, ignore_errors=True))
+
+    def _run(self, *args) -> tuple[str, str, bool]:
+        import io as _io
+
+        stdout, stderr = _io.StringIO(), _io.StringIO()
+        raised = False
+        try:
+            with override_settings(BASE_DIR=str(self.root), STATIC_ROOT=str(self.dst)):
+                call_command("check_staticfiles", *args, stdout=stdout, stderr=stderr)
+        except CommandError:
+            raised = True
+        return stdout.getvalue(), stderr.getvalue(), raised
+
+    def _touch_pair(self, relpath: str, src_text: str = "// js", dst_text: str | None = None) -> None:
+        # ``relpath`` — это путь ВНУТРИ ``static/src/`` (без ведущего ``src/``).
+        # ``self.src`` уже равен ``BASE_DIR/static/src``, mirror — ``STATIC_ROOT/src``.
+        src_file = self.src / relpath
+        dst_file = self.dst / "src" / relpath
+        src_file.parent.mkdir(parents=True, exist_ok=True)
+        dst_file.parent.mkdir(parents=True, exist_ok=True)
+        src_file.write_text(src_text, encoding="utf-8")
+        dst_file.write_text(dst_text if dst_text is not None else src_text, encoding="utf-8")
+
+    def _touch_src_only(self, relpath: str, text: str = "// js") -> None:
+        src_file = self.src / relpath
+        src_file.parent.mkdir(parents=True, exist_ok=True)
+        src_file.write_text(text, encoding="utf-8")
+
+    def _touch_dst_only(self, relpath: str, text: str = "// js") -> None:
+        dst_file = self.dst / "src" / relpath
+        dst_file.parent.mkdir(parents=True, exist_ok=True)
+        dst_file.write_text(text, encoding="utf-8")
+
+    def test_mirrored_files_pass(self):
+        self._touch_pair("js/example.js")
+        self._touch_pair("css/example.css")
+        out, _, raised = self._run()
+        self.assertFalse(raised)
+        self.assertIn("синхр", out.lower() + out)
+
+    def test_missing_staticfiles_copy_fails_with_fail_flag(self):
+        self._touch_src_only("js/orphan.js")
+        _, err, raised = self._run("--fail")
+        self.assertTrue(raised)
+        self.assertIn("orphan.js", err)
+
+    def test_missing_staticfiles_copy_warns_without_fail_flag(self):
+        self._touch_src_only("js/orphan.js")
+        out, err, raised = self._run()
+        self.assertFalse(raised)
+        combined = (out + err).lower()
+        self.assertIn("orphan.js", combined)
+        self.assertIn("collectstatic", combined)
+
+    def test_size_mismatch_is_reported(self):
+        self._touch_pair("js/big.js", src_text="x" * 10, dst_text="y" * 5)
+        _, err, raised = self._run("--fail")
+        self.assertTrue(raised)
+        self.assertIn("big.js", err)
+
+    def test_legacy_artifact_is_listed_and_can_be_ignored(self):
+        # Берём имя, которое НЕ подавлено по умолчанию (не ``*.bak``,
+        # не hashed manifest, не ``.gz``), чтобы команда его показала.
+        self._touch_dst_only("ai_ui/orphan_no_match.js")
+        out, err, raised = self._run()
+        self.assertFalse(raised)
+        self.assertIn("orphan_no_match.js", out + err)
+        # Через ``--ignore`` артефакт подавляется.
+        out2, err2, raised2 = self._run("--ignore", "orphan_*")
+        self.assertFalse(raised2)
+        self.assertNotIn("orphan_no_match.js", out2 + err2)
+
+    def test_html_assets_are_not_required_to_be_in_staticfiles(self):
+        # ``index.html`` лежит только в static/src/, его не обязательно
+        # держать под ``staticfiles/`` — команда должна это пропустить.
+        html = self.src / "index.html"
+        html.parent.mkdir(parents=True, exist_ok=True)
+        html.write_text("<html></html>", encoding="utf-8")
+        out, _, raised = self._run()
+        self.assertFalse(raised)
+        self.assertIn("синхр", out.lower() + out)

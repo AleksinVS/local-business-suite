@@ -10,9 +10,9 @@
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
     {% if copilotkit_enabled %}
-      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}?v={{ copilotkit_asset_version }}">
+      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}?v={{ copilotkit_css_version }}">
     {% elif native_ai_ui_enabled %}
-      <link rel="stylesheet" href="{% static 'src/ai_ui/native_ai.css' %}?v={{ native_ai_asset_version }}">
+      <link rel="stylesheet" href="{% static 'src/ai_ui/native_ai.css' %}?v={{ native_ai_css_version }}">
     {% endif %}
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>

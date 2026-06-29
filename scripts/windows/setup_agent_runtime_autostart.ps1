@@ -31,7 +31,18 @@ if (-not $TaskPath.EndsWith("\")) {
 # Настройки задачи
 $pythonPath = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $workingDir = $ProjectRoot
-$arguments = "-m uvicorn services.agent_runtime.app:app --host $BindHost --port $RuntimePort --timeout-keep-alive 300 --log-level info"
+
+# Используем обёртку ``start_agent_runtime_logged.ps1``: она пишет
+# stdout/stderr uvicorn в ``.local\agent_runtime.log`` / ``.local\agent_runtime.err.log``.
+# Без неё вывод uvicorn при запуске через Task Scheduler теряется,
+# и AG-UI ошибки, которые проявляются только в стек-трейсе, невозможно
+# диагностировать (см. запрос «Native AI UI — причины agent_runtime_error»).
+$wrapperPath = Join-Path $PSScriptRoot "start_agent_runtime_logged.ps1"
+if (-not (Test-Path $wrapperPath)) {
+    throw "Wrapper-скрипт не найден: $wrapperPath"
+}
+$powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+$wrapperArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$wrapperPath`" -BindHost $BindHost -Port $RuntimePort"
 
 function Get-TaskActionText($Task) {
     $parts = New-Object System.Collections.Generic.List[string]
@@ -134,10 +145,10 @@ if ($existingTask) {
     Write-Host "✓ Существующая задача удалена" -ForegroundColor Green
 }
 
-# Создание action с прямым запуском Python из .venv.
-$action = New-ScheduledTaskAction -Execute $pythonPath -Argument $arguments -WorkingDirectory $workingDir
+# Создание action через обёртку с логированием.
+$action = New-ScheduledTaskAction -Execute $powershellPath -Argument $wrapperArgs -WorkingDirectory $workingDir
 
-Write-Host "✓ Action создан: $pythonPath $arguments" -ForegroundColor Green
+Write-Host "✓ Action создан: $powershellPath $wrapperArgs" -ForegroundColor Green
 
 # Создание триггера при старте системы
 $trigger = New-ScheduledTaskTrigger -AtStartup

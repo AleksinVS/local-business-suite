@@ -1,6 +1,10 @@
 import concurrent.futures
+import faulthandler
 import logging
+import os
+import time
 import uuid
+from pathlib import Path
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -24,6 +28,68 @@ from .tools import build_tools
 # worker blocks indefinitely. The ThreadPoolExecutor wrapper below
 # enforces a real deadline that the streaming timeouts cannot escape.
 LLM_DEADLINE_SECONDS = 120
+
+# Absolute wall-clock deadline for the WHOLE agent invocation
+# (``agent.invoke``). ``_invoke_chat_model_with_deadline`` only protects
+# the LLM call itself — tool execution, ``add_messages`` state
+# marshalling, and LangGraph internal coordination can hang just the
+# same and on this host we have observed agents not returning at all
+# after 1-2 successful LLM cycles. This deadline makes the SSE stream
+# emit a clean ``RUN_ERROR`` and dumps every thread's stack to
+# ``.local/agent_runtime_faulthandler.log`` so the next incident is
+# diagnosable instead of manifesting as a silent "loading chat..."
+# while ``/health`` stays 200 on a different uvicorn worker.
+AGENT_DEADLINE_SECONDS = 90
+
+
+def _dump_all_thread_stacks(reason: str) -> None:
+    """Append every Python thread's stack to ``.local/agent_runtime_faulthandler.log``.
+
+    Best-effort: any IO error during dump is swallowed because the
+    caller is already on the timeout-cancellation path and we don't
+    want logging noise to mask the real failure.
+    """
+    try:
+        log_dir = Path(__file__).resolve().parents[2] / ".local"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / "agent_runtime_faulthandler.log"
+        with path.open("a", encoding="utf-8") as fp:
+            fp.write(f"\n--- faulthandler dump: {reason} ---\n")
+            faulthandler.dump_traceback(file=fp, all_threads=True)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("faulthandler dump failed: %s", exc)
+
+
+def _invoke_agent_with_deadline(invoke, messages):
+    """Run ``agent.invoke`` in a thread with a hard wall-clock deadline.
+
+    The body of ``agent(messages)`` may stop returning for reasons
+    that don't surface in ``_invoke_chat_model_with_deadline``
+    (tool calls, ``add_messages``, LangGraph internals). On the
+    observed host the LLM completes successfully twice and then the
+    third call never starts; without this wrapper the request stays
+    in the uvicorn worker until Django's ``read=600s`` httpx timeout
+    triggers ``ReadError`` on the proxy side.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(invoke, messages)
+    try:
+        return future.result(timeout=AGENT_DEADLINE_SECONDS)
+    except concurrent.futures.TimeoutError as exc:
+        future.cancel()
+        _dump_all_thread_stacks(
+            f"agent graph exceeded {AGENT_DEADLINE_SECONDS}s deadline"
+        )
+        logger.error(
+            "Agent graph exceeded %ss absolute deadline; stacks dumped "
+            "to .local/agent_runtime_faulthandler.log",
+            AGENT_DEADLINE_SECONDS,
+        )
+        raise RuntimeError(
+            f"agent graph exceeded {AGENT_DEADLINE_SECONDS}s deadline"
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _invoke_chat_model_with_deadline(invoke, messages):
@@ -224,7 +290,7 @@ def run_agent(
 
     history_messages = _history_to_messages(history)
     history_messages.append(HumanMessage(content=prompt))
-    result_messages = agent.invoke(history_messages)
+    result_messages = _invoke_agent_with_deadline(agent.invoke, history_messages)
     assistant_message = result_messages[-1].content if result_messages else ""
     return {
         "assistant_message": assistant_message,
@@ -354,14 +420,36 @@ def stream_agent(
     history_ai_count = sum(1 for m in history_messages if isinstance(m, AIMessage))
 
     ai_yielded = 0
-    for chunk in agent.stream(history_messages, stream_mode="messages"):
-        if isinstance(chunk, tuple) and len(chunk) >= 2:
-            msg = chunk[0]
-            if not isinstance(msg, AIMessage) or msg.tool_calls:
-                continue
-            ai_yielded += 1
-            if ai_yielded <= history_ai_count:
-                continue
-            yield msg.content
+    last_yield_at = time.monotonic()
+    # Hard wall-clock deadline over the whole streaming session.
+    # ``agent.stream`` may stop yielding chunks while LangGraph is
+    # blocked internally between LLM cycles — without a deadline the
+    # SSE consumer in ``app.py:stream_generator`` sits idle and the
+    # user sees no progress. When the deadline fires we dump every
+    # thread's stack and raise, which ``app.py:chat_stream`` translates
+    # into a single ``agent_runtime_error`` SSE event.
+    deadline = AGENT_DEADLINE_SECONDS
+    try:
+        for chunk in agent.stream(history_messages, stream_mode="messages"):
+            now = time.monotonic()
+            if now - last_yield_at > deadline:
+                _dump_all_thread_stacks(
+                    f"agent stream idle for {deadline}s without yielding"
+                )
+                raise RuntimeError(
+                    f"agent stream idle for {deadline}s without yielding"
+                )
+            if isinstance(chunk, tuple) and len(chunk) >= 2:
+                msg = chunk[0]
+                if not isinstance(msg, AIMessage) or msg.tool_calls:
+                    continue
+                ai_yielded += 1
+                if ai_yielded <= history_ai_count:
+                    continue
+                last_yield_at = now
+                yield msg.content
+    except concurrent.futures.TimeoutError:  # pragma: no cover - safety net
+        _dump_all_thread_stacks(f"agent stream exceeded {deadline}s deadline")
+        raise RuntimeError(f"agent stream exceeded {deadline}s deadline")
     for command in ui_commands:
         yield {"ui_command": command}

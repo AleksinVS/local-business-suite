@@ -20,14 +20,26 @@ from .task_types import resolve_task_type_for_tool
 from .tools import build_tools
 
 # Absolute wall-clock deadline for a single LLM call. LangChain's
-# `init_chat_model(..., timeout=120)` sets a per-request timeout on the
-# underlying httpx client, but in streaming mode httpx resets that
-# timer on every chunk the server sends. A slow LLM provider that
-# trickles one chunk every 30s can keep the call "alive" forever
-# without ever tripping the per-request timeout, so the uvicorn
-# worker blocks indefinitely. The ThreadPoolExecutor wrapper below
-# enforces a real deadline that the streaming timeouts cannot escape.
-LLM_DEADLINE_SECONDS = 120
+# `init_chat_model(..., timeout=120)` sets a per-request timeout on
+# the underlying httpx client, but in streaming mode httpx resets
+# that timer on every chunk the server sends. A slow LLM provider
+# that trickles one chunk every 30s can keep the call "alive"
+# forever without ever tripping the per-request timeout, so the
+# uvicorn worker blocks indefinitely. The ThreadPoolExecutor wrapper
+# below enforces a real deadline that the streaming timeouts cannot
+# escape.
+#
+# 60 seconds instead of the original 120: a single ``openrouter``
+# completion for ``nemotron-3-nano-30b-a3b:free`` round-trips in
+# ~5s in our tests. The 60s window catches the real-bug case
+# (langchain hanging inside ``model.invoke`` after the openrouter
+# response returns, observed 2026-06-30) without making the user
+# wait two minutes for the eventual ``RuntimeError`` to reach
+# the SSE consumer — by that point the browser-side fetch has
+# usually already aborted and shows ``Не удалось получить
+# ответ от ИИ-сервиса.``. Practical effect: user-visible failure
+# within one minute instead of two.
+LLM_DEADLINE_SECONDS = 60
 
 # Soft deadline for documentation / logging purposes. We deliberately
 # do NOT wrap ``agent.invoke`` in ``ThreadPoolExecutor`` because

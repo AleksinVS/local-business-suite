@@ -231,6 +231,7 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 actor_context.request_id,
                 actor_context.conversation_id,
                 exc.__class__.__name__,
+                exc_info=True,
             )
             yield sse_event(run_error_event("ИИ-сервис вернул ошибку."))
 
@@ -272,6 +273,7 @@ async def chat_stream(payload: ChatRequest):
                 actor_context.request_id,
                 actor_context.conversation_id,
                 exc.__class__.__name__,
+                exc_info=True,
             )
             yield "data: " + json.dumps(
                 {

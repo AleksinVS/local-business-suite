@@ -292,7 +292,10 @@ def run_agent(
 
     history_messages = _history_to_messages(history)
     history_messages.append(HumanMessage(content=prompt))
-    result_messages = _invoke_agent_with_deadline(agent.invoke, history_messages)
+    result_messages = _invoke_agent_with_deadline(
+        lambda msgs: agent.invoke(msgs, config={"recursion_limit": 1}),
+        history_messages,
+    )
     assistant_message = result_messages[-1].content if result_messages else ""
     return {
         "assistant_message": assistant_message,
@@ -460,7 +463,11 @@ def stream_agent(
         """
 
     try:
-        for chunk in agent.stream(history_messages, stream_mode="messages"):
+        for chunk in agent.stream(
+            history_messages,
+            stream_mode="messages",
+            config={"recursion_limit": 1},
+        ):
             if time.monotonic() - stream_started_at > deadline:
                 _dump_all_thread_stacks(
                     f"agent stream exceeded {deadline}s absolute deadline"

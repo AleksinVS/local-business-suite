@@ -422,7 +422,7 @@ def stream_agent(
     history_ai_count = sum(1 for m in history_messages if isinstance(m, AIMessage))
 
     ai_yielded = 0
-    last_yield_at = time.monotonic()
+    stream_started_at = time.monotonic()
     deadline = AGENT_DEADLINE_SECONDS
     # Hard wall-clock deadline over the whole streaming session.
     # ``agent.stream`` may stop yielding chunks while LangGraph is
@@ -439,15 +439,34 @@ def stream_agent(
     # browser's default fetch timeout window so we get a clean
     # ``RUN_ERROR`` on screen rather than ``Не удалось получить
     # ответ от ИИ-сервиса.`` from the JavaScript ``.catch``.
+    #
+    # IMPORTANT: we measure against ``stream_started_at`` (absolute),
+    # not ``last_yield_at``. Earlier draft used ``last_yield_at``,
+    # which the inner ``@entrypoint``-driven ``agent.stream`` kept
+    # resetting on each LangGraph retry of the agent body — each
+    # timeout raised ``RuntimeError`` from ``call_llm``, langgraph
+    # caught and restarted the ``agent`` entrypoint, our deadline
+    # check never saw two consecutive yields without a long gap,
+    # and the user waited ~4 minutes (4 * 60s retries) before the
+    # error finally reached the browser. Measuring absolute time
+    # since the start of ``stream_agent`` catches the overall hang
+    # independent of how many times ``agent.stream`` yields.
+
+    class _AgentTimeout(RuntimeError):
+        """Plain ``RuntimeError`` subclass used so we can distinguish
+        ``stream_agent``-level deadlines from LLM-level deadlines
+        if/when we ever tighten the boundary. Both currently bubble
+        through the same path.
+        """
+
     try:
         for chunk in agent.stream(history_messages, stream_mode="messages"):
-            now = time.monotonic()
-            if now - last_yield_at > deadline:
+            if time.monotonic() - stream_started_at > deadline:
                 _dump_all_thread_stacks(
-                    f"agent stream idle for {deadline}s without yielding"
+                    f"agent stream exceeded {deadline}s absolute deadline"
                 )
-                raise RuntimeError(
-                    f"agent stream idle for {deadline}s without yielding"
+                raise _AgentTimeout(
+                    f"agent stream exceeded {deadline}s absolute deadline"
                 )
             if isinstance(chunk, tuple) and len(chunk) >= 2:
                 msg = chunk[0]
@@ -456,7 +475,6 @@ def stream_agent(
                 ai_yielded += 1
                 if ai_yielded <= history_ai_count:
                     continue
-                last_yield_at = now
                 yield msg.content
     except concurrent.futures.TimeoutError:  # pragma: no cover - safety net
         _dump_all_thread_stacks(f"agent stream exceeded {deadline}s deadline")

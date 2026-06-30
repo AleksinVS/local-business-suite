@@ -52,7 +52,7 @@ LLM_DEADLINE_SECONDS = 60
 # itself (120s via ``_invoke_chat_model_with_deadline``). When those
 # fire the exception already propagates through ``app.py`` to the
 # SSE consumer as ``RUN_ERROR``.
-AGENT_DEADLINE_SECONDS = 90
+AGENT_DEADLINE_SECONDS = 60
 
 
 def _dump_all_thread_stacks(reason: str) -> None:
@@ -423,6 +423,7 @@ def stream_agent(
 
     ai_yielded = 0
     last_yield_at = time.monotonic()
+    deadline = AGENT_DEADLINE_SECONDS
     # Hard wall-clock deadline over the whole streaming session.
     # ``agent.stream`` may stop yielding chunks while LangGraph is
     # blocked internally between LLM cycles — without a deadline the
@@ -430,7 +431,14 @@ def stream_agent(
     # user sees no progress. When the deadline fires we dump every
     # thread's stack and raise, which ``app.py:chat_stream`` translates
     # into a single ``agent_runtime_error`` SSE event.
-    deadline = AGENT_DEADLINE_SECONDS
+    #
+    # ``AGENT_DEADLINE_SECONDS = 60`` (down from 90). An unbounded
+    # ``agent.stream`` hang in langchain can hold the uvicorn worker
+    # for the full deadline before the user gets a clean
+    # ``agent_runtime_error`` SSE event; 60s lands inside the
+    # browser's default fetch timeout window so we get a clean
+    # ``RUN_ERROR`` on screen rather than ``Не удалось получить
+    # ответ от ИИ-сервиса.`` from the JavaScript ``.catch``.
     try:
         for chunk in agent.stream(history_messages, stream_mode="messages"):
             now = time.monotonic()

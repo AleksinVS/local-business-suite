@@ -39,7 +39,7 @@ class DjangoGatewayClient:
             f"{self.base_url}/tools/{tool_code}/execute/",
             json=request_payload,
             headers={"X-AI-Gateway-Token": self.token},
-            timeout=90,
+            timeout=180,
         )
         response.raise_for_status()
         return response.json()

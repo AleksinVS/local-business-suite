@@ -28,7 +28,7 @@ from .tools import build_tools
 # uvicorn worker blocks indefinitely. The ThreadPoolExecutor wrapper
 # below enforces a real deadline that the streaming timeouts cannot
 # escape.
-LLM_DEADLINE_SECONDS = 120
+LLM_DEADLINE_SECONDS = 300
 
 # Soft deadline for documentation / logging purposes. We deliberately
 # do NOT wrap ``agent.invoke`` in ``ThreadPoolExecutor`` because
@@ -41,7 +41,7 @@ LLM_DEADLINE_SECONDS = 120
 # itself (120s via ``_invoke_chat_model_with_deadline``). When those
 # fire the exception already propagates through ``app.py`` to the
 # SSE consumer as ``RUN_ERROR``.
-AGENT_DEADLINE_SECONDS = 90
+AGENT_DEADLINE_SECONDS = 300
 
 
 def _dump_all_thread_stacks(reason: str) -> None:
@@ -209,7 +209,7 @@ def run_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0, "timeout": 120}
+    init_kwargs = {"temperature": 0, "timeout": 300}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:
@@ -336,7 +336,7 @@ def stream_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0, "timeout": 120}
+    init_kwargs = {"temperature": 0, "timeout": 300}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:

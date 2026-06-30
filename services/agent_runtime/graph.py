@@ -29,16 +29,17 @@ from .tools import build_tools
 # enforces a real deadline that the streaming timeouts cannot escape.
 LLM_DEADLINE_SECONDS = 120
 
-# Absolute wall-clock deadline for the WHOLE agent invocation
-# (``agent.invoke``). ``_invoke_chat_model_with_deadline`` only protects
-# the LLM call itself — tool execution, ``add_messages`` state
-# marshalling, and LangGraph internal coordination can hang just the
-# same and on this host we have observed agents not returning at all
-# after 1-2 successful LLM cycles. This deadline makes the SSE stream
-# emit a clean ``RUN_ERROR`` and dumps every thread's stack to
-# ``.local/agent_runtime_faulthandler.log`` so the next incident is
-# diagnosable instead of manifesting as a silent "loading chat..."
-# while ``/health`` stays 200 on a different uvicorn worker.
+# Soft deadline for documentation / logging purposes. We deliberately
+# do NOT wrap ``agent.invoke`` in ``ThreadPoolExecutor`` because
+# ``executor.shutdown(wait=False)`` does not kill the worker thread
+# of ``concurrent.futures`` — orphan threads accumulate, hold the
+# GIL, and over a few stuck requests make the uvicorn worker process
+# unresponsive even for ``/health``. The hard cap on a single agent
+# invocation therefore relies on the underlying timeouts that already
+# exist: ``httpx`` read/write inside tools (90s) and the LLM call
+# itself (120s via ``_invoke_chat_model_with_deadline``). When those
+# fire the exception already propagates through ``app.py`` to the
+# SSE consumer as ``RUN_ERROR``.
 AGENT_DEADLINE_SECONDS = 90
 
 
@@ -61,35 +62,24 @@ def _dump_all_thread_stacks(reason: str) -> None:
 
 
 def _invoke_agent_with_deadline(invoke, messages):
-    """Run ``agent.invoke`` in a thread with a hard wall-clock deadline.
+    """Best-effort wrapper kept for backwards compatibility.
 
-    The body of ``agent(messages)`` may stop returning for reasons
-    that don't surface in ``_invoke_chat_model_with_deadline``
-    (tool calls, ``add_messages``, LangGraph internals). On the
-    observed host the LLM completes successfully twice and then the
-    third call never starts; without this wrapper the request stays
-    in the uvicorn worker until Django's ``read=600s`` httpx timeout
-    triggers ``ReadError`` on the proxy side.
+    Historically this used ``concurrent.futures.ThreadPoolExecutor``
+    with ``shutdown(wait=False)`` to enforce a hard wall-clock cap,
+    but on this Windows host ``wait=False`` does not actually kill the
+    executor's worker thread. Orphan threads accumulate on stuck
+    requests, hold the GIL and eventually make the uvicorn worker
+    unresponsive even for ``/health``. The deadline has been
+    downgraded to a documentation constant (``AGENT_DEADLINE_SECONDS``)
+    while we look for a killable alternative (multiprocessing.Process
+    or subprocess-based isolation).
+
+    For now this just runs ``invoke`` synchronously; the LLM call
+    inside the graph is still protected by
+    ``_invoke_chat_model_with_deadline`` (120s) and tool calls by
+    ``DjangoGatewayClient.execute_tool`` (``httpx`` timeout=90s).
     """
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(invoke, messages)
-    try:
-        return future.result(timeout=AGENT_DEADLINE_SECONDS)
-    except concurrent.futures.TimeoutError as exc:
-        future.cancel()
-        _dump_all_thread_stacks(
-            f"agent graph exceeded {AGENT_DEADLINE_SECONDS}s deadline"
-        )
-        logger.error(
-            "Agent graph exceeded %ss absolute deadline; stacks dumped "
-            "to .local/agent_runtime_faulthandler.log",
-            AGENT_DEADLINE_SECONDS,
-        )
-        raise RuntimeError(
-            f"agent graph exceeded {AGENT_DEADLINE_SECONDS}s deadline"
-        ) from exc
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+    return invoke(messages)
 
 
 def _invoke_chat_model_with_deadline(invoke, messages):

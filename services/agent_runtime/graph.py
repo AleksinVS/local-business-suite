@@ -28,18 +28,7 @@ from .tools import build_tools
 # uvicorn worker blocks indefinitely. The ThreadPoolExecutor wrapper
 # below enforces a real deadline that the streaming timeouts cannot
 # escape.
-#
-# 60 seconds instead of the original 120: a single ``openrouter``
-# completion for ``nemotron-3-nano-30b-a3b:free`` round-trips in
-# ~5s in our tests. The 60s window catches the real-bug case
-# (langchain hanging inside ``model.invoke`` after the openrouter
-# response returns, observed 2026-06-30) without making the user
-# wait two minutes for the eventual ``RuntimeError`` to reach
-# the SSE consumer — by that point the browser-side fetch has
-# usually already aborted and shows ``Не удалось получить
-# ответ от ИИ-сервиса.``. Practical effect: user-visible failure
-# within one minute instead of two.
-LLM_DEADLINE_SECONDS = 60
+LLM_DEADLINE_SECONDS = 120
 
 # Soft deadline for documentation / logging purposes. We deliberately
 # do NOT wrap ``agent.invoke`` in ``ThreadPoolExecutor`` because
@@ -52,7 +41,7 @@ LLM_DEADLINE_SECONDS = 60
 # itself (120s via ``_invoke_chat_model_with_deadline``). When those
 # fire the exception already propagates through ``app.py`` to the
 # SSE consumer as ``RUN_ERROR``.
-AGENT_DEADLINE_SECONDS = 60
+AGENT_DEADLINE_SECONDS = 90
 
 
 def _dump_all_thread_stacks(reason: str) -> None:
@@ -292,10 +281,7 @@ def run_agent(
 
     history_messages = _history_to_messages(history)
     history_messages.append(HumanMessage(content=prompt))
-    result_messages = _invoke_agent_with_deadline(
-        lambda msgs: agent.invoke(msgs, config={"recursion_limit": 1}),
-        history_messages,
-    )
+    result_messages = agent.invoke(history_messages)
     assistant_message = result_messages[-1].content if result_messages else ""
     return {
         "assistant_message": assistant_message,
@@ -425,8 +411,7 @@ def stream_agent(
     history_ai_count = sum(1 for m in history_messages if isinstance(m, AIMessage))
 
     ai_yielded = 0
-    stream_started_at = time.monotonic()
-    deadline = AGENT_DEADLINE_SECONDS
+    last_yield_at = time.monotonic()
     # Hard wall-clock deadline over the whole streaming session.
     # ``agent.stream`` may stop yielding chunks while LangGraph is
     # blocked internally between LLM cycles — without a deadline the
@@ -434,46 +419,16 @@ def stream_agent(
     # user sees no progress. When the deadline fires we dump every
     # thread's stack and raise, which ``app.py:chat_stream`` translates
     # into a single ``agent_runtime_error`` SSE event.
-    #
-    # ``AGENT_DEADLINE_SECONDS = 60`` (down from 90). An unbounded
-    # ``agent.stream`` hang in langchain can hold the uvicorn worker
-    # for the full deadline before the user gets a clean
-    # ``agent_runtime_error`` SSE event; 60s lands inside the
-    # browser's default fetch timeout window so we get a clean
-    # ``RUN_ERROR`` on screen rather than ``Не удалось получить
-    # ответ от ИИ-сервиса.`` from the JavaScript ``.catch``.
-    #
-    # IMPORTANT: we measure against ``stream_started_at`` (absolute),
-    # not ``last_yield_at``. Earlier draft used ``last_yield_at``,
-    # which the inner ``@entrypoint``-driven ``agent.stream`` kept
-    # resetting on each LangGraph retry of the agent body — each
-    # timeout raised ``RuntimeError`` from ``call_llm``, langgraph
-    # caught and restarted the ``agent`` entrypoint, our deadline
-    # check never saw two consecutive yields without a long gap,
-    # and the user waited ~4 minutes (4 * 60s retries) before the
-    # error finally reached the browser. Measuring absolute time
-    # since the start of ``stream_agent`` catches the overall hang
-    # independent of how many times ``agent.stream`` yields.
-
-    class _AgentTimeout(RuntimeError):
-        """Plain ``RuntimeError`` subclass used so we can distinguish
-        ``stream_agent``-level deadlines from LLM-level deadlines
-        if/when we ever tighten the boundary. Both currently bubble
-        through the same path.
-        """
-
+    deadline = AGENT_DEADLINE_SECONDS
     try:
-        for chunk in agent.stream(
-            history_messages,
-            stream_mode="messages",
-            config={"recursion_limit": 1},
-        ):
-            if time.monotonic() - stream_started_at > deadline:
+        for chunk in agent.stream(history_messages, stream_mode="messages"):
+            now = time.monotonic()
+            if now - last_yield_at > deadline:
                 _dump_all_thread_stacks(
-                    f"agent stream exceeded {deadline}s absolute deadline"
+                    f"agent stream idle for {deadline}s without yielding"
                 )
-                raise _AgentTimeout(
-                    f"agent stream exceeded {deadline}s absolute deadline"
+                raise RuntimeError(
+                    f"agent stream idle for {deadline}s without yielding"
                 )
             if isinstance(chunk, tuple) and len(chunk) >= 2:
                 msg = chunk[0]
@@ -482,6 +437,7 @@ def stream_agent(
                 ai_yielded += 1
                 if ai_yielded <= history_ai_count:
                     continue
+                last_yield_at = now
                 yield msg.content
     except concurrent.futures.TimeoutError:  # pragma: no cover - safety net
         _dump_all_thread_stacks(f"agent stream exceeded {deadline}s deadline")

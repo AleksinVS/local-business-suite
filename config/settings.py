@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from django.core.exceptions import ValidationError
 from django.core.exceptions import ImproperlyConfigured
@@ -218,38 +219,96 @@ LOCAL_BUSINESS_PERFORMANCE_METRICS_EXCLUDE_PREFIXES = tuple(
     if prefix.strip()
 )
 
-DATABASES = {
-    "default": {
+TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in TRUE_VALUES
+
+
+def database_config_from_url(database_url):
+    parsed = urlparse(database_url)
+    if parsed.scheme not in {"postgres", "postgresql"}:
+        raise ImproperlyConfigured("DATABASE_URL must use postgres:// or postgresql://")
+
+    query = parse_qs(parsed.query)
+    options = {}
+    sslmode = query.get("sslmode", [""])[0]
+    if sslmode:
+        options["sslmode"] = sslmode
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": unquote(parsed.path.lstrip("/")),
+        "USER": unquote(parsed.username or ""),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname or "",
+        "PORT": str(parsed.port or ""),
+        "CONN_MAX_AGE": int(os.environ.get("LOCAL_BUSINESS_DB_CONN_MAX_AGE", "60")),
+    }
+    if options:
+        config["OPTIONS"] = options
+    return config
+
+
+LOCAL_BUSINESS_DB_BACKEND = os.environ.get(
+    "LOCAL_BUSINESS_DB_BACKEND",
+    "sqlite" if DJANGO_ENV == "development" else "postgresql",
+).strip().lower()
+if LOCAL_BUSINESS_DB_BACKEND == "postgres":
+    LOCAL_BUSINESS_DB_BACKEND = "postgresql"
+if LOCAL_BUSINESS_DB_BACKEND not in {"postgresql", "sqlite"}:
+    raise ImproperlyConfigured("LOCAL_BUSINESS_DB_BACKEND must be one of: postgresql, sqlite")
+
+if DJANGO_ENV == "production" and LOCAL_BUSINESS_DB_BACKEND == "sqlite" and not env_bool(
+    "LOCAL_BUSINESS_ALLOW_SQLITE_PRODUCTION",
+    False,
+):
+    raise ImproperlyConfigured(
+        "SQLite is not allowed in production for the main repository. "
+        "Set LOCAL_BUSINESS_DB_BACKEND=postgresql or explicitly set "
+        "LOCAL_BUSINESS_ALLOW_SQLITE_PRODUCTION=true for an emergency-only override."
+    )
+
+if LOCAL_BUSINESS_DB_BACKEND == "postgresql":
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if database_url:
+        default_database = database_config_from_url(database_url)
+    else:
+        default_database = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", os.environ.get("LOCAL_BUSINESS_POSTGRES_DB", "local_business_suite")),
+            "USER": os.environ.get("POSTGRES_USER", os.environ.get("LOCAL_BUSINESS_POSTGRES_USER", "local_business_app")),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", os.environ.get("LOCAL_BUSINESS_POSTGRES_PASSWORD", "")),
+            "HOST": os.environ.get("POSTGRES_HOST", os.environ.get("LOCAL_BUSINESS_POSTGRES_HOST", "127.0.0.1")),
+            "PORT": os.environ.get("POSTGRES_PORT", os.environ.get("LOCAL_BUSINESS_POSTGRES_PORT", "5432")),
+            "CONN_MAX_AGE": int(os.environ.get("LOCAL_BUSINESS_DB_CONN_MAX_AGE", "60")),
+        }
+        sslmode = os.environ.get("LOCAL_BUSINESS_POSTGRES_SSLMODE", "").strip()
+        if sslmode:
+            default_database["OPTIONS"] = {"sslmode": sslmode}
+else:
+    default_database = {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "db" / "main_vault.sqlite3",
+        "NAME": Path(os.environ.get("LOCAL_BUSINESS_SQLITE_PATH", DATA_DIR / "db" / "local_business.sqlite3")),
         "OPTIONS": {
-            "timeout": 20,
-        },
-    },
-    "chat": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "db" / "chat.sqlite3",
-        "OPTIONS": {
-            "timeout": 20,
-        },
-    },
-    "knowledge_meta": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "db" / "knowledge_meta.sqlite3",
-        "OPTIONS": {
-            "timeout": 20,
-        },
-    },
-    "analytics_control": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "db" / "analytics_control.sqlite3",
-        "OPTIONS": {
-            "timeout": 20,
+            "timeout": int(os.environ.get("LOCAL_BUSINESS_SQLITE_TIMEOUT_SECONDS", "20")),
         },
     }
-}
 
-DATABASE_ROUTERS = ["apps.core.db_routers.LocalBusinessDatabaseRouter"]
+DATABASES = {"default": default_database}
+DATABASE_ROUTERS = []
+
+LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES = {
+    "default": Path(os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_DEFAULT_PATH", DATA_DIR / "db" / "main_vault.sqlite3")),
+    "chat": Path(os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_CHAT_PATH", DATA_DIR / "db" / "chat.sqlite3")),
+    "knowledge_meta": Path(
+        os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_KNOWLEDGE_META_PATH", DATA_DIR / "db" / "knowledge_meta.sqlite3")
+    ),
+    "analytics_control": Path(
+        os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_ANALYTICS_CONTROL_PATH", DATA_DIR / "db" / "analytics_control.sqlite3")
+    ),
+}
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -405,22 +464,31 @@ LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE = get_contract_path(
     "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
     sub_dir="ai",
 )
+_default_external_connector_queue_backend = "database" if LOCAL_BUSINESS_DB_BACKEND == "postgresql" else "sqlite"
 LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND = os.environ.get(
     "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND",
-    "sqlite",
-)
+    _default_external_connector_queue_backend,
+).strip().lower()
+if LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND not in {"sqlite", "database"}:
+    raise ImproperlyConfigured("LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND must be one of: sqlite, database")
+LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION = env_bool("LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION", False)
+if (
+    DJANGO_ENV == "production"
+    and LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND == "sqlite"
+    and not LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION
+):
+    raise ImproperlyConfigured(
+        "SQLite external connector queue is not allowed in production. "
+        "Use LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=database or set "
+        "LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION=true for an explicit emergency override."
+    )
 LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH = Path(
     os.environ.get(
         "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH",
         DATA_DIR / "memory" / "queues" / "external_connectors.sqlite3",
     )
 )
-LOCAL_BUSINESS_DB_SPLIT_ENABLED = os.environ.get("LOCAL_BUSINESS_DB_SPLIT_ENABLED", "true").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+LOCAL_BUSINESS_DB_SPLIT_ENABLED = False
 LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR = Path(
     os.environ.get("LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR", DATA_DIR / "knowledge_repo")
 )
@@ -430,6 +498,27 @@ LOCAL_BUSINESS_KNOWLEDGE_WRITER_QUEUE_PATH = Path(
 LOCAL_BUSINESS_SEARCH_INDEX_PATH = Path(
     os.environ.get("LOCAL_BUSINESS_SEARCH_INDEX_PATH", DATA_DIR / "indexes" / "fulltext" / "search.sqlite3")
 )
+_default_memory_fulltext_backend = "postgresql" if LOCAL_BUSINESS_DB_BACKEND == "postgresql" else "sqlite_fts"
+LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND = os.environ.get(
+    "LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND",
+    _default_memory_fulltext_backend,
+).strip().lower()
+if LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND in {"sqlite", "fts5"}:
+    LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND = "sqlite_fts"
+if LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND in {"postgres", "database"}:
+    LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND = "postgresql"
+if LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND not in {"sqlite_fts", "postgresql"}:
+    raise ImproperlyConfigured("LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND must be one of: sqlite_fts, postgresql")
+if (
+    DJANGO_ENV == "production"
+    and LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND == "sqlite_fts"
+    and not LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION
+):
+    raise ImproperlyConfigured(
+        "SQLite FTS search index is not allowed in production. "
+        "Use LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND=postgresql or set "
+        "LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION=true for an explicit emergency override."
+    )
 LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND = os.environ.get("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND", "lancedb").strip().lower()
 if LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND not in {"disabled", "lancedb", "enabled"}:
     raise ImproperlyConfigured("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND must be one of: disabled, lancedb, enabled")

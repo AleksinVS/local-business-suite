@@ -19,7 +19,7 @@ from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER
 from apps.waiting_list.services import create_entry
 
 User = get_user_model()
-RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
+RUNTIME_DATABASES = {"default"}
 
 from .models import AIWindowContextSnapshot, AgentActionLog, ChatMessage, ChatSession, PendingAction
 from .chat_settings import get_chat_settings

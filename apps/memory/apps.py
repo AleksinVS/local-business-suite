@@ -7,7 +7,5 @@ class MemoryConfig(AppConfig):
     verbose_name = "Память ИИ"
 
     def ready(self):
-        # Регистрация pre_delete обработчика, который поддерживает
-        # SET_NULL-семантику для MemoryWriteRequest.session при удалении
-        # ChatSession. Подробности в apps/memory/signals.py.
+        # Совместимый pre_delete guard для старых SQLite/multi-db установок.
         from . import signals  # noqa: F401

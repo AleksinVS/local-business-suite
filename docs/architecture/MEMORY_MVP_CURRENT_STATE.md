@@ -1,6 +1,6 @@
 # Текущее состояние MVP памяти
 
-Дата: 2026-06-02.
+Дата: 2026-06-15.
 
 Этот документ фиксирует фактическую рабочую границу системы памяти. Целевые планы и ADR остаются источником решений "куда идем", но текущий runtime нужно сверять с этим описанием.
 
@@ -16,7 +16,7 @@ memory.remember
   -> data/knowledge_repo/**/*.md
   -> MemoryKnowledgeItem
   -> MemorySearchDocument
-  -> SQLite FTS5 index
+  -> full-text index selected by LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND
   -> optional LanceDB vector index
   -> memory.search
 ```
@@ -29,17 +29,17 @@ memory.remember
 - Персональные и организационные знания из AI-чата.
 - Secret handles: секретное значение не пишется в знание, индекс, audit и результат поиска.
 - Runtime Git-репозиторий знаний `data/knowledge_repo/`.
-- Раздельные runtime-базы `chat`, `knowledge_meta` и `analytics_control`.
+- Единая основная БД для chat, memory metadata и analytics control; production target - PostgreSQL.
 - Поиск через `memory.search` по корпусу `knowledge`.
 - Явный и fallback-показ `source_data` как ссылок на исходные объекты.
 - Trusted-only gate для обычного контекста агента.
 - `MemoryAccessAudit` для разрешенных и запрещенных поисков.
 - Ingestion MVP для local/UNC источников, текстовых файлов и табличных `.csv/.tsv/.xlsx/.xls` с issue queue.
-- SQLite FTS5 по содержимому документов с token fallback и prefix fallback.
+- PostgreSQL full-text backend в production; SQLite FTS5 остается dev/legacy fallback.
 - LanceDB vector backend с локальным embedding provider; по умолчанию используется легкий deterministic test profile, production-профиль включается через `LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE`.
 - Документный индекс: результат поиска возвращает документ, а не раздел/фрагмент.
 - Graph schema bootstrapping и extraction-команды как отдельный подготовительный контур.
-- Reference implementation внешнего коннектора: envelope, queue, landing zone, retention cleanup и handoff.
+- Reference implementation внешнего коннектора: envelope, database/sqlite queue backends, landing zone, retention cleanup и handoff.
 - Универсальные source adapters для внутренних модулей: `workorders` и `waiting_list` отдают `SourceObjectEnvelope`.
 - `source_adapter_reconcile` строит из envelope проекции `MemorySourceObject`, `MemorySearchDocument`, FTS/vector index и analytics projection.
 - Для `adapter_check` источников выдача `source_data` выполняет финальную проверку доступа через доменный адаптер; при отсутствии адаптера результат fail-closed.

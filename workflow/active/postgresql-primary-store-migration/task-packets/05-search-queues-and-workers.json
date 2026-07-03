@@ -1,0 +1,34 @@
+{
+  "task_id": "05-search-queues-and-workers",
+  "title": "PostgreSQL search, queues и workers",
+  "goal": "Убрать production-зависимость от SQLite FTS и SQLite queue files в основном репозитории.",
+  "write_scope": [
+    "apps/memory/vector_backends.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/external_connectors.py",
+    "apps/memory/models.py",
+    "apps/analytics/services.py",
+    "apps/*/management/commands/",
+    "contracts/ if backend contracts change",
+    "docs/deployment/POSTGRESQL_MIGRATION.md",
+    "docs/guides/"
+  ],
+  "non_goals": [
+    "Не внедрять Qdrant/OpenSearch/RabbitMQ/Celery без отдельного ADR",
+    "Не менять модель файлового знания",
+    "Не делать vector backend обязательным для cutover"
+  ],
+  "implementation_notes": [
+    "PostgreSQL FTS должен стать production search backend для fulltext.",
+    "SQLite FTS допускается только в SQLite-fork или dev fallback, если он не участвует в production acceptance.",
+    "Queue/job tables должны иметь status, locked_by, locked_until, attempt_count, next_attempt_at и idempotency_key.",
+    "Для leasing использовать select_for_update(skip_locked=True) на PostgreSQL.",
+    "Добавить rebuild/validate команды для search indexes."
+  ],
+  "acceptance_checks": [
+    "python manage.py memory_reindex --corpus all --backend fulltext",
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py memory_eval --dry-run",
+    "python manage.py test apps.memory.tests apps.analytics.tests apps.ai.tests"
+  ]
+}

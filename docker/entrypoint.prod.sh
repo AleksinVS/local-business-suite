@@ -3,6 +3,7 @@ set -eu
 
 mkdir -p /app/data/db /app/data/media /app/data/logs /app/data/contracts /app/staticfiles
 
+python manage.py wait_for_database --timeout "${LOCAL_BUSINESS_DB_WAIT_TIMEOUT:-60}"
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py seed_roles

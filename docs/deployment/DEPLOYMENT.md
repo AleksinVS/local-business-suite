@@ -11,11 +11,13 @@ Production-развертывание поддерживает две конфи
 - `agent-runtime` — LangGraph runtime и MCP bridge
 - `caddy` — reverse proxy
 
-База данных и пользовательские файлы хранятся на хосте:
-- `data/db/`
+PostgreSQL хранится в отдельном Docker volume `postgres_data`. Пользовательские файлы и runtime-файлы хранятся на хосте:
 - `data/media/`
 - `data/logs/`
 - `data/contracts/`
+- `data/knowledge_repo/`
+
+SQLite-файлы в `data/db/` остаются только legacy/dev источником миграции и не являются production target основного репозитория.
 
 Статические файлы не монтируются в отдельный volume. Они собираются внутри image во время старта `web`.
 
@@ -60,6 +62,10 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - `DJANGO_ENV=production`
 - `DJANGO_DEBUG=0`
 - `DJANGO_SECRET_KEY=<production-secret>`
+- `LOCAL_BUSINESS_DB_BACKEND=postgresql`
+- `POSTGRES_DB=local_business_suite`
+- `POSTGRES_USER=local_business_app`
+- `POSTGRES_PASSWORD=<production-db-password>`
 - `DJANGO_ALLOWED_HOSTS=<ip-or-domain>`
 - `DJANGO_INTERNAL_ALLOWED_HOSTS=web`
 - `LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal`
@@ -79,6 +85,10 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 DJANGO_ENV=production
 DJANGO_DEBUG=0
 DJANGO_SECRET_KEY=replace-me
+LOCAL_BUSINESS_DB_BACKEND=postgresql
+POSTGRES_DB=local_business_suite
+POSTGRES_USER=local_business_app
+POSTGRES_PASSWORD=replace-me
 DJANGO_ALLOWED_HOSTS=188.120.246.243
 DJANGO_INTERNAL_ALLOWED_HOSTS=web
 LOCAL_BUSINESS_SHARED_NETWORK=local-business-suite_internal

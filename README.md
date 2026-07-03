@@ -52,15 +52,15 @@
 - синхронизирует источники из `contracts/ai/memory_sources.json`;
 - пропускает данные через privacy pipeline перед индексированием;
 - хранит принятые знания в runtime Git-репозитории `data/knowledge_repo/`;
-- хранит метаданные знаний в `data/db/knowledge_meta.sqlite3`, а индексы отдельно в `data/indexes/`;
-- поддерживает локальный SQLite-поиск по перестраиваемым токенам без хранения полного текста знания в индексе;
+- хранит метаданные знаний в основной PostgreSQL database; SQLite-вариант сохранен в отдельной legacy-ветке/форке;
+- поддерживает PostgreSQL full-text индекс в основной БД; SQLite FTS остается dev/legacy-бэкендом;
 - обнаруживает корпоративные документы из local/UNC источников через ingestion MVP;
 - строит стабильную идентичность файлов, baseline virtual structure, входной каталог и согласованный managed_fs перенос с quarantine/purge gate;
 - дает пользователю личную виртуальную файловую структуру в `/memory/files/`, не меняя физическое размещение и права доступа;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
 - поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа, но не включает graph runtime search;
-- содержит reference implementation подключения внешних информационных систем через queued API-коннекторы, standalone queue backend и normalized landing zone;
-- выносит данные чатов в `data/db/chat.sqlite3`, а управляющие модели аналитики в `data/db/analytics_control.sqlite3`;
+- содержит reference implementation подключения внешних информационных систем через queued API-коннекторы, database queue backend и normalized landing zone;
+- хранит данные чатов, metadata памяти и управляющие модели аналитики в единой основной БД;
 - возвращает AI-чату только безопасные результаты с `citations`;
 - пишет каждый разрешенный или запрещенный поиск в `MemoryAccessAudit`.
 
@@ -93,7 +93,7 @@
 Ограничения текущей версии:
 
 - production scheduler/Celery пока не подключен;
-- SQLite FTS5 включен для поиска по содержимому документов; token fallback остается как аварийный режим;
+- в production full-text индекс хранится в основной PostgreSQL БД; SQLite FTS5 остается для dev/legacy;
 - LanceDB vector backend включен с локальным deterministic test embedding profile; production-модель подключается отдельной настройкой;
 - старый слой `MemorySnapshot`/`MemoryChunk` удален из текущей схемы; индексация идет через `MemorySearchDocument`;
 - отдельное DuckDB-хранилище аналитических срезов еще не подключено;
@@ -219,7 +219,7 @@ Runtime-данные не коммитятся:
 - база данных, медиа и логи;
 - `data/contracts/` — рабочие копии контрактов;
 - `data/knowledge_repo/` — runtime Git-репозиторий знаний;
-- `data/db/chat.sqlite3`, `data/db/knowledge_meta.sqlite3`, `data/db/analytics_control.sqlite3`;
+- `data/db/*.sqlite3` — только legacy/dev SQLite-файлы и источники миграции, не production target основного репозитория;
 - `data/indexes/` — полнотекстовые, векторные и графовые индексы;
 - `data/processing/` — временные raw/safe/extraction слои;
 - `data/memory/safe_corpus/`;
@@ -237,6 +237,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
 - `docs/architecture/OBSERVABILITY_BASELINE.md` — базовая наблюдаемость, p50/p95 и команда `performance_report`.
 - `docs/architecture/SERVICE_EXTRACTION_GUIDE.md` — правила безопасного выноса технических workers/services без смены основного стека.
+- `docs/architecture/POSTGRESQL_PRIMARY_STORE_PLAN.md` — целевой план миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта.
 - `docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md` — непрерывная бизнес-аналитика из знаний, email, документов и DMS.
 - `docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md` — план реализации сервиса памяти.
 - `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` — план ingestion-коннектора и bootstrapping схемы графа.
@@ -251,6 +252,7 @@ Runtime-данные не коммитятся:
 - `docs/guides/TESTING_POLICY.md` — уровни тестов, матрица обязательных проверок и независимая проверка субагентом.
 - `docs/guides/WORKER_AND_QUEUE_OPERATIONS.md` — единые правила worker-команд, очередей, retry и idempotency.
 - `docs/deployment/MEMORY_DEPLOYMENT.md` — deployment и smoke-проверки памяти.
+- `docs/deployment/POSTGRESQL_MIGRATION.md` — runbook миграции с SQLite runtime-файлов на одну PostgreSQL database.
 - `docs/deployment/DEPLOYMENT.md` — production deployment.
 - `docs/deployment/IIS_SSO.md` — IIS и Active Directory.
 - `docs/planning/README.md` — процесс планирования.

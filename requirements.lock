@@ -144,6 +144,10 @@ packaging==25.0
     #   langsmith
 pillow==12.1.1
     # via -r requirements.txt
+psycopg[binary]==3.3.4
+    # via -r requirements.txt
+psycopg-binary==3.3.4
+    # via psycopg
 pyarrow==24.0.0
     # via lancedb
 pyasn1==0.6.3
@@ -232,6 +236,7 @@ typing-extensions==4.15.0
     #   langchain-core
     #   mcp
     #   openai
+    #   psycopg
     #   pydantic
     #   pydantic-core
     #   referencing

@@ -19,5 +19,6 @@
   "copilotkit-ag-ui-integration": "Workflow: CopilotKit и AG-UI в основном Django UI",
   "ai-ui-protocol-foundation": "Workflow: версионируемая основа AI UI протоколов",
   "copilotkit-ai-ui-chat-development": "Workflow: разработка ИИ-чата в режиме CopilotKit UI",
-  "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата"
+  "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата",
+  "postgresql-primary-store-migration": "Workflow: миграция основного хранилища на PostgreSQL"
 }

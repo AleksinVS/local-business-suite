@@ -18,7 +18,13 @@ from .document_ingestion import delete_search_document_indexes
 from .models import MemoryAccessAudit, MemoryIndexJob, MemoryIngestionIssue, MemoryKnowledgeItem, MemorySearchDocument, MemorySource, MemorySourceObject
 from .policies import user_scope_tokens
 from .security import scan_for_secrets
-from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, SQLITE_FTS_SCHEMA_VERSION, MemoryIndexRecord, get_default_backend, get_default_vector_backend
+from .vector_backends import (
+    LANCEDB_VECTOR_SCHEMA_VERSION,
+    MemoryIndexRecord,
+    get_default_backend,
+    get_default_fulltext_schema_version,
+    get_default_vector_backend,
+)
 
 
 def sync_sources_from_contract(sources_payload):
@@ -538,7 +544,7 @@ def _memory_document_metadata(
         "payload_keys": sorted((envelope.payload or {}).keys()),
         "raw_mode": "source_of_truth_reference",
         "index_versions": {
-            "fulltext": SQLITE_FTS_SCHEMA_VERSION,
+            "fulltext": get_default_fulltext_schema_version(),
             **({"vector": LANCEDB_VECTOR_SCHEMA_VERSION} if vector_backend is not None else {}),
         },
         "embedding": embedding_metadata.__dict__ if embedding_metadata is not None else {},

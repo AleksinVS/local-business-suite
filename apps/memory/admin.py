@@ -5,6 +5,7 @@ from django.utils import timezone
 from .models import (
     MemoryAccessAudit,
     MemoryEvalCase,
+    MemoryExternalConnectorJob,
     MemoryFileMoveJob,
     MemoryFileObject,
     MemoryFileObjectVersion,
@@ -22,6 +23,7 @@ from .models import (
     MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
+    MemoryFullTextIndex,
     MemoryIndexJob,
     MemoryKnowledgeCandidate,
     MemoryKnowledgeEvent,
@@ -116,6 +118,14 @@ class MemorySearchDocumentAdmin(admin.ModelAdmin):
         if obj.source_object_id:
             return obj.source_object.object_id
         return ""
+
+
+@admin.register(MemoryFullTextIndex)
+class MemoryFullTextIndexAdmin(admin.ModelAdmin):
+    list_display = ("document_id", "sensitivity", "is_active", "backend_schema_version", "indexed_at")
+    list_filter = ("is_active", "sensitivity", "backend_schema_version")
+    search_fields = ("document_id", "search_text")
+    readonly_fields = ("created_at", "updated_at", "indexed_at")
 
 
 @admin.register(MemorySourceObject)
@@ -493,6 +503,27 @@ class MemoryIndexJobAdmin(admin.ModelAdmin):
             updated_at=now,
         )
         self.message_user(request, f"Отменено заданий памяти: {updated}.")
+
+
+@admin.register(MemoryExternalConnectorJob)
+class MemoryExternalConnectorJobAdmin(admin.ModelAdmin):
+    list_display = (
+        "job_id",
+        "source_code",
+        "job_kind",
+        "status",
+        "priority",
+        "attempts_display",
+        "request_id",
+        "updated_at",
+    )
+    list_filter = ("status", "source_code", "job_kind", "created_at", "updated_at")
+    search_fields = ("job_id", "source_code", "idempotency_key", "request_id", "error_message")
+    readonly_fields = ("job_id", "created_at", "updated_at")
+
+    @admin.display(description="Попытки")
+    def attempts_display(self, obj):
+        return f"{obj.attempt_count}/{obj.max_attempts}"
 
 
 @admin.register(MemoryAccessAudit)

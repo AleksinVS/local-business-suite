@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.core.json_utils import atomic_write_json
 
-from .models import MemorySearchDocument, MemorySource, MemorySourceObject
+from .models import MemoryExternalConnectorJob, MemorySearchDocument, MemorySource, MemorySourceObject
 from .vector_backends import MemoryIndexRecord, get_default_backend
 from .security import scan_for_secrets
 
@@ -272,6 +272,122 @@ class SQLiteExternalConnectorQueueBackend:
             )
 
 
+class DatabaseExternalConnectorQueueBackend:
+    """External connector queue stored in the primary Django database."""
+
+    def enqueue(
+        self,
+        *,
+        source_code: str,
+        job_kind: str,
+        payload: dict,
+        idempotency_key: str,
+        priority: int = 0,
+        max_attempts: int = 3,
+        request_id: str = "",
+    ) -> ExternalQueueJob:
+        job, _ = MemoryExternalConnectorJob.objects.get_or_create(
+            idempotency_key=idempotency_key,
+            defaults={
+                "source_code": source_code,
+                "job_kind": job_kind,
+                "status": ExternalJobStatus.PENDING,
+                "priority": priority,
+                "payload": payload or {},
+                "result": {},
+                "error_message": "",
+                "attempt_count": 0,
+                "max_attempts": max_attempts,
+                "request_id": request_id,
+            },
+        )
+        return _job_from_model(job)
+
+    def lease(self, *, limit: int = 1, lease_seconds: int = 300) -> list[ExternalQueueJob]:
+        from django.db import connection
+        from django.db.models import Q
+
+        now = timezone.now()
+        locked_until = now + timezone.timedelta(seconds=lease_seconds)
+        limit = max(1, min(int(limit), 100))
+        leased = []
+        with transaction.atomic():
+            queryset = (
+                MemoryExternalConnectorJob.objects.filter(
+                    status__in=[ExternalJobStatus.PENDING, ExternalJobStatus.RETRY_WAIT],
+                )
+                .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
+                .filter(Q(locked_until__isnull=True) | Q(locked_until__lte=now))
+                .order_by("-priority", "created_at", "job_id")
+            )
+            if connection.features.has_select_for_update:
+                select_kwargs = {}
+                if connection.features.has_select_for_update_skip_locked:
+                    select_kwargs["skip_locked"] = True
+                queryset = queryset.select_for_update(**select_kwargs)
+            for job in list(queryset[:limit]):
+                job.status = ExternalJobStatus.RUNNING
+                job.attempt_count += 1
+                job.started_at = now
+                job.locked_until = locked_until
+                job.save(update_fields=["status", "attempt_count", "started_at", "locked_until", "updated_at"])
+                leased.append(_job_from_model(job))
+        return leased
+
+    def complete(self, job_id: str, *, result: dict | None = None) -> ExternalQueueJob:
+        job = MemoryExternalConnectorJob.objects.get(job_id=job_id)
+        job.status = ExternalJobStatus.SUCCEEDED
+        job.result = result or {}
+        job.error_message = ""
+        job.finished_at = timezone.now()
+        job.locked_until = None
+        job.save(update_fields=["status", "result", "error_message", "finished_at", "locked_until", "updated_at"])
+        return _job_from_model(job)
+
+    def fail(self, job_id: str, *, error_message: str, retry_delay_seconds: int = 60) -> ExternalQueueJob:
+        try:
+            job = MemoryExternalConnectorJob.objects.get(job_id=job_id)
+        except MemoryExternalConnectorJob.DoesNotExist as exc:
+            raise ValidationError("External connector queue job does not exist.") from exc
+        now = timezone.now()
+        job.status = (
+            ExternalJobStatus.DEAD_LETTER
+            if job.attempt_count >= job.max_attempts
+            else ExternalJobStatus.RETRY_WAIT
+        )
+        job.error_message = error_message
+        job.next_attempt_at = None if job.status == ExternalJobStatus.DEAD_LETTER else now + timezone.timedelta(seconds=retry_delay_seconds)
+        job.locked_until = None
+        if job.status == ExternalJobStatus.DEAD_LETTER:
+            job.finished_at = now
+        job.save(update_fields=["status", "error_message", "next_attempt_at", "locked_until", "finished_at", "updated_at"])
+        return _job_from_model(job)
+
+    def stats(self) -> dict:
+        from django.db.models import Count
+
+        rows = (
+            MemoryExternalConnectorJob.objects.values("status")
+            .annotate(count=Count("id"))
+            .order_by("status")
+        )
+        return {row["status"]: row["count"] for row in rows}
+
+    def list_recent(self, *, statuses: list[str] | None = None, limit: int = 20) -> list[ExternalQueueJob]:
+        limit = max(1, min(int(limit), 200))
+        queryset = MemoryExternalConnectorJob.objects.all()
+        if statuses:
+            queryset = queryset.filter(status__in=statuses)
+        queryset = queryset.order_by("-updated_at", "-created_at", "job_id")[:limit]
+        return [_job_from_model(job) for job in queryset]
+
+    def get(self, job_id: str) -> ExternalQueueJob | None:
+        try:
+            return _job_from_model(MemoryExternalConnectorJob.objects.get(job_id=job_id))
+        except MemoryExternalConnectorJob.DoesNotExist:
+            return None
+
+
 @dataclass(frozen=True)
 class ExternalCleanupEntry:
     path: str
@@ -283,6 +399,8 @@ class ExternalCleanupEntry:
 
 def get_external_queue_backend():
     backend = getattr(settings, "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND", "sqlite")
+    if backend == "database":
+        return DatabaseExternalConnectorQueueBackend()
     if backend != "sqlite":
         raise ValidationError(f"Unsupported external connector queue backend: {backend}")
     return SQLiteExternalConnectorQueueBackend()
@@ -780,6 +898,23 @@ def _job_from_row(row) -> ExternalQueueJob:
         attempt_count=row["attempt_count"],
         max_attempts=row["max_attempts"],
         request_id=row["request_id"],
+    )
+
+
+def _job_from_model(job: MemoryExternalConnectorJob) -> ExternalQueueJob:
+    return ExternalQueueJob(
+        job_id=str(job.job_id),
+        source_code=job.source_code,
+        job_kind=job.job_kind,
+        status=job.status,
+        priority=job.priority,
+        payload=dict(job.payload or {}),
+        result=dict(job.result or {}),
+        error_message=job.error_message,
+        idempotency_key=job.idempotency_key,
+        attempt_count=job.attempt_count,
+        max_attempts=job.max_attempts,
+        request_id=job.request_id,
     )
 
 

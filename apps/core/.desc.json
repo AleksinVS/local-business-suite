@@ -12,7 +12,8 @@
   "source_adapters.py": "Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников",
   "right_panels.py": "Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре",
   "ai_skills.py": "Общий контракт AgentSkillProvider и registry модульных AI skills",
-  "db_routers.py": "Маршрутизатор Django-баз для разнесения чатов, памяти и аналитики по отдельным SQLite-файлам",
+  "db_routers.py": "Legacy no-op маршрутизатор старого SQLite split на время миграции",
+  "postgresql_migration.py": "Утилиты export/import/validate для переноса legacy SQLite runtime-данных в PostgreSQL",
   "middleware.py": "Middleware (PATH_INFO fix для IIS, debug logging)",
   "templatetags/core_tags.py": "Пользовательские теги шаблонов",
   "urls.py": "URL-маршруты приложения",
@@ -22,6 +23,10 @@
   "management/commands/sync_ai_tool_registry.py": "Синхронизация реестра AI-инструментов",
   "management/commands/validate_architecture_contracts.py": "Валидация JSON-контрактов",
   "management/commands/performance_report.py": "Отчет p50/p95 по latency-событиям из data/logs/performance_events.jsonl",
+  "management/commands/postgres_migration_export.py": "Экспорт legacy SQLite runtime-данных в migration package для PostgreSQL",
+  "management/commands/postgres_migration_import.py": "Импорт migration package в PostgreSQL default database",
+  "management/commands/postgres_migration_validate.py": "Валидация PostgreSQL import по migration manifest",
+  "management/commands/wait_for_database.py": "Ожидание готовности default database перед production-стартом",
   "management/commands/generate_change_plan.py": "Генерация плана изменений",
   "management/commands/seed_hospital_demo.py": "Сидирование демо-данных больницы"
 }

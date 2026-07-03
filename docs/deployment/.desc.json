@@ -7,5 +7,6 @@
   "MEMORY_DEPLOYMENT.md": "Развертывание, runtime contracts и smoke-проверки системы памяти",
   "SETTINGS_CENTER_DEPLOYMENT.md": "Deployment note для Settings Center, env proposals, migrations и restart semantics",
   "WINDOWS_RUN.md": "Запуск на Windows (разработка)",
-  "COPILOTKIT_AG_UI_DEPLOYMENT.md": "Deployment note для CopilotKit Runtime, AG-UI endpoint и React island"
+  "COPILOTKIT_AG_UI_DEPLOYMENT.md": "Deployment note для CopilotKit Runtime, AG-UI endpoint и React island",
+  "POSTGRESQL_MIGRATION.md": "Runbook миграции основного репозитория с SQLite на одну PostgreSQL database"
 }

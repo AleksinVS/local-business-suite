@@ -1,0 +1,35 @@
+{
+  "task_id": "02-postgresql-settings-and-deployment",
+  "title": "PostgreSQL settings и deployment",
+  "goal": "Добавить production-ready PostgreSQL настройки и путь запуска основного репозитория.",
+  "write_scope": [
+    "config/settings.py",
+    "requirements.txt",
+    "requirements.lock",
+    "docker-compose.yml",
+    "Dockerfile",
+    "docker/entrypoint.prod.sh",
+    "docs/deployment/POSTGRESQL_MIGRATION.md",
+    ".env.example",
+    "README.md"
+  ],
+  "non_goals": [
+    "Не переносить данные",
+    "Не менять модели доменов",
+    "Не внедрять отдельный broker или vector DB"
+  ],
+  "implementation_notes": [
+    "Добавить PostgreSQL driver для Django.",
+    "Поддержать DATABASE_URL или явные POSTGRES_* настройки.",
+    "В DJANGO_ENV=production запрещать SQLite без явного аварийного override.",
+    "Production entrypoint должен применять единую миграцию PostgreSQL через default alias.",
+    "Документировать создание database, пользователя приложения, расширений unaccent/pg_trgm и backup."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py migrate --plan",
+    "python manage.py validate_architecture_contracts",
+    "docker compose config",
+    "git diff --check"
+  ]
+}

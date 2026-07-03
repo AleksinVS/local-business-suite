@@ -12,13 +12,14 @@ from apps.memory.models import MemoryIndexJob, MemoryIngestionIssue, MemorySearc
 from apps.memory.policies import search_document_sensitivity
 from apps.memory.services import create_index_job, mark_index_job_failed, mark_index_job_finished, mark_index_job_started
 from apps.memory.source_text_extraction import PARSER_VERSION
-from apps.memory.vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, SQLITE_FTS_SCHEMA_VERSION
+from apps.memory.vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 
 
-BACKEND_VERSIONS = {
-    "fulltext": SQLITE_FTS_SCHEMA_VERSION,
-    "vector": LANCEDB_VECTOR_SCHEMA_VERSION,
-}
+def backend_versions():
+    return {
+        "fulltext": get_default_fulltext_schema_version(),
+        "vector": LANCEDB_VECTOR_SCHEMA_VERSION,
+    }
 
 
 class Command(BaseCommand):
@@ -188,8 +189,9 @@ class Command(BaseCommand):
 def _needs_reindex(document: MemorySearchDocument, *, backends) -> bool:
     metadata = document.metadata or {}
     versions = metadata.get("index_versions") or {}
+    expected_versions = backend_versions()
     for backend in backends:
-        if versions.get(backend) != BACKEND_VERSIONS[backend]:
+        if versions.get(backend) != expected_versions[backend]:
             return True
     if document.corpus_type == MemorySearchDocument.CorpusType.SOURCE_DATA:
         if metadata.get("content_hash") != document.source_object.content_hash:

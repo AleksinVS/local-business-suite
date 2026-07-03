@@ -1,12 +1,14 @@
 # План: сбор знаний из внешних информационных систем
 
-Статус: архитектурный план; MVP vertical slice for standalone queue, landing zone, enqueue/worker/status commands and handoff implemented 2026-05-20.
+Статус: архитектурный план; MVP vertical slice implemented 2026-05-20, production queue backend updated to database table by ADR-0029 on 2026-06-15.
 
 Legacy gap review: `docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md`.
 
 Дополнение 2026-05-22: handoff внешнего коннектора больше не создает постоянные `MemorySnapshot`/`MemoryChunk`. Нормализованный объект внешней системы записывается как `MemorySourceObject`, а для поиска создается `MemorySearchDocument`. Старые упоминания safe corpus/chunks ниже являются историей исходного проектирования и заменяются файловой схемой знаний из ADR-0011.
 
 Дополнение 2026-05-26: generic connector MVP считается reference implementation. Source-specific adapter, production schedule и развитие внешнего коннектора заморожены до выбора pilot source, владельца данных, sensitivity, scope mapping и retention.
+
+Дополнение 2026-06-15: после решения о PostgreSQL как основном хранилище production queue backend для внешних коннекторов - `MemoryExternalConnectorJob` в основной БД. Standalone SQLite queue остается dev/legacy backend для SQLite-fork и локальных тестов.
 
 Дата: 2026-05-20.
 
@@ -44,7 +46,7 @@ External API Landing Zone = manifest + normalized envelopes + queue + retention 
 
 - Raw API responses можно хранить в `short_lived_raw_quarantine`, если это явно включено для конкретного source и задан срок retention.
 - Маппинг прав внешней системы в `scope_tokens` портала на первом этапе ручной и определяется при внедрении конкретного source.
-- Очередь нужна сразу как отдельный queue backend. MVP использует standalone SQLite queue under `data/memory/queues/`, а не primary Django DB table.
+- Очередь нужна сразу как отдельный queue backend. Production backend теперь использует `MemoryExternalConnectorJob` в основной БД; standalone SQLite queue under `data/memory/queues/` остается dev/legacy вариантом.
 
 ## Архитектурные варианты
 
@@ -225,7 +227,7 @@ The payload should be normalized before handoff:
 
 Queue support is required from the first connector implementation.
 
-First-stage queue backend must be separate from the primary Django database. MVP uses a standalone SQLite queue file under:
+First-stage queue backend is now selected by deployment profile. Production uses `LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=database`; dev/legacy can use a standalone SQLite queue file under:
 
 ```text
 data/memory/queues/external_connectors.sqlite3
@@ -361,11 +363,11 @@ Memory handoff checks:
 MVP vertical slice implemented:
 
 1. Source contract/schema extensions for `external_api_snapshot`.
-2. Standalone SQLite connector queue under `data/memory/queues/`.
+2. Database connector queue `MemoryExternalConnectorJob`; standalone SQLite connector queue remains dev/legacy.
 3. Filesystem landing zone writer with audit/replay manifest and normalized envelope files.
 4. Optional `short_lived_raw_quarantine` raw response storage behind DLP/secret gate.
 5. Generic enqueue/worker/status/cleanup management commands.
-6. Handoff adapter from normalized envelope to `MemorySnapshot`, safe corpus and chunks.
+6. Handoff adapter from normalized envelope to `MemorySourceObject` and `MemorySearchDocument`.
 7. Canonical `content_hash` verification before queue/handoff.
 8. Durable tombstone registry with stale upsert protection.
 9. Tests for idempotency, secret blocking, raw quarantine DLP skip, cleanup, tombstones and commands.

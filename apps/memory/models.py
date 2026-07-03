@@ -343,7 +343,6 @@ class MemoryFileVirtualView(models.Model):
         related_name="memory_file_virtual_views",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     is_system = models.BooleanField(default=False)
@@ -445,7 +444,6 @@ class MemoryFileVirtualPlacement(models.Model):
         related_name="memory_file_virtual_placements",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -505,7 +503,6 @@ class MemoryFileUsageEvent(models.Model):
         related_name="memory_file_usage_events",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     event_kind = models.CharField(max_length=40, choices=EventKind.choices)
     safe_path_hash = models.CharField(max_length=128, blank=True)
@@ -560,7 +557,6 @@ class MemoryFileOrganizationProposal(models.Model):
         related_name="reviewed_memory_file_organization_proposals",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -600,7 +596,6 @@ class MemoryFileOrganizationDecision(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_file_organization_decisions",
-        db_constraint=False,
     )
     decision = models.CharField(max_length=40, choices=Decision.choices)
     before_state = models.JSONField(default=dict, blank=True)
@@ -666,7 +661,6 @@ class MemoryFileMoveJob(models.Model):
         related_name="approved_memory_file_move_jobs",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     approved_at = models.DateTimeField(blank=True, null=True)
     started_at = models.DateTimeField(blank=True, null=True)
@@ -760,6 +754,34 @@ class MemorySearchDocument(models.Model):
         return self.document_id
 
 
+class MemoryFullTextIndex(models.Model):
+    """Database-backed full-text index row for production PostgreSQL search."""
+
+    document_id = models.CharField(max_length=180, unique=True)
+    search_text = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    scope_tokens = models.JSONField(default=list, blank=True)
+    sensitivity = models.CharField(max_length=32, blank=True)
+    is_active = models.BooleanField(default=True)
+    backend_schema_version = models.CharField(max_length=64, default="postgres-fts-v1")
+    indexed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["document_id"]
+        indexes = [
+            models.Index(fields=["document_id"]),
+            models.Index(fields=["is_active", "sensitivity"]),
+            models.Index(fields=["indexed_at"]),
+        ]
+        verbose_name = "Полнотекстовый индекс памяти"
+        verbose_name_plural = "Полнотекстовые индексы памяти"
+
+    def __str__(self):
+        return self.document_id
+
+
 class MemoryIngestionRun(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Ожидает"
@@ -781,7 +803,6 @@ class MemoryIngestionRun(models.Model):
         related_name="memory_ingestion_runs",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -866,7 +887,6 @@ class MemoryIngestionIssue(models.Model):
         related_name="assigned_memory_ingestion_issues",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -874,7 +894,6 @@ class MemoryIngestionIssue(models.Model):
         related_name="reviewed_memory_ingestion_issues",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     resolution_code = models.CharField(max_length=80, blank=True)
     resolution_note = models.TextField(blank=True)
@@ -927,7 +946,6 @@ class MemoryReviewAction(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_review_actions",
-        db_constraint=False,
     )
     action = models.CharField(max_length=40, choices=Action.choices)
     decision = models.CharField(max_length=32, choices=Decision.choices, default=Decision.APPLIED)
@@ -1087,7 +1105,6 @@ class MemoryGraphSchemaProposal(models.Model):
         related_name="memory_graph_schema_reviews",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1139,7 +1156,6 @@ class MemoryGraphReviewItem(models.Model):
         related_name="memory_graph_review_items",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1177,22 +1193,13 @@ class MemoryWriteRequest(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_write_requests",
-        db_constraint=False,
     )
     session = models.ForeignKey(
         "ai.ChatSession",
-        # DO_NOTHING: only this on_delete value skips the cascade SELECT
-        # in Django's Collector.collect. SET_NULL still issues a SELECT to
-        # know which rows to UPDATE, and that SELECT runs on the parent's
-        # database (chat) — where the memory tables don't exist. The same
-        # applies to CASCADE and PROTECT. See WINDOWS_RUN.md
-        # "Cross-database FK gotcha" and apps/memory/signals.py for the
-        # pre_delete handler that achieves SET_NULL semantics explicitly.
-        on_delete=models.DO_NOTHING,
+        on_delete=models.SET_NULL,
         related_name="memory_write_requests",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     message_ids = models.JSONField(default=list, blank=True)
     target_scope = models.CharField(max_length=32, choices=TargetScope.choices, default=TargetScope.PERSONAL)
@@ -1246,7 +1253,6 @@ class MemoryKnowledgeItem(models.Model):
         related_name="memory_knowledge_items",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     kind = models.CharField(max_length=32, choices=Kind.choices, default=Kind.FACT)
     text_hash = models.CharField(max_length=128)
@@ -1255,15 +1261,10 @@ class MemoryKnowledgeItem(models.Model):
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ACTIVE)
     source_session = models.ForeignKey(
         "ai.ChatSession",
-        # DO_NOTHING: knowledge items outlive their source chat by design.
-        # PROTECT was crashing the cascade for the same multi-DB reason as
-        # MemoryWriteRequest.session above. See WINDOWS_RUN.md
-        # "Cross-database FK gotcha".
-        on_delete=models.DO_NOTHING,
+        on_delete=models.SET_NULL,
         related_name="memory_knowledge_items",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     source_message_ids = models.JSONField(default=list, blank=True)
     source_content_hash = models.CharField(max_length=128, blank=True)
@@ -1280,7 +1281,6 @@ class MemoryKnowledgeItem(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="created_memory_knowledge_items",
-        db_constraint=False,
     )
     supersedes = models.ForeignKey(
         "self",
@@ -1339,7 +1339,6 @@ class MemoryKnowledgeEvent(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_knowledge_events",
-        db_constraint=False,
     )
     payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1383,7 +1382,6 @@ class MemoryKnowledgeCandidate(models.Model):
         related_name="memory_candidate_reviews",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     reviewed_at = models.DateTimeField(blank=True, null=True)
     decision = models.TextField(blank=True)
@@ -1391,7 +1389,6 @@ class MemoryKnowledgeCandidate(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_candidates",
-        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1431,7 +1428,6 @@ class MemoryReflectionRun(models.Model):
         related_name="memory_reflection_runs",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1477,7 +1473,6 @@ class SecretHandle(models.Model):
         related_name="secret_handles",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     scope = models.CharField(max_length=32, blank=True)
     url = models.CharField(max_length=1000, blank=True)
@@ -1488,7 +1483,6 @@ class SecretHandle(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="created_secret_handles",
-        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1524,7 +1518,6 @@ class SecretAccessAudit(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="secret_access_audits",
-        db_constraint=False,
     )
     secret_handle = models.ForeignKey(SecretHandle, on_delete=models.PROTECT, related_name="access_audits")
     action = models.CharField(max_length=32, choices=Action.choices)
@@ -1581,7 +1574,6 @@ class MemoryIndexJob(models.Model):
         related_name="memory_index_jobs",
         blank=True,
         null=True,
-        db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1611,12 +1603,48 @@ class MemoryIndexJob(models.Model):
         return f"{self.job_kind}:{self.status}:{self.pk}"
 
 
+class MemoryExternalConnectorJob(models.Model):
+    """Database-backed external connector queue job."""
+
+    job_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    source_code = models.CharField(max_length=120)
+    job_kind = models.CharField(max_length=80)
+    status = models.CharField(max_length=32)
+    priority = models.IntegerField(default=0)
+    payload = models.JSONField(default=dict, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    next_attempt_at = models.DateTimeField(blank=True, null=True)
+    locked_until = models.DateTimeField(blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    request_id = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-priority", "created_at", "job_id"]
+        indexes = [
+            models.Index(fields=["status", "next_attempt_at", "locked_until", "-priority", "created_at"]),
+            models.Index(fields=["source_code", "status", "created_at"]),
+            models.Index(fields=["idempotency_key"]),
+            models.Index(fields=["job_id"]),
+        ]
+        verbose_name = "Задание внешнего коннектора"
+        verbose_name_plural = "Задания внешних коннекторов"
+
+    def __str__(self):
+        return f"{self.status}:{self.job_id}"
+
+
 class MemoryAccessAudit(models.Model):
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="memory_access_audits",
-        db_constraint=False,
     )
     request_id = models.CharField(max_length=120)
     query_hash = models.CharField(max_length=128, blank=True)

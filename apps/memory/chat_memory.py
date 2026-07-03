@@ -28,7 +28,7 @@ from .policies import can_write_organization_memory, can_write_personal_memory
 from .secret_backends import get_secret_backend
 from .security import scan_for_secrets
 from .vector_backends import MemoryIndexRecord
-from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, SQLITE_FTS_SCHEMA_VERSION
+from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 from .vector_backends import get_default_backend
 from .vector_backends import get_default_vector_backend
 
@@ -370,7 +370,7 @@ def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext
     existing_document = MemorySearchDocument.objects.filter(document_id=document_id).first()
     existing_versions = dict(((existing_document.metadata or {}).get("index_versions") if existing_document else {}) or {})
     if "fulltext" in selected_backends:
-        existing_versions["fulltext"] = SQLITE_FTS_SCHEMA_VERSION
+        existing_versions["fulltext"] = get_default_fulltext_schema_version()
     if "vector" in selected_backends:
         existing_versions["vector"] = LANCEDB_VECTOR_SCHEMA_VERSION
     metadata["index_versions"] = existing_versions

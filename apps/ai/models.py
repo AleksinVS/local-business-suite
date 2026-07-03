@@ -17,7 +17,6 @@ class SlashCommand(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="slash_commands",
-        db_constraint=False,
     )
     name = models.CharField(
         max_length=64,
@@ -64,7 +63,6 @@ class ChatSession(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="ai_chat_sessions",
-        db_constraint=False,
     )
     title = models.CharField(max_length=255, blank=True)
     channel = models.CharField(max_length=32, choices=Channel.choices, default=Channel.INTERNAL)
@@ -127,7 +125,6 @@ class PendingAction(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="ai_pending_actions",
-        db_constraint=False,
     )
     session = models.ForeignKey(
         ChatSession,
@@ -187,7 +184,6 @@ class AgentActionLog(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="ai_actions",
-        db_constraint=False,
     )
     tool_code = models.CharField(max_length=120)
     action_kind = models.CharField(max_length=16, choices=ActionKind.choices)
@@ -246,7 +242,6 @@ class AIWindowContextSnapshot(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="ai_window_context_snapshots",
-        db_constraint=False,
     )
     window_id = models.CharField(max_length=128)
     context_version = models.PositiveIntegerField()

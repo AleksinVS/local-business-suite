@@ -32,7 +32,7 @@ from .services import (
 )
 
 User = get_user_model()
-RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
+RUNTIME_DATABASES = {"default"}
 
 
 class AnalyticsDashboardTests(TestCase):

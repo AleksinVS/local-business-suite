@@ -1,0 +1,32 @@
+{
+  "task_id": "03-single-database-schema",
+  "title": "Одна database schema и восстановление FK",
+  "goal": "Перевести Django runtime на одну PostgreSQL database и убрать постоянную multi-db маршрутизацию.",
+  "write_scope": [
+    "apps/core/db_routers.py",
+    "config/settings.py",
+    "apps/ai/models.py",
+    "apps/memory/models.py",
+    "apps/analytics/models.py",
+    "apps/*/migrations/",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не менять бизнес-смысл моделей",
+    "Не удалять legacy migration tooling до завершения импорта",
+    "Не переносить файловые знания в PostgreSQL"
+  ],
+  "implementation_notes": [
+    "Целевой runtime использует один default alias.",
+    "LocalBusinessDatabaseRouter либо удаляется, либо остается только для legacy export commands.",
+    "Вернуть db_constraint=True для внутренних FK, где связь должна быть строгой.",
+    "Особенно проверить ChatSession, PendingAction, AgentActionLog, MemoryWriteRequest, MemoryKnowledgeItem, MemoryAccessAudit и Analytics* created_by/reviewed_by.",
+    "Создать миграции, которые применяются на пустой PostgreSQL database."
+  ],
+  "acceptance_checks": [
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py migrate --plan",
+    "python manage.py test apps.ai.tests apps.memory.tests apps.analytics.tests",
+    "python manage.py check"
+  ]
+}

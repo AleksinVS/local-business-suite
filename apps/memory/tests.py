@@ -86,7 +86,7 @@ from .services import (
 )
 
 User = get_user_model()
-RUNTIME_DATABASES = {"default", "chat", "knowledge_meta", "analytics_control"}
+RUNTIME_DATABASES = {"default"}
 
 
 def _memory_ingestion_profiles_with_acl(*, acl_mode, unresolved_policy):
@@ -1114,7 +1114,7 @@ class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(str(source), source.code)
 
         with self.assertRaises(IntegrityError):
-            with transaction.atomic(using="knowledge_meta"):
+            with transaction.atomic():
                 self.create_source(title="Duplicate source")
 
     def test_sync_sources_from_contract_upserts_enabled_and_disabled_sources(self):
@@ -1196,7 +1196,7 @@ class MemoryMetadataModelTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(str(eval_case), eval_case.code)
 
         with self.assertRaises(IntegrityError):
-            with transaction.atomic(using="knowledge_meta"):
+            with transaction.atomic():
                 MemoryEvalCase.objects.create(
                     code="smoke-workorder-search",
                     title="Duplicate eval case",
@@ -1501,8 +1501,7 @@ class MemoryChatKnowledgeTests(TestCase):
             self.assertEqual(request.session_id, session.id)
 
             # The chat delete must not raise, and the pre_delete
-            # handler must run the UPDATE on knowledge_meta via the
-            # router (not via the chat DB).
+            # handler must run the UPDATE on the default database.
             session.delete()
 
             request.refresh_from_db()
@@ -1530,8 +1529,8 @@ class MemoryChatKnowledgeTests(TestCase):
             )
             request = MemoryWriteRequest.objects.get(request_id=result["request_id"])
 
-            self.assertEqual(session._state.db, "chat")
-            self.assertEqual(request._state.db, "knowledge_meta")
+            self.assertEqual(session._state.db, "default")
+            self.assertEqual(request._state.db, "default")
             self.assertEqual(request.target_scope, MemoryWriteRequest.TargetScope.PERSONAL)
             self.assertEqual(request.status, MemoryWriteRequest.Status.QUEUED)
             self.assertFalse(MemoryKnowledgeItem.objects.exists())
@@ -1777,6 +1776,39 @@ class MemoryExternalConnectorTests(TestCase):
                 self.assertEqual(manifest["cursor_state"], {})
                 self.assertEqual(manifest["retention_class"], "external_default")
                 self.assertIn("objects", manifest)
+
+    def test_database_external_queue_backend_leases_and_completes_jobs(self):
+        from .external_connectors import ExternalJobKind, ExternalJobStatus, get_external_queue_backend
+
+        with self.settings(LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND="database"):
+            backend = get_external_queue_backend()
+            job = backend.enqueue(
+                source_code="external_api_landing_zone_test",
+                job_kind=ExternalJobKind.HANDOFF_EXTERNAL_OBJECT_TO_MEMORY,
+                payload={"envelope_path": "/tmp/envelope.json"},
+                idempotency_key="external-api-test:1",
+                request_id="req-db-queue-1",
+            )
+            duplicate = backend.enqueue(
+                source_code="external_api_landing_zone_test",
+                job_kind=ExternalJobKind.HANDOFF_EXTERNAL_OBJECT_TO_MEMORY,
+                payload={"envelope_path": "/tmp/envelope.json"},
+                idempotency_key="external-api-test:1",
+                request_id="req-db-queue-1",
+            )
+
+            self.assertEqual(job.job_id, duplicate.job_id)
+            self.assertEqual(backend.stats(), {ExternalJobStatus.PENDING: 1})
+
+            leased = backend.lease(limit=1, lease_seconds=60)
+            self.assertEqual([item.job_id for item in leased], [job.job_id])
+            self.assertEqual(leased[0].attempt_count, 1)
+            self.assertEqual(backend.stats(), {ExternalJobStatus.RUNNING: 1})
+
+            completed = backend.complete(job.job_id, result={"ok": True})
+
+            self.assertEqual(completed.status, ExternalJobStatus.SUCCEEDED)
+            self.assertEqual(backend.stats(), {ExternalJobStatus.SUCCEEDED: 1})
 
     def test_external_envelope_blocks_secret_before_queue(self):
         from django.core.exceptions import ValidationError
@@ -2098,6 +2130,30 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
 
             self.assertEqual([item.document_id for item in scoped_results], ["doc:index:1"])
             self.assertEqual(denied_results, [])
+
+    def test_database_fulltext_backend_is_idempotent_and_scope_filtered(self):
+        from .models import MemoryFullTextIndex
+        from .vector_backends import MemoryIndexRecord, PostgreSQLFullTextMemoryBackend
+
+        backend = PostgreSQLFullTextMemoryBackend()
+        record = MemoryIndexRecord(
+            document_id="doc:pg-index:1",
+            text="Сервисная запись beta indexed",
+            metadata={"corpus_type": "source_data"},
+            scope_tokens=["org:default", "team:biomed"],
+            sensitivity="internal",
+        )
+
+        backend.upsert(record)
+        backend.upsert(record)
+
+        scoped_results = backend.search("beta indexed", scope_tokens=["team:biomed"], sensitivity="internal")
+        denied_results = backend.search("beta indexed", scope_tokens=["team:finance"], sensitivity="internal")
+
+        self.assertEqual(MemoryFullTextIndex.objects.count(), 1)
+        self.assertEqual([item.document_id for item in scoped_results], ["doc:pg-index:1"])
+        self.assertEqual(scoped_results[0].metadata["search_backend"], "postgresql_fts")
+        self.assertEqual(denied_results, [])
 
     def test_memory_search_returns_cited_context_and_audits_without_forbidden_scope(self):
         from .retrieval import memory_search

@@ -21,15 +21,16 @@ Runtime data:
 
 - `data/contracts/ai/` — runtime copies of AI/memory contracts;
 - `data/knowledge_repo/` — runtime Git-репозиторий принятых знаний;
-- `data/db/chat.sqlite3` — данные AI-чатов;
-- `data/db/knowledge_meta.sqlite3` — metadata памяти и знаний;
-- `data/db/analytics_control.sqlite3` — управляющие модели аналитики;
-- `data/indexes/` — generated indexes;
+- основная PostgreSQL database — данные AI-чатов, metadata памяти и управляющие модели аналитики;
+- PostgreSQL full-text таблица `MemoryFullTextIndex` — production индекс поиска по памяти;
+- PostgreSQL таблица `MemoryExternalConnectorJob` — production очередь внешних коннекторов;
+- `data/db/*.sqlite3` — legacy/dev источники миграции, не production target основного репозитория;
+- `data/indexes/` — generated dev/legacy SQLite FTS и vector indexes;
 - `data/processing/` — временные raw/safe/extraction зоны;
 - `data/memory/safe_corpus/` — legacy compatible safe text для старого ingestion слоя;
 - `data/memory/manifests/` — manifests;
 - `data/memory/external_api/` — normalized landing zone for external information system connectors;
-- `data/memory/queues/` — standalone external connector queue backend;
+- `data/memory/queues/` — dev/legacy standalone external connector queue backend;
 - `data/memory/eval/` — eval reports.
 
 Эти runtime data не коммитятся.
@@ -62,10 +63,7 @@ python manage.py test apps.core.tests apps.memory.tests apps.ai.tests apps.analy
 Production entrypoint выполняет:
 
 ```bash
-python manage.py migrate --database=default --noinput
-python manage.py migrate --database=chat --noinput
-python manage.py migrate --database=knowledge_meta --noinput
-python manage.py migrate --database=analytics_control --noinput
+python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py seed_roles
 ```
@@ -73,10 +71,7 @@ python manage.py seed_roles
 После деплоя обязательно проверить, что миграции применились до запуска memory commands. Если деплой не использует стандартный entrypoint, выполнить вручную:
 
 ```bash
-python manage.py migrate --database=default --noinput
-python manage.py migrate --database=chat --noinput
-python manage.py migrate --database=knowledge_meta --noinput
-python manage.py migrate --database=analytics_control --noinput
+python manage.py migrate --noinput
 ```
 
 После первого обновления на раздельные базы выполнить перенос legacy-данных:
@@ -178,21 +173,28 @@ python manage.py memory_file_auto_organization_e2e
 
 ## External System Connector MVP
 
-External information system connectors use normalized runtime envelopes and a standalone queue backend.
+External information system connectors use normalized runtime envelopes and a queue backend selected by deployment profile.
 
 Runtime paths:
 
 ```text
 data/memory/external_api/
-data/memory/queues/external_connectors.sqlite3
+data/memory/queues/external_connectors.sqlite3  # только dev/legacy sqlite backend
 ```
 
 Environment overrides:
 
 ```bash
+# production PostgreSQL profile
+LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=database
+
+# dev/legacy SQLite profile
 LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=sqlite
 LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH=/path/to/data/memory/queues/external_connectors.sqlite3
 ```
+
+В `DJANGO_ENV=production` SQLite-очередь запрещена без явного аварийного override
+`LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION=true`.
 
 MVP commands:
 
@@ -244,10 +246,19 @@ python manage.py memory_sync_source
 Запустить smoke reindex:
 
 ```bash
+# production PostgreSQL profile
+LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND=postgresql
+
+# dev/legacy SQLite profile
+LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND=sqlite_fts
+
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py memory_reindex --corpus all --backend all
 ```
+
+В `DJANGO_ENV=production` SQLite FTS запрещен без явного аварийного override
+`LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION=true`.
 
 Запустить synthetic eval:
 

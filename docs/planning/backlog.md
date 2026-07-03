@@ -4,6 +4,23 @@
 
 ## Active
 
+### Миграция основного хранилища на PostgreSQL
+
+Создан проектный и исполнительный контур для перехода основного репозитория с текущего SQLite-разделения на одну PostgreSQL database. Кодовый срез миграции реализован: настройки PostgreSQL, единый `default` alias, восстановление внутренних FK, команды export/import/validate, PostgreSQL full-text backend и database queue backend. SQLite-вариант зафиксирован локальной веткой `sqlite-legacy-2026-06-15` и должен быть вынесен в отдельный удаленный fork/ветку.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md`;
+- проектный план находится в `docs/architecture/POSTGRESQL_PRIMARY_STORE_PLAN.md`;
+- active planning находится в `docs/planning/active/postgresql-primary-store-migration.md`;
+- runbook находится в `docs/deployment/POSTGRESQL_MIGRATION.md`;
+- workflow package находится в `workflow/active/postgresql-primary-store-migration/`.
+
+Оставшееся действие:
+- создать удаленный SQLite-fork из `sqlite-legacy-2026-06-15`;
+- провести migration dry-run на копии реальных runtime SQLite-файлов;
+- провести cutover и cleanup по `workflow/active/postgresql-primary-store-migration/task-packets/06-cutover-verification-and-cleanup.json`;
+- после приемки перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Разработка самописного AG-UI ИИ-чата
 
 Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e. Task packet `05-sidebar-history-model-and-clear-parity` выполнен: боковая панель восстанавливает историю, показывает времена сообщений, поддерживает выбор модели, очистку и переход в полный чат.

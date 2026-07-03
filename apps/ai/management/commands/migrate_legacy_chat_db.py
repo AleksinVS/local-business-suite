@@ -1,7 +1,7 @@
 import sqlite3
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 
 CHAT_TABLES = (
@@ -20,8 +20,11 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Show source and target counts without copying.")
 
     def handle(self, *args, **options):
-        legacy_db = settings.DATABASES["default"]["NAME"]
-        target_db = settings.DATABASES["chat"]["NAME"]
+        legacy_paths = getattr(settings, "LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES", {})
+        legacy_db = legacy_paths.get("default")
+        target_db = legacy_paths.get("chat")
+        if not legacy_db or not target_db:
+            raise CommandError("Legacy SQLite paths are not configured.")
         report = copy_tables(legacy_db=legacy_db, target_db=target_db, tables=CHAT_TABLES, dry_run=options["dry_run"])
         for table, counts in report.items():
             self.stdout.write(

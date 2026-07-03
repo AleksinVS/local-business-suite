@@ -179,7 +179,7 @@ Eval report пишется только в `data/memory/eval/`.
 ## Ограничения текущей версии
 
 - production scheduler/Celery не подключен;
-- SQLite FTS5 включен для поиска по содержимому документов; token fallback остается на случай недоступности FTS5;
+- production full-text поиск использует PostgreSQL backend; SQLite FTS5 остается для dev/legacy и малых локальных запусков;
 - LanceDB vector backend включен для локального векторного поиска; по умолчанию используется легкий deterministic test embedding profile;
 - production multilingual embedding model нужно включать явно через `LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE` после подготовки модели и железа;
 - FTS/vector индексы хранят перестраиваемые поисковые производные и метаданные, но не являются источником полного текста для выдачи;

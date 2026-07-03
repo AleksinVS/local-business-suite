@@ -205,4 +205,4 @@
 
 - Raw API responses можно хранить в short-lived quarantine, если это явно включено для конкретного источника.
 - Права внешней системы на первом этапе маппятся в `scope_tokens` портала вручную при внедрении источника.
-- Очередь коннектора нужна сразу как отдельный queue backend; текущий MVP использует standalone SQLite queue under `data/memory/queues/`.
+- Очередь коннектора нужна сразу как отдельный queue backend; production использует `LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND=database`, standalone SQLite queue under `data/memory/queues/` остается dev/legacy вариантом.

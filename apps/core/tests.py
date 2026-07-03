@@ -1,5 +1,7 @@
 import json
+import sqlite3
 import tempfile
+from io import StringIO
 from pathlib import Path
 
 from django.conf import settings
@@ -40,6 +42,7 @@ from apps.core.performance import (
     record_performance_event,
     summarize_performance_events,
 )
+from apps.core.postgresql_migration import validate_export_package, write_export_package
 from apps.core.right_panels import (
     RightPanelDescriptor,
     build_right_panel_descriptor,
@@ -48,6 +51,7 @@ from apps.core.right_panels import (
     registered_right_panel_providers,
 )
 from apps.workorders.policies import ROLE_MANAGER
+from config.settings import database_config_from_url
 from .models import Department
 
 User = get_user_model()
@@ -117,6 +121,85 @@ class DepartmentModelTests(TestCase):
 
         self.assertEqual(str(grandchild), "Стационар / Кардиология / Палата интенсивной терапии")
         self.assertEqual(set(root.descendant_ids()), {root.id, child.id, grandchild.id})
+
+
+class DatabaseConfigTests(TestCase):
+    def test_database_url_parser_builds_postgresql_config(self):
+        config = database_config_from_url(
+            "postgresql://local_user:p%40ss@db.local:5544/local_business_suite?sslmode=require"
+        )
+
+        self.assertEqual(config["ENGINE"], "django.db.backends.postgresql")
+        self.assertEqual(config["NAME"], "local_business_suite")
+        self.assertEqual(config["USER"], "local_user")
+        self.assertEqual(config["PASSWORD"], "p@ss")
+        self.assertEqual(config["HOST"], "db.local")
+        self.assertEqual(config["PORT"], "5544")
+        self.assertEqual(config["OPTIONS"]["sslmode"], "require")
+
+    def test_wait_for_database_command_uses_default_connection(self):
+        out = StringIO()
+
+        call_command("wait_for_database", timeout=1, interval=0.01, stdout=out)
+
+        self.assertIn("Database is available", out.getvalue())
+
+    def test_postgres_migration_export_reads_legacy_sqlite_manifest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sqlite_path = Path(tmpdir) / "legacy.sqlite3"
+            with sqlite3.connect(sqlite_path) as connection:
+                connection.execute("CREATE TABLE core_department (id integer primary key, name text, parent_id integer)")
+                connection.execute("INSERT INTO core_department (name) VALUES (?)", ("demo",))
+
+            with override_settings(LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={"default": sqlite_path}):
+                manifest = write_export_package(Path(tmpdir) / "export", dry_run=True)
+
+        table = manifest["tables"][0]
+        self.assertEqual(table["source_alias"], "default")
+        self.assertEqual(table["table"], "core_department")
+        self.assertEqual(table["columns"], ["id", "name", "parent_id"])
+        self.assertEqual(table["row_count"], 1)
+
+    def test_postgres_migration_export_prefers_domain_sqlite_source(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            default_path = Path(tmpdir) / "default.sqlite3"
+            chat_path = Path(tmpdir) / "chat.sqlite3"
+            with sqlite3.connect(default_path) as connection:
+                connection.execute("CREATE TABLE ai_chatmessage (id integer primary key)")
+                connection.execute("INSERT INTO ai_chatmessage (id) VALUES (1)")
+            with sqlite3.connect(chat_path) as connection:
+                connection.execute("CREATE TABLE ai_chatmessage (id integer primary key)")
+                connection.execute("INSERT INTO ai_chatmessage (id) VALUES (2)")
+                connection.execute("INSERT INTO ai_chatmessage (id) VALUES (3)")
+
+            with override_settings(
+                LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={
+                    "default": default_path,
+                    "chat": chat_path,
+                }
+            ):
+                manifest = write_export_package(Path(tmpdir) / "export", dry_run=True)
+
+        table = manifest["tables"][0]
+        self.assertEqual(table["source_alias"], "chat")
+        self.assertEqual(table["table"], "ai_chatmessage")
+        self.assertEqual(table["row_count"], 2)
+
+    def test_postgres_migration_package_validation_checks_jsonl_counts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sqlite_path = Path(tmpdir) / "legacy.sqlite3"
+            with sqlite3.connect(sqlite_path) as connection:
+                connection.execute("CREATE TABLE core_department (id integer primary key, name text, parent_id integer)")
+                connection.execute("INSERT INTO core_department (name) VALUES (?)", ("demo",))
+
+            output_dir = Path(tmpdir) / "export"
+            with override_settings(LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={"default": sqlite_path}):
+                write_export_package(output_dir)
+
+            result = validate_export_package(output_dir)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["tables"][0]["actual"], 1)
 
 
 class PerformanceMetricsTests(TestCase):

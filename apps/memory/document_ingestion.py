@@ -33,9 +33,9 @@ from .source_text_extraction import (
 )
 from .vector_backends import (
     LANCEDB_VECTOR_SCHEMA_VERSION,
-    SQLITE_FTS_SCHEMA_VERSION,
     MemoryIndexRecord,
     get_default_backend,
+    get_default_fulltext_schema_version,
     get_default_vector_backend,
 )
 
@@ -607,7 +607,7 @@ def ingest_source_object_text(
     existing_document = MemorySearchDocument.objects.filter(document_id=document_id).first()
     existing_versions = dict(((existing_document.metadata or {}).get("index_versions") if existing_document else {}) or {})
     if "fulltext" in selected_backends:
-        existing_versions["fulltext"] = SQLITE_FTS_SCHEMA_VERSION
+        existing_versions["fulltext"] = get_default_fulltext_schema_version()
     if vector_backend is not None:
         existing_versions["vector"] = LANCEDB_VECTOR_SCHEMA_VERSION
         embedding_metadata = vector_backend.embedding_provider.metadata

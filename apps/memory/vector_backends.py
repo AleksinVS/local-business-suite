@@ -16,6 +16,7 @@ from .embeddings import EmbeddingProvider, get_embedding_provider
 SQLITE_FTS_INDEX_RELATIVE_PATH = Path("indexes") / "fulltext" / "search.sqlite3"
 LANCEDB_INDEX_RELATIVE_PATH = Path("indexes") / "vector" / "lancedb"
 SQLITE_FTS_SCHEMA_VERSION = "sqlite-fts5-v1"
+POSTGRES_FTS_SCHEMA_VERSION = "postgres-fts-v1"
 LANCEDB_VECTOR_SCHEMA_VERSION = "lancedb-vector-v1"
 DEFAULT_SEARCH_LIMIT = 10
 MAX_FALLBACK_CANDIDATES = 1000
@@ -471,6 +472,204 @@ class SQLiteFTSMemoryBackend:
         connection.execute("DELETE FROM memory_documents_fts WHERE rowid = ?", (row_id,))
 
 
+class PostgreSQLFullTextMemoryBackend:
+    """Full-text backend stored in the primary Django database.
+
+    PostgreSQL deployments use native search ranking. Test and small SQLite
+    environments use the same table with an ORM token fallback so the public
+    interface stays compatible.
+    """
+
+    def upsert(self, record: MemoryIndexRecord) -> None:
+        self.upsert_many((record,))
+
+    def upsert_many(self, records: Iterable[MemoryIndexRecord]) -> int:
+        prepared_records = [_prepare_record(record) for record in records]
+        if not prepared_records:
+            return 0
+
+        from django.utils import timezone
+
+        from .models import MemoryFullTextIndex
+
+        indexed_at = timezone.now()
+        for record in prepared_records:
+            MemoryFullTextIndex.objects.update_or_create(
+                document_id=record.document_id,
+                defaults={
+                    "search_text": record.text,
+                    "metadata": dict(record.metadata or {}),
+                    "scope_tokens": list(record.scope_tokens),
+                    "sensitivity": record.sensitivity,
+                    "is_active": record.is_active,
+                    "backend_schema_version": POSTGRES_FTS_SCHEMA_VERSION,
+                    "indexed_at": indexed_at,
+                },
+            )
+        return len(prepared_records)
+
+    def delete(self, document_ids: Iterable[str]) -> int:
+        ids = _normalise_document_ids(document_ids)
+        if not ids:
+            return 0
+        from .models import MemoryFullTextIndex
+
+        MemoryFullTextIndex.objects.filter(document_id__in=ids).delete()
+        return len(ids)
+
+    def deactivate(self, document_ids: Iterable[str]) -> int:
+        ids = _normalise_document_ids(document_ids)
+        if not ids:
+            return 0
+        from django.utils import timezone
+
+        from .models import MemoryFullTextIndex
+
+        MemoryFullTextIndex.objects.filter(document_id__in=ids).update(
+            is_active=False,
+            search_text="",
+            indexed_at=timezone.now(),
+        )
+        return len(ids)
+
+    def search(
+        self,
+        query: str,
+        scope_tokens: Iterable[str] | None = None,
+        sensitivity: str | Iterable[str] | None = None,
+        limit: int = DEFAULT_SEARCH_LIMIT,
+    ) -> list[MemorySearchResult]:
+        query = (query or "").strip()
+        limit = _normalise_limit(limit)
+        allowed_scope_tokens = _normalise_scope_filter(scope_tokens)
+        allowed_sensitivities = _normalise_sensitivity_filter(sensitivity)
+
+        if not query or limit <= 0:
+            return []
+        if allowed_scope_tokens == set():
+            return []
+
+        try:
+            from django.db import connection
+
+            if connection.vendor == "postgresql":
+                return self._search_postgresql(
+                    query=query,
+                    allowed_scope_tokens=allowed_scope_tokens,
+                    allowed_sensitivities=allowed_sensitivities,
+                    limit=limit,
+                )
+        except Exception:
+            pass
+
+        return self._search_orm(
+            query=query,
+            allowed_scope_tokens=allowed_scope_tokens,
+            allowed_sensitivities=allowed_sensitivities,
+            limit=limit,
+        )
+
+    def _base_queryset(self, allowed_sensitivities: set[str] | None):
+        from .models import MemoryFullTextIndex
+
+        queryset = MemoryFullTextIndex.objects.filter(is_active=True)
+        if allowed_sensitivities is not None:
+            queryset = queryset.filter(sensitivity__in=sorted(allowed_sensitivities))
+        return queryset
+
+    def _search_postgresql(
+        self,
+        *,
+        query: str,
+        allowed_scope_tokens: set[str] | None,
+        allowed_sensitivities: set[str] | None,
+        limit: int,
+    ) -> list[MemorySearchResult]:
+        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+
+        fetch_limit = _candidate_fetch_limit(limit, allowed_scope_tokens)
+        search_vector = SearchVector("search_text", config="simple")
+        search_query = SearchQuery(query, config="simple", search_type="plain")
+        queryset = (
+            self._base_queryset(allowed_sensitivities)
+            .annotate(search_rank=SearchRank(search_vector, search_query))
+            .filter(search_rank__gt=0)
+            .order_by("-search_rank", "id")[:fetch_limit]
+        )
+        return self._rows_to_results(
+            queryset,
+            allowed_scope_tokens=allowed_scope_tokens,
+            limit=limit,
+            mode="postgresql_tsvector",
+        )
+
+    def _search_orm(
+        self,
+        *,
+        query: str,
+        allowed_scope_tokens: set[str] | None,
+        allowed_sensitivities: set[str] | None,
+        limit: int,
+    ) -> list[MemorySearchResult]:
+        terms = _query_terms(query) or [query]
+        terms = tuple(_unique_terms(" ".join(terms)))
+        if not terms:
+            return []
+
+        fetch_limit = _candidate_fetch_limit(limit, allowed_scope_tokens)
+        queryset = self._base_queryset(allowed_sensitivities)
+        for term in terms:
+            queryset = queryset.filter(search_text__icontains=term)
+        rows = list(queryset.order_by("id")[:fetch_limit])
+        scored = []
+        for row in rows:
+            haystack = (row.search_text or "").lower()
+            score = sum(1 for term in terms if term.lower() in haystack) / len(terms)
+            row.search_rank = float(score)
+            scored.append(row)
+        scored.sort(key=lambda row: (-float(getattr(row, "search_rank", 0.0) or 0.0), row.id))
+        return self._rows_to_results(
+            scored,
+            allowed_scope_tokens=allowed_scope_tokens,
+            limit=limit,
+            mode="orm_token_fallback",
+        )
+
+    def _rows_to_results(
+        self,
+        rows,
+        *,
+        allowed_scope_tokens: set[str] | None,
+        limit: int,
+        mode: str,
+    ) -> list[MemorySearchResult]:
+        results = []
+        for row in rows:
+            scope = _normalise_tokens(row.scope_tokens or [])
+            if not _scope_matches(scope, allowed_scope_tokens):
+                continue
+            metadata = dict(row.metadata or {})
+            metadata.setdefault("scope_tokens", list(scope))
+            metadata.setdefault("sensitivity", row.sensitivity)
+            metadata.update(
+                {
+                    "search_backend": "postgresql_fts",
+                    "search_channel": "fulltext",
+                    "fulltext_mode": mode,
+                }
+            )
+            results.append(
+                MemorySearchResult(
+                    document_id=row.document_id,
+                    score=float(getattr(row, "search_rank", 0.0) or 0.0),
+                    metadata=metadata,
+                )
+            )
+            if len(results) >= limit:
+                break
+        return results
+
+
 class LanceDBMemoryBackend:
     table_name = "memory_documents"
 
@@ -637,8 +836,28 @@ def default_lancedb_index_path() -> Path:
     return data_dir / LANCEDB_INDEX_RELATIVE_PATH
 
 
-def get_default_backend() -> SQLiteFTSMemoryBackend:
+def get_default_backend() -> VectorMemoryBackend:
+    try:
+        from django.conf import settings
+
+        backend = str(getattr(settings, "LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND", "sqlite_fts") or "").strip().lower()
+    except Exception:
+        backend = "sqlite_fts"
+    if backend in {"postgres", "postgresql", "database"}:
+        return PostgreSQLFullTextMemoryBackend()
     return SQLiteFTSMemoryBackend()
+
+
+def get_default_fulltext_schema_version() -> str:
+    try:
+        from django.conf import settings
+
+        backend = str(getattr(settings, "LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND", "sqlite_fts") or "").strip().lower()
+    except Exception:
+        backend = "sqlite_fts"
+    if backend in {"postgres", "postgresql", "database"}:
+        return POSTGRES_FTS_SCHEMA_VERSION
+    return SQLITE_FTS_SCHEMA_VERSION
 
 
 def get_default_vector_backend() -> LanceDBMemoryBackend | None:
@@ -847,6 +1066,8 @@ __all__ = [
     "LANCEDB_INDEX_RELATIVE_PATH",
     "LANCEDB_VECTOR_SCHEMA_VERSION",
     "LanceDBMemoryBackend",
+    "POSTGRES_FTS_SCHEMA_VERSION",
+    "PostgreSQLFullTextMemoryBackend",
     "SQLITE_FTS_SCHEMA_VERSION",
     "SQLITE_FTS_INDEX_RELATIVE_PATH",
     "SQLiteFTSMemoryBackend",
@@ -854,5 +1075,6 @@ __all__ = [
     "default_lancedb_index_path",
     "default_sqlite_fts_index_path",
     "get_default_backend",
+    "get_default_fulltext_schema_version",
     "get_default_vector_backend",
 ]

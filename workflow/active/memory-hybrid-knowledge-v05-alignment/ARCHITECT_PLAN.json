@@ -3,7 +3,7 @@
   "status": "ready",
   "created_at": "2026-07-03",
   "architecture_sources": [
-    "docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md",
+    "docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md",
     "docs/architecture/hybrid-knowledge-architecture-v0.5.md",
     "docs/planning/active/memory-hybrid-knowledge-v05-alignment.md",
     "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"

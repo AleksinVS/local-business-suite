@@ -2,7 +2,7 @@
 
 ## Зачем
 
-Ядро памяти расходится с целевой архитектурой (`docs/architecture/hybrid-knowledge-architecture-v0.5.md`): канон инвертирован (база авторитетна, файл — копия; ручная правка файла ломает чтение), путь записи проходит через шесть сущностей и три воркера, граф построен как неработающий LLM-extraction контур, событийные таблицы дублируют git-историю, а 11 из 31 моделей относятся к чужому домену (автоупорядочивание файлов). Решение принято в `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md`.
+Ядро памяти расходится с целевой архитектурой (`docs/architecture/hybrid-knowledge-architecture-v0.5.md`): канон инвертирован (база авторитетна, файл — копия; ручная правка файла ломает чтение), путь записи проходит через шесть сущностей и три воркера, граф построен как неработающий LLM-extraction контур, событийные таблицы дублируют git-историю, а 11 из 31 моделей относятся к чужому домену (автоупорядочивание файлов). Решение принято в `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`.
 
 ## Что сделать
 
@@ -24,7 +24,7 @@
 
 ## Источники
 
-- `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md` — решение;
+- `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md` — решение;
 - `docs/architecture/hybrid-knowledge-architecture-v0.5.md` — целевой концепт (v0.6 внутри);
 - `docs/planning/active/memory-hybrid-knowledge-v05-alignment.md` — проектный план;
 - `docs/architecture/MEMORY_MVP_CURRENT_STATE.md` — текущая граница;

@@ -4,7 +4,7 @@
 
 Accepted
 
-Adjusted by `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md`: the LLM graph extraction contour and schema proposal tables are removed; the moderated schema mechanic is preserved as controlled edge-type vocabulary rules. Ingestion and the issue queue remain in force.
+Adjusted by `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`: the LLM graph extraction contour and schema proposal tables are removed; the moderated schema mechanic is preserved as controlled edge-type vocabulary rules. Ingestion and the issue queue remain in force.
 
 ## Date
 

@@ -278,7 +278,7 @@ MVP реализован и ожидает приемку владельцем. 
 Принято решение выровнять ядро памяти с целевой архитектурой гибридной системы знаний: файл знания становится каноном (frontmatter авторитетен), запись идет напрямую с pull-reconciler вместо push-очередей, ревизии и ревью переходят на git-примитив, LLM graph extraction заменяется объявленными рёбрами из frontmatter, автоупорядочивание файлов выносится в отдельное замороженное приложение, вводится data store с дескрипторами датасетов.
 
 Контекст:
-- архитектурное решение находится в `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md`;
+- архитектурное решение находится в `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`;
 - целевой концепт находится в `docs/architecture/hybrid-knowledge-architecture-v0.5.md`;
 - текущая рабочая граница описана в `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`;
 - активный план находится в `docs/planning/active/memory-hybrid-knowledge-v05-alignment.md`;
@@ -439,9 +439,9 @@ Generic external connector MVP архивирован как reference implement
 
 ## Later
 
-### Data store: реестр датасетов и capture/query (этапы 5а/5б ADR-0031)
+### Data store: реестр датасетов и capture/query (этапы 5а/5б ADR-0030)
 
-Управляемый долг из `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md` (решение 7). Слой данных (append-only наблюдения) не реализуется в блоке выравнивания памяти; в коде остаются заглушки `apps/memory/data_store.py` и маркеры `DEBT(ADR-0031-5a)` / `DEBT(ADR-0031-5b)` (создаются task packet `07-data-store-debt-stubs`).
+Управляемый долг из `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md` (решение 7). Слой данных (append-only наблюдения) не реализуется в блоке выравнивания памяти; в коде остаются заглушки `apps/memory/data_store.py` и маркеры `DEBT(ADR-0030-5a)` / `DEBT(ADR-0030-5b)` (создаются task packet `07-data-store-debt-stubs`).
 
 Этап 5а — реестр датасетов и типизированный `capture`/`query`:
 - дескриптор датасета = концепт-страница `type: Dataset` (шаблон — в `docs/planning/active/memory-hybrid-knowledge-v05-alignment.md`), реестр — производная проекция reconciler;
@@ -458,7 +458,7 @@ Generic external connector MVP архивирован как reference implement
 
 ### Профили гибридного ранжирования памяти
 
-Реализация ADR-0016 отложена управляемо решением `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md` как архитектурный долг: в runtime остается один профиль по умолчанию (RRF-слияние FTS и вектора). Возврат к профилям — после того, как `python manage.py memory_eval` на реальном корпусе покажет измеримую пользу дифференциации профилей. Прежний план находится в `docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md`, workflow package — в `workflow/active/memory-hybrid-ranking-profiles/`; при старте среза их нужно актуализировать против ADR-0031.
+Реализация ADR-0016 отложена управляемо решением `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md` как архитектурный долг: в runtime остается один профиль по умолчанию (RRF-слияние FTS и вектора). Возврат к профилям — после того, как `python manage.py memory_eval` на реальном корпусе покажет измеримую пользу дифференциации профилей. Прежний план находится в `docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md`, workflow package — в `workflow/active/memory-hybrid-ranking-profiles/`; при старте среза их нужно актуализировать против ADR-0030.
 
 ### Graph runtime search
 

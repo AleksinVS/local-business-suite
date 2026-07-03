@@ -4,7 +4,7 @@
 
 Accepted
 
-Adjusted by `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md`: the write queue is replaced by direct file write plus pull-reconciler, and the knowledge event log is replaced by git history. Scopes, personal-to-organization candidate review (re-based on the git review gate) and secret handles remain in force.
+Adjusted by `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`: the write queue is replaced by direct file write plus pull-reconciler, and the knowledge event log is replaced by git history. Scopes, personal-to-organization candidate review (re-based on the git review gate) and secret handles remain in force.
 
 ## Date
 

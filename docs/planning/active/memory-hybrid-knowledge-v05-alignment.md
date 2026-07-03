@@ -4,7 +4,7 @@
 
 Active planning. Готов к исполнению.
 
-- Архитектурное решение: `docs/adr/ADR-0031-memory-alignment-hybrid-knowledge-v05.md`.
+- Архитектурное решение: `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`.
 - Целевой концепт: `docs/architecture/hybrid-knowledge-architecture-v0.5.md` (версия 0.6 внутри документа).
 - Текущая рабочая граница: `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`.
 - Workflow-блок: `workflow/active/memory-hybrid-knowledge-v05-alignment/`.
@@ -33,7 +33,7 @@ Active planning. Готов к исполнению.
 
 ## Этапы и соответствие task packets
 
-| Этап ADR-0031 | Task packet | Содержание |
+| Этап ADR-0030 | Task packet | Содержание |
 |---|---|---|
 | 1. Канон и reconciler | `01-file-canon-and-reconciler` | Кроссплатформенная блокировка записи, авторитет frontmatter, чистота канона, `needs-reconcile` вместо ошибки чтения, `memory_reconcile`, двойная работа + откат |
 | 2. Запись и очереди | `02-direct-write-and-queue-collapse` | Синхронная запись в `memory.remember`, единая таблица-очередь с DLQ, вывод старых таблиц, `index.md` вместо `_summary.md` |
@@ -46,7 +46,7 @@ Active planning. Готов к исполнению.
 
 Порядок: 01 -> 02 -> 03, затем 04/05/06 (могут идти параллельно), затем 07 -> 08.
 
-## Ключевые проектные решения (из ADR-0031)
+## Ключевые проектные решения (из ADR-0030)
 
 1. **Канон** — `data/knowledge_repo/**/*.md`. Frontmatter несет только присущие метаданные и workflow-флаги; `index_status`, версии индексов и собственные хэши файла живут в проекциях (инвариант №9 концепта).
 2. **Идентичность** — путь файла (OKF); `knowledge_id` остается producer-defined стабильным ключом.
@@ -60,8 +60,8 @@ Active planning. Готов к исполнению.
 Не реализуются в этом блоке. Чтобы этапы гарантированно не потерялись, блок оставляет три вида артефактов:
 
 1. **Заглушки в коде** (packet 07):
-   - модуль `apps/memory/data_store.py` с типизированным интерфейсом `capture(dataset, observation)` / `query_dataset(dataset, query_name, params)`, поднимающим `NotImplementedError`, с docstring-ссылкой на ADR-0031 §7 и концепт §3.1;
-   - маркеры `# DEBT(ADR-0031-5a): ...` в точке маршрутизации `memory.remember` (будущая fail-safe классификация «наблюдение vs знание») и в `memory_reconcile` (будущая материализация реестра датасетов из страниц `type: Dataset`);
+   - модуль `apps/memory/data_store.py` с типизированным интерфейсом `capture(dataset, observation)` / `query_dataset(dataset, query_name, params)`, поднимающим `NotImplementedError`, с docstring-ссылкой на ADR-0030 §7 и концепт §3.1;
+   - маркеры `# DEBT(ADR-0030-5a): ...` в точке маршрутизации `memory.remember` (будущая fail-safe классификация «наблюдение vs знание») и в `memory_reconcile` (будущая материализация реестра датасетов из страниц `type: Dataset`);
    - unit-тест, фиксирующий контракт заглушки (интерфейс существует, поднимает `NotImplementedError`).
 2. **Debt-записи в backlog** (`Later`, создаются вместе с этим планом): этап 5а (реестр датасетов + `capture`/`query`, первый потребитель — аналитический контур ADR-0008) и этап 5б (рефлексия-инициатор датасетов и миграция наблюдений) с критериями старта.
 3. **Шаблон дескриптора датасета** (фиксируется здесь и переносится в операторскую документацию на этапе 5а):

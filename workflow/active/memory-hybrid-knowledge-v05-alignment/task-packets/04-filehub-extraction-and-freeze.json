@@ -17,7 +17,7 @@
     "Создать apps.filehub и перенести модели MemoryFileObject, MemoryFileObjectVersion, MemoryFilePhysicalPlacement, MemoryFilePathAlias, MemoryFileVirtualView, MemoryFileVirtualRule, MemoryFileVirtualPlacement, MemoryFileUsageEvent, MemoryFileOrganizationProposal, MemoryFileOrganizationDecision, MemoryFileMoveJob; модули file_organization*, команды memory_file_*, маршруты /memory/files/ и /memory/review/file-organization/.",
     "Миграция без потери данных: перенос таблиц через db_table/database routing или управляемую миграцию данных; существующие записи доступны после переноса.",
     "Функциональные изменения запрещены: только перенос, переименование модулей и обновление импортов.",
-    "README приложения фиксирует статус: контур заморожен решением ADR-0031; развитие - только после выбора пилотного источника и явного решения владельца (ADR-0025).",
+    "README приложения фиксирует статус: контур заморожен решением ADR-0030; развитие - только после выбора пилотного источника и явного решения владельца (ADR-0025).",
     "apps.memory не импортирует apps.filehub; связь через MemorySourceObject остается на уровне кодов источников.",
     "Обновить .desc.json затронутых директорий и PROJECT_STRUCTURE.yaml (make gen-struct)."
   ],
@@ -36,6 +36,6 @@
   ],
   "notes": [
     "Рискованная задача (миграция данных): независимая проверка субагентом по AGENTS.md.",
-    "Ссылки: ADR-0031 решение 5; ADR-0025 (статусная пометка о заморозке)."
+    "Ссылки: ADR-0030 решение 5; ADR-0025 (статусная пометка о заморозке)."
   ]
 }

@@ -276,8 +276,7 @@ docs: # Документация проекта
     ADR-0027-copilotkit-ag-ui-django-integration.md: file # ADR: CopilotKit и AG-UI как дополнительный интерфейс ИИ-чата в Django UI
     ADR-0028-versioned-ai-ui-protocol-foundation.md: file # ADR: Версионируемая основа AI UI протоколов для CopilotKit и самописного интерфейса
     ADR-0029-postgresql-primary-store-and-sqlite-fork.md: file # ADR: PostgreSQL как основное хранилище и вынос SQLite-варианта
-    ADR-0030-llm-maintained-knowledge-wiki-layer.md: file # ADR: LLM-maintained wiki-слой для накопительной памяти
-    ADR-0031-memory-alignment-hybrid-knowledge-v05.md: file # ADR: Приведение системы памяти к архитектуре hybrid-knowledge v0.5
+    ADR-0030-memory-alignment-hybrid-knowledge-v05.md: file # ADR: Приведение системы памяти к архитектуре hybrid-knowledge v0.5
   architecture: # Архитектурные документы проекта
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
@@ -356,7 +355,7 @@ docs: # Документация проекта
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-audit-review-ui.md: file # Активный план UI аудита и ревью проблем памяти и поискового индекса
       memory-file-source-auto-organization.md: file # Активный план автоупорядочивания файловых источников
-      memory-hybrid-knowledge-v05-alignment.md: file # Активный план приведения памяти к архитектуре hybrid-knowledge v0.5 (ADR-0031)
+      memory-hybrid-knowledge-v05-alignment.md: file # Активный план приведения памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       module-registered-agent-skills-and-mcp-facade.md: file # Активный план модульных AI skills и registry-driven MCP-фасада
       native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
@@ -589,7 +588,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки автоупорядочивания файловых источников
       EXECUTOR_REPORT.implementation.md: file # Отчет реализации MVP автоупорядочивания файловых источников
       TASK_ACCEPTANCE.implementation.md: file # Техническая приемка MVP автоупорядочивания файловых источников
-    memory-hybrid-knowledge-v05-alignment: # Workflow: приведение памяти к архитектуре hybrid-knowledge v0.5 (ADR-0031)
+    memory-hybrid-knowledge-v05-alignment: # Workflow: приведение памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, глобальные ограничения и проверки
       BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока

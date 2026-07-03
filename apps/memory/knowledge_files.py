@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -233,17 +234,76 @@ def parse_knowledge_file(content: str) -> KnowledgeFile:
 
 @contextlib.contextmanager
 def knowledge_repo_lock(root: Path):
+    """Exclusive inter-process lock for knowledge repository writes.
+
+    Single-writer discipline (ADR-0030 decision 2) must hold on both Linux and
+    Windows. The previous implementation used ``fcntl`` only and silently
+    degraded to a no-op wherever ``fcntl`` was unavailable (i.e. Windows),
+    which let a second process write concurrently. This uses ``fcntl`` on
+    POSIX and ``msvcrt`` on Windows behind one interface so a second process is
+    really excluded on both platforms; if neither locking primitive is
+    available we raise instead of silently proceeding.
+    """
     lock_path = root / ".knowledge-write.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("w", encoding="utf-8") as lock_file:
+    # Append mode so concurrent openers do not truncate each other's lock file.
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        _acquire_exclusive_lock(lock_file)
         try:
-            import fcntl
+            yield
+        finally:
+            _release_exclusive_lock(lock_file)
 
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-            yield
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        except ImportError:
-            yield
+
+def _acquire_exclusive_lock(lock_file) -> None:
+    fcntl = _import_fcntl()
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return
+    msvcrt = _import_msvcrt()
+    if msvcrt is not None:
+        lock_file.seek(0)
+        while True:
+            try:
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                time.sleep(0.1)
+    raise RuntimeError(
+        "No cross-platform file lock available (need fcntl on POSIX or msvcrt on Windows)."
+    )
+
+
+def _release_exclusive_lock(lock_file) -> None:
+    fcntl = _import_fcntl()
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        return
+    msvcrt = _import_msvcrt()
+    if msvcrt is not None:
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+
+
+def _import_fcntl():
+    try:
+        import fcntl
+
+        return fcntl
+    except ImportError:
+        return None
+
+
+def _import_msvcrt():
+    try:
+        import msvcrt
+
+        return msvcrt
+    except ImportError:
+        return None
 
 
 def sha256_text(value: str) -> str:

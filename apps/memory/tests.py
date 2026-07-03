@@ -2431,3 +2431,39 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
             {"fulltext": 0.3, "vector": 0.7, "graph": 0.0},
         )
         self.assertIn("vector", result["items"][0]["metadata"]["channel_scores"])
+
+
+class KnowledgeRepoLockTests(TestCase):
+    """Cross-platform single-writer lock for the knowledge repository.
+
+    ADR-0030 decision 2: the write lock must really exclude a second writer on
+    both Linux and Windows (the old fcntl-only lock was a no-op on Windows).
+    """
+
+    def test_lock_excludes_concurrent_writer(self):
+        import threading
+
+        from .knowledge_files import knowledge_repo_lock
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            order = []
+            second_acquired = threading.Event()
+
+            def second_writer():
+                with knowledge_repo_lock(root):
+                    order.append("second")
+                    second_acquired.set()
+
+            with knowledge_repo_lock(root):
+                order.append("first")
+                worker = threading.Thread(target=second_writer)
+                worker.start()
+                # Second writer must not acquire the lock while we hold it.
+                self.assertFalse(second_acquired.wait(timeout=0.5))
+                self.assertEqual(order, ["first"])
+
+            # After release the second writer proceeds.
+            worker.join(timeout=5)
+            self.assertTrue(second_acquired.is_set())
+            self.assertEqual(order, ["first", "second"])

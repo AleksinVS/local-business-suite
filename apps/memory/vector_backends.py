@@ -590,17 +590,35 @@ class PostgreSQLFullTextMemoryBackend:
         fetch_limit = _candidate_fetch_limit(limit, allowed_scope_tokens)
         search_vector = SearchVector("search_text", config="simple")
         search_query = SearchQuery(query, config="simple", search_type="plain")
-        queryset = (
+        primary_rows = list(
             self._base_queryset(allowed_sensitivities)
             .annotate(search_rank=SearchRank(search_vector, search_query))
             .filter(search_rank__gt=0)
             .order_by("-search_rank", "id")[:fetch_limit]
         )
+
+        # Prefix fallback: mirror the SQLite FTS backend so a query that is a
+        # prefix of an indexed token still matches, and flag it in the trace.
+        rows = primary_rows
+        prefix_document_ids: set[str] = set()
+        if len(primary_rows) < limit:
+            prefix_tsquery = _pg_prefix_tsquery(query)
+            if prefix_tsquery:
+                prefix_query = SearchQuery(prefix_tsquery, config="simple", search_type="raw")
+                prefix_rows = list(
+                    self._base_queryset(allowed_sensitivities)
+                    .annotate(search_rank=SearchRank(search_vector, prefix_query))
+                    .filter(search_rank__gt=0)
+                    .order_by("-search_rank", "id")[:fetch_limit]
+                )
+                rows, prefix_document_ids = _merge_pg_rows(primary_rows, prefix_rows)
+
         return self._rows_to_results(
-            queryset,
+            rows,
             allowed_scope_tokens=allowed_scope_tokens,
             limit=limit,
             mode="postgresql_tsvector",
+            prefix_document_ids=prefix_document_ids,
         )
 
     def _search_orm(
@@ -642,12 +660,15 @@ class PostgreSQLFullTextMemoryBackend:
         allowed_scope_tokens: set[str] | None,
         limit: int,
         mode: str,
+        prefix_document_ids: set[str] | None = None,
     ) -> list[MemorySearchResult]:
+        prefix_document_ids = prefix_document_ids or set()
         results = []
         for row in rows:
             scope = _normalise_tokens(row.scope_tokens or [])
             if not _scope_matches(scope, allowed_scope_tokens):
                 continue
+            is_prefix = row.document_id in prefix_document_ids
             metadata = dict(row.metadata or {})
             metadata.setdefault("scope_tokens", list(scope))
             metadata.setdefault("sensitivity", row.sensitivity)
@@ -655,7 +676,8 @@ class PostgreSQLFullTextMemoryBackend:
                 {
                     "search_backend": "postgresql_fts",
                     "search_channel": "fulltext",
-                    "fulltext_mode": mode,
+                    "fulltext_mode": f"{mode}_prefix" if is_prefix else mode,
+                    "prefix_search_used": is_prefix,
                 }
             )
             results.append(
@@ -996,6 +1018,26 @@ def _fts_prefix_query(query: str) -> str:
     if not terms:
         return ""
     return " AND ".join(f'"{term.replace(chr(34), chr(34) + chr(34))}"*' for term in terms[:8])
+
+
+def _pg_prefix_tsquery(query: str) -> str:
+    terms = [term for term in _query_terms(query) if len(term) >= PREFIX_FALLBACK_MIN_TERM_LENGTH]
+    if not terms:
+        return ""
+    return " & ".join(f"{term}:*" for term in terms[:8])
+
+
+def _merge_pg_rows(primary, fallback):
+    seen = {row.document_id for row in primary}
+    prefix_document_ids: set[str] = set()
+    merged = list(primary)
+    for row in fallback:
+        if row.document_id in seen:
+            continue
+        seen.add(row.document_id)
+        prefix_document_ids.add(row.document_id)
+        merged.append(row)
+    return merged, prefix_document_ids
 
 
 def _merge_sqlite_rows(primary: list[sqlite3.Row], fallback: list[sqlite3.Row]) -> tuple[list[sqlite3.Row], set[str]]:

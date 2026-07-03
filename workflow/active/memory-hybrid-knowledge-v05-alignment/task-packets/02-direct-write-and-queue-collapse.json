@@ -18,6 +18,7 @@
   "requirements": [
     "memory.remember выполняет проверку прав и политики источника, затем синхронно пишет файл знания и git commit под межпроцессной блокировкой из задачи 01; результат инструмента возвращает knowledge_id и путь файла сразу, без статуса очереди.",
     "Ввести одну таблицу-очередь фоновых задач (вид задачи, полезная нагрузка, статус, retry-счетчик, dead-letter) для ре-консолидации, ingestion и переиндексации; один worker-процесс обрабатывает очередь.",
+    "Таблица-очередь строится по паттерну database queue backend из ADR-0029: status, locked_by, locked_until, attempt_count, next_attempt_at, idempotency_key; leasing через select_for_update(skip_locked=True) на PostgreSQL. Рассмотреть объединение с MemoryExternalConnectorJob в единый механизм очереди вместо двух параллельных; решение и обоснование зафиксировать в executor report.",
     "Вывести MemoryWriteRequest, MemoryIndexJob, MemoryKnowledgeEvent, MemoryReflectionRun и воркеры knowledge_writer_worker/knowledge_index_worker: незавершенные записи мигрируются в новую очередь, исторические данные выгружаются в архивный дамп в data/ до удаления таблиц.",
     "Файлы _summary.md заменяются на OKF index.md, генерируемые reconciler'ом из файлов знаний, а не из queryset базы.",
     "После записи memory.remember инициирует reconcile затронутых файлов (индексация); отказ индексации не теряется - задача уходит в очередь с retry/DLQ.",

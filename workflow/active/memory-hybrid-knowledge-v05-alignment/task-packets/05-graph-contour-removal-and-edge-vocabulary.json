@@ -20,7 +20,7 @@
     "Удалить модели MemoryGraphEntity, MemoryGraphExtractionRun, MemoryGraphSchemaProposal, MemoryGraphReviewItem и команды memory_graph_extract, memory_graph_schema_discover; вычистить graph-ветки из retrieval (заглушка канала остается совместимой, канал отключен).",
     "Зафиксировать контролируемый словарь типов рёбер (стартовый набор + правила расширения через pending-предложение и ревью владельца графа) в контракте contracts/ai/ и продублировать ссылку в конфигурации агента.",
     "Валидатор relations: в frontmatter: тип из словаря, цель - существующий или объявленный концепт, провенанс указывает в immutable-источник; чужие типы отклоняются или нормализуются.",
-    "Детерминированный материализатор: таблица рёбер в SQLite строится из relations: как шаг memory_reconcile, без LLM; пересборка с нуля дает тот же результат.",
+    "Детерминированный материализатор: таблица рёбер в основной БД (PostgreSQL по ADR-0029) строится из relations: как шаг memory_reconcile, без LLM; пересборка с нуля дает тот же результат.",
     "Graph runtime search не включается (остается в Later backlog)."
   ],
   "acceptance_checks": [

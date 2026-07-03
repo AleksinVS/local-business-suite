@@ -8,6 +8,7 @@ Active planning. Готов к исполнению.
 - Целевой концепт: `docs/architecture/hybrid-knowledge-architecture-v0.5.md` (версия 0.6 внутри документа).
 - Текущая рабочая граница: `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`.
 - Workflow-блок: `workflow/active/memory-hybrid-knowledge-v05-alignment/`.
+- Зависимость: этапы, меняющие схему памяти (вывод таблиц, слияние моделей), исполняются после cutover миграции на PostgreSQL (`docs/adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md`), чтобы не пересекаться с export/import/validate.
 
 ## Цель
 
@@ -54,6 +55,7 @@ Active planning. Готов к исполнению.
 4. **Удаление** — мягкое (`status: deleted`); настоящее стирание — runbook `git filter-repo`; фиксируется в пользовательской документации.
 5. **Классификация** — валидатор reconciler не пропускает молчаливое понижение `sensitivity` ручной правкой.
 6. **Миграция с откатом** — этап 1 работает в режиме двойной сверки (`memory_verify_knowledge_files`); авторитет переключается флагом только после чистой сверки.
+7. **Носитель проекций и очередей** — основная PostgreSQL БД (ADR-0029): таблица рёбер, FTS-проекция (`MemoryFullTextIndex`) и таблица-очередь живут в ней; канон знаний остается файловым. Паттерн очереди — database queue backend (`locked_by`/`locked_until`, `attempt_count`, `idempotency_key`, leasing `skip_locked`), как у `MemoryExternalConnectorJob`; допустимая реализация блокировки писателя — PostgreSQL advisory lock.
 
 ## Этапы 5а/5б (data store) — управляемый долг
 
@@ -98,6 +100,7 @@ dataset:
 - **Потеря пользовательских данных при выводе таблиц** — вывод только после миграции содержимого в файлы/архивные дампы; двойная сверка и откат на этапе 1.
 - **Приватность git-истории** — персональная память переживает мягкое удаление в истории; семантика фиксируется в пользовательской документации, стирание — через runbook.
 - **Отставание проекций между правкой и reconcile** — мягкая деградация, предусмотренная §7.1 концепта; окно ограничивается запуском reconciler после записи.
+- **Пересечение с PostgreSQL-миграцией (ADR-0029)** — вывод таблиц и слияние моделей во время export/import сломали бы манифесты миграции; блок стартует после cutover, очередь строится на database queue паттерне, а не параллельно с `MemoryExternalConnectorJob`.
 
 ## Проверки
 

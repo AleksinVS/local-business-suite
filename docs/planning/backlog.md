@@ -19,6 +19,7 @@
 - создать удаленный SQLite-fork из `sqlite-legacy-2026-06-15`;
 - провести migration dry-run на копии реальных runtime SQLite-файлов;
 - провести cutover и cleanup по `workflow/active/postgresql-primary-store-migration/task-packets/06-cutover-verification-and-cleanup.json`;
+- после cutover разблокируется блок `memory-hybrid-knowledge-v05-alignment` (ADR-0030): изменения схемы памяти отложены до завершения миграции;
 - после приемки перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ### Разработка самописного AG-UI ИИ-чата
@@ -294,7 +295,7 @@ Scope блока (см. план):
 - 07: заглушки и DEBT-маркеры этапов data store 5а/5б;
 - 08: документация, e2e acceptance, Definition of Done.
 
-Критерии готовности к старту выполнены: план и workflow-блок созданы, порядок миграции и откат описаны в пакетах 01/02, имя отдельного приложения (`apps.filehub`) определено. Блок готов к исполнению; этапы data store 5а/5б вынесены в отдельную debt-запись в `Later`.
+Критерии готовности к старту выполнены: план и workflow-блок созданы, порядок миграции и откат описаны в пакетах 01/02, имя отдельного приложения (`apps.filehub`) определено. Оставшаяся зависимость: этапы, меняющие схему памяти, исполняются после cutover миграции на PostgreSQL (`docs/adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md`), чтобы не пересекаться с export/import/validate. Этапы data store 5а/5б вынесены в отдельную debt-запись в `Later`.
 
 ### Внедрение архитектурных паттернов
 
@@ -454,7 +455,7 @@ Generic external connector MVP архивирован как reference implement
 - детекция серий однотипных фактов в вики, предложение датасета через pending-страницу;
 - миграция страниц-наблюдений в data store, старые страницы помечаются `superseded`.
 
-Критерии старта: 5а — после приемки этапов 1–4 блока `memory-hybrid-knowledge-v05-alignment`; 5б — после работоспособного 5а. Технология (SQLite vs DuckDB) выбирается на старте 5а.
+Критерии старта: 5а — после приемки этапов 1–4 блока `memory-hybrid-knowledge-v05-alignment`; 5б — после работоспособного 5а. Технология выбирается на старте 5а: после ADR-0029 естественный кандидат — append-only таблицы в основной PostgreSQL БД; DuckDB остается слоем OLAP-витрин.
 
 ### Профили гибридного ранжирования памяти
 

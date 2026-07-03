@@ -1082,5 +1082,51 @@ class TestExtractUiCommand(unittest.TestCase):
         self.assertIsNone(extract(msg))
 
 
+class TestChatModelDeadline(unittest.TestCase):
+    """Regression: the runtime used to call model_with_tools.invoke
+    directly, relying on LangChain's per-request httpx timeout. That
+    timeout resets on every chunk in streaming mode, so a slow LLM
+    provider that trickles one chunk every 30s could keep a call
+    "alive" indefinitely and hang the uvicorn worker. The fix wraps
+    the call in a ThreadPoolExecutor with an absolute wall-clock
+    deadline. These tests verify that wrapper.
+    """
+
+    def _import_helper(self):
+        from services.agent_runtime.graph import _invoke_chat_model_with_deadline
+        return _invoke_chat_model_with_deadline
+
+    def test_returns_result_when_call_completes_within_deadline(self):
+        with patch("services.agent_runtime.graph.LLM_DEADLINE_SECONDS", 2):
+            helper = self._import_helper()
+            result = helper(lambda msgs: {"assistant": "ok", "msgs": msgs}, [{"role": "user"}])
+        self.assertEqual(result["assistant"], "ok")
+        self.assertEqual(result["msgs"], [{"role": "user"}])
+
+    def test_raises_runtime_error_when_call_exceeds_deadline(self):
+        import time
+        with patch("services.agent_runtime.graph.LLM_DEADLINE_SECONDS", 1):
+            helper = self._import_helper()
+            def slow_call(msgs):
+                time.sleep(5)  # far longer than the 1s deadline
+                return {"never": "reached"}
+            started = time.time()
+            with self.assertRaises(RuntimeError) as ctx:
+                helper(slow_call, [])
+            elapsed = time.time() - started
+        # Must raise within deadline + small overhead (not wait 5s).
+        self.assertLess(elapsed, 3.0)
+        self.assertIn("deadline", str(ctx.exception).lower())
+
+    def test_propagates_exceptions_from_inner_call(self):
+        with patch("services.agent_runtime.graph.LLM_DEADLINE_SECONDS", 5):
+            helper = self._import_helper()
+            def failing(msgs):
+                raise ValueError("upstream broke")
+            with self.assertRaises(ValueError) as ctx:
+                helper(failing, [])
+        self.assertEqual(str(ctx.exception), "upstream broke")
+
+
 if __name__ == "__main__":
     unittest.main()

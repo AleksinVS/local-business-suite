@@ -708,10 +708,17 @@
         return response.json();
       })
       .then(function (config) {
-        new NativeAiSidebar(root, config);
+        try {
+          new NativeAiSidebar(root, config);
+        } catch (err) {
+          root.innerHTML = '<div class="native-ai-ui-error">NativeAi init failed: '
+            + escapeHtml(String(err && err.message || err)) + "</div>";
+          if (window.console && console.error) console.error("NativeAiSidebar init failed", err);
+        }
       })
-      .catch(function () {
-        root.innerHTML = '<div class="native-ai-ui-error">ИИ-чат недоступен.</div>';
+      .catch(function (err) {
+        root.innerHTML = '<div class="native-ai-ui-error">ИИ-чат недоступен: '
+          + escapeHtml(String(err && err.message || err)) + "</div>";
       });
   }
 

@@ -1,0 +1,41 @@
+{
+  "task_id": "04-filehub-extraction-and-freeze",
+  "title": "Вынос автоупорядочивания файлов в apps.filehub и заморозка",
+  "status": "ready",
+  "objective": "Вынести контур File Source Auto Organization (11 моделей MemoryFile*, модули file_organization*, 6 команд, UI) из apps.memory в отдельное приложение apps.filehub без функциональных изменений и заморозить его развитие.",
+  "write_scope": [
+    "apps/filehub/",
+    "apps/memory/",
+    "apps/memory/migrations/",
+    "config/",
+    "templates/",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "docs/planning/active/memory-file-source-auto-organization.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Создать apps.filehub и перенести модели MemoryFileObject, MemoryFileObjectVersion, MemoryFilePhysicalPlacement, MemoryFilePathAlias, MemoryFileVirtualView, MemoryFileVirtualRule, MemoryFileVirtualPlacement, MemoryFileUsageEvent, MemoryFileOrganizationProposal, MemoryFileOrganizationDecision, MemoryFileMoveJob; модули file_organization*, команды memory_file_*, маршруты /memory/files/ и /memory/review/file-organization/.",
+    "Миграция без потери данных: перенос таблиц через db_table/database routing или управляемую миграцию данных; существующие записи доступны после переноса.",
+    "Функциональные изменения запрещены: только перенос, переименование модулей и обновление импортов.",
+    "README приложения фиксирует статус: контур заморожен решением ADR-0031; развитие - только после выбора пилотного источника и явного решения владельца (ADR-0025).",
+    "apps.memory не импортирует apps.filehub; связь через MemorySourceObject остается на уровне кодов источников.",
+    "Обновить .desc.json затронутых директорий и PROJECT_STRUCTURE.yaml (make gen-struct)."
+  ],
+  "acceptance_checks": [
+    "Все тесты перенесенного контура проходят в apps.filehub; memory_file_auto_organization_e2e работает.",
+    "В apps/memory не остается моделей MemoryFile* и модулей file_organization*.",
+    "Существующие данные контура доступны после переноса (проверка на копии runtime-базы).",
+    "README apps.filehub описывает заморозку и условия разморозки.",
+    "PROJECT_STRUCTURE.yaml и .desc.json актуальны."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.filehub apps.memory.tests",
+    "python manage.py memory_file_auto_organization_e2e",
+    "python manage.py validate_architecture_contracts"
+  ],
+  "notes": [
+    "Рискованная задача (миграция данных): независимая проверка субагентом по AGENTS.md.",
+    "Ссылки: ADR-0031 решение 5; ADR-0025 (статусная пометка о заморозке)."
+  ]
+}

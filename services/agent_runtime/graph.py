@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import uuid
 
@@ -13,6 +14,44 @@ from .gateway_client import DjangoGatewayClient
 from .prompting import build_system_prompt
 from .task_types import resolve_task_type_for_tool
 from .tools import build_tools
+
+# Absolute wall-clock deadline for a single LLM call. LangChain's
+# `init_chat_model(..., timeout=120)` sets a per-request timeout on the
+# underlying httpx client, but in streaming mode httpx resets that
+# timer on every chunk the server sends. A slow LLM provider that
+# trickles one chunk every 30s can keep the call "alive" forever
+# without ever tripping the per-request timeout, so the uvicorn
+# worker blocks indefinitely. The ThreadPoolExecutor wrapper below
+# enforces a real deadline that the streaming timeouts cannot escape.
+LLM_DEADLINE_SECONDS = 120
+
+
+def _invoke_chat_model_with_deadline(invoke, messages):
+    """Run ``invoke`` in a worker thread with a hard wall-clock deadline.
+
+    On timeout we cancel the future (best-effort: Python cannot kill
+    a running C-level httpx read, but cancelling the future drops the
+    reference so the executor reclaims the thread) and raise a
+    RuntimeError that the LangGraph agent surfaces to the user as a
+    chat_runtime_error. The user gets a clean failure within
+    LLM_DEADLINE_SECONDS + a small overhead instead of an indefinitely
+    stuck chat.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(invoke, messages)
+    try:
+        return future.result(timeout=LLM_DEADLINE_SECONDS)
+    except concurrent.futures.TimeoutError as exc:
+        future.cancel()
+        logger.error(
+            "LLM call exceeded %ss absolute deadline; cancelling future",
+            LLM_DEADLINE_SECONDS,
+        )
+        raise RuntimeError(
+            f"LLM call exceeded {LLM_DEADLINE_SECONDS}s deadline"
+        ) from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _extract_ui_command(tool_result):
@@ -130,7 +169,10 @@ def run_agent(
 
     @task
     def call_llm(messages):
-        return model_with_tools.invoke([SystemMessage(content=current_instructions["body"])] + messages)
+        return _invoke_chat_model_with_deadline(
+            model_with_tools.invoke,
+            [SystemMessage(content=current_instructions["body"])] + messages,
+        )
 
     @task
     def call_tool(tool_call):
@@ -254,7 +296,10 @@ def stream_agent(
 
     @task
     def call_llm(messages):
-        return model_with_tools.invoke([SystemMessage(content=current_instructions["body"])] + messages)
+        return _invoke_chat_model_with_deadline(
+            model_with_tools.invoke,
+            [SystemMessage(content=current_instructions["body"])] + messages,
+        )
 
     @task
     def call_tool(tool_call):

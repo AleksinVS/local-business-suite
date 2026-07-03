@@ -20,5 +20,6 @@
   "ai-ui-protocol-foundation.md": "Активный план версионируемой основы AI UI протоколов",
   "copilotkit-ai-ui-chat-development.md": "Активный план разработки ИИ-чата в режиме CopilotKit UI",
   "native-ag-ui-chat-development.md": "Активный план разработки самописного AG-UI ИИ-чата",
-  "postgresql-primary-store-migration.md": "Активный план миграции основного хранилища на PostgreSQL"
+  "postgresql-primary-store-migration.md": "Активный план миграции основного хранилища на PostgreSQL",
+  "memory-hybrid-knowledge-v05-alignment.md": "Активный план приведения памяти к архитектуре hybrid-knowledge v0.5 (ADR-0031)"
 }

@@ -1,0 +1,45 @@
+{
+  "task_id": "03-git-review-and-candidates",
+  "title": "Ревью и кандидатство через git-примитив",
+  "status": "ready",
+  "objective": "Перевести кандидатство личное -> корпоративное и ревью рискованных правок на примитив propose -> pending -> review -> stable поверх git, упразднить MemoryKnowledgeCandidate/MemoryReviewAction, генерировать log.md из git-истории, перенацелить review UI.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/review_services.py",
+    "apps/memory/review_selectors.py",
+    "apps/memory/review_safety.py",
+    "apps/memory/views.py",
+    "apps/memory/urls.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/knowledge_files.py",
+    "apps/memory/tests.py",
+    "templates/",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Кандидат в корпоративную память - страница в org/ с lifecycle: pending (или git-ветка): создается из личного знания, не видна обычному поиску до принятия.",
+    "Принятие кандидата - действие владельца знаний в review UI: lifecycle переводится в current (merge), страница попадает в проекции и поиск; отклонение фиксируется в git.",
+    "Прямая запись в корпоративную память при наличии права сохраняется (существующее поведение ADR-0005).",
+    "Понижение классификации, ожидающее ревью (из задачи 01), обрабатывается тем же pending-механизмом.",
+    "MemoryKnowledgeCandidate и MemoryReviewAction выводятся: открытые кандидаты мигрируются в pending-страницы, история - в архивный дамп в data/.",
+    "log.md генерируется из git-истории командой или шагом reconcile; вручную не ведется.",
+    "Review UI (ADR-0017) показывает pending-страницы и issue queue вместо таблиц кандидатов; маршруты /memory/review/ сохраняются.",
+    "Атрибуция актора (человек/агент, версия модели) фиксируется в git commit."
+  ],
+  "acceptance_checks": [
+    "Личное знание -> кандидат -> pending не находится обычным поиском -> принятие владельцем -> находится в org/.",
+    "Отклоненный кандидат не попадает в поиск, решение видно в git-истории и UI.",
+    "log.md воспроизводимо генерируется из git и совпадает при повторной генерации.",
+    "Экран /memory/review/ работает на pending-страницах и issue queue; таблицы кандидатов отсутствуют в схеме.",
+    "Пользовательская документация описывает кандидатство и мягкое удаление (текст переживает в git-истории; стирание - runbook git filter-repo)."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_reconcile --dry-run"
+  ],
+  "notes": [
+    "Ссылки: ADR-0031 решения 1 (семантика удаления) и 4; концепт параграф 7.2; ADR-0005 (кандидатство), ADR-0017 (UI)."
+  ]
+}

@@ -6,7 +6,7 @@
 
 ### Миграция основного хранилища на PostgreSQL
 
-Создан проектный и исполнительный контур для перехода основного репозитория с текущего SQLite-разделения на одну PostgreSQL database. Кодовый срез миграции реализован: настройки PostgreSQL, единый `default` alias, восстановление внутренних FK, команды export/import/validate, PostgreSQL full-text backend и database queue backend. SQLite-вариант зафиксирован локальной веткой `sqlite-legacy-2026-06-15` и должен быть вынесен в отдельный удаленный fork/ветку.
+Создан проектный и исполнительный контур для перехода основного репозитория с текущего SQLite-разделения на одну PostgreSQL database. Кодовый срез миграции реализован: настройки PostgreSQL, единый `default` alias, восстановление внутренних FK, команды export/import/validate, PostgreSQL full-text backend и database queue backend. Dev-cutover проверен на реальном PostgreSQL: `migrate` строит схему чисто, полный приёмочный набор тестов и e2e зелёные (см. `workflow/active/postgresql-primary-store-migration/EXECUTOR_REPORT.dev-cutover.md`). SQLite baseline-ветка `sqlite-legacy-2026-06-15` выложена на `origin` как линия SQLite-варианта.
 
 Контекст:
 - архитектурное решение находится в `docs/adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md`;
@@ -16,11 +16,10 @@
 - workflow package находится в `workflow/active/postgresql-primary-store-migration/`.
 
 Оставшееся действие:
-- создать удаленный SQLite-fork из `sqlite-legacy-2026-06-15`;
-- провести migration dry-run на копии реальных runtime SQLite-файлов;
-- провести cutover и cleanup по `workflow/active/postgresql-primary-store-migration/task-packets/06-cutover-verification-and-cleanup.json`;
-- после cutover разблокируется блок `memory-hybrid-knowledge-v05-alignment` (ADR-0030): изменения схемы памяти отложены до завершения миграции;
-- после приемки перенести planning/workflow в архив и удалить этот блок из active backlog.
+- production cutover с freeze window и dry-run на копии реальных данных — при появлении production по runbook `docs/deployment/POSTGRESQL_MIGRATION.md` (сейчас production и реальных данных нет);
+- при необходимости создать отдельный standalone SQLite-репозиторий из `origin/sqlite-legacy-2026-06-15` (базовая ветка уже на remote);
+- блок `memory-hybrid-knowledge-v05-alignment` (ADR-0030) разблокирован dev-cutover'ом и находится в работе;
+- после production-приёмки перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ### Разработка самописного AG-UI ИИ-чата
 

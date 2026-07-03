@@ -1,0 +1,42 @@
+{
+  "task_id": "05-graph-contour-removal-and-edge-vocabulary",
+  "title": "Удаление graph-extraction контура, словарь рёбер и материализатор",
+  "status": "ready",
+  "objective": "Удалить LLM graph-extraction контур и заменить его путем концепта: контролируемый словарь типов рёбер, валидатор блока relations: в frontmatter и детерминированный материализатор таблицы рёбер как шаг reconcile.",
+  "write_scope": [
+    "apps/memory/graph_backends.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/knowledge_files.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "contracts/ai/",
+    "config/",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Экспортировать накопленные данные MemoryGraphEntity/MemoryGraphSchemaProposal в data/memory/graph_export/ (JSON) до удаления.",
+    "Удалить модели MemoryGraphEntity, MemoryGraphExtractionRun, MemoryGraphSchemaProposal, MemoryGraphReviewItem и команды memory_graph_extract, memory_graph_schema_discover; вычистить graph-ветки из retrieval (заглушка канала остается совместимой, канал отключен).",
+    "Зафиксировать контролируемый словарь типов рёбер (стартовый набор + правила расширения через pending-предложение и ревью владельца графа) в контракте contracts/ai/ и продублировать ссылку в конфигурации агента.",
+    "Валидатор relations: в frontmatter: тип из словаря, цель - существующий или объявленный концепт, провенанс указывает в immutable-источник; чужие типы отклоняются или нормализуются.",
+    "Детерминированный материализатор: таблица рёбер в SQLite строится из relations: как шаг memory_reconcile, без LLM; пересборка с нуля дает тот же результат.",
+    "Graph runtime search не включается (остается в Later backlog)."
+  ],
+  "acceptance_checks": [
+    "Экспорт graph-данных существует и читается; модели и команды контура отсутствуют в схеме и коде.",
+    "Страница с relations: валидного типа попадает в таблицу рёбер после reconcile; ребро неизвестного типа отклоняется валидатором с понятной ошибкой.",
+    "Полная пересборка таблицы рёбер с нуля детерминирована (повторный прогон дает идентичное содержимое).",
+    "Словарь типов рёбер и правила расширения зафиксированы в контракте и проходят validate_architecture_contracts.",
+    "memory.search работает без graph-канала; тесты retrieval проходят."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_reconcile --dry-run"
+  ],
+  "notes": [
+    "Ссылки: ADR-0029 решение 3; концепт параграфы 6 и 7.3; ADR-0004 (статусная пометка)."
+  ]
+}

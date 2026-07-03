@@ -256,6 +256,29 @@ MVP реализован и ожидает приемку владельцем. 
 
 ## Next
 
+### Приведение системы памяти к архитектуре hybrid-knowledge v0.5
+
+Принято решение выровнять ядро памяти с целевой архитектурой гибридной системы знаний: файл знания становится каноном (frontmatter авторитетен), запись идет напрямую с pull-reconciler вместо push-очередей, ревизии и ревью переходят на git-примитив, LLM graph extraction заменяется объявленными рёбрами из frontmatter, автоупорядочивание файлов выносится в отдельное замороженное приложение, вводится data store с дескрипторами датасетов.
+
+Контекст:
+- архитектурное решение находится в `docs/adr/ADR-0029-memory-alignment-hybrid-knowledge-v05.md`;
+- целевой концепт находится в `docs/architecture/hybrid-knowledge-architecture-v0.5.md`;
+- текущая рабочая граница описана в `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`;
+- активный план находится в `docs/planning/active/memory-hybrid-knowledge-v05-alignment.md`;
+- workflow package находится в `workflow/active/memory-hybrid-knowledge-v05-alignment/` (8 task packets).
+
+Scope блока (см. план):
+- 01: канон в файлах, кроссплатформенная блокировка записи, `memory_reconcile`, двойная сверка и откат;
+- 02: прямая запись `memory.remember`, единая таблица-очередь с DLQ, `index.md`;
+- 03: кандидатство и ревью через pending-страницы поверх git, `log.md` из истории;
+- 04: вынос автоупорядочивания файлов в `apps.filehub` и заморозка;
+- 05: удаление graph-extraction контура, словарь типов рёбер, материализатор;
+- 06: один профиль ранжирования RRF;
+- 07: заглушки и DEBT-маркеры этапов data store 5а/5б;
+- 08: документация, e2e acceptance, Definition of Done.
+
+Критерии готовности к старту выполнены: план и workflow-блок созданы, порядок миграции и откат описаны в пакетах 01/02, имя отдельного приложения (`apps.filehub`) определено. Блок готов к исполнению; этапы data store 5а/5б вынесены в отдельную debt-запись в `Later`.
+
 ### Внедрение архитектурных паттернов
 
 Подготовлен отдельный planning/workflow-блок для постепенного внедрения прикладных паттернов из архитектурного анализа. Scope направлен на единые сценарии записи, безопасные AI-команды, единые политики доступа, переходники источников и надежные фоновые задачи.
@@ -326,30 +349,6 @@ MVP реализован и ожидает приемку владельцем. 
 - согласован срок хранения `data/logs/performance_events.jsonl`;
 - определены начальные p95-пороги для рабочих сценариев;
 - подтвержден список страниц и команд для первого замера.
-
-### Профили гибридного ранжирования памяти и подсказки ИИ-бота
-
-FTS5 и LanceDB уже подключены, но гибридное ранжирование пока не нормализует BM25/vector score как разные шкалы. Следующий этап — ввести серверные профили ранжирования, включить semantic search по исходным файлам через локальные embeddings и закрепить, как ИИ-бот выбирает режим поиска по намерению пользователя.
-
-Контекст:
-- архитектурное решение находится в `docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md`;
-- активный план находится в `docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md`;
-- workflow package находится в `workflow/active/memory-hybrid-ranking-profiles/`.
-
-Предварительный scope:
-- добавить `ranking_profile` в `memory.search` и agent runtime wrapper;
-- заменить сложение raw score на RRF-based fusion;
-- включить LanceDB retrieval для `source_data` в явных source-режимах без нового внешнего API;
-- добавить правила: секрет блокирует индексирование документа и ставит blocker issue; PII индексируется, но ставится в audit queue;
-- реализовать reindex/delete по `document_id` с delete+upsert для LanceDB;
-- добавить trace с профилем, весами, RRF-позициями и итоговым score;
-- уточнить системные подсказки ИИ-бота для `source_explicit`, `knowledge_semantic`, `knowledge_precise`, `source_fallback`;
-- покрыть `precise`, `balanced`, `semantic_heavy`, `source_content` и `source_semantic` e2e-тестами.
-
-Критерии готовности к старту:
-- подтверждено, что MVP использует RRF, а не min-max как основной fusion;
-- подтверждено, что source semantic search входит в ближайший scope без нового внешнего API и cloud embeddings;
-- согласованы тексты подсказок ИИ-бота.
 
 ### Поиск по крупным разделам документов
 
@@ -422,6 +421,27 @@ Generic external connector MVP архивирован как reference implement
 - согласовано, какие документы можно отправлять в cloud GLM-OCR на тестах.
 
 ## Later
+
+### Data store: реестр датасетов и capture/query (этапы 5а/5б ADR-0029)
+
+Управляемый долг из `docs/adr/ADR-0029-memory-alignment-hybrid-knowledge-v05.md` (решение 7). Слой данных (append-only наблюдения) не реализуется в блоке выравнивания памяти; в коде остаются заглушки `apps/memory/data_store.py` и маркеры `DEBT(ADR-0029-5a)` / `DEBT(ADR-0029-5b)` (создаются task packet `07-data-store-debt-stubs`).
+
+Этап 5а — реестр датасетов и типизированный `capture`/`query`:
+- дескриптор датасета = концепт-страница `type: Dataset` (шаблон — в `docs/planning/active/memory-hybrid-knowledge-v05-alignment.md`), реестр — производная проекция reconciler;
+- fail-safe маршрутизация `memory.remember`: наблюдение пишется в data store только при совпадении со схемой зарегистрированного датасета, иначе — файл знания;
+- идемпотентный `capture` (дедуп-ключ), аддитивная эволюция схемы через ревью;
+- первый потребитель — аналитический контур ADR-0008 (факты/метрики как первые датасеты);
+- инсайты из данных — в вики с контрактом деривации `derived_from`/`as_of`/`window`.
+
+Этап 5б — рефлексия-инициатор датасетов:
+- детекция серий однотипных фактов в вики, предложение датасета через pending-страницу;
+- миграция страниц-наблюдений в data store, старые страницы помечаются `superseded`.
+
+Критерии старта: 5а — после приемки этапов 1–4 блока `memory-hybrid-knowledge-v05-alignment`; 5б — после работоспособного 5а. Технология (SQLite vs DuckDB) выбирается на старте 5а.
+
+### Профили гибридного ранжирования памяти
+
+Реализация ADR-0016 отложена управляемо решением `docs/adr/ADR-0029-memory-alignment-hybrid-knowledge-v05.md` как архитектурный долг: в runtime остается один профиль по умолчанию (RRF-слияние FTS и вектора). Возврат к профилям — после того, как `python manage.py memory_eval` на реальном корпусе покажет измеримую пользу дифференциации профилей. Прежний план находится в `docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md`, workflow package — в `workflow/active/memory-hybrid-ranking-profiles/`; при старте среза их нужно актуализировать против ADR-0029.
 
 ### Graph runtime search
 

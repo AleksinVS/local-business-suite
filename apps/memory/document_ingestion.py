@@ -13,10 +13,6 @@ from apps.core.source_adapters import resolve_privacy_profile
 
 from .acl import acl_blocks_ingestion, resolve_file_acl, scope_tokens_for_source_object
 from .models import (
-    MemoryGraphEntity,
-    MemoryGraphExtractionRun,
-    MemoryGraphReviewItem,
-    MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemorySearchDocument,
@@ -268,108 +264,6 @@ def prepare_bootstrap_package(*, source: MemorySource, department: str, dry_run=
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(path, package)
     return {**package, "path": str(path)}
-
-
-def discover_schema_proposals_from_package(*, package, dry_run=False):
-    proposals = []
-    seen_terms = {}
-    for block in package.get("blocks", []):
-        text = block.get("text", "")
-        for marker, proposal_kind, entity_type in (
-            ("отдел", MemoryGraphSchemaProposal.ProposalKind.ENTITY_TYPE, "Department"),
-            ("процедур", MemoryGraphSchemaProposal.ProposalKind.ENTITY_TYPE, "Procedure"),
-            ("инструкц", MemoryGraphSchemaProposal.ProposalKind.ENTITY_TYPE, "Document"),
-        ):
-            if marker.lower() in text.lower():
-                key = (proposal_kind, entity_type)
-                seen_terms.setdefault(key, []).append(
-                    {
-                        "source_code": block.get("source_code"),
-                        "object_id": block.get("object_id"),
-                        "document_id": block.get("document_id"),
-                        "text_hash": block.get("text_hash"),
-                    }
-                )
-    for (proposal_kind, entity_type), evidence in seen_terms.items():
-        payload = {
-            "code": entity_type,
-            "status": "proposed",
-            "source": "local-statistical-bootstrap-v1",
-        }
-        proposals.append({"proposal_kind": proposal_kind, "payload": payload, "evidence": evidence, "confidence": "0.6000"})
-        if not dry_run:
-            MemoryGraphSchemaProposal.objects.create(
-                proposal_kind=proposal_kind,
-                status=MemoryGraphSchemaProposal.Status.NEEDS_EXPERT_REVIEW,
-                department=package.get("department", ""),
-                payload=payload,
-                evidence=evidence,
-                confidence="0.6000",
-                rationale="Local bootstrap proposal from repeated marker terms.",
-            )
-    return {"proposal_count": len(proposals), "proposals": proposals}
-
-
-def extract_graph_instances(*, source: MemorySource, dry_run=False, limit=None):
-    run = MemoryGraphExtractionRun.objects.create(
-        source=source,
-        status=MemoryGraphExtractionRun.Status.RUNNING,
-        started_at=timezone.now(),
-    )
-    metrics = {"documents": 0, "entities": 0, "facts": 0, "review_items": 0, "dry_run": dry_run}
-    documents = MemorySearchDocument.objects.select_related("source_object", "source_object__source").filter(
-        source_object__source=source,
-        corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
-        index_status=MemorySearchDocument.IndexStatus.READY,
-    )
-    try:
-        for document in documents.order_by("document_id"):
-            if limit and metrics["documents"] >= limit:
-                break
-            metrics["documents"] += 1
-            try:
-                text = _read_text_file(Path(document.source_object.object_uri))
-            except OSError:
-                text = ""
-            entity_payloads = _extract_simple_entities(text)
-            if dry_run:
-                metrics["entities"] += len(entity_payloads)
-                continue
-            for payload in entity_payloads:
-                MemoryGraphEntity.objects.update_or_create(
-                    entity_id=payload["entity_id"],
-                    defaults={
-                        "entity_type": payload["entity_type"],
-                        "canonical_name": payload["canonical_name"],
-                        "aliases": [],
-                        "attributes": payload.get("attributes", {}),
-                        "scope_tokens": (document.source_object.metadata or {}).get("scope_tokens") or [],
-                        "sensitivity": document.source_object.source.sensitivity,
-                        "is_active": True,
-                    },
-                )
-                metrics["entities"] += 1
-            if "unknown:" in text:
-                MemoryGraphReviewItem.objects.create(
-                    item_kind=MemoryGraphReviewItem.ItemKind.UNKNOWN_TYPE,
-                    status=MemoryGraphReviewItem.Status.NEEDS_EXPERT_REVIEW,
-                    source=source,
-                    payload={"marker": "unknown:"},
-                    evidence=[{"document_id": document.document_id}],
-                )
-                metrics["review_items"] += 1
-        run.status = MemoryGraphExtractionRun.Status.SUCCEEDED
-        run.finished_at = timezone.now()
-        run.metrics = metrics
-        run.save(update_fields=["status", "finished_at", "metrics", "updated_at"])
-        return metrics
-    except Exception as exc:
-        run.status = MemoryGraphExtractionRun.Status.FAILED
-        run.finished_at = timezone.now()
-        run.error_message = str(exc)
-        run.metrics = metrics
-        run.save(update_fields=["status", "finished_at", "error_message", "metrics", "updated_at"])
-        raise
 
 
 def get_source_ingestion_profile(source: MemorySource):
@@ -811,22 +705,6 @@ def _mark_source_object(source_object, *, status, error="", partial_reason="", i
             "updated_at",
         ]
     )
-
-
-def _extract_simple_entities(text: str):
-    entities = []
-    for marker, entity_type in (("Отдел ", "Department"), ("Инструкция ", "Document"), ("Процедура ", "Procedure")):
-        if marker.lower() in text.lower():
-            canonical_name = marker.strip()
-            entities.append(
-                {
-                    "entity_id": "entity:" + hashlib.sha256(f"{entity_type}:{canonical_name}".encode("utf-8")).hexdigest()[:32],
-                    "entity_type": entity_type,
-                    "canonical_name": canonical_name,
-                    "attributes": {"source": "local-pattern-extractor-v1"},
-                }
-            )
-    return entities
 
 
 def _safe_name(value: str):

@@ -1,12 +1,25 @@
 # Операционный guide: memory ingestion и graph schema bootstrapping
 
+> **ADR-0030 decision 3 (2026-07-04).** LLM graph-extraction контур
+> (`MemoryGraphEntity`/`MemoryGraphExtractionRun`/`MemoryGraphSchemaProposal`/
+> `MemoryGraphReviewItem`, команды `memory_graph_extract` и
+> `memory_graph_schema_discover`) удален из кода. Раздел «Schema Review
+> Queue» ниже описывает **прежний** MVP-процесс и оставлен для истории;
+> актуальный путь рёбер — контролируемый словарь типов
+> (`contracts/ai/memory_graph_schema.json`), валидатор блока `relations:` во
+> frontmatter файлов знаний и детерминированный материализатор
+> `MemoryKnowledgeEdge`, оба в `apps/memory/knowledge_edges.py`, запускаемые
+> как часть `memory_reconcile` (без LLM). Graph runtime search по-прежнему
+> выключен (`Later` backlog).
+
 ## Назначение
 
-Этот guide описывает, как людям и агентам внедрять и эксплуатировать ingestion корпоративных документов и bootstrapping схемы графа памяти. Архитектурные решения зафиксированы в:
+Этот guide описывает, как людям и агентам внедрять и эксплуатировать ingestion корпоративных документов. Архитектурные решения зафиксированы в:
 
 - `docs/adr/ADR-0003-ai-memory-service.md`;
-- `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
-- `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md`.
+- `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md` (частично отменен ADR-0030 decision 3 — граф-экстракция удалена, механика модерируемой схемы сохранена на контракте словаря типов);
+- `docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md`;
+- `docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md` (historical).
 
 Документ не разрешает менять `apps/` или `contracts/` в обход отдельного task packet. Он фиксирует операторские правила, ограничения MVP и проверки.
 
@@ -23,9 +36,9 @@
 - default max file size 100 MB;
 - partial indexing для больших или сложных документов с явным issue/review flag;
 - scope-based access через `scope_rule` из `MemorySource`;
-- graph schema bootstrapping по подготовленному safe/de-identified corpus;
-- автоматическое создание graph entities/facts только после принятия схемы и прохождения validation gates;
-- selective review queue для ingestion issues, schema proposals и рискованных extraction exceptions.
+- контролируемый словарь типов рёбер/концептов (`contracts/ai/memory_graph_schema.json`) и валидатор блока `relations:` frontmatter — граф больше не строится LLM-экстракцией (ADR-0030 decision 3, см. раздел «Schema Review Queue»);
+- детерминированный материализатор `MemoryKnowledgeEdge` как шаг `memory_reconcile`;
+- selective review queue для ingestion issues.
 
 В MVP не входит:
 
@@ -34,7 +47,7 @@
 - хранение SMB credentials в Django или contracts;
 - наследование реальных файловых ACL как механизм доступа;
 - копирование всех raw documents в `data/memory/raw_vault/`;
-- обязательный human review для каждого GraphEntity/GraphFact;
+- LLM graph extraction (удалено, ADR-0030 decision 3) и связанный с ним human review для каждой сущности/факта;
 - визуальный graph explorer или полноценный ontology editor;
 - production cloud OCR/LLM для чувствительных документов;
 - indexed extraction embedded images inside DOCX/PDF, если документ не обрабатывается как scan;
@@ -137,10 +150,8 @@ python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code>
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department>
-python manage.py memory_graph_schema_discover --package <package-json> --dry-run
-python manage.py memory_graph_schema_discover --package <package-json>
-python manage.py memory_graph_extract --source-code <code> --dry-run
-python manage.py memory_graph_extract --source-code <code>
+python manage.py memory_reconcile --dry-run
+python manage.py memory_reconcile
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py memory_reindex --corpus all --backend all
@@ -306,30 +317,46 @@ memory_discover_source
 - `memory_index_operator` — reindex/delete stale/retry failed index;
 - `memory_observer` — только чтение безопасной очереди.
 
-## Schema Review Queue
+## Schema Review Queue (historical — see edge-vocabulary workflow below)
 
-Graph schema bootstrapping работает с типами и правилами, а не с каждым конкретным фактом.
+Этот раздел описывает прежний (до ADR-0030 decision 3) MVP-процесс LLM graph
+schema bootstrapping: safe/de-identified bootstrap package →
+`memory_graph_schema_discover` предлагал entity/relation types →
+`MemoryGraphSchemaProposal`/`MemoryGraphReviewItem` → эксперт/владелец графа
+принимал или отклонял → `memory_graph_extract` создавал
+`MemoryGraphEntity`/facts автоматически по принятой схеме. Весь этот контур,
+включая обе команды и все четыре модели, удален.
 
-Stage A, initiation:
+### Текущий путь: контролируемый словарь рёбер + `relations:` + материализатор
 
-1. Выбрать process-diverse подразделение.
-2. Подготовить curated document subset.
-3. Согласовать competency questions.
-4. Собрать safe/de-identified bootstrap package.
-5. Сформировать proposals по entity types, relation types, attributes, canonicalization rules и forbidden/noisy patterns.
-6. Передать delta профильному эксперту.
-7. Передать итог владельцу графа для финального accept/edit/reject.
-8. Accepted proposals становятся частью runtime/default `memory_graph_schema.json` через контролируемое изменение контракта.
-9. Rejected proposals сохраняются как negative examples.
+Модерируемая схема (правило ADR-0004 «новый тип не попадает в словарь без
+предложения и ревью владельцем») сохранена, но носитель другой:
 
-Stage B, working schema evolution:
+1. Стартовый и последующий словарь типов концептов/рёбер живет в
+   `contracts/ai/memory_graph_schema.json` (`entity_types`, `relation_types`,
+   поле `status`: `proposed` → `accepted`/`rejected`/`deprecated`); правило
+   расширения задокументировано в поле `expansion_rule` этого файла.
+2. Новый тип ребра входит в контракт со `status: proposed` (сам факт правки
+   контракта — предложение, ревьюится как любое другое изменение контракта);
+   становится доступным для `relations:` только когда владелец графа
+   переключает его на `status: accepted`.
+3. Агент/человек, синтезируя знание, вручную (без LLM-экстракции) добавляет
+   типизированные рёбра в блок `relations:` frontmatter файла знания —
+   `type` (из принятого словаря), `target` (knowledge_id или путь другого
+   файла знания) и `provenance` (ссылка на immutable-источник в форме
+   `kind:locator`, например `source_code:relative/path`).
+4. `apps/memory/knowledge_edges.py`:
+   - `validate_relations_block`/`validate_relation_entry` проверяют это
+     против словаря и отклоняют непринятый тип с понятной ошибкой;
+   - `materialize_knowledge_edges` детерминированно (без LLM) перестраивает
+     таблицу `MemoryKnowledgeEdge` из `relations:` всех файлов знаний; шаг
+     запускается как часть `memory_reconcile` (см. команду ниже), полная
+     пересборка идемпотентна.
 
-- новые документы обрабатываются по принятой схеме;
-- валидные concrete entities/facts создаются автоматически;
-- unknown patterns, conflicts, noisy terms и coverage gaps собираются как proposals;
-- periodic review выполняют профильные эксперты и владелец графа.
-
-Каждый accepted graph fact обязан иметь provenance: source, object id, `document_id` или evidence position, schema version, extractor, confidence, scope tokens и sensitivity.
+Provenance на ребре указывает только в immutable-источник и не
+инвалидируется правкой прозы страницы (§6 концепта v0.5); отставание
+объявленных рёбер от новой прозы сигнализируется страничным
+`lifecycle: needs-reconcile`, не ошибкой материализации.
 
 ## Cloud/OCR ограничения
 

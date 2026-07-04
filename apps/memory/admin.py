@@ -6,13 +6,10 @@ from .models import (
     MemoryAccessAudit,
     MemoryEvalCase,
     MemoryExternalConnectorJob,
-    MemoryGraphEntity,
-    MemoryGraphExtractionRun,
-    MemoryGraphReviewItem,
-    MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemoryFullTextIndex,
+    MemoryKnowledgeEdge,
     MemoryKnowledgeItem,
     MemorySearchDocument,
     MemorySource,
@@ -192,39 +189,28 @@ class MemoryIngestionIssueAdmin(admin.ModelAdmin):
         self.message_user(request, f"Проигнорировано проблем памяти: {updated}.")
 
 
-@admin.register(MemoryGraphEntity)
-class MemoryGraphEntityAdmin(admin.ModelAdmin):
-    list_display = ("entity_id", "entity_type", "canonical_name", "is_active", "sensitivity", "updated_at")
-    list_filter = ("entity_type", "is_active", "sensitivity")
-    search_fields = ("entity_id", "entity_type", "canonical_name")
-    readonly_fields = ("created_at", "updated_at")
+@admin.register(MemoryKnowledgeEdge)
+class MemoryKnowledgeEdgeAdmin(admin.ModelAdmin):
+    list_display = ("source_path", "edge_type", "target", "source_knowledge_id", "target_knowledge_id", "updated_at")
+    list_filter = ("edge_type",)
+    search_fields = ("source_path", "source_knowledge_id", "target", "target_knowledge_id", "provenance")
+    readonly_fields = (
+        "source_path",
+        "source_knowledge_id",
+        "edge_type",
+        "target",
+        "target_knowledge_id",
+        "target_path",
+        "provenance",
+        "created_at",
+        "updated_at",
+    )
 
-
-@admin.register(MemoryGraphExtractionRun)
-class MemoryGraphExtractionRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "source", "status", "started_at", "finished_at", "created_at")
-    list_filter = ("status", "source__domain", "created_at")
-    search_fields = ("source__code", "error_message")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source",)
-
-
-@admin.register(MemoryGraphSchemaProposal)
-class MemoryGraphSchemaProposalAdmin(admin.ModelAdmin):
-    list_display = ("proposal_kind", "status", "department", "confidence", "reviewed_by", "reviewed_at", "created_at")
-    list_filter = ("proposal_kind", "status", "department", "created_at", "reviewed_at")
-    search_fields = ("department", "rationale")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("reviewed_by",)
-
-
-@admin.register(MemoryGraphReviewItem)
-class MemoryGraphReviewItemAdmin(admin.ModelAdmin):
-    list_display = ("item_kind", "status", "source", "reviewed_by", "reviewed_at", "created_at")
-    list_filter = ("item_kind", "status", "source__domain", "created_at")
-    search_fields = ("source__code", "decision")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source", "reviewed_by")
+    def has_add_permission(self, request):
+        # ADR-0030 decision 3: rows are a deterministic projection rebuilt by
+        # memory_reconcile from knowledge-file `relations:` blocks, not
+        # hand-authored.
+        return False
 
 
 @admin.register(MemoryKnowledgeItem)

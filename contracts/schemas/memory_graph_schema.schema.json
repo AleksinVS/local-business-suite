@@ -31,7 +31,8 @@
     "auto_accept_policy": { "type": "object" },
     "review_policy": { "type": "object" },
     "department_evidence": { "type": "array" },
-    "changelog": { "type": "array" }
+    "changelog": { "type": "array" },
+    "expansion_rule": { "type": "string" }
   },
   "additionalProperties": false
 }

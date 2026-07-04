@@ -397,6 +397,28 @@ def _walk_knowledge_files(*, root: Path, base_dir: Path) -> list[tuple[str, dict
     return entries
 
 
+def walk_all_knowledge_files(*, root: Path | None = None) -> list[tuple[str, dict, str]]:
+    """Return every active knowledge file across all scopes (``org/`` + every ``users/<id>/``).
+
+    Shared corpus-wide walk used by the per-scope index/log rebuilds' sibling
+    need — the ``relations:`` edge materializer
+    (``apps.memory.knowledge_edges.materialize_knowledge_edges``) — which
+    needs a single pass over the whole repo to resolve edge targets and
+    rebuild ``MemoryKnowledgeEdge`` deterministically from the file canon.
+    Ordering is stable (org first, then users sorted by id) so a rebuild with
+    no file changes is a no-op.
+    """
+    root = root or ensure_knowledge_repo()
+    entries = list(_walk_knowledge_files(root=root, base_dir=root / "org"))
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            entries.extend(_walk_knowledge_files(root=root, base_dir=user_dir))
+    return entries
+
+
 def render_knowledge_file(payload: KnowledgeFile) -> str:
     metadata = yaml.safe_dump(_plain_value(payload.metadata), allow_unicode=True, sort_keys=False).strip()
     body = (payload.body or "").strip()

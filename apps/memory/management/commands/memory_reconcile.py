@@ -23,6 +23,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.memory.chat_memory import index_knowledge_item
+from apps.memory.knowledge_edges import materialize_knowledge_edges
 from apps.memory.knowledge_files import (
     _git_head,
     _safe_repo_path,
@@ -174,6 +175,17 @@ class Command(BaseCommand):
         # concept pages will be added here in stage 5a (data store), building the
         # dataset registry projection from the wiki, like edges from `relations:`.
 
+        # ADR-0030 decision 3: the graph-extraction contour is replaced by a
+        # deterministic materializer that parses every knowledge file's
+        # `relations:` frontmatter against the controlled edge-type vocabulary
+        # (contracts/ai/memory_graph_schema.json) and (re)builds
+        # MemoryKnowledgeEdge. No LLM; runs on every reconcile (like the
+        # index/log rebuild below), not gated by the per-item content-hash
+        # loop above, since edges depend on the whole corpus (a target may
+        # live in an unrelated file). `--dry-run` reports the projected
+        # create/update/delete counts without writing.
+        edges_result = materialize_knowledge_edges(dry_run=dry_run)
+
         indexes_written = []
         logs_written = []
         if not dry_run:
@@ -193,6 +205,8 @@ class Command(BaseCommand):
             "Memory reconcile finished: "
             f"scanned={scanned}, reconciled={reconciled}, held={held}, "
             f"indexes_written={len(indexes_written)}, logs_written={len(logs_written)}, "
+            f"edges_created={edges_result.created}, edges_updated={edges_result.updated}, "
+            f"edges_deleted={edges_result.deleted}, edges_skipped={len(edges_result.skipped)}, "
             f"dry_run={dry_run}, head={head[:12] or 'none'}"
         )
 

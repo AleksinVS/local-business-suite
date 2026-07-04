@@ -163,8 +163,13 @@ def get_settings_descriptors():
             setting_id="memory.contract.graph_schema",
             domain="memory",
             section="Граф",
-            title="Схема графа памяти",
-            description="Модерируемый контракт схемы графа для извлеченных сущностей и фактов.",
+            title="Словарь типов рёбер памяти",
+            description=(
+                "Модерируемый контролируемый словарь типов рёбер (и типа концепта) для блока "
+                "relations: в frontmatter файлов знаний; проверяется валидатором relations: и "
+                "детерминированным материализатором MemoryKnowledgeEdge (ADR-0030 decision 3). "
+                "Не схема LLM-извлечения — извлечение сущностей/фактов удалено."
+            ),
             help_topic_id="settings.memory.contract.graph_schema",
             storage_kind="runtime_contract",
             value_type="json",

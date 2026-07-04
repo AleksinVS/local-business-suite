@@ -17,6 +17,6 @@
   "memory_retrieval_budget.schema.json": "Schema для бюджета retrieval orchestration памяти",
   "memory_ingestion_profiles.schema.json": "Schema для профилей ingestion-коннектора памяти",
   "memory_file_organization_profiles.schema.json": "Schema для профилей автоупорядочивания файловых источников",
-  "memory_graph_schema.schema.json": "Schema для единой схемы графа памяти",
+  "memory_graph_schema.schema.json": "Schema для контролируемого словаря типов рёбер/концептов relations: (ADR-0030 решение 3)",
   "workorder_status_colors.schema.json": "Schema для палитры цветов статусов заявок"
 }

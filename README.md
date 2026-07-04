@@ -58,7 +58,7 @@
 - строит стабильную идентичность файлов, baseline virtual structure, входной каталог и согласованный managed_fs перенос с quarantine/purge gate;
 - дает пользователю личную виртуальную файловую структуру в `/memory/files/`, не меняя физическое размещение и права доступа;
 - ведет issue/review queue для skipped, partial, unsupported и рискованных документов;
-- поддерживает контракт `memory_graph_schema.json` и moderated schema proposals для bootstrapping типов графа, но не включает graph runtime search;
+- поддерживает контракт `memory_graph_schema.json` как контролируемый словарь типов рёбер для блока `relations:` frontmatter и детерминированный материализатор `MemoryKnowledgeEdge` (ADR-0030 решение 3; LLM graph-extraction контур удален), но не включает graph runtime search;
 - содержит reference implementation подключения внешних информационных систем через queued API-коннекторы, database queue backend и normalized landing zone;
 - хранит данные чатов, metadata памяти и управляющие модели аналитики в единой основной БД;
 - возвращает AI-чату только безопасные результаты с `citations`;
@@ -88,7 +88,7 @@
 - `contracts/ai/memory_routing.json` — правила маршрутизации по sensitivity.
 - `contracts/ai/memory_ingestion_profiles.json` — профили local/UNC adapters, parser/OCR cascade, limits и raw/ACL policies.
 - `contracts/ai/memory_file_organization_profiles.json` — профили входного каталога, managed root, retention и порогов предложений файловой структуры.
-- `contracts/ai/memory_graph_schema.json` — единая схема графа памяти.
+- `contracts/ai/memory_graph_schema.json` — контролируемый словарь типов рёбер/концептов для `relations:` frontmatter и материализатора рёбер.
 
 Ограничения текущей версии:
 
@@ -164,7 +164,7 @@ python manage.py memory_sync_source --dry-run
 python manage.py memory_discover_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
-python manage.py memory_graph_extract --source-code <code> --dry-run
+python manage.py memory_reconcile --dry-run
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py memory_eval --dry-run

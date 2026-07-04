@@ -644,7 +644,12 @@ def _search_channel_trace(search_mode: str, ranking_profile_config: Mapping[str,
         },
         "graph": {
             "status": "disabled",
-            "reason": "Graph runtime search not_ready; схема и extraction остаются отдельным контуром.",
+            "reason": (
+                "Graph runtime search not_ready (Later backlog, ADR-0030 decision 3): "
+                "typed edges are materialized from knowledge-file `relations:` frontmatter "
+                "(apps.memory.knowledge_edges) with no LLM extraction contour, but there is "
+                "no graph search backend wired into retrieval yet."
+            ),
             "requested": search_mode == "knowledge_graph",
         },
     }

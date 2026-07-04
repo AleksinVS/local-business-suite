@@ -36,12 +36,9 @@ from .models import (
     MemoryAccessAudit,
     MemoryEvalCase,
     MemoryExternalConnectorJob,
-    MemoryGraphEntity,
-    MemoryGraphExtractionRun,
-    MemoryGraphReviewItem,
-    MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
+    MemoryKnowledgeEdge,
     MemoryKnowledgeItem,
     MemorySearchDocument,
     MemorySource,
@@ -126,40 +123,6 @@ MEMORY_INGESTION_BOOTSTRAP_MODELS = {
         "message",
         "metadata",
     },
-    "MemoryGraphSchemaProposal": {
-        "proposal_kind",
-        "status",
-        "payload",
-        "evidence",
-        "confidence",
-        "reviewed_by",
-    },
-    "MemoryGraphEntity": {
-        "entity_id",
-        "entity_type",
-        "canonical_name",
-        "aliases",
-        "attributes",
-        "scope_tokens",
-        "sensitivity",
-        "is_active",
-    },
-    "MemoryGraphExtractionRun": {
-        "source",
-        "status",
-        "started_at",
-        "finished_at",
-        "metrics",
-        "error_message",
-    },
-    "MemoryGraphReviewItem": {
-        "item_kind",
-        "status",
-        "payload",
-        "evidence",
-        "decision",
-        "reviewed_by",
-    },
 }
 
 
@@ -227,10 +190,7 @@ class MemoryAdminObservabilityTests(TestCase):
             MemorySourceObject: django_admin.site._registry[MemorySourceObject].__class__,
             MemoryIngestionRun: django_admin.site._registry[MemoryIngestionRun].__class__,
             MemoryIngestionIssue: django_admin.site._registry[MemoryIngestionIssue].__class__,
-            MemoryGraphEntity: django_admin.site._registry[MemoryGraphEntity].__class__,
-            MemoryGraphExtractionRun: django_admin.site._registry[MemoryGraphExtractionRun].__class__,
-            MemoryGraphSchemaProposal: django_admin.site._registry[MemoryGraphSchemaProposal].__class__,
-            MemoryGraphReviewItem: django_admin.site._registry[MemoryGraphReviewItem].__class__,
+            MemoryKnowledgeEdge: django_admin.site._registry[MemoryKnowledgeEdge].__class__,
             MemoryKnowledgeItem: MemoryKnowledgeItemAdmin,
             SecretHandle: django_admin.site._registry[SecretHandle].__class__,
             SecretAccessAudit: django_admin.site._registry[SecretAccessAudit].__class__,
@@ -252,6 +212,32 @@ class MemoryAdminObservabilityTests(TestCase):
         self.assertNotIn("memory_memoryknowledgecandidate", table_names)
         self.assertNotIn("memory_memoryreviewaction", table_names)
 
+    def test_memory_graph_extraction_contour_is_gone_from_schema_and_code(self):
+        """ADR-0030 decision 3: the LLM graph-extraction contour (entities,
+        extraction runs, schema proposals, review items) is removed outright;
+        typed edges now come from the deterministic ``relations:``
+        materializer (``MemoryKnowledgeEdge``), not an LLM extraction run."""
+        from django.db import connection
+
+        for model_name in (
+            "MemoryGraphEntity",
+            "MemoryGraphExtractionRun",
+            "MemoryGraphSchemaProposal",
+            "MemoryGraphReviewItem",
+        ):
+            self.assertIsNone(get_optional_memory_model(model_name))
+        table_names = set(connection.introspection.table_names())
+        for table_name in (
+            "memory_memorygraphentity",
+            "memory_memorygraphextractionrun",
+            "memory_memorygraphschemaproposal",
+            "memory_memorygraphreviewitem",
+        ):
+            self.assertNotIn(table_name, table_names)
+        available_commands = get_commands()
+        self.assertNotIn("memory_graph_extract", available_commands)
+        self.assertNotIn("memory_graph_schema_discover", available_commands)
+
     def test_memory_admin_search_fields_do_not_include_storage_paths(self):
         path_fields = {"raw_path", "safe_path", "text_path"}
 
@@ -264,10 +250,7 @@ class MemoryAdminObservabilityTests(TestCase):
             MemorySourceObject,
             MemoryIngestionRun,
             MemoryIngestionIssue,
-            MemoryGraphEntity,
-            MemoryGraphExtractionRun,
-            MemoryGraphSchemaProposal,
-            MemoryGraphReviewItem,
+            MemoryKnowledgeEdge,
             MemoryKnowledgeItem,
             SecretHandle,
             SecretAccessAudit,
@@ -536,7 +519,6 @@ class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase
         command_cases = (
             ("memory_discover_source", ["--source-code", "bootstrap_test_source", "--dry-run"]),
             ("memory_ingest_source", ["--source-code", "bootstrap_test_source", "--dry-run"]),
-            ("memory_graph_extract", ["--source-code", "bootstrap_test_source", "--dry-run"]),
         )
         available_commands = get_commands()
         checked_commands = []
@@ -2429,6 +2411,187 @@ class MemoryReconcileTests(TestCase):
 
             org_log_path = Path(tmpdir) / "knowledge_repo" / "org" / "log.md"
             self.assertTrue(org_log_path.exists())
+
+
+class MemoryKnowledgeEdgeTests(TestCase):
+    """Deterministic `relations:` edge materializer (ADR-0030 decision 3, packet 05).
+
+    Replaces the removed LLM graph-extraction contour: typed edges come from
+    a knowledge file's `relations:` frontmatter, validated against the
+    controlled edge-type vocabulary (contracts/ai/memory_graph_schema.json)
+    and materialized into MemoryKnowledgeEdge by memory_reconcile — no LLM."""
+
+    databases = RUNTIME_DATABASES
+
+    def _make_item(self, *, tag):
+        from apps.ai.models import ChatMessage, ChatSession
+
+        from .chat_memory import remember_knowledge
+
+        user = User.objects.create_user(username=f"edge-user-{tag}", password="pass")
+        session = ChatSession.objects.create(user=user, title="Memory chat")
+        message = ChatMessage.objects.create(
+            session=session, role=ChatMessage.Role.USER, content=f"Запомни: concept {tag} note."
+        )
+        result = remember_knowledge(
+            actor=user, session=session, payload={"message_ids": [message.id]}, request_id=f"req-edge-{tag}"
+        )
+        return user, MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
+
+    def _rewrite_relations(self, item, relations):
+        from .knowledge_files import (
+            KnowledgeFile,
+            _safe_repo_path,
+            knowledge_repo_root,
+            parse_knowledge_file,
+            render_knowledge_file,
+        )
+
+        path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+        parsed = parse_knowledge_file(path.read_text(encoding="utf-8"))
+        meta = dict(parsed.metadata)
+        meta["relations"] = relations
+        new = KnowledgeFile(metadata=meta, body=parsed.body)
+        path.write_text(render_knowledge_file(new), encoding="utf-8")
+
+    def test_valid_relation_produces_knowledge_edge_after_reconcile(self):
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            _source_user, source_item = self._make_item(tag="source")
+            _target_user, target_item = self._make_item(tag="target")
+
+            self._rewrite_relations(
+                source_item,
+                [
+                    {
+                        "type": "depends_on",
+                        "target": target_item.memory_id,
+                        "provenance": "source_code:workorders_public_timeline",
+                    }
+                ],
+            )
+
+            out = StringIO()
+            call_command("memory_reconcile", stdout=out)
+            self.assertIn("edges_created=1", out.getvalue())
+
+            edge = MemoryKnowledgeEdge.objects.get(
+                source_path=source_item.knowledge_file_path,
+                edge_type="depends_on",
+                target=target_item.memory_id,
+            )
+            self.assertEqual(edge.source_knowledge_id, source_item.memory_id)
+            self.assertEqual(edge.target_path, target_item.knowledge_file_path)
+            self.assertEqual(edge.target_knowledge_id, target_item.memory_id)
+            self.assertEqual(edge.provenance, "source_code:workorders_public_timeline")
+
+    def test_unknown_edge_type_rejected_with_clear_error(self):
+        from .knowledge_edges import validate_relation_entry
+
+        with self.assertRaises(ValidationError) as ctx:
+            validate_relation_entry(
+                {"type": "not_a_real_relation", "target": "some/concept.md", "provenance": "source_code:some/path"}
+            )
+        self.assertIn("not_a_real_relation", str(ctx.exception))
+
+    def test_pending_edge_type_not_yet_accepted_is_rejected(self):
+        """A type present in the vocabulary with status=proposed (not yet
+        reviewed/accepted by the graph owner) is not usable in `relations:`
+        yet — the moderated-schema expansion gate (ADR-0004 mechanic, carried
+        by the contract's `status` field instead of the removed
+        MemoryGraphSchemaProposal/MemoryGraphReviewItem tables)."""
+        from .knowledge_edges import validate_relation_entry
+
+        with self.assertRaises(ValidationError):
+            validate_relation_entry(
+                {"type": "duplicates", "target": "some/concept.md", "provenance": "source_code:some/path"}
+            )
+
+    def test_invalid_relation_provenance_rejected_with_clear_error(self):
+        from .knowledge_edges import validate_relation_entry
+
+        with self.assertRaises(ValidationError) as ctx:
+            validate_relation_entry(
+                {"type": "relates_to", "target": "some/concept.md", "provenance": "see the report"}
+            )
+        self.assertIn("provenance", str(ctx.exception))
+
+    def test_full_rebuild_is_deterministic(self):
+        from .knowledge_edges import materialize_knowledge_edges
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            _source_user, source_item = self._make_item(tag="rebuild-source")
+            _target_user, target_item = self._make_item(tag="rebuild-target")
+            self._rewrite_relations(
+                source_item,
+                [
+                    {
+                        "type": "relates_to",
+                        "target": target_item.memory_id,
+                        "provenance": "source_code:workorders_public_timeline",
+                    }
+                ],
+            )
+
+            first_result = materialize_knowledge_edges()
+            self.assertEqual(first_result.created, 1)
+            first_rows = sorted(
+                MemoryKnowledgeEdge.objects.values_list("source_path", "edge_type", "target", "provenance")
+            )
+
+            second_result = materialize_knowledge_edges()
+            self.assertEqual((second_result.created, second_result.updated, second_result.deleted), (0, 0, 0))
+            second_rows = sorted(
+                MemoryKnowledgeEdge.objects.values_list("source_path", "edge_type", "target", "provenance")
+            )
+            self.assertEqual(first_rows, second_rows)
+
+    def test_reconcile_dry_run_reports_edge_counts_without_writing(self):
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            _source_user, source_item = self._make_item(tag="dry-source")
+            _target_user, target_item = self._make_item(tag="dry-target")
+            self._rewrite_relations(
+                source_item,
+                [
+                    {
+                        "type": "relates_to",
+                        "target": target_item.memory_id,
+                        "provenance": "source_code:workorders_public_timeline",
+                    }
+                ],
+            )
+
+            out = StringIO()
+            call_command("memory_reconcile", "--dry-run", stdout=out)
+            self.assertIn("edges_created=1", out.getvalue())
+            self.assertEqual(MemoryKnowledgeEdge.objects.count(), 0)
+
+    def test_invalid_relation_entry_is_skipped_not_fatal_for_the_whole_run(self):
+        """One bad relation in a file must not block reconciling the rest of
+        the repo (soft degradation, concept v0.5 §7.1)."""
+        from .knowledge_edges import materialize_knowledge_edges
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            _source_user, source_item = self._make_item(tag="mixed-source")
+            _target_user, target_item = self._make_item(tag="mixed-target")
+            self._rewrite_relations(
+                source_item,
+                [
+                    {
+                        "type": "relates_to",
+                        "target": target_item.memory_id,
+                        "provenance": "source_code:workorders_public_timeline",
+                    },
+                    {"type": "not_a_real_relation", "target": target_item.memory_id, "provenance": "source_code:x"},
+                ],
+            )
+
+            result = materialize_knowledge_edges()
+            self.assertEqual(result.created, 1)
+            self.assertEqual(len(result.skipped), 1)
+            self.assertIn("not_a_real_relation", result.skipped[0]["error"])
+            self.assertTrue(
+                MemoryKnowledgeEdge.objects.filter(edge_type="relates_to", target=target_item.memory_id).exists()
+            )
 
 
 class MemoryPendingReviewUITests(MemoryModelFactoryMixin, TestCase):

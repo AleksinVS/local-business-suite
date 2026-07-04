@@ -13,5 +13,5 @@
   "memory_retrieval_budget.json": "Бюджеты lightweight retrieval orchestration без обязательного LLM в hot path",
   "memory_ingestion_profiles.json": "Дефолтные профили ingestion-коннектора памяти: adapters, parsers, OCR, limits и policies",
   "memory_file_organization_profiles.json": "Дефолтные профили автоупорядочивания файловых источников без host-specific путей",
-  "memory_graph_schema.json": "Дефолтная единая схема графа памяти для bootstrapping и extraction"
+  "memory_graph_schema.json": "Контролируемый словарь типов рёбер/концептов для relations: frontmatter и MemoryKnowledgeEdge материализатора (ADR-0030 решение 3; LLM bootstrapping/extraction контур удален)"
 }

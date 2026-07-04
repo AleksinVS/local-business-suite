@@ -1,113 +1,108 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "name": "memory_graph_schema",
-  "description": "Initial organization-wide graph schema contract for the AI memory service.",
+  "description": "Controlled edge-type (and concept-type) vocabulary for the `relations:` frontmatter block on knowledge files (ADR-0030 decision 3; concept v0.5 §6 and §7.3). This is no longer an LLM graph-extraction schema: there is no automatic entity/fact extraction contour. `entity_types` names the concept-node kind a relation's `subject_type`/`object_type` may reference (today just the generic knowledge-file concept node); `relation_types` is the controlled set of `type:` values the `relations:` validator (apps.memory.knowledge_edges.validate_relations_block) checks each declared edge against before the deterministic materializer (apps.memory.knowledge_edges.materialize_knowledge_edges, run from `memory_reconcile`) writes a MemoryKnowledgeEdge row. No LLM is involved in materialization; the agent only ever emits against this fixed vocabulary when it authors `relations:` in a knowledge file.",
+  "expansion_rule": "ADR-0004's moderated-schema mechanic is preserved on a new carrier: previously a new entity/relation type entered through MemoryGraphSchemaProposal + MemoryGraphReviewItem rows; those tables are removed. Now a new type enters this contract with status 'proposed' (itself a pending change to this file, reviewed like any other contract edit — the concept's single propose -> pending -> review -> stable primitive, §7.2/§7.3, applied to a schema file instead of a database row) and becomes usable by the `relations:` validator only once the graph owner flips it to status 'accepted' here. 'rejected'/'deprecated' entries are kept for history and are never accepted by the validator. The LLM/agent never edits this file directly; it can only draft a proposal for a human to land.",
   "entity_types": {
-    "Department": {
-      "label": "Подразделение",
-      "description": "Организационная единица, участвующая в процессах учреждения.",
-      "scope_note": "Используется для отделений, отделов и служб.",
+    "Concept": {
+      "label": "Концепт (страница знания)",
+      "description": "Любая страница знания (knowledge file) — единственный тип узла графа знаний: узел графа = концепт = страница (концепт v0.5 §5).",
+      "scope_note": "Используется как subject_type/object_type для всех типов рёбер ниже — источник и цель всегда знаниевые файлы, не типизированные организационные сущности.",
       "positive_examples": [
-        "Отдел медицинской техники",
-        "Приемное отделение"
+        "org/sources/workorders/2026/incident-2026-07-01.md",
+        "users/12/sources/chat/2026/preference-timezone.md"
       ],
       "negative_examples": [
-        "кабинет",
-        "здание"
+        "раздел внутри страницы",
+        "отдельное предложение"
       ],
       "attributes": [
-        "name",
-        "short_name"
-      ],
-      "status": "accepted"
-    },
-    "Document": {
-      "label": "Документ",
-      "description": "Внутренний документ, регламент, инструкция, приказ или иной управляемый артефакт.",
-      "scope_note": "Номера документов допускаются в bootstrap после policy review.",
-      "positive_examples": [
-        "Инструкция по техническому обслуживанию",
-        "Приказ"
-      ],
-      "negative_examples": [
-        "устная договоренность"
-      ],
-      "attributes": [
-        "title",
-        "document_number"
-      ],
-      "status": "accepted"
-    },
-    "Procedure": {
-      "label": "Процедура",
-      "description": "Повторяемое действие, рабочий процесс или регламентированная операция.",
-      "scope_note": "Используется для процессов эксплуатации, ремонта, согласования и контроля.",
-      "positive_examples": [
-        "калибровка оборудования",
-        "первичная регистрация заявки"
-      ],
-      "negative_examples": [
-        "одноразовый комментарий"
-      ],
-      "attributes": [
-        "name"
+        "knowledge_id",
+        "title"
       ],
       "status": "accepted"
     }
   },
   "relation_types": {
-    "document_describes_procedure": {
-      "label": "документ описывает процедуру",
-      "subject_type": "Document",
-      "object_type": "Procedure",
-      "description": "Документ содержит правила, описание или порядок выполнения процедуры.",
+    "relates_to": {
+      "label": "связано с",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Неспецифичная смысловая связь между двумя концептами.",
       "status": "accepted"
     },
-    "department_responsible_for_procedure": {
-      "label": "подразделение отвечает за процедуру",
-      "subject_type": "Department",
-      "object_type": "Procedure",
-      "description": "Подразделение отвечает за выполнение или контроль процедуры.",
+    "causes": {
+      "label": "вызывает",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепт-источник является причиной концепта-цели.",
       "status": "accepted"
+    },
+    "depends_on": {
+      "label": "зависит от",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепт-источник требует концепт-цель как предпосылку.",
+      "status": "accepted"
+    },
+    "part_of": {
+      "label": "часть",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепт-источник является частью концепта-цели.",
+      "status": "accepted"
+    },
+    "supersedes": {
+      "label": "заменяет",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепт-источник заменяет устаревший концепт-цель (дублирует frontmatter `supersedes`, но как явное типизированное ребро для обхода графа).",
+      "status": "accepted"
+    },
+    "derived_from": {
+      "label": "выведено из",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепт-источник — датасет/запрос, из которого выведен концепт-цель (концепт v0.5 §3.1, контракт деривации).",
+      "status": "accepted"
+    },
+    "contradicts": {
+      "label": "противоречит",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Концепты содержат конфликтующие утверждения; флаг для линт-прохода reconcile.",
+      "status": "accepted"
+    },
+    "duplicates": {
+      "label": "дублирует",
+      "subject_type": "Concept",
+      "object_type": "Concept",
+      "description": "Предложен на рассмотрение владельцем графа; пока не принят — валидатор отклоняет этот тип как непринятый (демонстрация expansion_rule выше).",
+      "status": "proposed"
     }
   },
   "attribute_types": {
-    "name": {
-      "label": "Название",
-      "value_type": "string"
-    },
-    "short_name": {
-      "label": "Краткое название",
+    "knowledge_id": {
+      "label": "Идентификатор знания",
       "value_type": "string"
     },
     "title": {
       "label": "Заголовок",
-      "value_type": "string"
-    },
-    "document_number": {
-      "label": "Номер документа",
       "value_type": "string"
     }
   },
   "canonicalization_rules": [],
   "negative_examples": [],
   "forbidden_patterns": [],
-  "confidence_thresholds": {
-    "auto_accept_entity": 0.85,
-    "auto_accept_fact": 0.85,
-    "review_below": 0.85
-  },
+  "confidence_thresholds": {},
   "auto_accept_policy": {
-    "enabled": true,
-    "requires_accepted_type": true,
-    "requires_safe_chunk_evidence": true
+    "enabled": false,
+    "note": "Нет LLM-извлечения и авто-принятия по confidence; агент эмитирует рёбра только против утверждённого (status=accepted) словаря; материализатор отклоняет любой тип вне этого списка."
   },
   "review_policy": {
-    "unknown_type": "review",
-    "unknown_relation": "review",
-    "low_confidence": "review",
-    "canonicalization_conflict": "review",
-    "dlp_warning": "review"
+    "unknown_type": "reject",
+    "unknown_relation": "reject",
+    "pending_relation_type": "reject"
   },
   "department_evidence": [],
   "changelog": [
@@ -115,6 +110,11 @@
       "version": "1.0.0",
       "date": "2026-05-20",
       "description": "Initial seed schema for moderated bootstrapping."
+    },
+    {
+      "version": "2.0.0",
+      "date": "2026-07-04",
+      "description": "ADR-0030 decision 3 (packet 05): repurposed from the removed LLM graph-extraction schema into the controlled edge-type vocabulary for the `relations:` frontmatter validator and the deterministic MemoryKnowledgeEdge materializer. entity_types collapsed to the single generic Concept node (graph granularity = knowledge-file concept, concept v0.5 §5); relation_types replaced with a starter wiki-style edge vocabulary (relates_to/causes/depends_on/part_of/supersedes/derived_from/contradicts) plus one status=proposed example (duplicates) documenting the expansion workflow."
     }
   ]
 }

@@ -371,167 +371,6 @@ class MemoryIngestionIssue(models.Model):
         return f"{self.issue_kind}:{self.status}:{self.pk}"
 
 
-class MemoryGraphEntity(models.Model):
-    entity_id = models.CharField(max_length=160, unique=True)
-    entity_type = models.CharField(max_length=80)
-    canonical_name = models.CharField(max_length=255)
-    aliases = models.JSONField(default=list, blank=True)
-    attributes = models.JSONField(default=dict, blank=True)
-    scope_tokens = models.JSONField(default=list, blank=True)
-    sensitivity = models.CharField(max_length=32)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["entity_type", "canonical_name"]
-        indexes = [
-            models.Index(fields=["entity_type"]),
-            models.Index(fields=["canonical_name"]),
-            models.Index(fields=["sensitivity"]),
-            models.Index(fields=["is_active"]),
-        ]
-        verbose_name = "Сущность графа памяти"
-        verbose_name_plural = "Сущности графа памяти"
-
-    def __str__(self):
-        return self.entity_id
-
-
-class MemoryGraphExtractionRun(models.Model):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        RUNNING = "running", "Выполняется"
-        SUCCEEDED = "succeeded", "Успешно"
-        FAILED = "failed", "Ошибка"
-
-    source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="graph_extraction_runs")
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    started_at = models.DateTimeField(blank=True, null=True)
-    finished_at = models.DateTimeField(blank=True, null=True)
-    metrics = models.JSONField(default=dict, blank=True)
-    error_message = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["source", "-created_at"]),
-            models.Index(fields=["status"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(finished_at__isnull=True) | Q(started_at__isnull=True) | Q(started_at__lte=models.F("finished_at")),
-                name="memory_graph_extraction_run_time_range",
-            ),
-        ]
-        verbose_name = "Запуск извлечения графа памяти"
-        verbose_name_plural = "Запуски извлечения графа памяти"
-
-    def __str__(self):
-        return f"{self.source.code}:{self.status}:{self.pk}"
-
-
-class MemoryGraphSchemaProposal(models.Model):
-    class ProposalKind(models.TextChoices):
-        ENTITY_TYPE = "entity_type", "Тип сущности"
-        RELATION_TYPE = "relation_type", "Тип связи"
-        ATTRIBUTE_TYPE = "attribute_type", "Тип атрибута"
-        CANONICALIZATION_RULE = "canonicalization_rule", "Правило каноникализации"
-        FORBIDDEN_PATTERN = "forbidden_pattern", "Запрещенный паттерн"
-
-    class Status(models.TextChoices):
-        PROPOSED = "proposed", "Предложено"
-        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Нужен эксперт"
-        EXPERT_APPROVED = "expert_approved", "Одобрено экспертом"
-        ACCEPTED = "accepted", "Принято"
-        REJECTED = "rejected", "Отклонено"
-        SUPERSEDED = "superseded", "Заменено"
-
-    proposal_kind = models.CharField(max_length=64, choices=ProposalKind.choices)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PROPOSED)
-    department = models.CharField(max_length=120, blank=True)
-    payload = models.JSONField(default=dict)
-    evidence = models.JSONField(default=list, blank=True)
-    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
-    rationale = models.TextField(blank=True)
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_graph_schema_reviews",
-        blank=True,
-        null=True,
-    )
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["status", "-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["proposal_kind"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["department"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(confidence__gte=0) & Q(confidence__lte=1),
-                name="memory_graph_schema_proposal_confidence_0_1",
-            ),
-        ]
-        verbose_name = "Предложение схемы графа памяти"
-        verbose_name_plural = "Предложения схемы графа памяти"
-
-    def __str__(self):
-        return f"{self.proposal_kind}:{self.status}:{self.pk}"
-
-
-class MemoryGraphReviewItem(models.Model):
-    class ItemKind(models.TextChoices):
-        UNKNOWN_TYPE = "unknown_type", "Неизвестный тип"
-        UNKNOWN_RELATION = "unknown_relation", "Неизвестная связь"
-        LOW_CONFIDENCE = "low_confidence", "Низкая уверенность"
-        CANONICALIZATION_CONFLICT = "canonicalization_conflict", "Конфликт каноникализации"
-        DLP_WARNING = "dlp_warning", "Предупреждение DLP"
-
-    class Status(models.TextChoices):
-        OPEN = "open", "Открыт"
-        NEEDS_EXPERT_REVIEW = "needs_expert_review", "Нужен эксперт"
-        RESOLVED = "resolved", "Закрыт"
-        REJECTED = "rejected", "Отклонен"
-
-    item_kind = models.CharField(max_length=64, choices=ItemKind.choices)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.OPEN)
-    source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="graph_review_items", blank=True, null=True)
-    payload = models.JSONField(default=dict)
-    evidence = models.JSONField(default=list, blank=True)
-    decision = models.TextField(blank=True)
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_graph_review_items",
-        blank=True,
-        null=True,
-    )
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["status", "-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["item_kind"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["source", "status"]),
-        ]
-        verbose_name = "Элемент ревью графа памяти"
-        verbose_name_plural = "Элементы ревью графа памяти"
-
-    def __str__(self):
-        return f"{self.item_kind}:{self.status}:{self.pk}"
-
-
 class MemoryKnowledgeItem(models.Model):
     class Scope(models.TextChoices):
         PERSONAL = "personal", "Личное"
@@ -619,6 +458,54 @@ class MemoryKnowledgeItem(models.Model):
 
     def __str__(self):
         return self.memory_id
+
+
+class MemoryKnowledgeEdge(models.Model):
+    """Deterministic edge materialized from a knowledge file's ``relations:`` block.
+
+    ADR-0030 decision 3: this table replaces the removed LLM graph-extraction
+    contour (``MemoryGraphEntity``/``MemoryGraphExtractionRun``/
+    ``MemoryGraphSchemaProposal``/``MemoryGraphReviewItem``). Rows are built by
+    ``apps.memory.knowledge_edges.materialize_knowledge_edges``, which walks
+    the knowledge files (the canon), parses each ``relations:`` entry, and
+    validates it against the controlled edge-type vocabulary
+    (``contracts/ai/memory_graph_schema.json``) — no LLM involved. The table is
+    a rebuildable projection: a full rebuild from the same files always
+    produces the same set of rows (matched on the uniqueness key below), which
+    is what makes it safe to run as an unconditional step of
+    ``memory_reconcile``.
+    """
+
+    source_path = models.CharField(max_length=1000)
+    source_knowledge_id = models.CharField(max_length=160, blank=True)
+    edge_type = models.CharField(max_length=80)
+    target = models.CharField(max_length=1000)
+    target_knowledge_id = models.CharField(max_length=160, blank=True)
+    target_path = models.CharField(max_length=1000, blank=True)
+    provenance = models.CharField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["source_path", "edge_type", "target"]
+        indexes = [
+            models.Index(fields=["source_path"]),
+            models.Index(fields=["source_knowledge_id"]),
+            models.Index(fields=["edge_type"]),
+            models.Index(fields=["target"]),
+            models.Index(fields=["target_knowledge_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_path", "edge_type", "target"],
+                name="memory_knowledge_edge_source_type_target_uniq",
+            ),
+        ]
+        verbose_name = "Ребро знания памяти"
+        verbose_name_plural = "Рёбра знаний памяти"
+
+    def __str__(self):
+        return f"{self.source_path} --{self.edge_type}--> {self.target}"
 
 
 class SecretHandle(models.Model):

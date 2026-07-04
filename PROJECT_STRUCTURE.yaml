@@ -418,7 +418,8 @@ services: # Автономные сервисы (вне Django)
     protocols: # Версионируемые AI UI protocol adapters agent runtime
       __init__.py: file # Инициализация пакета protocol adapters
     app.py: file # FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)
-    config.py: file # Конфигурация runtime (из переменных окружения)
+    config.py: file # Конфигурация runtime (из переменных окружения); резолвер и источник AI-контрактов (ADR-0031)
+    contract_cache.py: file # Кэш JSON-контрактов с инвалидацией по (st_mtime_ns, st_size, st_ino) — перечитывание без перезапуска (ADR-0031)
     gateway_client.py: file # HTTP-клиент для связи с Django tool gateway
     graph.py: file # LangGraph graph — логика агента, активация skills и вызов инструментов
     mcp_server.py: file # MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities

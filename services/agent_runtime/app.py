@@ -21,13 +21,55 @@ from .protocols.agui.v1 import (
     tool_trace_events,
     ui_command_events,
 )
-from .config import load_runtime_settings, get_available_models
+from .config import describe_contract_sources, load_runtime_settings, get_available_models
 from .graph import run_agent, stream_agent
 from .mcp_server import build_mcp_server
 from .schemas import AGUIActorPayload, AGUIRunAgentInput, ChatRequest, ChatResponse
 
 
 mcp_server = build_mcp_server()
+
+# Dedicated logger + handler for the contract-source startup diagnostic
+# (ADR-0031 п.3 шаг 1). A dedicated handler is used, rather than relying
+# on root logging config, because this process has none: uvicorn only
+# configures its own "uvicorn*" loggers (disable_existing_loggers=False),
+# and an unconfigured root logger silently drops INFO records and only
+# lets WARNING+ through via logging.lastResort. Without this handler the
+# "which contract source is actually in use" diagnostic — the entire
+# point of this log line — would be invisible in `docker compose logs`.
+_startup_logger = logging.getLogger("services.agent_runtime.startup")
+if not _startup_logger.handlers:
+    _startup_handler = logging.StreamHandler()
+    _startup_handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    _startup_logger.addHandler(_startup_handler)
+    _startup_logger.setLevel(logging.INFO)
+    _startup_logger.propagate = False
+
+
+def _log_contract_sources_at_startup() -> None:
+    """Log the actual path and source (runtime copy vs packaged default)
+    used for each AI contract file. Emits a WARNING per contract that
+    fell back to the packaged default, since that means the Settings
+    Center runtime copy under data/contracts/ai/ is not reachable from
+    this process (missing ./data mount, or Django has not created the
+    working copy yet)."""
+    for entry in describe_contract_sources():
+        if entry["source"] == "default":
+            _startup_logger.warning(
+                "Contract '%s' is falling back to the packaged default at %s; "
+                "the Settings Center runtime copy under data/contracts/ai/ was "
+                "not found. Verify ./data is mounted read-only into this "
+                "container (docker-compose*.yml, ADR-0031).",
+                entry["name"],
+                entry["path"],
+            )
+        else:
+            _startup_logger.info(
+                "Contract '%s' resolved from %s copy: %s",
+                entry["name"],
+                entry["source"],
+                entry["path"],
+            )
 
 
 def _prompt_hash(prompt: str) -> str:
@@ -101,6 +143,7 @@ def _safe_chat_log_context(payload: ChatRequest, actor_context) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _log_contract_sources_at_startup()
     async with mcp_server.session_manager.run():
         yield
 
@@ -117,7 +160,13 @@ def health():
 @app.get("/health/details")
 def health_details():
     settings = load_runtime_settings()
-    return {"status": "ok", "model": settings.model}
+    contracts = describe_contract_sources()
+    return {
+        "status": "ok",
+        "model": settings.model,
+        "contracts": contracts,
+        "contracts_degraded": any(entry["source"] == "default" for entry in contracts),
+    }
 
 
 @app.get("/models")

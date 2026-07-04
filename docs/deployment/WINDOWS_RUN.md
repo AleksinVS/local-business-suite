@@ -215,6 +215,28 @@ Get-WmiObject Win32_Process -Filter "Name='python.exe'" |
 
 При добавлении **новых** cross-DB FK (`db_constraint=False`, разные DB у родителя и наследника) всегда ставьте `on_delete=models.DO_NOTHING`. Иначе при `delete()` родителя получите 500.
 
+### Проверка источника AI-контрактов (tools.json/task_types.json/models.json)
+
+На Windows-запуске (в отличие от Docker) `agent_runtime` и Django работают на одной
+файловой системе, поэтому дополнительный том не нужен — `data/contracts/ai/` виден
+runtime-процессу напрямую (ADR-0031, доставка контрактов, шаг 1 — том нужен только
+в Docker-конфигурации, см. `docs/deployment/DEPLOYMENT.md`). При старте runtime пишет
+в свой лог фактический источник каждого контракта (`runtime`/`default`/`override`) и
+предупреждение `WARNING`, если контракт откатился на packaged default из `contracts/`
+(это означало бы, что `data/contracts/ai/*.json` отсутствует). Быстрая проверка без
+чтения логов:
+
+```powershell
+curl http://127.0.0.1:8090/health/details
+```
+
+Поле `contracts` показывает путь и источник для каждого контракта; `contracts_degraded:
+true` означает, что хотя бы один контракт читается не из `data/contracts/ai/`. Правки
+контрактов через Settings Center подхватываются работающим runtime без перезапуска
+(инвалидация кэша по метаданным файла, `services/agent_runtime/contract_cache.py`) —
+в отличие от правки `.env`, которая по-прежнему требует перезапуска runtime (см. раздел
+про `DJANGO_AI_GATEWAY_URL` выше).
+
 ## Полезные команды
 
 Проверка проекта:

@@ -26,6 +26,8 @@ services:
       - deployments/test-host/.env
     environment:
       DJANGO_AI_GATEWAY_URL: http://web:8000/ai/gateway
+    volumes:
+      - ./data:/app/data:ro
     networks:
       - internal
     depends_on:

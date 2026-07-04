@@ -1,7 +1,8 @@
 {
   ".": "Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач",
   "app.py": "FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)",
-  "config.py": "Конфигурация runtime (из переменных окружения)",
+  "config.py": "Конфигурация runtime (из переменных окружения); резолвер и источник AI-контрактов (ADR-0031)",
+  "contract_cache.py": "Кэш JSON-контрактов с инвалидацией по (st_mtime_ns, st_size, st_ino) — перечитывание без перезапуска (ADR-0031)",
   "graph.py": "LangGraph graph — логика агента, активация skills и вызов инструментов",
   "task_types.py": "Обработчики типов задач (workorders, lookup, inventory, analytics)",
   "tools.py": "Клиент для вызова инструментов Django (HTTP → gateway)",
@@ -10,5 +11,6 @@
   "schemas.py": "Pydantic-схемы данных (запросы, ответы)",
   "mcp_server.py": "MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities",
   "protocols/": "Версионируемые AI UI protocol adapters, включая AG-UI-compatible слой",
-  "tests/test_normalization.py": "Тесты нормализации данных"
+  "tests/test_normalization.py": "Тесты нормализации данных",
+  "tests/test_contracts.py": "Тесты резолвера AI-контрактов и кэша с инвалидацией по метаданным (ADR-0031)"
 }

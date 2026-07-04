@@ -42,6 +42,8 @@ services:
       - .env
     environment:
       DJANGO_AI_GATEWAY_URL: http://web:8000/ai/gateway
+    volumes:
+      - ./data:/app/data:ro
     depends_on:
       - web
     ports:

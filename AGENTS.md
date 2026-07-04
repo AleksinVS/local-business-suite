@@ -216,7 +216,7 @@ make test
 make contracts
 ```
 
-Дополнительные проверки памяти:
+Дополнительные проверки памяти (после ADR-0030 выравнивания под hybrid-knowledge v0.5: канон-файл + `memory_reconcile`, единая очередь `MemoryExternalConnectorJob`, ревью через git/pending-страницы, словарь рёбер вместо graph-extraction, `apps.filehub` для автоупорядочивания файлов):
 
 ```bash
 python manage.py memory_sync_source --dry-run
@@ -224,15 +224,24 @@ python manage.py memory_discover_source --source-code <code> --dry-run
 python manage.py memory_ingest_source --source-code <code> --dry-run
 python manage.py memory_prepare_bootstrap_package --source-code <code> --department <department> --dry-run
 python manage.py memory_reconcile --dry-run
+python manage.py memory_verify_knowledge_files
+python manage.py memory_alignment_acceptance_e2e
+python manage.py memory_reindex --dry-run
+python manage.py memory_eval --dry-run
+python manage.py validate_architecture_contracts
+```
+
+Команды автоупорядочивания файлов (`memory_file_organization_baseline`, `memory_file_incoming_worker`, `memory_file_structure_stats`, `memory_file_move_worker`, `memory_file_auto_organization_e2e`) зарегистрированы в `apps.filehub.management.commands` (контур вынесен из `apps.memory` и заморожен, ADR-0030 решение 5); вызов через `manage.py` не меняется:
+
+```bash
 python manage.py memory_file_organization_baseline --source-code <code> --dry-run
 python manage.py memory_file_incoming_worker --source-code <code> --dry-run
 python manage.py memory_file_structure_stats --source-code <code> --dry-run
 python manage.py memory_file_move_worker --source-code <code> --dry-run
 python manage.py memory_file_auto_organization_e2e
-python manage.py memory_reindex --dry-run
-python manage.py memory_eval --dry-run
-python manage.py validate_architecture_contracts
 ```
+
+Выведенные из кода команды памяти (не вызывать, их больше нет): `memory_graph_extract`, `memory_graph_schema_discover` (LLM graph-extraction контур удален; заменен словарем типов рёбер `contracts/ai/memory_graph_schema.json` + валидатором `relations:` + детерминированным материализатором, вызываемым из `memory_reconcile`), `memory_reflect_chats`, `knowledge_writer_worker`, `knowledge_index_worker` (запись стала синхронной — `memory.remember` пишет файл + git commit + индекс за один вызов; ночная рефлексия — `knowledge_reflection_worker`).
 
 При любом изменении структуры (добавлении папок/важных файлов) необходимо обновить соответствующие `.desc.json` и запустить `make gen-struct`.
 

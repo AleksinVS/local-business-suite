@@ -215,23 +215,20 @@ def build_tools(
         query: str,
         limit: int = 5,
         sensitivity: str = "internal",
-        search_mode: str = "knowledge_default",
-        ranking_profile: str = "",
-        include_source_data: bool = False,
+        corpus: str = "knowledge",
     ) -> dict:
         """
         Search the safe memory corpus for cited context available to the current user.
 
         Use this for questions about the memory service, indexed knowledge,
         remembered context, source citations, previous safe context, or facts
-        linked to work orders/devices. Use source_explicit when the user asks
-        to search original indexed files or source documents. Use
-        ranking_profile=source_content for exact source content and
-        ranking_profile=source_semantic for meaning-based source file search.
-        Use source_fallback when source documents are acceptable if accepted
-        knowledge is empty, and knowledge_semantic for semantic accepted
-        knowledge search. The tool returns only safe chunks/facts with citations;
-        it does not expose raw snapshots or accepted knowledge for source_data.
+        linked to work orders/devices. corpus="knowledge" (default) searches
+        accepted knowledge; corpus="source_data" searches raw source objects
+        instead (use this when the user explicitly asks to search original
+        indexed files or source documents). There is a single ranking profile
+        (hybrid full-text + vector, RRF fusion) — it is not a parameter. The
+        tool returns only safe chunks/facts with citations; it does not
+        expose raw snapshots.
         """
         result = gateway_client.execute_tool(
             tool_code="memory.search",
@@ -240,9 +237,7 @@ def build_tools(
                 "query": query,
                 "limit": limit,
                 "sensitivity": sensitivity,
-                "search_mode": search_mode,
-                "ranking_profile": ranking_profile,
-                "include_source_data": include_source_data,
+                "corpus": corpus,
             },
             session_id=session_id,
             conversation_id=conversation_id,
@@ -261,13 +256,15 @@ def build_tools(
         importance: str = "",
     ) -> dict:
         """
-        Queue selected chat knowledge for memory ingestion.
+        Save selected chat knowledge into memory synchronously.
 
-        Use this when the user explicitly asks to remember something. If no
-        message_ids are provided, the Django memory service uses the current
-        chat session and the latest user message or user_note. The default
-        target_scope is personal; use organization only when the user clearly
-        asked to remember this for everyone or for the organization.
+        Use this when the user explicitly asks to remember something. The
+        Django memory service writes the knowledge file and its git commit
+        and indexes it within this one call (no queue status to poll). If no
+        message_ids are provided, it uses the current chat session and the
+        latest user message or user_note. The default target_scope is
+        personal; use organization only when the user clearly asked to
+        remember this for everyone or for the organization.
         """
         result = gateway_client.execute_tool(
             tool_code="memory.remember",

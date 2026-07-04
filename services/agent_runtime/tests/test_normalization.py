@@ -195,12 +195,14 @@ class TestPromptMemorySection(unittest.TestCase):
         self.assertIn("memory.update_personal", section)
         self.assertIn("safe corpus", section)
         self.assertIn("citations", section)
-        self.assertIn("source_explicit", section)
-        self.assertIn("source_semantic", section)
-        self.assertIn("ranking_profile", section)
-        self.assertIn("knowledge_semantic", section)
+        self.assertIn("corpus=\"source_data\"", section)
+        self.assertIn("corpus=\"knowledge\"", section)
+        self.assertIn("RRF", section)
         self.assertIn("не является отдельным сетевым сервисом", section)
         self.assertNotIn("read-only инструмент `memory.search`", section)
+        self.assertNotIn("search_mode", section)
+        self.assertNotIn("ranking_profile", section)
+        self.assertNotIn("include_source_data", section)
 
     def test_build_system_prompt_includes_memory_section(self):
         from services.agent_runtime.prompting import build_system_prompt
@@ -303,9 +305,7 @@ class TestRuntimeMemoryTool(unittest.TestCase):
                 "query": "manualftsneedle_xlsx_260526",
                 "limit": 3,
                 "sensitivity": "internal",
-                "search_mode": "source_explicit",
-                "ranking_profile": "source_semantic",
-                "include_source_data": True,
+                "corpus": "source_data",
             }
         )
 
@@ -318,11 +318,37 @@ class TestRuntimeMemoryTool(unittest.TestCase):
                 "query": "manualftsneedle_xlsx_260526",
                 "limit": 3,
                 "sensitivity": "internal",
-                "search_mode": "source_explicit",
-                "ranking_profile": "source_semantic",
-                "include_source_data": True,
+                "corpus": "source_data",
             },
         )
+
+    def test_memory_search_tool_schema_excludes_removed_params(self):
+        """ADR-0030 decision 6: the removed profile-selection params must not
+        appear in the LangChain tool schema advertised to the LLM, since the
+        Django gateway now rejects them (apps/ai/tooling.py
+        _MEMORY_SEARCH_REMOVED_KEYS)."""
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def execute_tool(self, **kwargs):
+                return {"ok": True}
+
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=FakeGatewayClient(),
+            conversation_id="conv-1",
+            request_id="req-1",
+            origin_channel="test",
+            actor_version="v1",
+        )
+        search_tool = next(tool for tool in tools if tool.name == "memory.search")
+        schema_args = set(search_tool.args)
+
+        self.assertEqual(schema_args, {"query", "limit", "sensitivity", "corpus"})
+        self.assertNotIn("search_mode", schema_args)
+        self.assertNotIn("ranking_profile", schema_args)
+        self.assertNotIn("include_source_data", schema_args)
 
     def test_memory_remember_tool_uses_current_session_by_default(self):
         from services.agent_runtime.tools import build_tools

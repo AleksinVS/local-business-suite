@@ -168,10 +168,9 @@ python manage.py memory_reconcile --dry-run
 python manage.py memory_reindex --corpus all --backend fulltext --dry-run
 python manage.py memory_reindex --corpus all --backend vector --dry-run
 python manage.py memory_eval --dry-run
-python manage.py knowledge_writer_worker --dry-run
-python manage.py knowledge_index_worker --dry-run
 python manage.py knowledge_reflection_worker --dry-run
 python manage.py memory_verify_knowledge_files --strict
+python manage.py memory_alignment_acceptance_e2e
 python manage.py memory_file_organization_baseline --source-code <code> --dry-run
 python manage.py memory_file_incoming_worker --source-code <code> --dry-run
 python manage.py memory_file_structure_stats --source-code <code> --dry-run
@@ -179,6 +178,8 @@ python manage.py memory_file_move_worker --source-code <code> --dry-run
 python manage.py memory_file_auto_organization_e2e
 python manage.py memory_file_content_search_e2e
 ```
+
+`memory.remember` пишет знание синхронно (файл + git commit + индекс за один вызов); `knowledge_writer_worker`/`knowledge_index_worker` выведены из кода (ADR-0030). Команды автоупорядочивания файлов зарегистрированы в замороженном `apps.filehub`.
 
 Ожидаемый smoke-результат для eval:
 

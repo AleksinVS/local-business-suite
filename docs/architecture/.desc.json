@@ -29,5 +29,6 @@
   "AI_UI_PROTOCOL_FOUNDATION_PLAN.md": "План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса",
   "COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md": "План разработки ИИ-чата в режиме CopilotKit UI",
   "NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md": "План разработки основного самописного AG-UI ИИ-чата",
-  "POSTGRESQL_PRIMARY_STORE_PLAN.md": "План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта"
+  "POSTGRESQL_PRIMARY_STORE_PLAN.md": "План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта",
+  "project-knowledge-system-v0.1.md": "Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)"
 }

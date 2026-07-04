@@ -1694,7 +1694,7 @@ class IdentityContextPropagationTests(TestCase):
                 result = execute_tool(
                     tool_code="memory.search",
                     actor_context={"user_id": self.manager.id},
-                    payload={"query": "oxygen maintenance", "limit": 3, "sensitivity": "internal", "search_mode": "source_explicit"},
+                    payload={"query": "oxygen maintenance", "limit": 3, "sensitivity": "internal", "corpus": "source_data"},
                     request_id="req-ai-memory-untrusted",
                 )
 
@@ -1702,6 +1702,106 @@ class IdentityContextPropagationTests(TestCase):
             self.assertEqual(result["result"]["items"], [])
             audit = MemoryAccessAudit.objects.get(request_id="req-ai-memory-untrusted")
             self.assertGreaterEqual(audit.retrieval_trace["filtered"].get("trust_gate_denied_document", 0), 1)
+
+    def test_memory_search_tool_contract_reduces_params_to_corpus_and_limit(self):
+        """ADR-0030 decision 6: memory.search's public contract is limited to
+        corpus (knowledge/source_data) and limit. It no longer declares a
+        ranking profile, search mode, include_source_data toggle or raw
+        channel weights as inputs."""
+        from apps.ai.tool_definitions import get_tool_registry
+
+        tool = get_tool_registry()["memory.search"]
+        self.assertEqual(set(tool["inputs"]), {"query", "limit", "sensitivity", "corpus"})
+        self.assertEqual(tool["input_schemas"]["corpus"]["enum"], ["knowledge", "source_data"])
+        for removed_param in ("ranking_profile", "search_mode", "include_source_data", "fulltext_weight", "vector_weight", "graph_weight"):
+            self.assertNotIn(removed_param, tool["inputs"])
+            self.assertNotIn(removed_param, tool["input_schemas"])
+
+    def test_memory_search_tool_rejects_ranking_profile_and_raw_weights(self):
+        """A caller (LLM or legacy client) that still sends the removed
+        ranking-profile/weight parameters gets a clear validation error
+        instead of the value being silently accepted or ignored."""
+        for removed_payload in (
+            {"query": "x", "ranking_profile": "precise"},
+            {"query": "x", "search_mode": "knowledge_semantic"},
+            {"query": "x", "include_source_data": True},
+            {"query": "x", "fulltext_weight": 0.9, "vector_weight": 0.1},
+        ):
+            with self.subTest(removed_payload=removed_payload):
+                result = execute_tool(
+                    tool_code="memory.search",
+                    actor_context={"user_id": self.manager.id},
+                    payload=removed_payload,
+                    request_id=f"req-ai-memory-search-rejected-{list(removed_payload)[-1]}",
+                )
+                self.assertFalse(result["ok"], result)
+                self.assertTrue(result["errors"], result)
+
+    def test_memory_search_tool_accepts_source_data_corpus_selection(self):
+        from apps.memory.models import MemoryAccessAudit, MemorySearchDocument, MemorySource, MemorySourceObject
+        from apps.memory.vector_backends import MemoryIndexRecord, SQLiteFTSMemoryBackend
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            source = MemorySource.objects.create(
+                code="ai_corpus_source_data",
+                title="AI corpus source_data",
+                source_kind="external_api_snapshot",
+                domain="memory",
+                sensitivity="internal",
+                pii_policy="deidentify_before_index",
+                trust_status=MemorySource.TrustStatus.TRUSTED,
+                authority_class=MemorySource.AuthorityClass.APPROVED_CORPUS,
+                trusted_for_context=True,
+                trusted_context_kinds=["retrieved_chunk", "citation"],
+            )
+            source_object = MemorySourceObject.objects.create(
+                source=source,
+                object_id="ai-corpus-doc-1",
+                object_uri="external://ai-corpus-doc-1",
+                relative_path="ai-corpus-doc-1",
+                file_name="ai-corpus-doc-1",
+                content_hash="hash-ai-corpus-1",
+                metadata={"scope_tokens": [f"user:{self.manager.id}"]},
+            )
+            document = MemorySearchDocument.objects.create(
+                document_id="source:ai-corpus-doc-1",
+                corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+                object_kind=MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+                source_object=source_object,
+                body_hash=source_object.content_hash,
+                index_status=MemorySearchDocument.IndexStatus.READY,
+                metadata={"corpus_type": "source_data"},
+            )
+            vector_backend = SQLiteFTSMemoryBackend(Path(tmpdir) / "memory" / "indexes" / "sqlite_fts" / "ai-corpus.sqlite3")
+            vector_backend.upsert(
+                MemoryIndexRecord(
+                    document_id=document.document_id,
+                    text="corpus selection check oxygen maintenance",
+                    metadata={"corpus_type": "source_data"},
+                    scope_tokens=[f"user:{self.manager.id}"],
+                    sensitivity="internal",
+                )
+            )
+
+            with patch("apps.memory.retrieval.get_default_backend", return_value=vector_backend):
+                knowledge_result = execute_tool(
+                    tool_code="memory.search",
+                    actor_context={"user_id": self.manager.id},
+                    payload={"query": "corpus selection check", "limit": 3, "sensitivity": "internal", "corpus": "knowledge"},
+                    request_id="req-ai-corpus-knowledge",
+                )
+                source_data_result = execute_tool(
+                    tool_code="memory.search",
+                    actor_context={"user_id": self.manager.id},
+                    payload={"query": "corpus selection check", "limit": 3, "sensitivity": "internal", "corpus": "source_data"},
+                    request_id="req-ai-corpus-source-data",
+                )
+
+        self.assertTrue(knowledge_result["ok"], knowledge_result)
+        self.assertTrue(source_data_result["ok"], source_data_result)
+        self.assertEqual(knowledge_result["result"]["items"], [])
+        self.assertEqual(source_data_result["result"]["items"][0]["kind"], "source_data")
+        self.assertEqual(source_data_result["result"]["meta"]["ranking_profile"], "default")
 
     def test_memory_remember_tool_writes_synchronously_without_secret_value_in_audit(self):
         """memory.remember is synchronous (ADR-0030 decision 2): one execute_tool
@@ -1914,8 +2014,7 @@ class IdentityContextPropagationTests(TestCase):
                     "query": "ai-memory-cobalt-260529",
                     "limit": 5,
                     "sensitivity": "internal",
-                    "search_mode": "knowledge_precise",
-                    "ranking_profile": "precise",
+                    "corpus": "knowledge",
                 },
                 request_id="req-ai-journey-memory-search",
             )
@@ -1962,9 +2061,7 @@ class IdentityContextPropagationTests(TestCase):
                     "query": marker,
                     "limit": 5,
                     "sensitivity": "internal",
-                    "search_mode": "source_explicit",
-                    "ranking_profile": "source_content",
-                    "include_source_data": True,
+                    "corpus": "source_data",
                 },
                 request_id="req-ai-file-fts-search",
             )
@@ -2008,9 +2105,7 @@ class IdentityContextPropagationTests(TestCase):
                     "query": marker,
                     "limit": 5,
                     "sensitivity": "internal",
-                    "search_mode": "source_explicit",
-                    "ranking_profile": "source_semantic",
-                    "include_source_data": True,
+                    "corpus": "source_data",
                 },
                 request_id="req-ai-file-vector-search",
             )

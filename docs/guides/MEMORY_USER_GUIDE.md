@@ -199,7 +199,7 @@ Eval report пишется только в `data/memory/eval/`.
 
 AI-чат использует `memory.search` как read путь к memory service. Диалоги самого чата хранятся в `ChatSession` и `ChatMessage` и не считаются долговременной curated memory без отдельного pipeline.
 
-Agent runtime передает в `memory.search` режим поиска. Для обычных вопросов используется `knowledge_default`; для явного поиска по исходным файлам и содержимому документов используется `source_explicit`; для поиска по смыслу в принятых знаниях используется `knowledge_semantic`; для поиска по смыслу в исходных файлах используется `source_explicit` с профилем `source_semantic`; для сценариев, где исходные документы допустимы только как запасной вариант, используется `source_fallback` или `include_source_data=true`.
+`memory.search` принимает только корпус (`corpus`: `knowledge` по умолчанию или `source_data`) и `limit` (плюс `query`/`sensitivity`). Выбор именованного профиля ранжирования или сырых весов каналов ИИ-боту недоступен: единственный серверный профиль по умолчанию — гибрид FTS + вектор со слиянием RRF (ADR-0030 решение 6). `corpus=knowledge` ищет принятые знания с автоматическим fallback к `source_data`, если знаний не найдено; `corpus=source_data` ищет только явные исходные объекты. Дифференциация профилей ранжирования (ADR-0016: `precise`/`balanced`/`semantic_heavy`/`source_content`/`source_semantic`/`graph_future`) — отложенный архитектурный долг: концепция не удалена, но не подключена к runtime и возвращается только тогда, когда `memory_eval` на реальном корпусе покажет измеримую пользу дифференциации профилей. В коде `apps/memory/retrieval.py` для этого есть ровно одна точка расширения — функция `_select_ranking_profile()`.
 
 Для запросов вида "запомни" добавлен MVP-контур:
 

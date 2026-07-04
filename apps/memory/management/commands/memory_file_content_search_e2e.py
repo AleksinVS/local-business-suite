@@ -153,17 +153,20 @@ class Command(BaseCommand):
         if not prefix_audit.retrieval_trace["search_channels"]["fulltext"].get("prefix_search_used"):
             raise CommandError("Prefix fallback was not reflected in retrieval trace.")
 
+        # ADR-0030 decision 6: there is no longer a selectable "source_semantic"
+        # named profile — the single default RRF profile always blends the
+        # fulltext and vector channels, so a semantic-only match is still
+        # found through the vector channel without picking a profile.
         semantic_result = self._assert_source_search(
             user=user,
             token=tokens["semantic"],
             request_id=f"file-content-e2e-source-semantic-{marker}",
-            ranking_profile="source_semantic",
         )
         semantic_audit = MemoryAccessAudit.objects.get(request_id=f"file-content-e2e-source-semantic-{marker}")
         if not semantic_audit.retrieval_trace["search_channels"]["vector"].get("requested"):
             raise CommandError("Source semantic search did not request the vector channel.")
-        if semantic_result["meta"].get("ranking_profile") != "source_semantic":
-            raise CommandError("Source semantic ranking profile is missing from response metadata.")
+        if semantic_result["meta"].get("ranking_profile") != "default":
+            raise CommandError("The single default ranking profile is missing from response metadata.")
 
         for document in MemorySearchDocument.objects.filter(source_object__source=source):
             metadata_json = json.dumps(document.metadata or {}, ensure_ascii=False)
@@ -183,14 +186,13 @@ class Command(BaseCommand):
             )
         )
 
-    def _assert_source_search(self, *, user, token, request_id, ranking_profile="source_content"):
+    def _assert_source_search(self, *, user, token, request_id):
         result = memory_search(
             actor=user,
             query=token,
             sensitivity="internal",
             request_id=request_id,
             search_mode="source_explicit",
-            ranking_profile=ranking_profile,
         )
         if not result["items"]:
             raise CommandError(f"Token was not found through source_data search: {token}")

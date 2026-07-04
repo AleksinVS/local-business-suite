@@ -395,14 +395,12 @@
       "domain": "memory",
       "mode": "read",
       "execution_mode": "service_or_read_only_query",
-      "description": "Искать принятые знания памяти и необязательные ссылки на исходные данные с цитатами и служебными метаданными маршрутизации.",
+      "description": "Искать принятые знания памяти и необязательные ссылки на исходные данные с цитатами и служебными метаданными маршрутизации. Единственный профиль ранжирования (гибрид FTS + вектор, слияние RRF) применяется всегда; выбор весов каналов или именованного профиля недоступен ИИ-боту (ADR-0030 решение 6). Профили ранжирования ADR-0016 — отложенный архитектурный долг, не публичный параметр.",
       "inputs": [
         "query",
         "limit",
         "sensitivity",
-        "search_mode",
-        "ranking_profile",
-        "include_source_data"
+        "corpus"
       ],
       "input_schemas": {
         "query": {
@@ -424,31 +422,9 @@
             "secret"
           ]
         },
-        "search_mode": {
-          "description": "Простой детерминированный режим поиска. По умолчанию knowledge_default. knowledge_graph принимается для совместимости, но графовый поиск в текущем MVP еще не готов.",
-          "enum": [
-            "knowledge_default",
-            "knowledge_precise",
-            "knowledge_semantic",
-            "knowledge_graph",
-            "source_explicit",
-            "source_fallback"
-          ]
-        },
-        "ranking_profile": {
-          "description": "Именованный серверный профиль ранжирования. По умолчанию выбирается из search_mode; сырые веса каналов не принимаются.",
-          "enum": [
-            "precise",
-            "balanced",
-            "semantic_heavy",
-            "source_content",
-            "source_semantic",
-            "graph_future"
-          ]
-        },
-        "include_source_data": {
-          "description": "Разрешить fallback к исходным данным, если поиск по знаниям ничего не вернул.",
-          "type": "boolean"
+        "corpus": {
+          "description": "Корпус поиска. knowledge (по умолчанию) — принятые знания, с автоматическим fallback к source_data, если знаний не найдено. source_data — только явные исходные объекты (файлы/заявки/иные источники), результат всегда помечается предупреждением, что это не принятое знание. Веса каналов и именованный профиль ранжирования не передаются: единственный серверный профиль (RRF, фикс. веса fulltext/vector) применяется всегда.",
+          "enum": ["knowledge", "source_data"]
         }
       },
       "outputs": [

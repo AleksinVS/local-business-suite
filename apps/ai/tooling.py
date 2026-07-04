@@ -34,6 +34,30 @@ class UnknownToolError(Exception):
     pass
 
 
+# ADR-0030 decision 6: memory.search's public contract no longer accepts a
+# ranking profile, a search mode, an include_source_data toggle, or raw
+# channel weights — only corpus (knowledge/source_data) + limit. Keep an
+# explicit reject list so a caller that still sends the old parameters gets a
+# clear ValidationError instead of the value being silently dropped.
+_MEMORY_SEARCH_REMOVED_KEYS = {
+    "search_mode",
+    "ranking_profile",
+    "include_source_data",
+    "fulltext_weight",
+    "vector_weight",
+    "graph_weight",
+}
+
+_MEMORY_SEARCH_CORPUS_VALUES = {"knowledge", "source_data"}
+
+
+def _normalize_memory_search_corpus(value) -> str:
+    corpus = str(value or "knowledge").strip()
+    if corpus not in _MEMORY_SEARCH_CORPUS_VALUES:
+        raise ValidationError(f"Unsupported memory.search corpus: {corpus!r}.")
+    return corpus
+
+
 # Bounded-scope task type registry imported lazily to avoid circular imports.
 _task_type_catalog = None
 
@@ -176,15 +200,26 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
     elif tool_code == "memory.search":
         from apps.memory.retrieval import memory_search
 
+        # ADR-0030 decision 6: the public memory.search contract exposes only
+        # corpus + limit (see apps/ai/tool_definitions.py, contracts/ai/tools.json).
+        # ranking_profile/search_mode/include_source_data and raw channel
+        # weights were removed from the public surface; reject them explicitly
+        # rather than silently ignoring a caller that still sends them.
+        removed_keys = _MEMORY_SEARCH_REMOVED_KEYS & set(payload.keys())
+        if removed_keys:
+            raise ValidationError(
+                "memory.search больше не принимает параметры выбора профиля/весов ранжирования: "
+                f"{', '.join(sorted(removed_keys))}. Публичный контракт сокращен до corpus и limit "
+                "(ADR-0030 решение 6; профили ранжирования ADR-0016 — отложенный долг)."
+            )
+        corpus = _normalize_memory_search_corpus(payload.get("corpus"))
         return memory_search(
             actor=actor,
             query=payload.get("query"),
             sensitivity=payload.get("sensitivity"),
             limit=payload.get("limit", 5),
             request_id=actor_context.get("request_id", ""),
-            search_mode=payload.get("search_mode", "knowledge_default"),
-            include_source_data=bool(payload.get("include_source_data", False)),
-            ranking_profile=payload.get("ranking_profile", ""),
+            search_mode="source_explicit" if corpus == "source_data" else "knowledge_default",
         )
     elif tool_code == "memory.remember":
         from apps.memory.services import remember_knowledge_for_actor

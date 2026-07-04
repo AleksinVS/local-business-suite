@@ -28,58 +28,26 @@ MAX_LIMIT = 50
 PATH_METADATA_KEYS = {"raw_path", "safe_path", "text_path", "path"}
 RRF_K = 60
 
-DEFAULT_RANKING_PROFILES = {
-    "precise": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.90,
-        "vector_weight": 0.10,
-        "graph_weight": 0.00,
-        "overlap_boost": 0.08,
-    },
-    "balanced": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.55,
-        "vector_weight": 0.45,
-        "graph_weight": 0.00,
-        "overlap_boost": 0.10,
-    },
-    "semantic_heavy": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.25,
-        "vector_weight": 0.75,
-        "graph_weight": 0.00,
-        "overlap_boost": 0.10,
-    },
-    "source_content": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.70,
-        "vector_weight": 0.30,
-        "graph_weight": 0.00,
-        "overlap_boost": 0.10,
-    },
-    "source_semantic": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.30,
-        "vector_weight": 0.70,
-        "graph_weight": 0.00,
-        "overlap_boost": 0.10,
-    },
-    "graph_future": {
-        "fusion": "rrf",
-        "fulltext_weight": 0.35,
-        "vector_weight": 0.35,
-        "graph_weight": 0.30,
-        "overlap_boost": 0.10,
-    },
-}
-
-DEFAULT_PROFILE_BY_SEARCH_MODE = {
-    "knowledge_default": "balanced",
-    "knowledge_precise": "precise",
-    "knowledge_semantic": "semantic_heavy",
-    "knowledge_graph": "graph_future",
-    "source_explicit": "source_content",
-    "source_fallback": "balanced",
+# ADR-0030 decision 6: exactly one default ranking profile remains wired into
+# the runtime — RRF fusion of the fulltext and vector channels. The graph
+# channel weight stays at 0.0 (packet 05 left graph runtime search a
+# disabled, model-free stub; ADR-0030 decision 3).
+#
+# ADR-0016 defines a family of named ranking profiles (precise, balanced,
+# semantic_heavy, source_content, source_semantic, graph_future) tuned for
+# different search intents. That concept is NOT deleted: it is deferred
+# architectural debt, accepted-but-not-implemented, and returns only once
+# `memory_eval` on a real corpus shows a measurable benefit from
+# differentiating profiles (see ADR-0016 status note and ADR-0030 decision
+# 6). `_select_ranking_profile()` below is the single extension point where
+# that future multi-profile selection would be reintroduced.
+DEFAULT_RANKING_PROFILE_ID = "default"
+DEFAULT_RANKING_PROFILE = {
+    "fusion": "rrf",
+    "fulltext_weight": 0.55,
+    "vector_weight": 0.45,
+    "graph_weight": 0.00,
+    "overlap_boost": 0.10,
 }
 
 
@@ -98,11 +66,22 @@ def memory_search(
     ranking_profile="",
     source_codes=None,
 ):
+    """
+    Search the memory corpus.
+
+    `ranking_profile` is accepted only for backward compatibility with
+    internal callers predating ADR-0030 decision 6 (e.g. the workorders.search
+    tool wiring); its value is ignored — see `_select_ranking_profile()` for
+    the single default-profile extension point. `search_mode` still selects
+    the corpus (`knowledge_default` -> knowledge with source_data fallback,
+    `source_explicit` -> source_data only); it no longer selects a ranking
+    profile.
+    """
     query_text = _normalize_query(query)
     query_hash = _query_hash(query_text)
     normalized_limit = _normalize_limit(limit)
     normalized_search_mode = _normalize_search_mode(search_mode)
-    normalized_ranking_profile, ranking_profile_config = _resolve_ranking_profile(ranking_profile, normalized_search_mode)
+    normalized_ranking_profile, ranking_profile_config = _select_ranking_profile(ranking_profile)
     allowed_corpus_types = _allowed_corpus_types(normalized_search_mode)
     allowed_source_codes = _normalize_tokens(source_codes)
     trace: dict[str, Any] = {
@@ -562,40 +541,59 @@ def _document_citation(document: MemorySearchDocument, *, trust_decision) -> dic
 
 
 def _normalize_search_mode(value) -> str:
+    # ADR-0030 decision 6: exactly one knowledge search mode remains, plus the
+    # explicit source_data corpus mode used for the `source_data` corpus
+    # selection (workorders.search and other internal source-only callers).
+    # The old knowledge_precise/knowledge_semantic/knowledge_graph/
+    # source_fallback variants existed only to pick a ranking profile that no
+    # longer varies, so they are removed rather than kept as inert aliases.
     mode = str(value or "knowledge_default").strip()
     allowed = {
         "knowledge_default",
-        "knowledge_precise",
-        "knowledge_semantic",
-        "knowledge_graph",
         "source_explicit",
-        "source_fallback",
     }
     if mode not in allowed:
         raise ValidationError("Unsupported memory search mode.")
     return mode
 
 
-def _resolve_ranking_profile(value, search_mode: str) -> tuple[str, dict[str, Any]]:
-    profile_id = str(value or "").strip() or DEFAULT_PROFILE_BY_SEARCH_MODE[search_mode]
-    profiles = _ranking_profiles()
-    if profile_id not in profiles:
-        raise ValidationError("Unsupported memory ranking profile.")
-    profile = {**DEFAULT_RANKING_PROFILES.get(profile_id, {}), **dict(profiles[profile_id] or {})}
+def _select_ranking_profile(requested_profile: str = "") -> tuple[str, dict[str, Any]]:
+    """
+    Single ranking-profile extension point.
+
+    ADR-0030 decision 6 collapses runtime ranking to exactly one default
+    profile: RRF fusion of the fulltext and vector channels (graph weight
+    held at 0.0). ADR-0016's family of named ranking profiles (precise,
+    balanced, semantic_heavy, source_content, source_semantic, graph_future)
+    is deferred architectural debt, not deleted — it returns only once
+    `memory_eval` on a real corpus shows a measurable benefit from
+    differentiating profiles. When that happens, this is the only function
+    that needs to branch on a requested profile again.
+
+    `requested_profile` is accepted only so legacy internal callers (e.g. the
+    workorders.search tool, which historically passed ranking_profile=
+    "source_content") keep working without raising; the value has no effect
+    on the resolved weights and is not part of the public memory.search
+    contract (see apps/ai/tool_definitions.py).
+    """
+    del requested_profile
+    profile = dict(_ranking_profile_config())
     profile.setdefault("fusion", "rrf")
     profile.setdefault("rrf_k", RRF_K)
-    profile.setdefault("overlap_boost", DEFAULT_RANKING_PROFILES.get(profile_id, {}).get("overlap_boost", 0.0))
+    profile.setdefault("overlap_boost", DEFAULT_RANKING_PROFILE.get("overlap_boost", 0.0))
     if profile.get("fusion") != "rrf":
         raise ValidationError("Only rrf memory ranking fusion is supported in this runtime.")
-    return profile_id, profile
+    return DEFAULT_RANKING_PROFILE_ID, profile
 
 
-def _ranking_profiles() -> dict[str, dict[str, Any]]:
+def _ranking_profile_config() -> dict[str, Any]:
+    # Ops can still tune the single default profile's weights via
+    # LOCAL_BUSINESS_MEMORY_PROFILES.ranking_profiles.default without a code
+    # change; any other named key in that config is legacy/unused dead
+    # config (ADR-0016 profiles are not selectable at runtime).
     configured = dict((getattr(settings, "LOCAL_BUSINESS_MEMORY_PROFILES", {}) or {}).get("ranking_profiles", {}) or {})
-    profiles = {key: dict(value) for key, value in DEFAULT_RANKING_PROFILES.items()}
-    for key, value in configured.items():
-        profiles[key] = {**profiles.get(key, {}), **dict(value or {})}
-    return profiles
+    override = dict(configured.get(DEFAULT_RANKING_PROFILE_ID) or {})
+    return {**DEFAULT_RANKING_PROFILE, **override}
 
 
 def _public_profile_config(profile: Mapping[str, Any]) -> dict[str, Any]:
@@ -615,11 +613,7 @@ def _vector_search_requested(search_mode: str, ranking_profile_config: Mapping[s
         return False
     return search_mode in {
         "knowledge_default",
-        "knowledge_precise",
-        "knowledge_semantic",
-        "knowledge_graph",
         "source_explicit",
-        "source_fallback",
     }
 
 
@@ -650,7 +644,11 @@ def _search_channel_trace(search_mode: str, ranking_profile_config: Mapping[str,
                 "(apps.memory.knowledge_edges) with no LLM extraction contour, but there is "
                 "no graph search backend wired into retrieval yet."
             ),
-            "requested": search_mode == "knowledge_graph",
+            # The graph_weight in the single default profile is 0.0, so the
+            # graph channel is never requested regardless of search_mode
+            # (ADR-0030 decision 6; the old knowledge_graph compatibility
+            # mode was removed with the multi-profile public surface).
+            "requested": False,
         },
     }
 
@@ -675,13 +673,11 @@ def _update_search_channel_trace(trace: dict[str, Any], *, fulltext_candidates, 
 def _allowed_corpus_types(search_mode: str) -> set[str]:
     if search_mode == "source_explicit":
         return {"source_data"}
-    if search_mode == "source_fallback":
-        return {"knowledge", "source_data"}
     return {"knowledge"}
 
 
 def _source_data_fallback_allowed(search_mode: str, include_source_data: bool) -> bool:
-    return bool(include_source_data or search_mode in {"knowledge_default", "source_fallback", "source_explicit"})
+    return bool(include_source_data or search_mode in {"knowledge_default", "source_explicit"})
 
 
 def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, trace, allowed_source_codes):

@@ -2146,8 +2146,15 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
             "disabled",
         )
 
-    def test_source_semantic_profile_uses_vector_candidates_for_source_data(self):
-        from .retrieval import memory_search
+    def test_single_default_ranking_profile_blends_fulltext_and_vector_via_rrf(self):
+        """ADR-0030 decision 6: exactly one default ranking profile remains at
+        runtime (RRF fusion of fulltext + vector, fixed weights). Requesting a
+        legacy ADR-0016 profile name (e.g. "source_semantic") no longer
+        raises and no longer changes the weights: it is silently resolved to
+        the single default profile, since ranking_profile is kept only for
+        backward-compatible internal callers and is not part of the public
+        memory.search contract (see apps/ai/tool_definitions.py)."""
+        from .retrieval import DEFAULT_RANKING_PROFILE, memory_search
         from .vector_backends import MemorySearchResult
 
         user = User.objects.create_user(username="memory-source-semantic-user", password="pass")
@@ -2223,21 +2230,50 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
                 query="semantic source query",
                 sensitivity="internal",
                 search_mode="source_explicit",
-                ranking_profile="source_semantic",
+                ranking_profile="source_semantic",  # legacy ADR-0016 name; must be ignored, not rejected.
                 vector_backend=FulltextBackend(),
                 request_id="req-source-semantic-profile",
             )
 
-        self.assertEqual(result["items"][0]["id"], semantic_document.document_id)
+        # Both channels contributed a rank-1 candidate; with the single
+        # default profile's weights (fulltext 0.55 > vector 0.45) the
+        # fulltext-only match now outranks the vector-only match.
+        self.assertEqual(result["items"][0]["id"], exact_document.document_id)
+        self.assertEqual(result["items"][1]["id"], semantic_document.document_id)
         self.assertEqual(result["items"][0]["kind"], "source_data")
-        self.assertEqual(result["meta"]["ranking_profile"], "source_semantic")
+        self.assertEqual(result["meta"]["ranking_profile"], "default")
+        self.assertEqual(
+            result["meta"]["ranking_profile_config"]["weights"],
+            {"fulltext": DEFAULT_RANKING_PROFILE["fulltext_weight"], "vector": DEFAULT_RANKING_PROFILE["vector_weight"], "graph": 0.0},
+        )
         audit = MemoryAccessAudit.objects.get(request_id="req-source-semantic-profile")
         self.assertTrue(audit.retrieval_trace["search_channels"]["vector"]["requested"])
         self.assertEqual(
             audit.retrieval_trace["rank_fusion"]["weights"],
-            {"fulltext": 0.3, "vector": 0.7, "graph": 0.0},
+            {"fulltext": 0.55, "vector": 0.45, "graph": 0.0},
         )
-        self.assertIn("vector", result["items"][0]["metadata"]["channel_scores"])
+        # Trace/metadata still records per-channel RRF positions for diagnostics.
+        self.assertIn("vector", result["items"][1]["metadata"]["channel_scores"])
+        self.assertEqual(result["items"][1]["metadata"]["channel_scores"]["vector"]["rank"], 1)
+        self.assertIn("fulltext", result["items"][0]["metadata"]["channel_scores"])
+        self.assertEqual(result["items"][0]["metadata"]["channel_scores"]["fulltext"]["rank"], 1)
+
+    def test_select_ranking_profile_is_the_single_extension_point(self):
+        """A future multi-profile return (ADR-0016, deferred) has exactly one
+        place to change: _select_ranking_profile(). Verify it always resolves
+        to the single default profile regardless of the requested value, and
+        that the removed multi-profile table no longer exists."""
+        from . import retrieval
+
+        self.assertFalse(hasattr(retrieval, "DEFAULT_RANKING_PROFILES"))
+        self.assertFalse(hasattr(retrieval, "DEFAULT_PROFILE_BY_SEARCH_MODE"))
+        for requested in ("", "precise", "balanced", "semantic_heavy", "graph_future", "anything-bogus"):
+            profile_id, profile_config = retrieval._select_ranking_profile(requested)
+            self.assertEqual(profile_id, "default")
+            self.assertEqual(profile_config["fulltext_weight"], retrieval.DEFAULT_RANKING_PROFILE["fulltext_weight"])
+            self.assertEqual(profile_config["vector_weight"], retrieval.DEFAULT_RANKING_PROFILE["vector_weight"])
+            self.assertEqual(profile_config["graph_weight"], 0.0)
+            self.assertEqual(profile_config["fusion"], "rrf")
 
 
 class KnowledgeRepoLockTests(TestCase):

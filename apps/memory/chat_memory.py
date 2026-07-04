@@ -72,6 +72,11 @@ def remember_knowledge(*, actor, session, payload, request_id=""):
         raise ValidationError("message_ids or user_note is required.")
     importance = str(payload.get("importance", "") or "")
 
+    # DEBT(ADR-0030-5a): fail-safe observation-vs-knowledge routing goes here.
+    # In stage 5a an utterance that matches the schema of a registered dataset
+    # is captured into the data store (apps.memory.data_store.capture) instead
+    # of a knowledge file. Until then every remember is a knowledge file (the
+    # wiki is the staging area) — the current behavior below.
     knowledge_item, file_result, sanitized = _write_knowledge_item_and_file(
         actor=actor,
         session=session,
@@ -459,6 +464,11 @@ def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_b
 
 
 def propose_reflection_candidates(*, limit=100):
+    # DEBT(ADR-0030-5b): reflection dataset-initiator goes here. In stage 5b,
+    # when reflection notices a recurring series of like observations it also
+    # proposes a `type: Dataset` page (pending review); on acceptance the
+    # observation pages migrate into the data store and are marked superseded.
+    # For now reflection only proposes personal->organization knowledge candidates.
     candidates = []
     queryset = (
         MemoryKnowledgeItem.objects.filter(scope=MemoryKnowledgeItem.Scope.PERSONAL, status=MemoryKnowledgeItem.Status.ACTIVE)

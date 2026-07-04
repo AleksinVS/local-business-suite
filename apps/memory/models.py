@@ -971,7 +971,7 @@ class MemoryReviewAction(models.Model):
         null=True,
     )
     index_job = models.ForeignKey(
-        "memory.MemoryIndexJob",
+        "memory.MemoryExternalConnectorJob",
         on_delete=models.PROTECT,
         related_name="review_actions",
         blank=True,
@@ -1175,58 +1175,6 @@ class MemoryGraphReviewItem(models.Model):
         return f"{self.item_kind}:{self.status}:{self.pk}"
 
 
-class MemoryWriteRequest(models.Model):
-    class TargetScope(models.TextChoices):
-        PERSONAL = "personal", "Личная"
-        ORGANIZATION = "organization", "Организационная"
-
-    class Status(models.TextChoices):
-        QUEUED = "queued", "В очереди"
-        PROCESSING = "processing", "Обрабатывается"
-        ACCEPTED = "accepted", "Принято"
-        CANDIDATE_CREATED = "candidate_created", "Кандидат создан"
-        FAILED = "failed", "Ошибка"
-        CANCELLED = "cancelled", "Отменено"
-
-    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_write_requests",
-    )
-    session = models.ForeignKey(
-        "ai.ChatSession",
-        on_delete=models.SET_NULL,
-        related_name="memory_write_requests",
-        blank=True,
-        null=True,
-    )
-    message_ids = models.JSONField(default=list, blank=True)
-    target_scope = models.CharField(max_length=32, choices=TargetScope.choices, default=TargetScope.PERSONAL)
-    user_note = models.TextField(blank=True)
-    importance = models.CharField(max_length=32, blank=True)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.QUEUED)
-    result = models.JSONField(default=dict, blank=True)
-    error_message = models.TextField(blank=True)
-    processed_at = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["actor", "-created_at"]),
-            models.Index(fields=["target_scope", "status"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["request_id"]),
-        ]
-        verbose_name = "Запрос записи памяти"
-        verbose_name_plural = "Запросы записи памяти"
-
-    def __str__(self):
-        return f"{self.request_id}:{self.target_scope}:{self.status}"
-
-
 class MemoryKnowledgeItem(models.Model):
     class Scope(models.TextChoices):
         PERSONAL = "personal", "Личное"
@@ -1316,46 +1264,6 @@ class MemoryKnowledgeItem(models.Model):
         return self.memory_id
 
 
-class MemoryKnowledgeEvent(models.Model):
-    class EventType(models.TextChoices):
-        REMEMBERED = "remembered", "Запомнено"
-        EDITED = "edited", "Изменено"
-        DELETED = "deleted", "Удалено"
-        REFLECTED = "reflected", "Отрефлексировано"
-        PROMOTED = "promoted", "Повышено"
-        REJECTED = "rejected", "Отклонено"
-        SECRET_CAPTURED = "secret_captured", "Секрет зафиксирован"
-
-    event_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    event_type = models.CharField(max_length=32, choices=EventType.choices)
-    knowledge_item = models.ForeignKey(
-        MemoryKnowledgeItem,
-        on_delete=models.PROTECT,
-        related_name="events",
-        blank=True,
-        null=True,
-    )
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_knowledge_events",
-    )
-    payload = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["created_at", "id"]
-        indexes = [
-            models.Index(fields=["event_type"]),
-            models.Index(fields=["actor", "created_at"]),
-        ]
-        verbose_name = "Событие знания памяти"
-        verbose_name_plural = "События знаний памяти"
-
-    def __str__(self):
-        return f"{self.event_type}:{self.event_id}"
-
-
 class MemoryKnowledgeCandidate(models.Model):
     class Status(models.TextChoices):
         PROPOSED = "proposed", "Предложено"
@@ -1402,51 +1310,6 @@ class MemoryKnowledgeCandidate(models.Model):
         ]
         verbose_name = "Кандидат знания памяти"
         verbose_name_plural = "Кандидаты знаний памяти"
-
-    def __str__(self):
-        return f"{self.status}:{self.pk}"
-
-
-class MemoryReflectionRun(models.Model):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        RUNNING = "running", "Выполняется"
-        SUCCEEDED = "succeeded", "Успешно"
-        FAILED = "failed", "Ошибка"
-
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    window_start = models.DateTimeField(blank=True, null=True)
-    window_end = models.DateTimeField(blank=True, null=True)
-    dry_run = models.BooleanField(default=False)
-    started_at = models.DateTimeField(blank=True, null=True)
-    finished_at = models.DateTimeField(blank=True, null=True)
-    metrics = models.JSONField(default=dict, blank=True)
-    error_message = models.TextField(blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_reflection_runs",
-        blank=True,
-        null=True,
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["dry_run"]),
-            models.Index(fields=["window_start", "window_end"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(finished_at__isnull=True) | Q(started_at__isnull=True) | Q(started_at__lte=models.F("finished_at")),
-                name="memory_reflection_run_time_range",
-            ),
-        ]
-        verbose_name = "Запуск рефлексии памяти"
-        verbose_name_plural = "Запуски рефлексии памяти"
 
     def __str__(self):
         return f"{self.status}:{self.pk}"
@@ -1541,73 +1404,11 @@ class SecretAccessAudit(models.Model):
         return f"{self.secret_handle_id}:{self.action}:{self.decision}"
 
 
-class MemoryIndexJob(models.Model):
-    class JobKind(models.TextChoices):
-        DISCOVER = "discover", "Обнаружение"
-        SYNC = "sync", "Синхронизация"
-        REINDEX = "reindex", "Переиндексация"
-        EVAL = "eval", "Оценка"
-        REMEMBER = "remember", "Запоминание"
-        REFLECT = "reflect", "Рефлексия"
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        RUNNING = "running", "Выполняется"
-        SUCCEEDED = "succeeded", "Успешно"
-        FAILED = "failed", "Ошибка"
-        CANCELLED = "cancelled", "Отменено"
-
-    source = models.ForeignKey(MemorySource, on_delete=models.PROTECT, related_name="index_jobs", blank=True, null=True)
-    job_kind = models.CharField(max_length=16, choices=JobKind.choices)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    request_id = models.CharField(max_length=120, blank=True)
-    started_at = models.DateTimeField(blank=True, null=True)
-    finished_at = models.DateTimeField(blank=True, null=True)
-    attempts = models.PositiveIntegerField(default=0)
-    max_attempts = models.PositiveIntegerField(default=3)
-    error_message = models.TextField(blank=True)
-    payload = models.JSONField(default=dict, blank=True)
-    result = models.JSONField(default=dict, blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_index_jobs",
-        blank=True,
-        null=True,
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["job_kind"]),
-            models.Index(fields=["status"]),
-            models.Index(fields=["request_id"]),
-            models.Index(fields=["-created_at", "-id"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(finished_at__isnull=True) | Q(started_at__isnull=True) | Q(started_at__lte=models.F("finished_at")),
-                name="memory_index_job_time_range",
-            ),
-            models.CheckConstraint(
-                condition=Q(attempts__lte=models.F("max_attempts")),
-                name="memory_index_job_attempts_lte_max",
-            ),
-        ]
-        verbose_name = "Задание индекса памяти"
-        verbose_name_plural = "Задания индекса памяти"
-
-    def __str__(self):
-        return f"{self.job_kind}:{self.status}:{self.pk}"
-
-
 class MemoryExternalConnectorJob(models.Model):
     """Database-backed external connector queue job."""
 
     job_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    source_code = models.CharField(max_length=120)
+    source_code = models.CharField(max_length=120, blank=True)
     job_kind = models.CharField(max_length=80)
     status = models.CharField(max_length=32)
     priority = models.IntegerField(default=0)
@@ -1619,6 +1420,7 @@ class MemoryExternalConnectorJob(models.Model):
     max_attempts = models.PositiveIntegerField(default=3)
     next_attempt_at = models.DateTimeField(blank=True, null=True)
     locked_until = models.DateTimeField(blank=True, null=True)
+    locked_by = models.CharField(max_length=120, blank=True)
     started_at = models.DateTimeField(blank=True, null=True)
     finished_at = models.DateTimeField(blank=True, null=True)
     request_id = models.CharField(max_length=120, blank=True)
@@ -1630,11 +1432,12 @@ class MemoryExternalConnectorJob(models.Model):
         indexes = [
             models.Index(fields=["status", "next_attempt_at", "locked_until", "-priority", "created_at"]),
             models.Index(fields=["source_code", "status", "created_at"]),
+            models.Index(fields=["job_kind", "status", "created_at"]),
             models.Index(fields=["idempotency_key"]),
             models.Index(fields=["job_id"]),
         ]
-        verbose_name = "Задание внешнего коннектора"
-        verbose_name_plural = "Задания внешних коннекторов"
+        verbose_name = "Задание очереди памяти"
+        verbose_name_plural = "Задания очереди памяти"
 
     def __str__(self):
         return f"{self.status}:{self.job_id}"

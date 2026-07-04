@@ -8,8 +8,8 @@ from django.urls import reverse
 
 from .models import (
     MemoryAccessAudit,
+    MemoryExternalConnectorJob,
     MemoryIngestionIssue,
-    MemoryIndexJob,
     MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
@@ -493,10 +493,13 @@ def _scoped_review_action_queryset(queryset, user):
 
 
 def _scoped_index_job_queryset(user):
-    queryset = MemoryIndexJob.objects.select_related("source").order_by("-created_at", "-id")
+    queryset = MemoryExternalConnectorJob.objects.order_by("-created_at", "-id")
     if getattr(user, "is_superuser", False):
         return queryset
-    return queryset.filter(Q(source_id__in=_visible_source_ids_for_user(user)) | Q(created_by=user))
+    visible_codes = list(
+        MemorySource.objects.filter(id__in=_visible_source_ids_for_user(user)).values_list("code", flat=True)
+    )
+    return queryset.filter(Q(source_code__in=visible_codes) | Q(source_code=""))
 
 
 def _visible_source_ids_for_user(user) -> list[int]:
@@ -539,9 +542,11 @@ def _document_for_source_object(source_object):
 
 
 def _jobs_for_document(document: MemorySearchDocument):
-    queryset = MemoryIndexJob.objects.select_related("source").order_by("-created_at", "-id")
+    queryset = MemoryExternalConnectorJob.objects.order_by("-created_at", "-id")
     if document.source_object_id:
-        return queryset.filter(Q(source=document.source_object.source) | Q(payload__document_id=document.document_id))
+        return queryset.filter(
+            Q(source_code=document.source_object.source.code) | Q(payload__document_id=document.document_id)
+        )
     return queryset.filter(payload__document_id=document.document_id)
 
 

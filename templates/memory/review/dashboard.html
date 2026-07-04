@@ -110,9 +110,9 @@
         {% for job in recent_jobs %}
           <tr>
             <td>{{ job.pk }}</td>
-            <td>{{ job.get_job_kind_display }}</td>
-            <td>{{ job.get_status_display }}</td>
-            <td>{{ job.source|default:"" }}</td>
+            <td>{{ job.job_kind }}</td>
+            <td>{{ job.status }}</td>
+            <td>{{ job.source_code|default:"" }}</td>
             <td>{{ job.created_at }}</td>
           </tr>
         {% empty %}

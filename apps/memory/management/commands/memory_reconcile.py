@@ -28,6 +28,7 @@ from apps.memory.knowledge_files import (
     _safe_repo_path,
     knowledge_repo_root,
     parse_knowledge_file,
+    rebuild_all_knowledge_indexes,
     sha256_text,
 )
 from apps.memory.models import MemoryKnowledgeItem
@@ -172,7 +173,12 @@ class Command(BaseCommand):
         # concept pages will be added here in stage 5a (data store), building the
         # dataset registry projection from the wiki, like edges from `relations:`.
 
+        indexes_written = []
         if not dry_run:
+            # ADR-0030 decision 4: index.md is generated from the knowledge
+            # files on disk (not the DB queryset); rebuild it here so a batch
+            # of reconciled files is reflected immediately.
+            indexes_written = rebuild_all_knowledge_indexes()
             state = _load_state()
             state["last_commit"] = head
             state["reconciled_at"] = timezone.now().isoformat()
@@ -181,6 +187,7 @@ class Command(BaseCommand):
         self.stdout.write(
             "Memory reconcile finished: "
             f"scanned={scanned}, reconciled={reconciled}, held={held}, "
+            f"indexes_written={len(indexes_written)}, "
             f"dry_run={dry_run}, head={head[:12] or 'none'}"
         )
 

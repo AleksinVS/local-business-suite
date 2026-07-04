@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Iterable
 
-from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -15,18 +12,16 @@ from django.utils import timezone
 from apps.ai.models import ChatMessage
 
 from .models import (
-    MemoryIndexJob,
     MemoryKnowledgeCandidate,
-    MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
     MemorySearchDocument,
     MemorySource,
-    MemoryWriteRequest,
 )
-from .knowledge_files import read_knowledge_item_file, rebuild_knowledge_summaries, write_knowledge_item_file
+from .knowledge_files import read_knowledge_item_file, rebuild_knowledge_index, write_knowledge_item_file
 from .policies import can_write_organization_memory, can_write_personal_memory
 from .secret_backends import get_secret_backend
 from .security import scan_for_secrets
+from .services import MemoryQueueJobKind, enqueue_memory_queue_task
 from .vector_backends import MemoryIndexRecord
 from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 from .vector_backends import get_default_backend
@@ -38,6 +33,9 @@ CHAT_MEMORY_ORG_SOURCE = "ai_chat_organization"
 CHAT_MEMORY_SCHEMA_VERSION = "chat-memory-v1"
 CHAT_MEMORY_EXTRACTOR_VERSION = "chat-memory-mvp-v1"
 
+TARGET_SCOPE_PERSONAL = "personal"
+TARGET_SCOPE_ORGANIZATION = "organization"
+
 
 @dataclass(frozen=True)
 class SanitizedMemoryText:
@@ -45,13 +43,23 @@ class SanitizedMemoryText:
     secret_handles: tuple[dict, ...]
 
 
-def queue_memory_remember(*, actor, session, payload, request_id=""):
+def remember_knowledge(*, actor, session, payload, request_id=""):
+    """Synchronous ``memory.remember`` write path (ADR-0030 decision 2).
+
+    Writes the knowledge file and its git commit under the packet-01
+    cross-platform lock, then indexes inline, all within one call. There is no
+    queue status in the result: the file write + commit is durable by the time
+    this function returns. If inline indexing fails, the write itself still
+    succeeds; a retryable ``reindex`` task is enqueued on the unified memory
+    queue (``MemoryExternalConnectorJob``) so indexing catches up, with a
+    dead-letter path once retries are exhausted.
+    """
     _assert_authenticated(actor)
     target_scope = _normalize_target_scope(payload.get("target_scope"))
-    if target_scope == MemoryWriteRequest.TargetScope.PERSONAL:
+    if target_scope == TARGET_SCOPE_PERSONAL:
         if not can_write_personal_memory(actor, actor):
             raise PermissionDenied("Personal memory write is not allowed.")
-    elif target_scope == MemoryWriteRequest.TargetScope.ORGANIZATION:
+    elif target_scope == TARGET_SCOPE_ORGANIZATION:
         if not can_write_organization_memory(actor):
             raise PermissionDenied("Organization memory write is not allowed for this user.")
 
@@ -60,144 +68,76 @@ def queue_memory_remember(*, actor, session, payload, request_id=""):
         latest = session.messages.filter(role=ChatMessage.Role.USER).order_by("-created_at", "-id").first()
         if latest:
             message_ids = [latest.id]
-    if not message_ids and not str(payload.get("user_note", "")).strip():
+    user_note = str(payload.get("user_note", "") or "")
+    if not message_ids and not user_note.strip():
         raise ValidationError("message_ids or user_note is required.")
+    importance = str(payload.get("importance", "") or "")
 
-    request = MemoryWriteRequest.objects.create(
+    knowledge_item, file_result, sanitized = _write_knowledge_item_and_file(
         actor=actor,
         session=session,
-        message_ids=message_ids,
         target_scope=target_scope,
-        user_note=str(payload.get("user_note", "") or ""),
-        importance=str(payload.get("importance", "") or ""),
-        status=MemoryWriteRequest.Status.QUEUED,
+        message_ids=message_ids,
+        user_note=user_note,
+        importance=importance,
     )
-    job = MemoryIndexJob.objects.create(
-        job_kind=MemoryIndexJob.JobKind.REMEMBER,
-        status=MemoryIndexJob.Status.PENDING,
-        request_id=request_id or str(request.request_id),
-        payload={"memory_write_request_id": request.pk, "target_scope": target_scope},
-        created_by=actor,
-    )
-    request.result = {"job_id": job.pk, "request_id": str(request.request_id)}
-    request.save(update_fields=["result", "updated_at"])
-    return {
-        "request_id": str(request.request_id),
-        "status": request.status,
-        "target_scope": request.target_scope,
-        "queued_at": request.created_at.isoformat(),
-        "job_id": job.pk,
-        "message": "Memory ingestion request queued.",
-    }
 
-
-def remember_memory_now(*, actor, session, payload, request_id=""):
-    queued = queue_memory_remember(actor=actor, session=session, payload=payload, request_id=request_id)
-    request = MemoryWriteRequest.objects.get(request_id=queued["request_id"])
-    job = MemoryIndexJob.objects.filter(pk=queued["job_id"]).first()
-    if job is not None:
-        job.status = MemoryIndexJob.Status.RUNNING
-        job.started_at = timezone.now()
-        job.attempts += 1
-        job.save(update_fields=["status", "started_at", "attempts", "updated_at"])
+    index_status = "ready"
     try:
-        processed = process_memory_write_request(request)
+        index_knowledge_item(knowledge_item)
     except Exception as exc:
-        if job is not None:
-            job.status = MemoryIndexJob.Status.FAILED
-            job.finished_at = timezone.now()
-            job.error_message = str(exc)
-            job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
-        raise
-    request.refresh_from_db()
-    result = {
-        "memory_id": processed["memory_id"],
-        "request_id": queued["request_id"],
-        "status": request.status,
-        "target_scope": request.target_scope,
-        "processed_at": request.processed_at.isoformat() if request.processed_at else "",
-        "job_id": queued["job_id"],
-        "event_id": processed["event_id"],
-        "secret_handles": processed.get("secret_handles", []),
+        knowledge_item.refresh_from_db(fields=["index_status"])
+        index_status = knowledge_item.index_status
+        enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            source_code=knowledge_item.source_code,
+            idempotency_key=f"reindex:{knowledge_item.memory_id}",
+            payload={"memory_id": knowledge_item.memory_id, "reason": str(exc)},
+            request_id=request_id,
+        )
+
+    return {
+        "memory_id": knowledge_item.memory_id,
+        "target_scope": target_scope,
+        "knowledge_file_path": file_result.relative_path,
+        "knowledge_file_commit": file_result.commit_hash,
+        "secret_handles": list(sanitized.secret_handles),
+        "index_status": index_status,
         "message": "Memory knowledge item saved.",
     }
-    if job is not None:
-        job.status = MemoryIndexJob.Status.SUCCEEDED
-        job.finished_at = timezone.now()
-        job.result = result
-        job.error_message = ""
-        job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
-    return result
 
 
 @transaction.atomic
-def process_memory_write_request(request: MemoryWriteRequest):
-    if request.status not in {MemoryWriteRequest.Status.QUEUED, MemoryWriteRequest.Status.FAILED}:
-        return request.result
+def _write_knowledge_item_and_file(*, actor, session, target_scope, message_ids, user_note, importance):
+    source_messages = _load_messages(session=session, message_ids=message_ids)
+    raw_text = _build_raw_memory_text(messages=source_messages, user_note=user_note)
+    if not raw_text.strip():
+        raise ValidationError("Memory request has no text to ingest.")
 
-    request.status = MemoryWriteRequest.Status.PROCESSING
-    request.save(update_fields=["status", "updated_at"])
-
-    try:
-        source_messages = _load_source_messages(request)
-        raw_text = _build_raw_memory_text(request=request, messages=source_messages)
-        if not raw_text.strip():
-            raise ValidationError("Memory request has no text to ingest.")
-
-        sanitized = sanitize_memory_text(
-            raw_text,
-            actor=request.actor,
-            scope=request.target_scope,
-            source_metadata={"memory_write_request_id": request.pk},
-        )
-        knowledge_item = create_knowledge_item_from_request(
-            request=request,
-            safe_text=sanitized.text,
-            messages=source_messages,
-            secret_handles=sanitized.secret_handles,
-        )
-        file_result = write_knowledge_item_file(
-            knowledge_item,
-            body=_normalize_memory_text(sanitized.text),
-            commit_message=f"Remember knowledge {knowledge_item.memory_id}",
-        )
-        event = append_knowledge_event(
-            knowledge_item=knowledge_item,
-            actor=request.actor,
-            event_type=MemoryKnowledgeEvent.EventType.REMEMBERED,
-            payload={
-                "memory_write_request_id": request.pk,
-                "target_scope": request.target_scope,
-                "source_message_ids": list(request.message_ids or []),
-                "secret_handles": list(sanitized.secret_handles),
-            },
-        )
-        rebuild_memory_projection(scope=knowledge_item.scope, owner_user=knowledge_item.owner_user)
-        index_knowledge_item(knowledge_item)
-
-        result = {
-            "memory_id": knowledge_item.memory_id,
-            "event_id": str(event.event_id),
-            "secret_handles": list(sanitized.secret_handles),
-            "knowledge_file_path": file_result.relative_path,
-            "knowledge_file_commit": file_result.commit_hash,
-        }
-        request.status = (
-            MemoryWriteRequest.Status.ACCEPTED
-            if request.target_scope == MemoryWriteRequest.TargetScope.ORGANIZATION
-            else MemoryWriteRequest.Status.ACCEPTED
-        )
-        request.result = {**request.result, **result}
-        request.error_message = ""
-        request.processed_at = timezone.now()
-        request.save(update_fields=["status", "result", "error_message", "processed_at", "updated_at"])
-        return result
-    except Exception as exc:
-        request.status = MemoryWriteRequest.Status.FAILED
-        request.error_message = str(exc)
-        request.processed_at = timezone.now()
-        request.save(update_fields=["status", "error_message", "processed_at", "updated_at"])
-        raise
+    sanitized = sanitize_memory_text(
+        raw_text,
+        actor=actor,
+        scope=target_scope,
+        source_metadata={"actor_id": actor.id, "session_id": getattr(session, "id", None)},
+    )
+    knowledge_item = create_knowledge_item_for_remember(
+        actor=actor,
+        session=session,
+        target_scope=target_scope,
+        message_ids=message_ids,
+        user_note=user_note,
+        importance=importance,
+        safe_text=sanitized.text,
+        messages=source_messages,
+        secret_handles=sanitized.secret_handles,
+    )
+    file_result = write_knowledge_item_file(
+        knowledge_item,
+        body=_normalize_memory_text(sanitized.text),
+        commit_message=f"Remember knowledge {knowledge_item.memory_id}",
+    )
+    rebuild_memory_projection(scope=knowledge_item.scope, owner_user=knowledge_item.owner_user)
+    return knowledge_item, file_result, sanitized
 
 
 def sanitize_memory_text(text: str, *, actor, scope: str, source_metadata=None) -> SanitizedMemoryText:
@@ -244,19 +184,31 @@ def sanitize_memory_text(text: str, *, actor, scope: str, source_metadata=None) 
     return SanitizedMemoryText(text="".join(output), secret_handles=tuple(handles))
 
 
-def create_knowledge_item_from_request(*, request: MemoryWriteRequest, safe_text: str, messages, secret_handles=()):
+def create_knowledge_item_for_remember(
+    *,
+    actor,
+    session,
+    target_scope: str,
+    message_ids: list[int],
+    user_note: str,
+    importance: str,
+    safe_text: str,
+    messages=(),
+    secret_handles=(),
+):
     text = _normalize_memory_text(safe_text)
     if not text:
         raise ValidationError("Memory text is empty after sanitization.")
     text_hash = _sha256(text)
-    source_hash = _source_content_hash(messages=messages, user_note=request.user_note)
+    source_hash = _source_content_hash(messages=messages, user_note=user_note)
     scope = (
         MemoryKnowledgeItem.Scope.ORGANIZATION
-        if request.target_scope == MemoryWriteRequest.TargetScope.ORGANIZATION
+        if target_scope == TARGET_SCOPE_ORGANIZATION
         else MemoryKnowledgeItem.Scope.PERSONAL
     )
-    owner_user = request.actor if scope == MemoryKnowledgeItem.Scope.PERSONAL else None
+    owner_user = actor if scope == MemoryKnowledgeItem.Scope.PERSONAL else None
     memory_id = _memory_id(scope=scope, owner_user=owner_user, text_hash=text_hash)
+    source_refs = _source_refs_for_remember(session=session, message_ids=message_ids)
     defaults = {
         "scope": scope,
         "owner_user": owner_user,
@@ -265,23 +217,23 @@ def create_knowledge_item_from_request(*, request: MemoryWriteRequest, safe_text
         "sensitivity": "internal" if not secret_handles else "confidential",
         "scope_tokens": _scope_tokens_for_memory(scope=scope, owner_user=owner_user),
         "status": MemoryKnowledgeItem.Status.ACTIVE,
-        "source_session": request.session,
-        "source_message_ids": list(request.message_ids or []),
-        "source_refs": _source_refs_for_request(request),
+        "source_session": session,
+        "source_message_ids": list(message_ids or []),
+        "source_refs": source_refs,
         "source_code": "chat",
         "source_kind": "chat",
         "index_status": "indexing_pending",
         "source_content_hash": source_hash,
         "provenance": {
-            "memory_write_request_id": request.pk,
-            "source_message_ids": list(request.message_ids or []),
+            "actor_id": actor.id,
+            "source_message_ids": list(message_ids or []),
             "source_content_hash": source_hash,
         },
         "metadata": {
-            "importance": request.importance,
+            "importance": importance,
             "secret_handles": list(secret_handles),
         },
-        "created_by": request.actor,
+        "created_by": actor,
     }
     item, created = MemoryKnowledgeItem.objects.update_or_create(memory_id=memory_id, defaults=defaults)
     if not created and item.status != MemoryKnowledgeItem.Status.ACTIVE:
@@ -290,45 +242,17 @@ def create_knowledge_item_from_request(*, request: MemoryWriteRequest, safe_text
     return item
 
 
-def append_knowledge_event(*, knowledge_item, actor, event_type, payload=None):
-    event = MemoryKnowledgeEvent.objects.create(
-        knowledge_item=knowledge_item,
-        actor=actor,
-        event_type=event_type,
-        payload=_safe_event_payload(payload or {}),
-    )
-    _append_event_file(event)
-    return event
-
-
 def rebuild_memory_projection(*, scope: str, owner_user=None):
-    items = MemoryKnowledgeItem.objects.filter(scope=scope, status=MemoryKnowledgeItem.Status.ACTIVE)
-    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
-        if owner_user is None:
-            raise ValidationError("owner_user is required for personal memory projection.")
-        items = items.filter(owner_user=owner_user)
-    elif scope == MemoryKnowledgeItem.Scope.ORGANIZATION:
-        items = items.filter(owner_user__isnull=True)
+    """Regenerate the OKF ``index.md`` for a scope from the knowledge files on disk.
 
-    records = []
-    for item in items.order_by("created_at", "id"):
-        try:
-            body = read_knowledge_item_file(item).body
-        except ValidationError:
-            body = ""
-        records.append(
-            {
-                "memory_id": item.memory_id,
-                "kind": item.kind,
-                "text": body,
-                "sensitivity": item.sensitivity,
-                "scope_tokens": item.scope_tokens,
-                "updated_at": item.updated_at.isoformat(),
-                "metadata": item.metadata,
-            }
-        )
-    rebuild_knowledge_summaries(scope=scope, owner_user=owner_user)
-    return records
+    ADR-0030 decision 4: the git commit is now the write journal; there is no
+    ``MemoryKnowledgeEvent`` log and no DB-queryset-built ``_summary.md``. The
+    index is rebuilt by walking the knowledge files themselves.
+    """
+    owner_user_id = owner_user.id if owner_user is not None else None
+    if scope == MemoryKnowledgeItem.Scope.PERSONAL and owner_user_id is None:
+        raise ValidationError("owner_user is required for personal memory projection.")
+    return rebuild_knowledge_index(scope=scope, owner_user_id=owner_user_id)
 
 
 def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
@@ -412,16 +336,22 @@ def edit_personal_memory(*, actor, memory_id: str, new_text: str):
     item.metadata = {**(item.metadata or {}), "secret_handles": list(sanitized.secret_handles)}
     item.index_status = "indexing_pending"
     item.save(update_fields=["text_hash", "kind", "metadata", "index_status", "updated_at"])
-    write_knowledge_item_file(item, body=body, commit_message=f"Edit knowledge {item.memory_id}")
-    event = append_knowledge_event(
-        knowledge_item=item,
-        actor=actor,
-        event_type=MemoryKnowledgeEvent.EventType.EDITED,
-        payload={"secret_handles": list(sanitized.secret_handles)},
-    )
+    file_result = write_knowledge_item_file(item, body=body, commit_message=f"Edit knowledge {item.memory_id}")
     rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
-    index_knowledge_item(item)
-    return {"memory_id": item.memory_id, "event_id": str(event.event_id), "status": item.status}
+    try:
+        index_knowledge_item(item)
+    except Exception as exc:
+        enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            source_code=item.source_code,
+            idempotency_key=f"reindex:{item.memory_id}",
+            payload={"memory_id": item.memory_id, "reason": str(exc)},
+        )
+    return {
+        "memory_id": item.memory_id,
+        "knowledge_file_commit": file_result.commit_hash,
+        "status": item.status,
+    }
 
 
 def delete_personal_memory(*, actor, memory_id: str):
@@ -430,13 +360,7 @@ def delete_personal_memory(*, actor, memory_id: str):
     item.status = MemoryKnowledgeItem.Status.DELETED
     item.index_status = "deleted"
     item.save(update_fields=["status", "index_status", "updated_at"])
-    write_knowledge_item_file(item, body=body, commit_message=f"Delete knowledge {item.memory_id}")
-    event = append_knowledge_event(
-        knowledge_item=item,
-        actor=actor,
-        event_type=MemoryKnowledgeEvent.EventType.DELETED,
-        payload={},
-    )
+    file_result = write_knowledge_item_file(item, body=body, commit_message=f"Delete knowledge {item.memory_id}")
     rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
     document_ids = list(MemorySearchDocument.objects.filter(knowledge_item=item).values_list("document_id", flat=True))
     if document_ids:
@@ -450,7 +374,11 @@ def delete_personal_memory(*, actor, memory_id: str):
             index_status=MemorySearchDocument.IndexStatus.DELETED,
             updated_at=timezone.now(),
         )
-    return {"memory_id": item.memory_id, "event_id": str(event.event_id), "status": item.status}
+    return {
+        "memory_id": item.memory_id,
+        "knowledge_file_commit": file_result.commit_hash,
+        "status": item.status,
+    }
 
 
 def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_by):
@@ -472,37 +400,6 @@ def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_b
     return candidate
 
 
-def process_queued_memory_requests(*, limit=100):
-    processed = []
-    queryset = MemoryWriteRequest.objects.filter(
-        status=MemoryWriteRequest.Status.QUEUED
-    ).order_by("created_at", "id")[:limit]
-    for request in queryset:
-        job = _memory_write_request_job(request)
-        if job is not None:
-            job.status = MemoryIndexJob.Status.RUNNING
-            job.started_at = timezone.now()
-            job.attempts += 1
-            job.save(update_fields=["status", "started_at", "attempts", "updated_at"])
-        try:
-            result = process_memory_write_request(request)
-        except Exception as exc:
-            if job is not None:
-                job.status = MemoryIndexJob.Status.FAILED
-                job.finished_at = timezone.now()
-                job.error_message = str(exc)
-                job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
-            raise
-        if job is not None:
-            job.status = MemoryIndexJob.Status.SUCCEEDED
-            job.finished_at = timezone.now()
-            job.result = result
-            job.error_message = ""
-            job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
-        processed.append(result)
-    return processed
-
-
 def propose_reflection_candidates(*, limit=100):
     candidates = []
     queryset = (
@@ -519,44 +416,34 @@ def propose_reflection_candidates(*, limit=100):
     return candidates
 
 
-def _load_source_messages(request: MemoryWriteRequest):
-    ids = [int(value) for value in request.message_ids or [] if str(value).isdigit()]
+def _load_messages(*, session, message_ids: list[int]):
+    ids = [int(value) for value in message_ids or [] if str(value).isdigit()]
     if not ids:
         return []
     messages = list(
-        ChatMessage.objects.filter(session=request.session, id__in=ids).order_by("created_at", "id")
+        ChatMessage.objects.filter(session=session, id__in=ids).order_by("created_at", "id")
     )
     if len(messages) != len(set(ids)):
         raise ValidationError("One or more message_ids do not belong to this chat session.")
     return messages
 
 
-def _memory_write_request_job(request: MemoryWriteRequest):
-    return (
-        MemoryIndexJob.objects.filter(
-            job_kind=MemoryIndexJob.JobKind.REMEMBER,
-            payload__memory_write_request_id=request.pk,
-        )
-        .order_by("-created_at", "-id")
-        .first()
-    )
-
-
-def _build_raw_memory_text(*, request: MemoryWriteRequest, messages: Iterable[ChatMessage]) -> str:
+def _build_raw_memory_text(*, messages: Iterable[ChatMessage], user_note: str) -> str:
     parts = [message.content for message in messages if message.content]
-    if request.user_note:
-        parts.append(request.user_note)
+    if user_note:
+        parts.append(user_note)
     return "\n\n".join(parts)
 
 
-def _source_refs_for_request(request: MemoryWriteRequest) -> list[dict[str, str]]:
+def _source_refs_for_remember(*, session, message_ids: list[int]) -> list[dict[str, str]]:
     refs = []
-    if request.session_id:
-        for message_id in request.message_ids or []:
+    session_id = getattr(session, "id", None)
+    if session_id:
+        for message_id in message_ids or []:
             refs.append(
                 {
                     "kind": "chat_message",
-                    "value": f"chat_session:{request.session_id}/message:{message_id}",
+                    "value": f"chat_session:{session_id}/message:{message_id}",
                 }
             )
     return refs
@@ -597,37 +484,6 @@ def _chat_memory_source(scope: str) -> MemorySource:
     return source
 
 
-def _legacy_event_log_dir(*, scope: str, owner_user=None) -> Path:
-    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
-        if owner_user is None:
-            raise ValidationError("owner_user is required for personal memory event log path.")
-        return Path(settings.DATA_DIR) / "memory" / "chat_knowledge" / "users" / str(owner_user.id)
-    return Path(settings.DATA_DIR) / "memory" / "chat_knowledge" / "org" / "default"
-
-
-def _append_event_file(event: MemoryKnowledgeEvent):
-    """Write a legacy append-only event log; knowledge text lives in data/knowledge_repo."""
-    item = event.knowledge_item
-    if item is None:
-        return
-    base_dir = _legacy_event_log_dir(scope=item.scope, owner_user=item.owner_user)
-    now = event.created_at or timezone.now()
-    event_path = base_dir / "events" / f"{now:%Y-%m}.jsonl"
-    event_payload = {
-        "event_id": str(event.event_id),
-        "event_type": event.event_type,
-        "memory_id": item.memory_id,
-        "scope": item.scope,
-        "owner_user_id": item.owner_user_id,
-        "payload": event.payload,
-        "created_at": now.isoformat(),
-        "actor_id": event.actor_id,
-    }
-    event_path.parent.mkdir(parents=True, exist_ok=True)
-    with event_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event_payload, ensure_ascii=False, sort_keys=True) + "\n")
-
-
 def _scope_tokens_for_memory(*, scope: str, owner_user=None) -> list[str]:
     if scope == MemoryKnowledgeItem.Scope.PERSONAL:
         return [f"user:{owner_user.id}"]
@@ -661,8 +517,8 @@ def _normalize_memory_text(text: str) -> str:
 
 
 def _normalize_target_scope(value) -> str:
-    item = str(value or MemoryWriteRequest.TargetScope.PERSONAL).strip().lower()
-    if item not in {MemoryWriteRequest.TargetScope.PERSONAL, MemoryWriteRequest.TargetScope.ORGANIZATION}:
+    item = str(value or TARGET_SCOPE_PERSONAL).strip().lower()
+    if item not in {TARGET_SCOPE_PERSONAL, TARGET_SCOPE_ORGANIZATION}:
         raise ValidationError("target_scope must be 'personal' or 'organization'.")
     return item
 
@@ -678,11 +534,6 @@ def _normalize_message_ids(value) -> list[int]:
         except (TypeError, ValueError):
             raise ValidationError("message_ids must contain integers.")
     return message_ids
-
-
-def _safe_event_payload(payload: dict) -> dict:
-    blocked_keys = {"value", "secret", "password", "token", "api_key", "private_key"}
-    return {str(key): value for key, value in dict(payload or {}).items() if str(key).lower() not in blocked_keys}
 
 
 def _get_owned_personal_memory(*, actor, memory_id: str) -> MemoryKnowledgeItem:

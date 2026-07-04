@@ -28,7 +28,6 @@ from apps.workorders.policies import ROLE_CUSTOMER, ROLE_MANAGER, ROLE_TECHNICIA
 from .admin import (
     MemoryAccessAuditAdmin,
     MemoryEvalCaseAdmin,
-    MemoryIndexJobAdmin,
     MemoryKnowledgeItemAdmin,
     MemorySearchDocumentAdmin,
     MemorySourceAdmin,
@@ -36,6 +35,7 @@ from .admin import (
 from .models import (
     MemoryAccessAudit,
     MemoryEvalCase,
+    MemoryExternalConnectorJob,
     MemoryFileMoveJob,
     MemoryFileObject,
     MemoryFileObjectVersion,
@@ -53,16 +53,12 @@ from .models import (
     MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
-    MemoryIndexJob,
     MemoryKnowledgeCandidate,
-    MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
-    MemoryReflectionRun,
     MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
-    MemoryWriteRequest,
     SecretAccessAudit,
     SecretHandle,
 )
@@ -77,10 +73,11 @@ from .review_selectors import index_document_queryset, issue_to_review_queue_ite
 from .review_services import apply_index_review_action, apply_issue_review_action
 from .knowledge_files import read_knowledge_item_file
 from .services import (
-    create_index_job,
-    mark_index_job_failed,
-    mark_index_job_finished,
-    mark_index_job_started,
+    MemoryQueueJobKind,
+    complete_memory_queue_task,
+    enqueue_memory_queue_task,
+    fail_memory_queue_task,
+    lease_memory_queue_tasks,
     record_access_audit,
     sync_sources_from_contract,
 )
@@ -274,7 +271,7 @@ class MemoryAdminObservabilityTests(TestCase):
         expected_admin_classes = {
             MemorySource: MemorySourceAdmin,
             MemorySearchDocument: MemorySearchDocumentAdmin,
-            MemoryIndexJob: MemoryIndexJobAdmin,
+            MemoryExternalConnectorJob: django_admin.site._registry[MemoryExternalConnectorJob].__class__,
             MemoryAccessAudit: MemoryAccessAuditAdmin,
             MemoryEvalCase: MemoryEvalCaseAdmin,
             MemorySourceObject: django_admin.site._registry[MemorySourceObject].__class__,
@@ -295,11 +292,8 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphExtractionRun: django_admin.site._registry[MemoryGraphExtractionRun].__class__,
             MemoryGraphSchemaProposal: django_admin.site._registry[MemoryGraphSchemaProposal].__class__,
             MemoryGraphReviewItem: django_admin.site._registry[MemoryGraphReviewItem].__class__,
-            MemoryWriteRequest: django_admin.site._registry[MemoryWriteRequest].__class__,
             MemoryKnowledgeItem: MemoryKnowledgeItemAdmin,
-            MemoryKnowledgeEvent: django_admin.site._registry[MemoryKnowledgeEvent].__class__,
             MemoryKnowledgeCandidate: django_admin.site._registry[MemoryKnowledgeCandidate].__class__,
-            MemoryReflectionRun: django_admin.site._registry[MemoryReflectionRun].__class__,
             MemoryReviewAction: django_admin.site._registry[MemoryReviewAction].__class__,
             SecretHandle: django_admin.site._registry[SecretHandle].__class__,
             SecretAccessAudit: django_admin.site._registry[SecretAccessAudit].__class__,
@@ -315,7 +309,7 @@ class MemoryAdminObservabilityTests(TestCase):
         for model in (
             MemorySource,
             MemorySearchDocument,
-            MemoryIndexJob,
+            MemoryExternalConnectorJob,
             MemoryAccessAudit,
             MemoryEvalCase,
             MemorySourceObject,
@@ -336,11 +330,8 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphExtractionRun,
             MemoryGraphSchemaProposal,
             MemoryGraphReviewItem,
-            MemoryWriteRequest,
             MemoryKnowledgeItem,
-            MemoryKnowledgeEvent,
             MemoryKnowledgeCandidate,
-            MemoryReflectionRun,
             MemoryReviewAction,
             SecretHandle,
             SecretAccessAudit,
@@ -457,14 +448,14 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
             {"action": "enqueue_reindex"},
         )
         self.assertEqual(enqueue_response.status_code, 302)
-        job = MemoryIndexJob.objects.get(payload__document_id=document.document_id)
-        self.assertEqual(job.job_kind, MemoryIndexJob.JobKind.REINDEX)
+        job = MemoryExternalConnectorJob.objects.get(payload__document_id=document.document_id)
+        self.assertEqual(job.job_kind, MemoryQueueJobKind.REINDEX)
         dashboard_response = self.client.get(reverse("memory:review_dashboard"))
         detail_response = self.client.get(reverse("memory:review_index_detail", kwargs={"document_id": document.document_id}))
-        self.assertContains(dashboard_response, "Переиндексация")
-        self.assertContains(dashboard_response, "Ожидает")
-        self.assertContains(detail_response, "Переиндексация")
-        self.assertContains(detail_response, "Ожидает")
+        self.assertContains(dashboard_response, "reindex")
+        self.assertContains(dashboard_response, "pending")
+        self.assertContains(detail_response, "reindex")
+        self.assertContains(detail_response, "pending")
         self.assertEqual(
             MemoryReviewAction.objects.get(search_document=document, action=MemoryReviewAction.Action.ENQUEUE_REINDEX).decision,
             MemoryReviewAction.Decision.QUEUED,
@@ -525,7 +516,7 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
-        self.assertFalse(MemoryIndexJob.objects.filter(payload__document_id=hidden_document.document_id).exists())
+        self.assertFalse(MemoryExternalConnectorJob.objects.filter(payload__document_id=hidden_document.document_id).exists())
 
     def test_delete_stale_index_rejects_healthy_document(self):
         user = self.create_review_user()
@@ -560,7 +551,7 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         )
 
         self.assertEqual(action.decision, MemoryReviewAction.Decision.QUEUED)
-        self.assertTrue(MemoryIndexJob.objects.filter(payload__document_id=document.document_id).exists())
+        self.assertTrue(MemoryExternalConnectorJob.objects.filter(payload__document_id=document.document_id).exists())
 
     def test_index_queryset_without_gap_remains_lazy(self):
         user = self.create_review_user()
@@ -1204,49 +1195,87 @@ class MemoryMetadataModelTests(MemoryModelFactoryMixin, TestCase):
                 )
 
 
-class MemoryIndexJobServiceTests(MemoryModelFactoryMixin, TestCase):
+class MemoryQueueTaskServiceTests(MemoryModelFactoryMixin, TestCase):
+    """Unified memory queue (ADR-0030 decision 2): single MemoryExternalConnectorJob table."""
+
     databases = RUNTIME_DATABASES
-    def test_create_and_transition_index_job(self):
-        user = User.objects.create_user(username="memory-indexer", password="pass")
+
+    def test_enqueue_lease_and_complete_task(self):
         source = self.create_source()
 
-        job = create_index_job(
-            job_kind=MemoryIndexJob.JobKind.SYNC,
-            source=source,
-            created_by=user,
-            request_id="req-1",
+        job = enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            source_code=source.code,
+            idempotency_key="test-enqueue-1",
             payload={"source_code": source.code},
         )
 
-        self.assertEqual(job.status, MemoryIndexJob.Status.PENDING)
-        self.assertEqual(job.attempts, 0)
+        self.assertEqual(job.status, "pending")
+        self.assertEqual(job.attempt_count, 0)
         self.assertEqual(job.max_attempts, 3)
-        self.assertEqual(str(job), f"sync:pending:{job.pk}")
 
-        mark_index_job_started(job)
-        job.refresh_from_db()
-        self.assertEqual(job.status, MemoryIndexJob.Status.RUNNING)
-        self.assertEqual(job.attempts, 1)
-        self.assertIsNotNone(job.started_at)
+        # Re-enqueueing with the same idempotency_key returns the same row.
+        same_job = enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            source_code=source.code,
+            idempotency_key="test-enqueue-1",
+            payload={"source_code": source.code},
+        )
+        self.assertEqual(same_job.pk, job.pk)
+        self.assertEqual(MemoryExternalConnectorJob.objects.filter(idempotency_key="test-enqueue-1").count(), 1)
 
-        mark_index_job_finished(job, result={"chunks": 1})
+        leased = lease_memory_queue_tasks(job_kinds=[MemoryQueueJobKind.REINDEX], limit=5, locked_by="worker-1")
+        self.assertEqual(len(leased), 1)
+        self.assertEqual(leased[0].job_id, str(job.job_id))
+        self.assertEqual(leased[0].locked_by, "worker-1")
+
         job.refresh_from_db()
-        self.assertEqual(job.status, MemoryIndexJob.Status.SUCCEEDED)
-        self.assertEqual(job.result, {"chunks": 1})
+        self.assertEqual(job.status, "running")
+        self.assertEqual(job.attempt_count, 1)
+        self.assertEqual(job.locked_by, "worker-1")
+
+        complete_memory_queue_task(job.job_id, result={"indexed": True})
+        job.refresh_from_db()
+        self.assertEqual(job.status, "succeeded")
+        self.assertEqual(job.result, {"indexed": True})
         self.assertEqual(job.error_message, "")
-        self.assertIsNotNone(job.finished_at)
+        self.assertEqual(job.locked_by, "")
 
-    def test_mark_index_job_failed_records_error_and_result(self):
-        job = create_index_job(job_kind=MemoryIndexJob.JobKind.REINDEX)
+    def test_failed_task_retries_then_reaches_dead_letter(self):
+        job = enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            idempotency_key="test-dead-letter-1",
+            payload={"memory_id": "chat:personal:user-1:deadbeef"},
+            max_attempts=2,
+        )
 
-        mark_index_job_started(job)
-        mark_index_job_failed(job, error_message="backend unavailable", result={"retryable": True})
+        # Attempt 1: lease, fail -> retry_wait (attempts exhausted check is 1 < 2).
+        leased = lease_memory_queue_tasks(job_kinds=[MemoryQueueJobKind.REINDEX], limit=1)
+        self.assertEqual(len(leased), 1)
+        failed = fail_memory_queue_task(leased[0].job_id, error_message="backend unavailable")
+        self.assertEqual(failed.status, "retry_wait")
         job.refresh_from_db()
+        self.assertEqual(job.attempt_count, 1)
 
-        self.assertEqual(job.status, MemoryIndexJob.Status.FAILED)
-        self.assertEqual(job.error_message, "backend unavailable")
-        self.assertEqual(job.result, {"retryable": True})
+        # Attempt 2: lease again (retry window elapses immediately in this
+        # unit test because next_attempt_at is in the past by the time we
+        # force it below), fail again -> attempt_count reaches max_attempts,
+        # task moves to dead_letter and is visible to an operator.
+        job.next_attempt_at = timezone.now() - timedelta(seconds=1)
+        job.save(update_fields=["next_attempt_at"])
+        leased_again = lease_memory_queue_tasks(job_kinds=[MemoryQueueJobKind.REINDEX], limit=1)
+        self.assertEqual(len(leased_again), 1)
+        final = fail_memory_queue_task(leased_again[0].job_id, error_message="backend unavailable again")
+        self.assertEqual(final.status, "dead_letter")
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, "dead_letter")
+        self.assertEqual(job.attempt_count, job.max_attempts)
         self.assertIsNotNone(job.finished_at)
+        self.assertEqual(job.error_message, "backend unavailable again")
+
+        # Dead-lettered tasks are not leased again.
+        self.assertEqual(lease_memory_queue_tasks(job_kinds=[MemoryQueueJobKind.REINDEX], limit=5), [])
 
 
 class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
@@ -1481,79 +1510,63 @@ class MemoryChatKnowledgeTests(TestCase):
         message = ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content=text)
         return user, session, message
 
-    def test_chat_delete_nullifies_memory_write_request_session(self):
-        """Deleting a ChatSession must set session_id=NULL on any
-        MemoryWriteRequest rows that referenced it. The FK is DO_NOTHING
-        to bypass the cross-DB cascade SELECT (see apps/memory/signals.py
-        and WINDOWS_RUN.md "Cross-database FK gotcha"); this signal
-        re-introduces the SET_NULL cleanup explicitly."""
-        from .chat_memory import queue_memory_remember
+    def test_chat_delete_nullifies_knowledge_item_session(self):
+        """Deleting a ChatSession must set source_session_id=NULL on any
+        MemoryKnowledgeItem rows that referenced it (standard Django
+        on_delete=SET_NULL, now that chat and memory tables live in one
+        database); the knowledge item and its file survive the chat delete."""
+        from .chat_memory import remember_knowledge
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             user, session, message = self.create_chat()
-            result = queue_memory_remember(
+            result = remember_knowledge(
                 actor=user,
                 session=session,
                 payload={"message_ids": [message.id], "user_note": "x"},
                 request_id="req-delete-chat-1",
             )
-            request = MemoryWriteRequest.objects.get(request_id=result["request_id"])
-            self.assertEqual(request.session_id, session.id)
+            item = MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
+            self.assertEqual(item.source_session_id, session.id)
 
-            # The chat delete must not raise, and the pre_delete
-            # handler must run the UPDATE on the default database.
             session.delete()
 
-            request.refresh_from_db()
-            self.assertIsNone(request.session_id)
-            # Row itself survives — write request history is kept.
-            self.assertEqual(
-                MemoryWriteRequest.objects.filter(
-                    request_id=result["request_id"]
-                ).count(),
-                1,
-            )
+            item.refresh_from_db()
+            self.assertIsNone(item.source_session_id)
+            # Row itself survives — the knowledge item is independent of the chat.
+            self.assertEqual(MemoryKnowledgeItem.objects.filter(memory_id=result["memory_id"]).count(), 1)
 
-    def test_remember_request_queues_personal_memory_by_default(self):
-        from .chat_memory import process_queued_memory_requests, queue_memory_remember
+    def test_remember_knowledge_writes_personal_memory_synchronously(self):
+        """memory.remember is a single synchronous call (ADR-0030 decision 2):
+        one call creates the file, the git commit, and the search index; there
+        is no MemoryWriteRequest/MemoryIndexJob queue status in the result."""
+        from .chat_memory import remember_knowledge
         from .retrieval import memory_search
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             user, session, message = self.create_chat()
             other_user = User.objects.create_user(username="chat-memory-other-user", password="pass")
-            result = queue_memory_remember(
+            result = remember_knowledge(
                 actor=user,
                 session=session,
                 payload={"message_ids": [message.id], "user_note": "важно"},
                 request_id="req-remember-1",
             )
-            request = MemoryWriteRequest.objects.get(request_id=result["request_id"])
 
             self.assertEqual(session._state.db, "default")
-            self.assertEqual(request._state.db, "default")
-            self.assertEqual(request.target_scope, MemoryWriteRequest.TargetScope.PERSONAL)
-            self.assertEqual(request.status, MemoryWriteRequest.Status.QUEUED)
-            self.assertFalse(MemoryKnowledgeItem.objects.exists())
-            self.assertEqual(
-                MemoryIndexJob.objects.filter(job_kind=MemoryIndexJob.JobKind.REMEMBER, status=MemoryIndexJob.Status.PENDING).count(),
-                1,
-            )
+            self.assertNotIn("request_id", result)
+            self.assertNotIn("job_id", result)
+            self.assertNotIn("event_id", result)
+            self.assertEqual(result["target_scope"], "personal")
+            self.assertEqual(result["index_status"], "ready")
+            self.assertTrue(result["knowledge_file_commit"])
 
-            processed = process_queued_memory_requests(limit=5)[0]
-            request.refresh_from_db()
-
-            self.assertEqual(request.status, MemoryWriteRequest.Status.ACCEPTED)
-            self.assertEqual(
-                MemoryIndexJob.objects.filter(job_kind=MemoryIndexJob.JobKind.REMEMBER, status=MemoryIndexJob.Status.SUCCEEDED).count(),
-                1,
-            )
-            self.assertTrue(MemoryKnowledgeItem.objects.filter(owner_user=user, scope=MemoryKnowledgeItem.Scope.PERSONAL).exists())
-            self.assertTrue((Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "_summary.md").exists())
-            self.assertTrue(MemoryKnowledgeItem.objects.filter(knowledge_file_path__startswith=f"users/{user.id}/").exists())
+            item = MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
+            self.assertEqual(item.owner_user, user)
+            self.assertEqual(item.scope, MemoryKnowledgeItem.Scope.PERSONAL)
+            self.assertEqual(item.knowledge_file_path, result["knowledge_file_path"])
+            self.assertTrue((Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "index.md").exists())
+            self.assertFalse((Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "_summary.md").exists())
             self.assertTrue((Path(tmpdir) / "knowledge_repo" / ".git").exists())
-            self.assertIn("memory_id", processed)
-            self.assertNotIn("claim_id", processed)
-            self.assertNotIn("belief_id", processed)
             self.assertIsNone(get_optional_memory_model("MemoryClaim"))
             self.assertIsNone(get_optional_memory_model("MemoryBelief"))
 
@@ -1575,8 +1588,46 @@ class MemoryChatKnowledgeTests(TestCase):
             )
             self.assertEqual(denied["items"], [])
 
+    def test_remember_knowledge_indexing_failure_enqueues_retryable_reindex_task(self):
+        """If inline indexing raises, the write must still succeed (file +
+        commit + memory_id); a retryable reindex task lands on the unified
+        queue and eventually reaches dead_letter once retries are exhausted."""
+        from .chat_memory import remember_knowledge
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat()
+            with patch("apps.memory.chat_memory.index_knowledge_item", side_effect=RuntimeError("backend unavailable")):
+                result = remember_knowledge(
+                    actor=user,
+                    session=session,
+                    payload={"message_ids": [message.id]},
+                    request_id="req-remember-index-fail",
+                )
+
+            self.assertTrue(result["memory_id"])
+            self.assertTrue(result["knowledge_file_commit"])
+            self.assertEqual(result["index_status"], "indexing_pending")
+
+            job = MemoryExternalConnectorJob.objects.get(idempotency_key=f"reindex:{result['memory_id']}")
+            self.assertEqual(job.job_kind, MemoryQueueJobKind.REINDEX)
+            self.assertEqual(job.status, "pending")
+            self.assertEqual(job.max_attempts, 3)
+
+            for _ in range(job.max_attempts):
+                leased = lease_memory_queue_tasks(job_kinds=[MemoryQueueJobKind.REINDEX], limit=1)
+                self.assertEqual(len(leased), 1)
+                fail_memory_queue_task(leased[0].job_id, error_message="backend unavailable")
+                job.refresh_from_db()
+                if job.status != "dead_letter":
+                    job.next_attempt_at = timezone.now() - timedelta(seconds=1)
+                    job.save(update_fields=["next_attempt_at"])
+
+            job.refresh_from_db()
+            self.assertEqual(job.status, "dead_letter")
+            self.assertEqual(job.attempt_count, job.max_attempts)
+
     def test_secret_span_becomes_handle_and_non_secret_text_is_indexed(self):
-        from .chat_memory import process_memory_write_request, queue_memory_remember
+        from .chat_memory import remember_knowledge
         from .retrieval import memory_search
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir), LOCAL_BUSINESS_SECRET_VAULT_BASE_URL="https://vault.example"):
@@ -1584,16 +1635,13 @@ class MemoryChatKnowledgeTests(TestCase):
             user, session, message = self.create_chat(
                 text=f"Запомни: тестовый стенд называется alpha. Пароль: {secret_value}"
             )
-            queued = queue_memory_remember(
+            result = remember_knowledge(
                 actor=user,
                 session=session,
                 payload={"message_ids": [message.id]},
                 request_id="req-secret-memory",
             )
-            request = MemoryWriteRequest.objects.get(request_id=queued["request_id"])
-
-            process_memory_write_request(request)
-            item = MemoryKnowledgeItem.objects.get(owner_user=user)
+            item = MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
             saved_text = read_knowledge_item_file(item).body
 
             self.assertIn("тестовый стенд называется alpha", saved_text)
@@ -1601,6 +1649,8 @@ class MemoryChatKnowledgeTests(TestCase):
             self.assertNotIn(secret_value, saved_text)
             self.assertEqual(SecretHandle.objects.count(), 1)
             self.assertEqual(SecretAccessAudit.objects.count(), 1)
+            self.assertTrue(result["secret_handles"])
+            self.assertNotIn(secret_value, json.dumps(result, ensure_ascii=False))
 
             found = memory_search(
                 actor=user,
@@ -1611,19 +1661,27 @@ class MemoryChatKnowledgeTests(TestCase):
             self.assertEqual(len(found["items"]), 1)
             self.assertNotIn(secret_value, json.dumps(found, ensure_ascii=False))
 
-            index_path = Path(tmpdir) / "indexes" / "fulltext" / "search.sqlite3"
-            self.assertTrue(index_path.exists())
-            self.assertNotIn(secret_value.encode("utf-8"), index_path.read_bytes())
+            if settings.LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND == "sqlite_fts":
+                index_path = Path(tmpdir) / "indexes" / "fulltext" / "search.sqlite3"
+                self.assertTrue(index_path.exists())
+                self.assertNotIn(secret_value.encode("utf-8"), index_path.read_bytes())
+            else:
+                from .models import MemoryFullTextIndex
+
+                rows = list(MemoryFullTextIndex.objects.filter(is_active=True))
+                self.assertTrue(rows)
+                for row in rows:
+                    self.assertNotIn(secret_value, row.search_text)
 
     def test_organization_memory_requires_staff_permission(self):
         from django.core.exceptions import PermissionDenied
 
-        from .chat_memory import queue_memory_remember
+        from .chat_memory import remember_knowledge
 
         user, session, message = self.create_chat(username="org-denied-user")
 
         with self.assertRaises(PermissionDenied):
-            queue_memory_remember(
+            remember_knowledge(
                 actor=user,
                 session=session,
                 payload={"message_ids": [message.id], "target_scope": "organization"},
@@ -1631,17 +1689,16 @@ class MemoryChatKnowledgeTests(TestCase):
             )
 
     def test_reflection_creates_organization_candidate_for_high_importance_personal_memory(self):
-        from .chat_memory import process_memory_write_request, propose_reflection_candidates, queue_memory_remember
+        from .chat_memory import propose_reflection_candidates, remember_knowledge
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             user, session, message = self.create_chat(text="Запомни: общий регламент alpha действует для отдела.")
-            queued = queue_memory_remember(
+            remember_knowledge(
                 actor=user,
                 session=session,
                 payload={"message_ids": [message.id], "importance": "organization_candidate"},
                 request_id="req-candidate",
             )
-            process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
 
             candidates = propose_reflection_candidates()
 
@@ -1649,22 +1706,25 @@ class MemoryChatKnowledgeTests(TestCase):
             self.assertEqual(candidates[0].status, MemoryKnowledgeCandidate.Status.PROPOSED)
 
     def test_owner_can_edit_and_delete_personal_memory(self):
-        from .chat_memory import delete_personal_memory, edit_personal_memory, process_memory_write_request, queue_memory_remember
+        from .chat_memory import delete_personal_memory, edit_personal_memory, remember_knowledge
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             user, session, message = self.create_chat()
-            queued = queue_memory_remember(actor=user, session=session, payload={"message_ids": [message.id]})
-            process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
-            item = MemoryKnowledgeItem.objects.get(owner_user=user)
+            result = remember_knowledge(actor=user, session=session, payload={"message_ids": [message.id]})
+            item = MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
 
             edited = edit_personal_memory(actor=user, memory_id=item.memory_id, new_text="Насос alpha калибруется ежемесячно.")
             item.refresh_from_db()
             self.assertEqual(edited["status"], MemoryKnowledgeItem.Status.ACTIVE)
+            self.assertNotIn("event_id", edited)
+            self.assertTrue(edited["knowledge_file_commit"])
             self.assertIn("ежемесячно", read_knowledge_item_file(item).body)
 
             deleted = delete_personal_memory(actor=user, memory_id=item.memory_id)
             item.refresh_from_db()
             self.assertEqual(deleted["status"], MemoryKnowledgeItem.Status.DELETED)
+            self.assertNotIn("event_id", deleted)
+            self.assertTrue(deleted["knowledge_file_commit"])
             self.assertEqual(item.status, MemoryKnowledgeItem.Status.DELETED)
 
 
@@ -2477,18 +2537,17 @@ class MemoryReconcileTests(TestCase):
     def _make_item(self):
         from apps.ai.models import ChatMessage, ChatSession
 
-        from .chat_memory import process_memory_write_request, queue_memory_remember
+        from .chat_memory import remember_knowledge
 
         user = User.objects.create_user(username="reconcile-user", password="pass")
         session = ChatSession.objects.create(user=user, title="Memory chat")
         message = ChatMessage.objects.create(
             session=session, role=ChatMessage.Role.USER, content="Запомни: alpha требует калибровку."
         )
-        queued = queue_memory_remember(
+        result = remember_knowledge(
             actor=user, session=session, payload={"message_ids": [message.id]}, request_id="req-reconcile"
         )
-        process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
-        return user, MemoryKnowledgeItem.objects.get(owner_user=user)
+        return user, MemoryKnowledgeItem.objects.get(memory_id=result["memory_id"])
 
     def _rewrite_file(self, item, *, body=None, metadata_updates=None):
         from .knowledge_files import (
@@ -2559,3 +2618,24 @@ class MemoryReconcileTests(TestCase):
             self.assertNotIn("index_status", meta)
             self.assertNotIn("text_hash", meta)
             self.assertEqual(meta.get("lifecycle"), "current")
+
+    def test_reconcile_regenerates_index_md_from_files_not_summary_md(self):
+        """ADR-0030 decision 4: index.md is generated from the knowledge files
+        on disk by the reconciler; _summary.md is no longer produced anywhere."""
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, item = self._make_item()
+
+            out = StringIO()
+            call_command("memory_reconcile", stdout=out)
+            self.assertIn("indexes_written=", out.getvalue())
+
+            index_path = Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "index.md"
+            summary_path = Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "_summary.md"
+            self.assertTrue(index_path.exists())
+            self.assertFalse(summary_path.exists())
+            self.assertIn(item.memory_id, index_path.read_text(encoding="utf-8"))
+
+            org_index_path = Path(tmpdir) / "knowledge_repo" / "org" / "index.md"
+            org_summary_path = Path(tmpdir) / "knowledge_repo" / "org" / "_summary.md"
+            self.assertTrue(org_index_path.exists())
+            self.assertFalse(org_summary_path.exists())

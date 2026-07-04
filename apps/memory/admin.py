@@ -24,16 +24,12 @@ from .models import (
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemoryFullTextIndex,
-    MemoryIndexJob,
     MemoryKnowledgeCandidate,
-    MemoryKnowledgeEvent,
     MemoryKnowledgeItem,
-    MemoryReflectionRun,
     MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
-    MemoryWriteRequest,
     SecretAccessAudit,
     SecretHandle,
 )
@@ -52,7 +48,6 @@ class MemorySourceAdmin(admin.ModelAdmin):
         "trusted_for_context",
         "sensitivity",
         "search_document_count",
-        "job_count",
         "last_synced_at",
         "updated_at",
     )
@@ -75,17 +70,12 @@ class MemorySourceAdmin(admin.ModelAdmin):
             .get_queryset(request)
             .annotate(
                 _search_document_count=Count("source_objects__search_documents", distinct=True),
-                _job_count=Count("index_jobs", distinct=True),
             )
         )
 
     @admin.display(ordering="_search_document_count", description="Поисковые документы")
     def search_document_count(self, obj):
         return obj._search_document_count
-
-    @admin.display(ordering="_job_count", description="Задания")
-    def job_count(self, obj):
-        return obj._job_count
 
 
 @admin.register(MemorySearchDocument)
@@ -390,18 +380,6 @@ class MemoryGraphReviewItemAdmin(admin.ModelAdmin):
     autocomplete_fields = ("source", "reviewed_by")
 
 
-@admin.register(MemoryWriteRequest)
-class MemoryWriteRequestAdmin(admin.ModelAdmin):
-    list_display = ("request_id", "actor", "target_scope", "status", "processed_at", "created_at")
-    list_filter = ("target_scope", "status", "created_at", "processed_at")
-    search_fields = ("request_id", "error_message")
-    readonly_fields = ("request_id", "created_at", "updated_at", "processed_at")
-    autocomplete_fields = ("actor", "session")
-
-    def get_queryset(self, request):
-        return super().get_queryset(request)
-
-
 @admin.register(MemoryKnowledgeItem)
 class MemoryKnowledgeItemAdmin(admin.ModelAdmin):
     list_display = ("memory_id", "scope", "owner_user", "kind", "status", "sensitivity", "updated_at")
@@ -414,15 +392,6 @@ class MemoryKnowledgeItemAdmin(admin.ModelAdmin):
         return super().get_queryset(request)
 
 
-@admin.register(MemoryKnowledgeEvent)
-class MemoryKnowledgeEventAdmin(admin.ModelAdmin):
-    list_display = ("event_id", "event_type", "knowledge_item", "actor", "created_at")
-    list_filter = ("event_type", "created_at")
-    search_fields = ("event_id", "knowledge_item__memory_id")
-    readonly_fields = ("event_id", "created_at")
-    autocomplete_fields = ("knowledge_item", "actor")
-
-
 @admin.register(MemoryKnowledgeCandidate)
 class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
     list_display = ("id", "status", "source_item", "created_by", "reviewer", "reviewed_at", "created_at")
@@ -430,15 +399,6 @@ class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
     search_fields = ("source_item__memory_id", "decision")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("source_item", "created_by", "reviewer")
-
-
-@admin.register(MemoryReflectionRun)
-class MemoryReflectionRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "status", "dry_run", "window_start", "window_end", "started_at", "finished_at")
-    list_filter = ("status", "dry_run", "created_at", "started_at")
-    search_fields = ("error_message",)
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("created_by",)
 
 
 @admin.register(SecretHandle)
@@ -459,52 +419,6 @@ class SecretAccessAuditAdmin(admin.ModelAdmin):
     autocomplete_fields = ("actor", "secret_handle")
 
 
-@admin.register(MemoryIndexJob)
-class MemoryIndexJobAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "job_kind",
-        "status",
-        "source",
-        "request_id",
-        "attempts_display",
-        "created_by",
-        "created_at",
-        "started_at",
-        "finished_at",
-        "duration",
-    )
-    list_filter = ("job_kind", "status", "source__domain", "created_at", "started_at", "finished_at")
-    search_fields = ("request_id", "source__code", "error_message")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source", "created_by")
-    actions = ("cancel_selected_jobs",)
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("source")
-
-    @admin.display(description="Попытки")
-    def attempts_display(self, obj):
-        return f"{obj.attempts}/{obj.max_attempts}"
-
-    @admin.display(description="Длительность")
-    def duration(self, obj):
-        if not obj.started_at:
-            return ""
-        finished_at = obj.finished_at or timezone.now()
-        return finished_at - obj.started_at
-
-    @admin.action(description="Отменить выбранные ожидающие или выполняемые задания")
-    def cancel_selected_jobs(self, request, queryset):
-        now = timezone.now()
-        updated = queryset.filter(status__in=[MemoryIndexJob.Status.PENDING, MemoryIndexJob.Status.RUNNING]).update(
-            status=MemoryIndexJob.Status.CANCELLED,
-            finished_at=now,
-            updated_at=now,
-        )
-        self.message_user(request, f"Отменено заданий памяти: {updated}.")
-
-
 @admin.register(MemoryExternalConnectorJob)
 class MemoryExternalConnectorJobAdmin(admin.ModelAdmin):
     list_display = (
@@ -514,16 +428,29 @@ class MemoryExternalConnectorJobAdmin(admin.ModelAdmin):
         "status",
         "priority",
         "attempts_display",
+        "locked_by",
         "request_id",
         "updated_at",
     )
     list_filter = ("status", "source_code", "job_kind", "created_at", "updated_at")
-    search_fields = ("job_id", "source_code", "idempotency_key", "request_id", "error_message")
+    search_fields = ("job_id", "source_code", "idempotency_key", "request_id", "error_message", "locked_by")
     readonly_fields = ("job_id", "created_at", "updated_at")
+    actions = ("cancel_selected_jobs",)
 
     @admin.display(description="Попытки")
     def attempts_display(self, obj):
         return f"{obj.attempt_count}/{obj.max_attempts}"
+
+    @admin.action(description="Отменить выбранные ожидающие задания")
+    def cancel_selected_jobs(self, request, queryset):
+        now = timezone.now()
+        updated = queryset.filter(status__in=["pending", "retry_wait"]).update(
+            status="cancelled",
+            finished_at=now,
+            locked_until=None,
+            updated_at=now,
+        )
+        self.message_user(request, f"Отменено заданий очереди памяти: {updated}.")
 
 
 @admin.register(MemoryAccessAudit)

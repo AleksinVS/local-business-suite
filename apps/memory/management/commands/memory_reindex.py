@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.memory.chat_memory import index_knowledge_item
 from apps.memory.document_ingestion import (
@@ -8,9 +9,9 @@ from apps.memory.document_ingestion import (
     ingest_source_object_text,
     inspect_source_object_for_ingestion,
 )
-from apps.memory.models import MemoryIndexJob, MemoryIngestionIssue, MemorySearchDocument, MemorySource, MemorySourceObject
+from apps.memory.models import MemoryIngestionIssue, MemorySearchDocument, MemorySource, MemorySourceObject
 from apps.memory.policies import search_document_sensitivity
-from apps.memory.services import create_index_job, mark_index_job_failed, mark_index_job_finished, mark_index_job_started
+from apps.memory.services import MemoryQueueJobKind, enqueue_memory_queue_task
 from apps.memory.source_text_extraction import PARSER_VERSION
 from apps.memory.vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 
@@ -42,7 +43,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="Inspect eligible records without writing indexes or creating a MemoryIndexJob.",
+            help="Inspect eligible records without writing indexes or enqueuing a memory queue task.",
         )
         parser.add_argument(
             "--force",
@@ -69,9 +70,10 @@ class Command(BaseCommand):
             )
             return
 
-        job = create_index_job(
-            job_kind=MemoryIndexJob.JobKind.REINDEX,
-            source=source,
+        job = enqueue_memory_queue_task(
+            job_kind=MemoryQueueJobKind.REINDEX,
+            source_code=source.code if source else "",
+            idempotency_key=f"memory-reindex-cli:{source.code if source else 'all'}:{corpus}:{backend}:{timezone.now().timestamp()}",
             payload={
                 "source_code": source.code if source else "",
                 "corpus": corpus,
@@ -81,13 +83,24 @@ class Command(BaseCommand):
                 "celery": False,
             },
         )
-        mark_index_job_started(job)
+        job.status = "running"
+        job.started_at = timezone.now()
+        job.attempt_count += 1
+        job.save(update_fields=["status", "started_at", "attempt_count", "updated_at"])
         try:
             result = self._run_reindex(source=source, corpus=corpus, backends=backends, force=force, dry_run=False)
-            mark_index_job_finished(job, result=result)
         except Exception as exc:
-            mark_index_job_failed(job, error_message=str(exc), result={"corpus": corpus, "backend": backend})
+            job.status = "failed"
+            job.finished_at = timezone.now()
+            job.error_message = str(exc)
+            job.result = {"corpus": corpus, "backend": backend}
+            job.save(update_fields=["status", "finished_at", "error_message", "result", "updated_at"])
             raise
+        job.status = "succeeded"
+        job.finished_at = timezone.now()
+        job.result = result
+        job.error_message = ""
+        job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
 
         self.stdout.write(
             self.style.SUCCESS(

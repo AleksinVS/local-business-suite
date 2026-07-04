@@ -15,7 +15,15 @@ from apps.core.source_adapters import (
 from .knowledge_files import read_knowledge_item_file
 from .deidentification import detect_pii, redact_text
 from .document_ingestion import delete_search_document_indexes
-from .models import MemoryAccessAudit, MemoryIndexJob, MemoryIngestionIssue, MemoryKnowledgeItem, MemorySearchDocument, MemorySource, MemorySourceObject
+from .models import (
+    MemoryAccessAudit,
+    MemoryExternalConnectorJob,
+    MemoryIngestionIssue,
+    MemoryKnowledgeItem,
+    MemorySearchDocument,
+    MemorySource,
+    MemorySourceObject,
+)
 from .policies import user_scope_tokens
 from .security import scan_for_secrets
 from .vector_backends import (
@@ -284,40 +292,97 @@ def compile_knowledge_item_digest(*, scope_tokens=None, limit=100):
     return records
 
 
-def create_index_job(*, job_kind, source=None, created_by=None, request_id="", payload=None):
-    return MemoryIndexJob.objects.create(
-        source=source,
-        job_kind=job_kind,
-        created_by=created_by,
-        request_id=request_id,
-        payload=payload or {},
+class MemoryQueueJobKind:
+    """Task kinds carried by the single unified memory queue.
+
+    ADR-0030 decision 2: MemoryWriteRequest/MemoryIndexJob/MemoryKnowledgeEvent/
+    MemoryReflectionRun collapse into ``MemoryExternalConnectorJob``. The queue
+    already carries external-connector kinds (see ``external_connectors.ExternalJobKind``);
+    these are the additional kinds used by the rest of the memory app.
+    """
+
+    RECONCILE = "reconcile"
+    INGESTION = "ingestion"
+    REINDEX = "reindex"
+
+
+class MemoryQueueStatus:
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    RETRY_WAIT = "retry_wait"
+    FAILED = "failed"
+    DEAD_LETTER = "dead_letter"
+    CANCELLED = "cancelled"
+
+
+def enqueue_memory_queue_task(
+    *,
+    job_kind: str,
+    idempotency_key: str,
+    payload: dict | None = None,
+    source_code: str = "",
+    priority: int = 0,
+    max_attempts: int = 3,
+    request_id: str = "",
+) -> MemoryExternalConnectorJob:
+    """Enqueue a task on the single unified memory queue table.
+
+    Idempotent by ``idempotency_key``: a repeat enqueue with the same key
+    returns the existing row instead of creating a duplicate.
+    """
+    job, _created = MemoryExternalConnectorJob.objects.get_or_create(
+        idempotency_key=idempotency_key,
+        defaults={
+            "source_code": source_code,
+            "job_kind": job_kind,
+            "status": MemoryQueueStatus.PENDING,
+            "priority": priority,
+            "payload": payload or {},
+            "max_attempts": max_attempts,
+            "request_id": request_id,
+        },
+    )
+    return job
+
+
+def lease_memory_queue_tasks(
+    *,
+    job_kinds: list[str] | None = None,
+    limit: int = 1,
+    lease_seconds: int = 300,
+    locked_by: str = "",
+):
+    """Lease pending/retry-eligible unified-queue tasks.
+
+    Reuses ``DatabaseExternalConnectorQueueBackend.lease`` (ADR-0029 database
+    queue backend pattern: ``select_for_update(skip_locked=True)`` on
+    PostgreSQL) so the memory queue and the external-connector queue share one
+    leasing implementation against ``MemoryExternalConnectorJob``.
+    """
+    from .external_connectors import DatabaseExternalConnectorQueueBackend
+
+    return DatabaseExternalConnectorQueueBackend().lease(
+        limit=limit,
+        lease_seconds=lease_seconds,
+        locked_by=locked_by,
+        job_kinds=job_kinds,
     )
 
 
-def mark_index_job_started(job: MemoryIndexJob):
-    job.status = MemoryIndexJob.Status.RUNNING
-    job.started_at = timezone.now()
-    job.attempts += 1
-    job.save(update_fields=["status", "started_at", "attempts", "updated_at"])
-    return job
+def complete_memory_queue_task(job_id, *, result=None):
+    from .external_connectors import DatabaseExternalConnectorQueueBackend
+
+    return DatabaseExternalConnectorQueueBackend().complete(str(job_id), result=result)
 
 
-def mark_index_job_finished(job: MemoryIndexJob, *, result=None):
-    job.status = MemoryIndexJob.Status.SUCCEEDED
-    job.finished_at = timezone.now()
-    job.result = result or {}
-    job.error_message = ""
-    job.save(update_fields=["status", "finished_at", "result", "error_message", "updated_at"])
-    return job
+def fail_memory_queue_task(job_id, *, error_message: str, retry_delay_seconds: int = 60):
+    """Fail a leased task; moves it to ``dead_letter`` once attempts are exhausted."""
+    from .external_connectors import DatabaseExternalConnectorQueueBackend
 
-
-def mark_index_job_failed(job: MemoryIndexJob, *, error_message, result=None):
-    job.status = MemoryIndexJob.Status.FAILED
-    job.finished_at = timezone.now()
-    job.error_message = error_message
-    job.result = result or {}
-    job.save(update_fields=["status", "finished_at", "error_message", "result", "updated_at"])
-    return job
+    return DatabaseExternalConnectorQueueBackend().fail(
+        str(job_id), error_message=error_message, retry_delay_seconds=retry_delay_seconds
+    )
 
 
 def record_access_audit(
@@ -344,10 +409,10 @@ def record_access_audit(
     )
 
 
-def queue_memory_remember_for_actor(*, actor, session, payload, request_id=""):
-    from .chat_memory import queue_memory_remember
+def remember_knowledge_for_actor(*, actor, session, payload, request_id=""):
+    from .chat_memory import remember_knowledge
 
-    return queue_memory_remember(actor=actor, session=session, payload=payload, request_id=request_id)
+    return remember_knowledge(actor=actor, session=session, payload=payload, request_id=request_id)
 
 
 def update_personal_memory_for_actor(*, actor, payload):

@@ -1,4 +1,4 @@
-from .models import MemoryIndexJob, MemorySearchDocument, MemorySource
+from .models import MemoryExternalConnectorJob, MemorySearchDocument, MemorySource
 from .policies import can_access_search_document
 
 
@@ -26,4 +26,4 @@ def active_search_documents_queryset(user):
 
 
 def recent_index_jobs_queryset(limit=50):
-    return MemoryIndexJob.objects.select_related("source").order_by("-created_at", "-id")[:limit]
+    return MemoryExternalConnectorJob.objects.order_by("-created_at", "-id")[:limit]

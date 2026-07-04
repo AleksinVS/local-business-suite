@@ -20,7 +20,7 @@ from .policies import can_access_knowledge_item
 
 
 FRONT_MATTER_SEPARATOR = "---"
-SUMMARY_FILE_NAME = "_summary.md"
+INDEX_FILE_NAME = "index.md"
 
 
 @dataclass(frozen=True)
@@ -216,32 +216,77 @@ def verify_knowledge_item_file(item: MemoryKnowledgeItem) -> dict[str, Any]:
     }
 
 
-def rebuild_knowledge_summaries(*, scope: str, owner_user=None) -> list[str]:
-    root = ensure_knowledge_repo()
-    queryset = MemoryKnowledgeItem.objects.filter(scope=scope, status=MemoryKnowledgeItem.Status.ACTIVE)
-    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
-        if owner_user is None:
-            raise ValidationError("owner_user is required for personal summary.")
-        queryset = queryset.filter(owner_user=owner_user)
-        summary_paths = [f"users/{owner_user.id}/{SUMMARY_FILE_NAME}"]
-    else:
-        queryset = queryset.filter(owner_user__isnull=True)
-        summary_paths = [f"org/{SUMMARY_FILE_NAME}"]
+def rebuild_knowledge_index(*, scope: str, owner_user_id: int | None = None) -> str:
+    """Regenerate the OKF ``index.md`` for a scope by walking knowledge files on disk.
 
-    items = list(queryset.order_by("source_code", "created_at", "id"))
-    content = _summary_markdown(scope=scope, owner_user=owner_user, items=items)
-    written = []
+    ADR-0030 decision 4: the index is a derived-layer artifact built from the
+    knowledge files themselves (the canon), not from the ``MemoryKnowledgeItem``
+    queryset. ``_summary.md`` is no longer produced.
+    """
+    root = ensure_knowledge_repo()
+    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
+        if owner_user_id is None:
+            raise ValidationError("owner_user_id is required for personal index.")
+        base_dir = root / "users" / str(owner_user_id)
+        index_relative = f"users/{owner_user_id}/{INDEX_FILE_NAME}"
+    else:
+        base_dir = root / "org"
+        index_relative = f"org/{INDEX_FILE_NAME}"
+
+    entries = _walk_knowledge_files(root=root, base_dir=base_dir)
+    content = _index_markdown(scope=scope, owner_user_id=owner_user_id, entries=entries)
+
     with knowledge_repo_lock(root):
-        for relative_path in summary_paths:
-            path = _safe_repo_path(root, relative_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = path.with_name(path.name + ".tmp")
-            tmp_path.write_text(content, encoding="utf-8")
-            os.replace(tmp_path, path)
-            _run_git(root, "add", relative_path)
-            written.append(relative_path)
-        _commit_if_needed(root, f"Update {scope} knowledge summary")
+        index_path = _safe_repo_path(root, index_relative)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = index_path.with_name(index_path.name + ".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        os.replace(tmp_path, index_path)
+        _run_git(root, "add", index_relative)
+        _commit_if_needed(root, f"Update {scope} knowledge index")
+    return index_relative
+
+
+def rebuild_all_knowledge_indexes() -> list[str]:
+    """Regenerate every scope's ``index.md`` by walking the knowledge repo on disk.
+
+    Intended to be called from ``memory_reconcile`` (and any place that wants a
+    fresh index after a batch of file-canon changes) rather than from every
+    single write, since it is a full-repo walk.
+    """
+    root = ensure_knowledge_repo()
+    written = [rebuild_knowledge_index(scope=MemoryKnowledgeItem.Scope.ORGANIZATION)]
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            try:
+                owner_user_id = int(user_dir.name)
+            except ValueError:
+                continue
+            written.append(rebuild_knowledge_index(scope=MemoryKnowledgeItem.Scope.PERSONAL, owner_user_id=owner_user_id))
     return written
+
+
+def _walk_knowledge_files(*, root: Path, base_dir: Path) -> list[tuple[str, dict, str]]:
+    entries: list[tuple[str, dict, str]] = []
+    if not base_dir.exists():
+        return entries
+    for path in sorted(base_dir.rglob("*.md")):
+        if path.name == INDEX_FILE_NAME:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+            parsed = parse_knowledge_file(content)
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        meta = parsed.metadata or {}
+        if str(meta.get("status", MemoryKnowledgeItem.Status.ACTIVE)) != MemoryKnowledgeItem.Status.ACTIVE:
+            continue
+        entries.append((path.relative_to(root).as_posix(), meta, parsed.body))
+    entries.sort(key=lambda entry: (str(entry[1].get("source_code") or ""), entry[0]))
+    return entries
 
 
 def render_knowledge_file(payload: KnowledgeFile) -> str:
@@ -399,20 +444,18 @@ def _legacy_source_refs(item: MemoryKnowledgeItem) -> list[dict[str, str]]:
     return refs
 
 
-def _summary_markdown(*, scope: str, owner_user, items: list[MemoryKnowledgeItem]) -> str:
-    title = "Organization knowledge summary" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "Personal knowledge summary"
+def _index_markdown(*, scope: str, owner_user_id: int | None, entries: list[tuple[str, dict, str]]) -> str:
+    title = "Organization knowledge index" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "Personal knowledge index"
     lines = [f"# {title}", ""]
-    if owner_user is not None:
-        lines.append(f"Owner user id: {owner_user.id}")
+    if owner_user_id is not None:
+        lines.append(f"Owner user id: {owner_user_id}")
         lines.append("")
-    for item in items:
-        source_refs = item.source_refs or _legacy_source_refs(item)
+    for relative_path, meta, body in entries:
+        knowledge_id = meta.get("knowledge_id") or meta.get("legacy_memory_id") or relative_path
+        source_code = meta.get("source_code") or "chat"
+        source_refs = meta.get("source_refs") or []
         source_text = f" source={source_refs[0]['value']}" if source_refs else ""
-        try:
-            body = read_knowledge_item_file(item).body
-        except ValidationError as exc:
-            body = f"[knowledge file error: {exc}]"
-        lines.append(f"- `{item.memory_id}` [{item.source_code}] {body}{source_text}")
+        lines.append(f"- `{knowledge_id}` [{source_code}] ({relative_path}) {body}{source_text}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -481,8 +524,16 @@ def _ensure_git_identity(root: Path) -> None:
 
 
 def _commit_if_needed(root: Path, message: str) -> None:
-    status = _run_git(root, "status", "--porcelain").stdout.strip()
-    if not status:
+    # Check the STAGED diff specifically (``git diff --cached``), not
+    # ``git status --porcelain``: the working tree can legitimately show
+    # unrelated noise at this point (the always-present, never-committed
+    # ``.knowledge-write.lock`` file; another knowledge file edited directly
+    # on disk but not yet reconciled/staged) while the file(s) we just
+    # ``git add``-ed have no real diff from HEAD (e.g. a no-op index.md
+    # regeneration). Committing on any such noise fails with "nothing added
+    # to commit" / "no changes added to commit".
+    result = _run_git_optional(root, "diff", "--cached", "--quiet")
+    if result.returncode == 0:
         return
     _run_git(root, "commit", "-m", message)
 

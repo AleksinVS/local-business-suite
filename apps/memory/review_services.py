@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from .document_ingestion import delete_search_document_indexes
-from .models import MemoryIngestionIssue, MemoryIndexJob, MemoryReviewAction, MemorySearchDocument
+from .models import MemoryIngestionIssue, MemoryReviewAction, MemorySearchDocument
 from .policies import (
     can_manage_memory_search_index,
     can_review_scoped_issue,
@@ -16,7 +18,7 @@ from .policies import (
 )
 from .review_safety import safe_review_metadata, safe_review_text
 from .review_selectors import PRIVACY_ISSUE_KINDS, index_stale_deletion_allowed
-from .services import create_index_job
+from .services import enqueue_memory_queue_task, MemoryQueueJobKind
 
 
 @transaction.atomic
@@ -199,11 +201,11 @@ def _resolve_assignee(value):
 def _create_reindex_job_for_issue(*, actor, issue: MemoryIngestionIssue, dry_run: bool):
     if issue.source_object_id is None:
         raise ValidationError("У проблемы нет объекта источника для переиндексации.")
-    return create_index_job(
-        job_kind=MemoryIndexJob.JobKind.REINDEX,
-        source=issue.source,
-        created_by=actor,
+    return enqueue_memory_queue_task(
+        job_kind=MemoryQueueJobKind.REINDEX,
+        source_code=issue.source.code if issue.source_id else "",
         request_id=f"memory-review-issue-{issue.pk}",
+        idempotency_key=f"memory-review-issue-{issue.pk}-{uuid.uuid4().hex[:12]}",
         payload={
             "mode": "memory_review_issue",
             "dry_run": dry_run,
@@ -211,17 +213,18 @@ def _create_reindex_job_for_issue(*, actor, issue: MemoryIngestionIssue, dry_run
             "source_object_id": issue.source_object.object_id,
             "document_id": _document_id_for_issue(issue),
             "secret_blocked_requires_source_fix": issue.issue_kind == MemoryIngestionIssue.IssueKind.SECRET_BLOCKED,
+            "actor_id": getattr(actor, "id", None),
         },
     )
 
 
 def _create_reindex_job_for_document(*, actor, document: MemorySearchDocument, dry_run: bool, retry: bool = False):
-    return create_index_job(
-        job_kind=MemoryIndexJob.JobKind.REINDEX,
-        source=document.source_object.source if document.source_object_id else None,
-        created_by=actor,
+    return enqueue_memory_queue_task(
+        job_kind=MemoryQueueJobKind.REINDEX,
+        source_code=document.source_object.source.code if document.source_object_id else "",
         request_id=f"memory-review-document-{document.pk}",
-        payload=_reindex_payload(document=document, dry_run=dry_run, retry=retry),
+        idempotency_key=f"memory-review-document-{document.pk}-{uuid.uuid4().hex[:12]}",
+        payload={**_reindex_payload(document=document, dry_run=dry_run, retry=retry), "actor_id": getattr(actor, "id", None)},
     )
 
 

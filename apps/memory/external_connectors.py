@@ -61,6 +61,7 @@ class ExternalQueueJob:
     attempt_count: int
     max_attempts: int
     request_id: str
+    locked_by: str = ""
 
 
 class SQLiteExternalConnectorQueueBackend:
@@ -117,23 +118,45 @@ class SQLiteExternalConnectorQueueBackend:
             ).fetchone()
         return _job_from_row(row)
 
-    def lease(self, *, limit: int = 1, lease_seconds: int = 300) -> list[ExternalQueueJob]:
+    def lease(
+        self,
+        *,
+        limit: int = 1,
+        lease_seconds: int = 300,
+        locked_by: str = "",
+        job_kinds: list[str] | None = None,
+    ) -> list[ExternalQueueJob]:
         now = _now_iso()
         locked_until = _future_iso(lease_seconds)
         leased = []
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            rows = connection.execute(
-                """
-                SELECT * FROM external_connector_jobs
-                WHERE status IN (?, ?)
-                  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-                  AND (locked_until IS NULL OR locked_until <= ?)
-                ORDER BY priority DESC, created_at ASC, job_id ASC
-                LIMIT ?
-                """,
-                (ExternalJobStatus.PENDING, ExternalJobStatus.RETRY_WAIT, now, now, limit),
-            ).fetchall()
+            if job_kinds:
+                placeholders = ", ".join("?" for _ in job_kinds)
+                rows = connection.execute(
+                    f"""
+                    SELECT * FROM external_connector_jobs
+                    WHERE status IN (?, ?)
+                      AND job_kind IN ({placeholders})
+                      AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                      AND (locked_until IS NULL OR locked_until <= ?)
+                    ORDER BY priority DESC, created_at ASC, job_id ASC
+                    LIMIT ?
+                    """,
+                    (ExternalJobStatus.PENDING, ExternalJobStatus.RETRY_WAIT, *job_kinds, now, now, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM external_connector_jobs
+                    WHERE status IN (?, ?)
+                      AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                      AND (locked_until IS NULL OR locked_until <= ?)
+                    ORDER BY priority DESC, created_at ASC, job_id ASC
+                    LIMIT ?
+                    """,
+                    (ExternalJobStatus.PENDING, ExternalJobStatus.RETRY_WAIT, now, now, limit),
+                ).fetchall()
             for row in rows:
                 connection.execute(
                     """
@@ -303,7 +326,14 @@ class DatabaseExternalConnectorQueueBackend:
         )
         return _job_from_model(job)
 
-    def lease(self, *, limit: int = 1, lease_seconds: int = 300) -> list[ExternalQueueJob]:
+    def lease(
+        self,
+        *,
+        limit: int = 1,
+        lease_seconds: int = 300,
+        locked_by: str = "",
+        job_kinds: list[str] | None = None,
+    ) -> list[ExternalQueueJob]:
         from django.db import connection
         from django.db.models import Q
 
@@ -320,6 +350,8 @@ class DatabaseExternalConnectorQueueBackend:
                 .filter(Q(locked_until__isnull=True) | Q(locked_until__lte=now))
                 .order_by("-priority", "created_at", "job_id")
             )
+            if job_kinds:
+                queryset = queryset.filter(job_kind__in=list(job_kinds))
             if connection.features.has_select_for_update:
                 select_kwargs = {}
                 if connection.features.has_select_for_update_skip_locked:
@@ -330,7 +362,8 @@ class DatabaseExternalConnectorQueueBackend:
                 job.attempt_count += 1
                 job.started_at = now
                 job.locked_until = locked_until
-                job.save(update_fields=["status", "attempt_count", "started_at", "locked_until", "updated_at"])
+                job.locked_by = locked_by
+                job.save(update_fields=["status", "attempt_count", "started_at", "locked_until", "locked_by", "updated_at"])
                 leased.append(_job_from_model(job))
         return leased
 
@@ -341,7 +374,8 @@ class DatabaseExternalConnectorQueueBackend:
         job.error_message = ""
         job.finished_at = timezone.now()
         job.locked_until = None
-        job.save(update_fields=["status", "result", "error_message", "finished_at", "locked_until", "updated_at"])
+        job.locked_by = ""
+        job.save(update_fields=["status", "result", "error_message", "finished_at", "locked_until", "locked_by", "updated_at"])
         return _job_from_model(job)
 
     def fail(self, job_id: str, *, error_message: str, retry_delay_seconds: int = 60) -> ExternalQueueJob:
@@ -358,9 +392,20 @@ class DatabaseExternalConnectorQueueBackend:
         job.error_message = error_message
         job.next_attempt_at = None if job.status == ExternalJobStatus.DEAD_LETTER else now + timezone.timedelta(seconds=retry_delay_seconds)
         job.locked_until = None
+        job.locked_by = ""
         if job.status == ExternalJobStatus.DEAD_LETTER:
             job.finished_at = now
-        job.save(update_fields=["status", "error_message", "next_attempt_at", "locked_until", "finished_at", "updated_at"])
+        job.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "next_attempt_at",
+                "locked_until",
+                "locked_by",
+                "finished_at",
+                "updated_at",
+            ]
+        )
         return _job_from_model(job)
 
     def stats(self) -> dict:
@@ -915,6 +960,7 @@ def _job_from_model(job: MemoryExternalConnectorJob) -> ExternalQueueJob:
         attempt_count=job.attempt_count,
         max_attempts=job.max_attempts,
         request_id=job.request_id,
+        locked_by=job.locked_by,
     )
 
 

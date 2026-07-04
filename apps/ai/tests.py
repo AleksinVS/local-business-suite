@@ -934,16 +934,21 @@ class AIViewsTests(TestCase):
         self.assertNotContains(detail_response, 'id="sidebar-ai-chat"')
 
     def test_chat_delete_archives_session_with_memory_links(self):
-        from apps.memory.models import MemoryWriteRequest
+        from apps.memory.models import MemoryKnowledgeItem
 
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(user=self.customer, title="Удаляемый чат")
         ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Запомни это")
-        MemoryWriteRequest.objects.create(
-            actor=self.customer,
-            session=session,
-            target_scope=MemoryWriteRequest.TargetScope.PERSONAL,
-            user_note="Связь с памятью должна сохраниться",
+        MemoryKnowledgeItem.objects.create(
+            memory_id="chat:personal:user-memory-link-test:abc123",
+            scope=MemoryKnowledgeItem.Scope.PERSONAL,
+            owner_user=self.customer,
+            kind=MemoryKnowledgeItem.Kind.FACT,
+            text_hash="hash-memory-link-test",
+            sensitivity="internal",
+            scope_tokens=[f"user:{self.customer.id}"],
+            source_session=session,
+            created_by=self.customer,
         )
 
         response = self.client.post(
@@ -957,7 +962,8 @@ class AIViewsTests(TestCase):
         self.assertEqual(session.status, ChatSession.Status.ARCHIVED)
         self.assertEqual(session.metadata["archive_reason"], "user_deleted")
         self.assertTrue(session.messages.exists())
-        self.assertTrue(MemoryWriteRequest.objects.filter(session=session).exists())
+        # Chat archive (not delete) must not disturb the knowledge item's link.
+        self.assertTrue(MemoryKnowledgeItem.objects.filter(source_session=session).exists())
 
     def test_chat_sidebar_lists_only_active_sessions(self):
         self.client.force_login(self.customer)
@@ -1697,8 +1703,13 @@ class IdentityContextPropagationTests(TestCase):
             audit = MemoryAccessAudit.objects.get(request_id="req-ai-memory-untrusted")
             self.assertGreaterEqual(audit.retrieval_trace["filtered"].get("trust_gate_denied_document", 0), 1)
 
-    def test_memory_remember_tool_queues_request_without_secret_value_in_audit(self):
-        from apps.memory.models import MemoryIndexJob, MemoryKnowledgeItem, MemoryWriteRequest
+    def test_memory_remember_tool_writes_synchronously_without_secret_value_in_audit(self):
+        """memory.remember is synchronous (ADR-0030 decision 2): one execute_tool
+        call returns memory_id + file path + commit immediately. Secret handling
+        stays unchanged: the request audit log never carries the raw secret
+        value, and the secret text itself never lands in the knowledge file."""
+        from apps.memory.knowledge_files import read_knowledge_item_file
+        from apps.memory.models import MemoryKnowledgeItem, SecretHandle
 
         session = ChatSession.objects.create(user=self.manager)
         message = ChatMessage.objects.create(
@@ -1720,19 +1731,20 @@ class IdentityContextPropagationTests(TestCase):
                 request_id="req-ai-memory-remember",
             )
 
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(result["tool"], "memory.remember")
-        self.assertEqual(result["result"]["status"], MemoryWriteRequest.Status.QUEUED)
-        self.assertIn("queued_at", result["result"])
-        self.assertNotIn("memory_id", result["result"])
-        self.assertNotIn("event_id", result["result"])
-        self.assertNotIn("processed_at", result["result"])
-        self.assertEqual(MemoryWriteRequest.objects.count(), 1)
-        self.assertFalse(MemoryKnowledgeItem.objects.exists())
-        self.assertEqual(
-            MemoryIndexJob.objects.filter(job_kind=MemoryIndexJob.JobKind.REMEMBER, status=MemoryIndexJob.Status.PENDING).count(),
-            1,
-        )
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["tool"], "memory.remember")
+            self.assertNotIn("status", result["result"])
+            self.assertNotIn("queued_at", result["result"])
+            self.assertNotIn("event_id", result["result"])
+            self.assertIn("memory_id", result["result"])
+            self.assertTrue(result["result"]["knowledge_file_commit"])
+
+            item = MemoryKnowledgeItem.objects.get(memory_id=result["result"]["memory_id"])
+            saved_text = read_knowledge_item_file(item).body
+            self.assertNotIn("not-a-real-secret-value", saved_text)
+            self.assertIn("<SECRET_HANDLE:", saved_text)
+            self.assertEqual(SecretHandle.objects.count(), 1)
+
         self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.remember")
 
         action = AgentActionLog.objects.get(tool_code="memory.remember", status=AgentActionLog.Status.SUCCEEDED)
@@ -1766,7 +1778,6 @@ class IdentityContextPropagationTests(TestCase):
         self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.update_personal")
 
     def test_ai_chat_workorder_and_personal_memory_user_journey_tools(self):
-        from apps.memory.chat_memory import process_queued_memory_requests
         from apps.memory.models import MemoryAccessAudit, MemoryKnowledgeItem
 
         main_board, _created = Board.objects.get_or_create(slug="main", defaults={"title": "Основная доска"})
@@ -1884,10 +1895,9 @@ class IdentityContextPropagationTests(TestCase):
                 request_id="req-ai-journey-remember",
             )
             self.assertTrue(remember_result["ok"], remember_result)
-            self.assertEqual(remember_result["result"]["status"], "queued")
+            self.assertIn("memory_id", remember_result["result"])
+            self.assertTrue(remember_result["result"]["knowledge_file_commit"])
 
-            processed = process_queued_memory_requests(limit=5)
-            self.assertEqual(len(processed), 1)
             self.assertTrue(
                 MemoryKnowledgeItem.objects.filter(
                     owner_user=self.manager,

@@ -187,9 +187,9 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
             ranking_profile=payload.get("ranking_profile", ""),
         )
     elif tool_code == "memory.remember":
-        from apps.memory.services import queue_memory_remember_for_actor
+        from apps.memory.services import remember_knowledge_for_actor
 
-        return queue_memory_remember_for_actor(
+        return remember_knowledge_for_actor(
             actor=actor,
             session=session,
             payload=payload,

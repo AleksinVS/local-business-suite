@@ -15,7 +15,7 @@
 - **Ролевая модель и политики доступа** на основе серверных контрактов.
 - **AI-чат** с bounded tools и gateway-интеграцией в Django.
 - **Система памяти AI** для поиска по безопасному корпусу знаний с citations и audit.
-- **Автоупорядочивание файловых источников памяти** с виртуальной baseline-структурой, входным каталогом и безопасным managed_fs переносом.
+- **Автоупорядочивание файловых источников** (виртуальная baseline-структура, входной каталог, безопасный managed_fs перенос) — вынесено в отдельное замороженное приложение `apps.filehub` (ADR-0030).
 - **Уведомления портала**: PWA/browser notifications без стороннего Web Push и опциональный Tauri-клиент в трее.
 - **Аналитика** по заявкам и устройствам.
 - **Контрактная конфигурация** ролей, workflow, AI tools, task types и memory sources.
@@ -24,7 +24,7 @@
 
 Основные блоки:
 
-- `apps/` — Django-приложения доменов: accounts, inventory, workorders, waiting_list, analytics, ai, memory, core.
+- `apps/` — Django-приложения доменов: core, accounts, inventory, workorders, waiting_list, notifications, analytics, ai, memory, filehub (замороженное автоупорядочивание файлов, ADR-0030), settings_center.
 - `contracts/` — дефолтные JSON-контракты, которые версионируются в Git.
 - `data/contracts/` — runtime-копии контрактов для изменяемой среды.
 - `services/agent_runtime/` — отдельный runtime AI-агента на LangGraph/MCP.

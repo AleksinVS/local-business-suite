@@ -4,6 +4,29 @@
 
 ## Active
 
+### Устранение находок архитектурного ревью 2026-07-04
+
+Проведено архитектурное ревью проекта; находки зафиксированы, проектная и исполнительная
+документация создана. Ключевые дефекты: горячее обновление контрактов действует только в
+одном gunicorn-воркере; запись `role_rules` из `apps/core` идёт мимо валидации и audit;
+agent-runtime в Docker не видит `data/contracts/`; медиа не раздаётся в production и не
+защищено проверкой прав; IIS-отладочный контур работает во всех средах. Дополнительно:
+воспроизводимость сборки, bootstrap в `settings.py`, дрейф контрактов, вывод
+`legacy`-драйвера AI UI (ADR-0032), SQLite-легаси, разнос `json_utils`, гигиена
+планирования. Блок 2026-06-01 помечен superseded и поглощён.
+
+Контекст:
+- ревью: `docs/guides/ARCHITECTURE_REVIEW_2026-07-04.md`;
+- активный план: `docs/planning/active/architecture-review-remediation-2026-07-04.md`;
+- workflow package: `workflow/active/architecture-review-remediation-2026-07-04/` (12 task packets, 4 фазы);
+- ADR: `docs/adr/ADR-0031-runtime-contract-store-and-delivery.md` (Accepted 2026-07-05,
+  с уточнениями реализации), `docs/adr/ADR-0032-retire-legacy-ai-ui-driver.md` (Accepted).
+
+Оставшееся действие:
+- исполнить пакеты фаз 1-2 (контракты, agent-runtime, media) с независимой проверкой;
+- исполнить пакеты фаз 3-4; пакет 12 (гигиена планирования) — последним;
+- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
+
 ### Миграция основного хранилища на PostgreSQL
 
 Создан проектный и исполнительный контур для перехода основного репозитория с текущего SQLite-разделения на одну PostgreSQL database. Кодовый срез миграции реализован: настройки PostgreSQL, единый `default` alias, восстановление внутренних FK, команды export/import/validate, PostgreSQL full-text backend и database queue backend. Dev-cutover проверен на реальном PostgreSQL: `migrate` строит схему чисто, полный приёмочный набор тестов и e2e зелёные (см. `workflow/active/postgresql-primary-store-migration/EXECUTOR_REPORT.dev-cutover.md`). SQLite baseline-ветка `sqlite-legacy-2026-06-15` выложена на `origin` как линия SQLite-варианта.

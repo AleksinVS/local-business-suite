@@ -1,0 +1,37 @@
+{
+  "task_id": "08-contract-defaults-drift-strategy",
+  "title": "Отчёт о дрейфе default-контрактов и runtime-копий",
+  "risk": "medium",
+  "adr": "docs/adr/ADR-0031-runtime-contract-store-and-delivery.md",
+  "depends_on": ["01-contract-read-write-consistency"],
+  "goal": "Расхождение между contracts/ (git-дефолты) и data/contracts/ (рабочие копии) видно при штатной проверке по всем контрактам, а не только по AI tools.",
+  "findings": [
+    "get_contract_path копирует дефолт в data/contracts/ один раз; обновления дефолтов в git не достигают работающих установок и не диагностируются",
+    "дрейф проверяется только для AI tools (validate_ai_tools_drift)"
+  ],
+  "write_scope": [
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "apps/core/contract_store.py или отдельный apps/core/contract_drift.py",
+    "apps/core/tests.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md (как читать отчёт о дрейфе и переносить обновления дефолтов)"
+  ],
+  "non_goals": [
+    "Не выполнять автоматическое слияние дефолтов в runtime-копии — только диагностика (механика слияния, если понадобится, отдельным решением по ADR-0031 п.4)",
+    "Не вводить обязательную версию схемы во все контракты в этом пакете"
+  ],
+  "implementation_notes": [
+    "Для каждого контракта из реестра путей: сравнение default vs runtime по ключам верхнего уровня и хешу нормализованного JSON; вывод: одинаковы / runtime изменён (ожидаемо) / в default появились ключи, отсутствующие в runtime (кандидат на перенос).",
+    "Дрейф — не ошибка команды (exit 0), но отчёт печатается всегда; флаг --fail-on-drift для CI-сценариев по желанию.",
+    "Использовать единый реестр контрактов (имя -> default path, runtime path, валидатор), который уже фактически есть в settings_center.registry — не плодить второй список."
+  ],
+  "tests": [
+    "unit: искусственный дрейф (ключ добавлен в default) отражается в отчёте",
+    "unit: идентичные файлы дают пустой отчёт",
+    "unit: --fail-on-drift возвращает ненулевой код при дрейфе"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.core.tests"
+  ],
+  "independent_verification": false
+}

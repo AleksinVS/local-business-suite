@@ -1,0 +1,43 @@
+{
+  "task_id": "09-legacy-ai-ui-driver-removal",
+  "title": "Вывод legacy-драйвера AI UI",
+  "risk": "medium",
+  "adr": "docs/adr/ADR-0032-retire-legacy-ai-ui-driver.md",
+  "goal": "Драйвер legacy удалён из кода, конфигурации, тестов и документации; матрица AI UI — copilotkit/native; установка с LOCAL_BUSINESS_AI_UI_DRIVER=legacy падает с понятным сообщением о переходе на native.",
+  "findings": [
+    "Поддерживаются три драйвера (legacy/copilotkit/native) — тройная матрица шаблонов, статики и тестов; native является режимом по умолчанию, legacy сохранялся как страховка",
+    "Решение владельца 2026-07-04: legacy вывести; CopilotKit не трогать (решение отложено)"
+  ],
+  "write_scope": [
+    "config/settings.py (валидация LOCAL_BUSINESS_AI_UI_DRIVER)",
+    "apps/ai/views.py, apps/ai/ui_runtime/, apps/ai/context_processors.py",
+    "templates/ai/ (ветки и шаблоны только для legacy)",
+    "static/src/ai_ui/, static/src/js/ (код только для legacy)",
+    "apps/ai/tests.py, scripts/e2e/tests/ (смоки legacy)",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md, README.md, docs/deployment/ (упоминания legacy)",
+    ".env.example",
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md (пометка об уточнении матрицы драйверов)"
+  ],
+  "non_goals": [
+    "Не трогать copilotkit-драйвер, services/copilot_runtime и Node-стадию сборки CopilotKit-статики",
+    "Не менять native-драйвер функционально",
+    "Не обновлять @ag-ui/client и agui_profile"
+  ],
+  "implementation_notes": [
+    "Сначала инвентаризация: grep -rn legacy по apps/ai, templates, static/src, scripts/e2e, docs, .env* — список удаляемого зафиксировать в executor report до удаления.",
+    "config/settings.py: допустимые значения {copilotkit, native}; при legacy — ImproperlyConfigured с текстом о переходе на native; учесть логику LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT.",
+    "Проверить, что smoke-матрица AI UI в тестах и e2e сокращена до copilotkit/native и остаётся зелёной.",
+    "В ADR-0028 добавить примечание: матрица драйверов уточнена ADR-0032."
+  ],
+  "tests": [
+    "unit: LOCAL_BUSINESS_AI_UI_DRIVER=legacy -> ImproperlyConfigured с сообщением про native",
+    "unit/e2e: native и copilotkit смоки зелёные после удаления",
+    "grep -rn \"legacy\" apps/ai templates/ai static/src — остаются только исторические упоминания в docs/adr и changelog-подобных местах"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python manage.py check",
+    "npx playwright test scripts/e2e/tests/native_ai_ui.spec.ts (или актуальный e2e-набор AI UI)"
+  ],
+  "independent_verification": false
+}

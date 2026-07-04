@@ -12,7 +12,7 @@
   "interface-russification": "Workflow: русификация интерфейса портала и подготовка к локализации",
   "testing-policy-and-independent-verification": "Workflow: политика тестирования и независимая проверка субагентом",
   "workorder-tree-view": "Workflow: дерево заявок и режимы просмотра доски",
-  "architecture-review-remediation-2026-06-01": "Workflow: исправления по архитектурному ревью 2026-06-01",
+  "architecture-review-remediation-2026-06-01": "Workflow (superseded): исправления по ревью 2026-06-01; поглощён блоком 2026-07-04",
   "design-patterns-hardening-2026-06-01": "Workflow: внедрение архитектурных паттернов 2026-06-01",
   "memory-file-source-auto-organization": "Workflow: автоупорядочивание файловых источников",
   "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
@@ -21,5 +21,6 @@
   "copilotkit-ai-ui-chat-development": "Workflow: разработка ИИ-чата в режиме CopilotKit UI",
   "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата",
   "postgresql-primary-store-migration": "Workflow: миграция основного хранилища на PostgreSQL",
-  "memory-hybrid-knowledge-v05-alignment": "Workflow: приведение памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)"
+  "memory-hybrid-knowledge-v05-alignment": "Workflow: приведение памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)",
+  "architecture-review-remediation-2026-07-04": "Workflow: устранение находок архитектурного ревью 2026-07-04 (12 task packets)"
 }

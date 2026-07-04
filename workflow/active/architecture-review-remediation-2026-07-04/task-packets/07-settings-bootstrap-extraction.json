@@ -1,0 +1,45 @@
+{
+  "task_id": "07-settings-bootstrap-extraction",
+  "title": "Вынос bootstrap-побочных эффектов из config/settings.py",
+  "risk": "medium",
+  "goal": "Импорт настроек не создаёт каталоги и не копирует файлы; первичная подготовка runtime-окружения выполняется явной командой; валидация контрактов доступна через штатные Django system checks.",
+  "findings": [
+    "config/settings.py при импорте создаёт ~20 каталогов (строки 44-61, 397-399), копирует контракты default->runtime (get_contract_path, строка 401) и загружает+валидирует ~30 JSON-файлов (строки 658-760)",
+    "любая команда manage.py платит эту цену; запись на диск при импорте конфигурации ломает read-only сценарии и параллельные запуски",
+    "env_bool определён (строка 226), но часть флагов парсится вручную (строки 200-202, 556-558, 601, 614-616, 626-630)"
+  ],
+  "write_scope": [
+    "config/settings.py",
+    "apps/core/management/commands/bootstrap_runtime.py (новая команда)",
+    "apps/core/checks.py (новый модуль system checks) или расширение AppConfig.ready",
+    "apps/core/apps.py",
+    "docker/entrypoint.prod.sh",
+    "scripts/ (локальные сценарии запуска, если создают ожидания по каталогам)",
+    "apps/core/tests.py",
+    "README.md, docs/deployment/DEPLOYMENT.md"
+  ],
+  "non_goals": [
+    "Не менять расположение data/ и семантику contracts/ vs data/contracts/",
+    "Не отказываться от валидации контрактов на старте — она переезжает в system checks/AppConfig, а не удаляется",
+    "Не трогать поведение get_contract_path для env-override путей"
+  ],
+  "implementation_notes": [
+    "settings оставляет только вычисление путей и чтение env; mkdir и копирование дефолтов переходят в bootstrap_runtime (идемпотентную), которая вызывается из entrypoint.prod.sh перед migrate и упоминается в README для локального запуска.",
+    "Загрузку payload-констант в settings по возможности заменить на contract store (пакет 01); валидацию всех контрактов оформить system check с меткой contracts (manage.py check --tag contracts), чтобы make check её выполнял.",
+    "Обратная совместимость на переходный период: если runtime-копий нет, contract store читает дефолт из contracts/ и предупреждает — чтобы dev-запуск без bootstrap не падал.",
+    "Все булевы env-флаги перевести на env_bool; TRUE_VALUES объявить до первого использования.",
+    "Зависимость: выполнять после пакета 01 (store), иначе двойная работа по точкам чтения."
+  ],
+  "tests": [
+    "unit: bootstrap_runtime создаёт каталоги и копирует контракты идемпотентно (повторный запуск ничего не ломает)",
+    "unit: import config.settings в чистой среде без data/ не создаёт каталогов и не падает",
+    "unit: manage.py check --tag contracts ловит невалидный контракт",
+    "regression: полный тестовый набор зелёный"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test",
+    ".venv/bin/python manage.py check",
+    "grep -n \"mkdir\\|shutil.copy\" config/settings.py — вхождений нет"
+  ],
+  "independent_verification": false
+}

@@ -1,0 +1,42 @@
+{
+  "task_id": "02-agent-runtime-contract-delivery",
+  "title": "Доставка рабочих контрактов в agent-runtime",
+  "risk": "high",
+  "adr": "docs/adr/ADR-0031-runtime-contract-store-and-delivery.md",
+  "goal": "Agent-runtime в Docker работает с теми же рабочими контрактами (data/contracts/), что и Django, и явно сообщает, какой источник контрактов использует.",
+  "findings": [
+    "services/agent_runtime/config.py резолвит data/contracts/, но ни docker-compose.yml, ни docker-compose.prod.yml не монтируют ./data в контейнер agent-runtime",
+    "Runtime молча откатывается на contracts/, запечённые в образ: правки tools.json/task_types.json/models.json через Settings Center до агента не доходят"
+  ],
+  "write_scope": [
+    "docker-compose.yml",
+    "docker-compose.prod.yml",
+    "services/agent_runtime/config.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/tests/",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/deployment/WINDOWS_RUN.md (если описывает запуск agent-runtime)",
+    "services/agent_runtime/README.md"
+  ],
+  "non_goals": [
+    "Не реализовывать доставку контрактов через Django gateway (шаг 2 ADR-0031 — отдельная будущая задача)",
+    "Не давать agent-runtime права записи в data/"
+  ],
+  "implementation_notes": [
+    "В обоих compose добавить agent-runtime том ./data:/app/data:ro (read-only обязателен).",
+    "В load_runtime_settings/startup лог: фактические пути ai_tools/ai_task_types/ai_models и признак runtime|default источника; при fallback на дефолты — предупреждение уровня WARNING.",
+    "Перечитывание контрактов агентом обязательно (не только на старте): инвалидация по тому же ключу (st_mtime_ns, st_size, st_ino), что и в contract store пакета 01. Причина — гонка первого старта compose: рабочие копии создаёт Django, агент может подняться раньше и иначе останется на дефолтах до перезапуска (ADR-0031 п.3, уточнения 2026-07-05).",
+    "Проверить также локальный (не Docker) запуск make ai-runtime — поведение не должно измениться."
+  ],
+  "tests": [
+    "unit: _contract_path возвращает runtime-копию при её наличии и дефолт при отсутствии; предупреждение при fallback",
+    "unit: появление/изменение runtime-копии подхватывается работающим агентом без перезапуска (инвалидация по ключу метаданных)",
+    "integration/e2e: docker compose up web+agent-runtime, правка data/contracts/ai/tools.json на хосте видна из контейнера agent-runtime (файл доступен read-only); фиксация результата в executor report"
+  ],
+  "acceptance_checks": [
+    "docker compose config — agent-runtime содержит том ./data:/app/data:ro в обоих файлах",
+    "python -m pytest services/agent_runtime/tests -q",
+    "лог старта agent-runtime содержит фактический источник контрактов"
+  ],
+  "independent_verification": true
+}

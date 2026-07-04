@@ -12,7 +12,7 @@
   "module-registered-agent-skills-and-mcp-facade.md": "Активный план модульных AI skills и registry-driven MCP-фасада",
   "interface-russification-and-localization.md": "Активный план русификации интерфейса портала и подготовки к локализации",
   "workorder-tree-view.md": "Активный план дерева заявок и режимов просмотра доски",
-  "architecture-review-remediation-2026-06-01.md": "Активный план исправлений по архитектурному ревью 2026-06-01",
+  "architecture-review-remediation-2026-06-01.md": "Superseded план ревью 2026-06-01; задачи поглощены планом 2026-07-04",
   "design-patterns-hardening-2026-06-01.md": "Активный план внедрения архитектурных паттернов",
   "memory-file-source-auto-organization.md": "Активный план автоупорядочивания файловых источников",
   "desktop-notifications-pwa-tauri.md": "Активный план PWA-first уведомлений и опционального Tauri-клиента",
@@ -21,5 +21,6 @@
   "copilotkit-ai-ui-chat-development.md": "Активный план разработки ИИ-чата в режиме CopilotKit UI",
   "native-ag-ui-chat-development.md": "Активный план разработки самописного AG-UI ИИ-чата",
   "postgresql-primary-store-migration.md": "Активный план миграции основного хранилища на PostgreSQL",
-  "memory-hybrid-knowledge-v05-alignment.md": "Активный план приведения памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)"
+  "memory-hybrid-knowledge-v05-alignment.md": "Активный план приведения памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)",
+  "architecture-review-remediation-2026-07-04.md": "Активный план устранения находок архитектурного ревью 2026-07-04"
 }

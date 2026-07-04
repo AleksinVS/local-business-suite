@@ -1,0 +1,37 @@
+{
+  "task_id": "05-ai-gateway-mcp-identity-reverification",
+  "title": "Перепроверка identity-контура AI gateway/MCP и логирования prompt",
+  "risk": "medium",
+  "absorbs": "architecture-review-remediation-2026-06-01/task-packets/03-ai-gateway-mcp-identity-and-prompt-logging.json",
+  "goal": "Закрыть задачу 03 блока 2026-06-01: подтвердить или восстановить строгую привязку service identity к пользователю в AI gateway и MCP-фасаде и отсутствие raw prompt в технических логах.",
+  "findings": [
+    "Блок 2026-06-01 не исполнялся; на 2026-07-04 raw prompt в логах services/agent_runtime быстрым осмотром не обнаружен (AgentActionLog хранит prompt_sha256/prompt_length), но полная проверка не проводилась",
+    "gateway_token_is_valid (apps/ai/views.py:181) использует hmac.compare_digest — корректно; актуальность проверок validate_gateway_actor и MCP-фасада против текущих требований не подтверждена"
+  ],
+  "write_scope": [
+    "apps/ai/views.py (только при найденных дефектах)",
+    "apps/ai/tooling.py (только при найденных дефектах)",
+    "services/agent_runtime/app.py, mcp_server.py, gateway_client.py (только при найденных дефектах)",
+    "apps/ai/tests.py, services/agent_runtime/tests/",
+    "EXECUTOR_REPORT с фактическим состоянием"
+  ],
+  "non_goals": [
+    "Не публиковать MCP наружу",
+    "Не менять модель доверия gateway (статический токен + подписанные actor-токены) без отдельного ADR"
+  ],
+  "implementation_notes": [
+    "Чек-лист перепроверки: (1) каждый tool-вызов через gateway привязан к проверенному user_id активного пользователя и сессии; (2) actor-токены подписаны и ограничены TTL; (3) raw prompt и полный actor context не попадают в технические логи agent-runtime и Django (grep по logger-вызовам); (4) audit-путь ошибок хранит только prompt_sha256/prompt_length.",
+    "Безопасный путь разбора ошибок по request_id описан в docs/guides/ARCHITECTURE_REVIEW_2026-06-01.md — сверить, что он остаётся рабочим.",
+    "Если дефектов нет — пакет закрывается отчётом с доказательствами (пути/строки, команды), без изменений кода."
+  ],
+  "tests": [
+    "unit: gateway отклоняет запрос без токена, с неверным токеном, с несуществующим/неактивным user_id (проверить наличие существующих тестов, дополнить пробелы)",
+    "unit: лог-вызовы agent-runtime не содержат поля prompt (тест или проверка grep-ом, зафиксировать в отчёте)"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    "python -m pytest services/agent_runtime/tests -q",
+    "EXECUTOR_REPORT содержит явный вердикт по каждому пункту чек-листа"
+  ],
+  "independent_verification": false
+}

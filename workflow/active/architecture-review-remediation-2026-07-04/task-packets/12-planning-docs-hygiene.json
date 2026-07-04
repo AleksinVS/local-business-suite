@@ -1,0 +1,45 @@
+{
+  "task_id": "12-planning-docs-hygiene",
+  "title": "Гигиена планирования, документации и структуры",
+  "risk": "low",
+  "absorbs": "architecture-review-remediation-2026-06-01/task-packets/04-docs-root-hygiene-and-structure.json (часть про ссылки и структуру)",
+  "goal": "Планирование и структура соответствуют фактическому состоянию: завершённые/superseded блоки в архиве, backlog синхронизирован, ссылки живые, DEPLOY_PRIVATE.md в deployments/ и описан в PROJECT_STRUCTURE.yaml.",
+  "findings": [
+    "workflow/active — 20 блоков против 13 направлений в backlog Active; блоки architecture-review-remediation-2026-06-01, design-patterns-hardening-2026-06-01, memory-audit-review-ui, memory-hybrid-ranking-profiles, settings-center-gui, testing-policy-and-independent-verification, universal-right-drawer-ai-navigation отсутствуют в активном backlog",
+    "docs/architecture/ARCHITECTURE.md:20 ссылается на несуществующий ../../ai/chat_agent/ARCHITECTURE.md",
+    "DEPLOY_PRIVATE.md в корне; решение владельца — перенести в deployments/ и добавить в PROJECT_STRUCTURE.yaml"
+  ],
+  "write_scope": [
+    "workflow/active/* -> workflow/archive/2026/* (по итогам сверки с владельцем)",
+    "workflow/active/architecture-review-remediation-2026-06-01/ (архивация как superseded)",
+    "docs/planning/active/*.md (архивация закрытых планов в docs/planning/archive/)",
+    "docs/planning/backlog.md",
+    "docs/architecture/ARCHITECTURE.md",
+    "DEPLOY_PRIVATE.md -> deployments/DEPLOY_PRIVATE.md",
+    ".gitignore (исключение-негация для deployments/DEPLOY_PRIVATE.md, чтобы файл остался под git)",
+    ".desc.json: корень, deployments/ (создать), docs/planning/active, workflow/active, workflow/archive",
+    "PROJECT_STRUCTURE.yaml (make gen-struct)",
+    "README.md (если упоминает перенесённые файлы)"
+  ],
+  "non_goals": [
+    "Не трогать learning/, drafts/, личный корневой BACKLOG.md (решение владельца)",
+    "Не архивировать блоки без подтверждения статуса: перед переносом каждого блока сверить фактическое состояние (наличие executor/acceptance reports) и при сомнении спросить владельца"
+  ],
+  "implementation_notes": [
+    "Кандидаты на архив по расхождению backlog/workflow: architecture-review-remediation-2026-06-01 (superseded новым блоком), design-patterns-hardening-2026-06-01, memory-audit-review-ui, memory-hybrid-ranking-profiles, settings-center-gui, testing-policy-and-independent-verification, universal-right-drawer-ai-navigation — список утвердить у владельца одним вопросом.",
+    "deployments/ в .gitignore: проверить текущее правило и добавить негацию !deployments/DEPLOY_PRIVATE.md (и !deployments/.desc.json), иначе перенесённый файл выпадет из git; git mv выполнять после правки .gitignore.",
+    "ARCHITECTURE.md: ссылку на AI-архитектуру заменить на актуальные документы (docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md / NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md) или удалить; заодно добавить ADR-0031/0032 в список ADR.",
+    "Backlog: добавить недостающие active-направления или убрать завершённые; завершённые задачи удалять, а не помечать.",
+    "Выполняется последним пакетом блока — фиксирует итоговое состояние."
+  ],
+  "tests": [
+    "make gen-struct проходит; git status показывает согласованный набор перемещений",
+    "ручная проверка: все ссылки из ARCHITECTURE.md и README.md на существующие файлы"
+  ],
+  "acceptance_checks": [
+    "node scripts/dev/generate-structure.js (make gen-struct)",
+    "git ls-files deployments/DEPLOY_PRIVATE.md — файл отслеживается",
+    "сверка: каждый блок в workflow/active имеет соответствие в backlog Active"
+  ],
+  "independent_verification": false
+}

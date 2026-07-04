@@ -1,0 +1,40 @@
+{
+  "task_id": "06-build-reproducibility-and-prod-compose",
+  "title": "Воспроизводимая сборка и чистый production-compose",
+  "risk": "medium",
+  "goal": "Docker-образы и локальная установка ставят зависимости из lock-файла; docker-compose.prod.yml не привязан к конкретному хосту и не содержит мёртвой конфигурации.",
+  "findings": [
+    "requirements.lock (pip-compile) не используется ни одной сборкой: Dockerfile:18 и make install ставят requirements.txt — транзитивные зависимости не зафиксированы",
+    "docker-compose.prod.yml: env_file жёстко указывает deployments/test-host/.env; объявлены неиспользуемые тома db, media, static, logs"
+  ],
+  "write_scope": [
+    "Dockerfile",
+    "services/agent_runtime/Dockerfile (решить: собственный lock или общий)",
+    "Makefile",
+    "docker-compose.prod.yml",
+    "README.md (раздел быстрого старта и развертывания)",
+    "docs/deployment/DEPLOYMENT.md",
+    "requirements.lock (перегенерация при необходимости)"
+  ],
+  "non_goals": [
+    "Не менять состав зависимостей и их версии (только источник установки)",
+    "Не внедрять новый менеджер зависимостей (uv/poetry) — при желании отдельным решением"
+  ],
+  "implementation_notes": [
+    "Dockerfile: COPY requirements.lock + pip install -r requirements.lock; requirements.txt остаётся человекочитаемым входом pip-compile.",
+    "make install: ставить из requirements.lock; добавить цель make lock (pip-compile --output-file=requirements.lock requirements.txt).",
+    "services/agent_runtime/requirements.txt: завести собственный lock тем же способом или явно зафиксировать в отчёте, почему он не нужен.",
+    "docker-compose.prod.yml: env_file через переменную (например ${LOCAL_BUSINESS_ENV_FILE:?set path to host env}) либо задокументированный docker-compose.override.yml в deployments/<host>/; убрать тома db/media/static/logs; проверить docker compose config.",
+    "README quickstart: указать установку из lock для воспроизводимости."
+  ],
+  "tests": [
+    "docker build . завершается успешно с установкой из lock",
+    "docker compose -f docker-compose.prod.yml config проходит с заданным env-файлом и падает с понятной ошибкой без него"
+  ],
+  "acceptance_checks": [
+    "grep -n \"requirements.lock\" Dockerfile Makefile — установка идёт из lock",
+    "grep -n \"test-host\" docker-compose.prod.yml — вхождений нет",
+    "docker compose -f docker-compose.prod.yml config (с тестовым env) — без предупреждений о неиспользуемых томах"
+  ],
+  "independent_verification": false
+}

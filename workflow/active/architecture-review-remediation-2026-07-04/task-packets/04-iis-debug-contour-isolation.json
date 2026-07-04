@@ -1,0 +1,43 @@
+{
+  "task_id": "04-iis-debug-contour-isolation",
+  "title": "Изоляция IIS-отладочного контура",
+  "risk": "medium",
+  "absorbs": "architecture-review-remediation-2026-06-01/task-packets/04-docs-root-hygiene-and-structure.json (часть про debug log)",
+  "goal": "IIS-специфичные обходы и отладка включаются только явным флагом деплоя, ничего не пишут в корень проекта и не работают в Linux/Docker-контуре по умолчанию.",
+  "findings": [
+    "apps/core/middleware.py:9 — жёсткий путь C:\\inetpub\\portal\\debug_path.log; на Linux в корне проекта создан файл-мусор 'C:\\inetpub\\portal\\debug_path.log' (существует в рабочей копии)",
+    "PathInfoDebugMiddleware включён безусловно (config/settings.py:113): эвристика переписывания PATH_INFO применяется вне IIS; при DEBUG на каждый запрос открывается файл, исключения молча глотаются",
+    "apps/core/debug_views.py (debug_request) выводит переменные окружения; включён всегда (staff-only)"
+  ],
+  "write_scope": [
+    "apps/core/middleware.py",
+    "apps/core/debug_views.py",
+    "apps/core/urls.py",
+    "config/settings.py",
+    "apps/core/tests.py",
+    "docs/deployment/IIS_SSO.md",
+    ".env.example",
+    "удаление файла 'C:\\inetpub\\portal\\debug_path.log' из корня рабочей копии"
+  ],
+  "non_goals": [
+    "Не менять саму логику PATH_INFO-фикса для IIS (она нужна на Windows/FastCGI)",
+    "Не трогать FORCE_SCRIPT_NAME без проверки на IIS-стенде"
+  ],
+  "implementation_notes": [
+    "Ввести env-флаг LOCAL_BUSINESS_IIS_COMPAT_ENABLED (default false): middleware добавляется в MIDDLEWARE только при включённом флаге; debug_request регистрируется при том же флаге и DEBUG.",
+    "Отладочный лог писать в DATA_DIR/logs/iis_path_debug.log через штатный logging (logger 'apps'), не через open() в middleware; включение — отдельным env-флагом или уровнем логгера.",
+    "В IIS_SSO.md добавить: какие флаги включать на IIS-развёртывании; в .env.example — закомментированные примеры.",
+    "Удалить мусорный файл из корня; убедиться, что он в .gitignore не требуется (файл не отслеживается git)."
+  ],
+  "tests": [
+    "unit: при выключенном флаге middleware отсутствует в MIDDLEWARE и запрос не порождает файлов",
+    "unit: при включённом флаге PATH_INFO-фикс работает как раньше (существующее поведение зафиксировать тестом до правки)",
+    "unit: debug_request возвращает 404 при выключенном флаге"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.core.tests",
+    "ls 'C:\\inetpub\\portal\\debug_path.log' — файла нет",
+    ".venv/bin/python manage.py check"
+  ],
+  "independent_verification": false
+}

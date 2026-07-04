@@ -15,13 +15,9 @@ from .file_organization import (
     sanitize_path_segment,
     sync_file_objects_from_source_objects,
 )
-from .models import (
-    MemoryFileVirtualPlacement,
-    MemoryFileVirtualView,
-    MemoryIngestionIssue,
-    MemorySource,
-    MemorySourceObject,
-)
+from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
+
+from .models import MemoryFileVirtualPlacement, MemoryFileVirtualView
 
 
 REVIEW_CONFIDENCE_THRESHOLD = 0.55

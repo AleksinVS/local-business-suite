@@ -13,7 +13,7 @@
       <p class="description">Baseline, виртуальные структуры, предложения общей структуры и задания безопасного переноса.</p>
     </div>
     <div class="header-actions">
-      <a class="button-link-muted" href="{% url 'memory:user_file_views' %}">Моя структура</a>
+      <a class="button-link-muted" href="{% url 'filehub:user_file_views' %}">Моя структура</a>
     </div>
   </div>
   <div class="table-container">
@@ -70,7 +70,7 @@
             <td>{{ proposal.confidence }}</td>
             <td>
               {% if can_decide_file_organization %}
-                <form method="post" action="{% url 'memory:file_organization_proposal_action' proposal.pk %}" class="inline-form">
+                <form method="post" action="{% url 'filehub:file_organization_proposal_action' proposal.pk %}" class="inline-form">
                   {% csrf_token %}
                   <select name="decision">
                     {% for value, label in proposal_decisions %}

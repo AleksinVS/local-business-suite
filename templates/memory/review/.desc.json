@@ -1,12 +1,11 @@
 {
   ".": "Шаблоны рабочего UI ревью памяти",
-  "_nav.html": "Навигация между сводкой, issues, индексом и журналом",
+  "_nav.html": "Навигация между сводкой, issues, индексом, файлами (apps.filehub) и журналом",
   "dashboard.html": "Сводка открытых issues, privacy/blocker счетчиков и состояния индекса",
   "issue_list.html": "Очередь MemoryIngestionIssue с фильтрами",
   "issue_detail.html": "Карточка issue, безопасные metadata и действия ревью",
   "index_list.html": "Список MemorySearchDocument с diagnostics FTS/vector",
   "index_detail.html": "Карточка search document и действия reindex/delete stale",
-  "file_organization.html": "Сводка автоупорядочивания файлов: baseline placements, proposals и move jobs",
   "pending_list.html": "Кандидаты personal->organization и понижения классификации, ожидающие ревью (lifecycle: pending)",
   "audit.html": "Комбинированный аудит: решенные issues, задания очереди памяти и git-история знаний"
 }

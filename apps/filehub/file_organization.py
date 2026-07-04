@@ -10,15 +10,14 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
+
 from .models import (
     MemoryFileObject,
     MemoryFileObjectVersion,
     MemoryFilePathAlias,
     MemoryFilePhysicalPlacement,
     MemoryFileVirtualView,
-    MemoryIngestionIssue,
-    MemorySource,
-    MemorySourceObject,
 )
 
 

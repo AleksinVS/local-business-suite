@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.memory.file_organization_stats import build_organization_proposals
+from apps.filehub.file_organization_stats import build_organization_proposals
 from apps.memory.models import MemorySource
 
 

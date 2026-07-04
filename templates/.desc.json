@@ -14,5 +14,6 @@
   "registration/": "Шаблоны аутентификации (login)",
   "waiting_list/": "Шаблоны листа ожидания (с partials)",
   "settings_center/": "Шаблоны Settings Center: dashboard, contracts, users, env proposals и contextual help",
-  "memory/": "Шаблоны UI ревью памяти, issues и поискового индекса"
+  "memory/": "Шаблоны UI ревью памяти, issues и поискового индекса",
+  "filehub/": "Шаблоны UI автоупорядочивания файлов (заморожено ADR-0030): личные виртуальные структуры и операторское ревью"
 }

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.memory.file_organization_incoming import process_incoming_folder
+from apps.filehub.file_organization_incoming import process_incoming_folder
 from apps.memory.models import MemorySource
 
 

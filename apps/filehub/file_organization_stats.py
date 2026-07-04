@@ -6,6 +6,8 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
+from apps.memory.models import MemorySource
+
 from .file_organization import decimal_confidence, get_file_organization_profile, path_bucket, safe_path_hash
 from .models import (
     MemoryFileOrganizationDecision,
@@ -13,7 +15,6 @@ from .models import (
     MemoryFileUsageEvent,
     MemoryFileVirtualPlacement,
     MemoryFileVirtualView,
-    MemorySource,
 )
 
 

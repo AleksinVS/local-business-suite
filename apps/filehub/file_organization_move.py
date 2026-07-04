@@ -6,16 +6,17 @@ from pathlib import Path
 
 from django.utils import timezone
 
-from .document_ingestion import sha256_file
+from apps.memory.document_ingestion import sha256_file
+from apps.memory.models import MemorySource
+from apps.memory.storage_backends import ManagedFSStorageBackend
+
 from .file_organization import get_file_organization_profile, normalize_relative_path, sanitize_path_segment
 from .models import (
     MemoryFileMoveJob,
     MemoryFileObject,
     MemoryFileOrganizationProposal,
     MemoryFilePhysicalPlacement,
-    MemorySource,
 )
-from .storage_backends import ManagedFSStorageBackend
 
 
 def create_move_job_for_file(

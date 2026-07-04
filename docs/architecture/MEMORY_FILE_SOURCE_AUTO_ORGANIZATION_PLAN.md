@@ -8,6 +8,8 @@
 
 Реализация MVP: выполнена 2026-06-02. В runtime добавлены stable file identity, baseline generator, incoming worker, пользовательский UI виртуальных структур, usage-driven proposals, managed_fs copy/verify/quarantine/purge gate, операторский UI и e2e-команда. S3-compatible backend остается future implementation.
 
+Обновление 2026-07-04 (ADR-0030 решение 5, packet 04): весь контур (11 моделей `MemoryFile*`, модули `file_organization*`, management-команды `memory_file_organization_baseline`/`memory_file_incoming_worker`/`memory_file_structure_stats`/`memory_file_move_worker`/`memory_file_auto_organization_e2e` и UI `/memory/files/`, `/memory/review/file-organization/`) вынесен из `apps.memory` в отдельное приложение `apps.filehub` без функциональных изменений (физические таблицы БД не менялись) и заморожен — см. `apps/filehub/README.md`. Пути ниже, ссылающиеся на `apps.memory`/`apps/memory/file_organization*`, описывают исходную (до выноса) реализацию; актуальный код живет в `apps/filehub/`.
+
 ## Назначение
 
 План описывает целевую архитектуру режима автоупорядочивания файлового источника:

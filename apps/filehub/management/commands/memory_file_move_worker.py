@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.memory.file_organization_move import purge_ready_source_files, run_move_worker
+from apps.filehub.file_organization_move import purge_ready_source_files, run_move_worker
 from apps.memory.models import MemorySource
 
 

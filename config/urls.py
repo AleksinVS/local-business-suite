@@ -26,6 +26,7 @@ urlpatterns = [
     path("analytics/", include("apps.analytics.urls")),
     path("inventory/", include("apps.inventory.urls")),
     path("memory/", include("apps.memory.urls")),
+    path("memory/", include("apps.filehub.urls")),
     path("settings/", include("apps.settings_center.urls")),
     path("notifications/", include("apps.notifications.urls")),
     path("service-worker.js", service_worker, name="service_worker"),

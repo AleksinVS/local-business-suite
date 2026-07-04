@@ -9,20 +9,18 @@ from django.core.management.base import BaseCommand, CommandError
 from django.test.utils import override_settings
 from django.utils import timezone
 
-from apps.memory.document_ingestion import discover_source_objects
-from apps.memory.file_organization_baseline import build_baseline_virtual_structure
-from apps.memory.file_organization_incoming import process_incoming_folder
-from apps.memory.file_organization_move import create_move_job_for_file, purge_ready_source_files, run_move_worker
-from apps.memory.file_organization_stats import build_organization_proposals, record_file_usage_event
-from apps.memory.models import (
+from apps.filehub.file_organization_baseline import build_baseline_virtual_structure
+from apps.filehub.file_organization_incoming import process_incoming_folder
+from apps.filehub.file_organization_move import create_move_job_for_file, purge_ready_source_files, run_move_worker
+from apps.filehub.file_organization_stats import build_organization_proposals, record_file_usage_event
+from apps.filehub.models import (
     MemoryFileMoveJob,
     MemoryFileOrganizationProposal,
     MemoryFileUsageEvent,
     MemoryFileVirtualPlacement,
-    MemorySearchDocument,
-    MemorySource,
-    MemorySourceObject,
 )
+from apps.memory.document_ingestion import discover_source_objects
+from apps.memory.models import MemorySearchDocument, MemorySource, MemorySourceObject
 from apps.memory.policies import can_access_search_document
 
 

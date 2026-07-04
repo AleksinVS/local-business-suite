@@ -1,0 +1,468 @@
+# ADR-0030 decision 5 (packet 04): re-create the File Source Auto
+# Organization models under the ``filehub`` app label, state-only
+# (``database_operations=[]``). The physical tables already exist (created
+# by ``apps.memory``'s historical migration 0013) and are left untouched;
+# ``Meta.db_table`` on every model below is pinned to those original
+# ``memory_memoryfile*`` names.
+#
+# The operation sequence (CreateModel split around the two circular FKs
+# ``MemoryFileObject.current_version`` / ``current_physical_placement``,
+# followed by AddIndex/AddConstraint) mirrors exactly what Django generated
+# in ``apps.memory``'s migration 0013 for these same models, so the
+# resulting state is equivalent to before the move.
+import django.db.models.deletion
+import uuid
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ('memory', '0001_initial'),
+        ('memory', '0022_move_file_organization_models_to_filehub'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.CreateModel(
+                    name='MemoryFileObject',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('file_id', models.CharField(max_length=80, unique=True)),
+                        ('lifecycle_status', models.CharField(choices=[('source_active', 'Активен в источнике'), ('move_planned', 'Перенос запланирован'), ('managed_active', 'Активен в управляемом хранилище'), ('source_quarantined', 'Исходник в карантине'), ('source_purged', 'Исходник удален'), ('needs_review', 'Требует ревью'), ('blocked', 'Заблокирован')], default='source_active', max_length=32)),
+                        ('first_seen_at', models.DateTimeField(auto_now_add=True)),
+                        ('last_seen_at', models.DateTimeField(blank=True, null=True)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_objects', to='memory.memorysource')),
+                    ],
+                    options={
+                        'verbose_name': 'Файл памяти',
+                        'verbose_name_plural': 'Файлы памяти',
+                        'db_table': 'memory_memoryfileobject',
+                        'ordering': ['source__code', 'file_id'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileObjectVersion',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('sha256', models.CharField(max_length=128)),
+                        ('size_bytes', models.PositiveBigIntegerField(default=0)),
+                        ('mtime', models.DateTimeField(blank=True, null=True)),
+                        ('storage_backend', models.CharField(default='source_fs', max_length=32)),
+                        ('storage_ref', models.CharField(max_length=1200)),
+                        ('version_status', models.CharField(choices=[('current', 'Текущая'), ('historical', 'Историческая'), ('blocked', 'Заблокирована')], default='current', max_length=32)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('file_object', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='versions', to='filehub.memoryfileobject')),
+                        ('source_object', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='file_versions', to='memory.memorysourceobject')),
+                    ],
+                    options={
+                        'verbose_name': 'Версия файла памяти',
+                        'verbose_name_plural': 'Версии файлов памяти',
+                        'db_table': 'memory_memoryfileobjectversion',
+                        'ordering': ['file_object__file_id', '-created_at', '-id'],
+                    },
+                ),
+                migrations.AddField(
+                    model_name='memoryfileobject',
+                    name='current_version',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='filehub.memoryfileobjectversion'),
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileOrganizationProposal',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('proposal_id', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                        ('title', models.CharField(max_length=255)),
+                        ('summary', models.TextField(blank=True)),
+                        ('status', models.CharField(choices=[('proposed', 'Предложено'), ('needs_more_data', 'Нужно больше данных'), ('accepted_virtual', 'Принято как виртуальное правило'), ('accepted_physical', 'Принято для физического переноса'), ('rejected', 'Отклонено'), ('superseded', 'Заменено')], default='proposed', max_length=32)),
+                        ('proposed_rule', models.JSONField(blank=True, default=dict)),
+                        ('affected_file_count', models.PositiveIntegerField(default=0)),
+                        ('confidence', models.DecimalField(decimal_places=4, default=0, max_digits=5)),
+                        ('evidence', models.JSONField(blank=True, default=list)),
+                        ('conflicts', models.JSONField(blank=True, default=list)),
+                        ('metrics', models.JSONField(blank=True, default=dict)),
+                        ('reviewed_at', models.DateTimeField(blank=True, null=True)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('reviewed_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='reviewed_memory_file_organization_proposals', to=settings.AUTH_USER_MODEL)),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_organization_proposals', to='memory.memorysource')),
+                    ],
+                    options={
+                        'verbose_name': 'Предложение файловой структуры',
+                        'verbose_name_plural': 'Предложения файловой структуры',
+                        'db_table': 'memory_memoryfileorganizationproposal',
+                        'ordering': ['status', '-created_at', '-id'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileOrganizationDecision',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('decision', models.CharField(choices=[('accept_as_virtual_rule', 'Принять как виртуальное правило'), ('accept_for_physical_move', 'Принять для физического переноса'), ('edit', 'Изменить'), ('reject', 'Отклонить'), ('needs_more_data', 'Нужно больше данных')], max_length=40)),
+                        ('before_state', models.JSONField(blank=True, default=dict)),
+                        ('after_state', models.JSONField(blank=True, default=dict)),
+                        ('safe_metadata', models.JSONField(blank=True, default=dict)),
+                        ('comment', models.TextField(blank=True)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('actor', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='memory_file_organization_decisions', to=settings.AUTH_USER_MODEL)),
+                        ('proposal', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='decisions', to='filehub.memoryfileorganizationproposal')),
+                    ],
+                    options={
+                        'verbose_name': 'Решение по файловой структуре',
+                        'verbose_name_plural': 'Решения по файловой структуре',
+                        'db_table': 'memory_memoryfileorganizationdecision',
+                        'ordering': ['-created_at', '-id'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFilePathAlias',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('relative_path', models.CharField(max_length=1000)),
+                        ('alias_kind', models.CharField(choices=[('original', 'Первичный путь'), ('current', 'Текущий путь'), ('previous', 'Предыдущий путь'), ('external_link', 'Внешняя ссылка')], default='current', max_length=32)),
+                        ('is_active', models.BooleanField(default=True)),
+                        ('first_seen_at', models.DateTimeField(auto_now_add=True)),
+                        ('last_seen_at', models.DateTimeField(blank=True, null=True)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('file_object', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='path_aliases', to='filehub.memoryfileobject')),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_path_aliases', to='memory.memorysource')),
+                    ],
+                    options={
+                        'verbose_name': 'Псевдоним пути файла',
+                        'verbose_name_plural': 'Псевдонимы путей файлов',
+                        'db_table': 'memory_memoryfilepathalias',
+                        'ordering': ['source__code', 'relative_path'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFilePhysicalPlacement',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('storage_backend', models.CharField(choices=[('source_fs', 'Исходная файловая система'), ('managed_fs', 'Управляемая файловая система'), ('s3_compatible', 'S3-совместимое хранилище')], max_length=32)),
+                        ('physical_ref', models.CharField(max_length=1200)),
+                        ('relative_path', models.CharField(blank=True, max_length=1000)),
+                        ('path_role', models.CharField(choices=[('source_current', 'Текущий исходный путь'), ('source_alias', 'Исторический исходный путь'), ('managed_current', 'Текущий управляемый путь'), ('quarantine', 'Карантин'), ('purged', 'Удалено')], max_length=32)),
+                        ('placement_status', models.CharField(choices=[('active', 'Активно'), ('migrated', 'Перенесено'), ('quarantined', 'Карантин'), ('purged', 'Удалено'), ('failed', 'Ошибка')], default='active', max_length=32)),
+                        ('is_current', models.BooleanField(default=True)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('file_object', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='physical_placements', to='filehub.memoryfileobject')),
+                        ('source_object', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='physical_placements', to='memory.memorysourceobject')),
+                    ],
+                    options={
+                        'verbose_name': 'Физическое размещение файла',
+                        'verbose_name_plural': 'Физические размещения файлов',
+                        'db_table': 'memory_memoryfilephysicalplacement',
+                        'ordering': ['file_object__file_id', '-is_current', 'storage_backend', 'relative_path'],
+                    },
+                ),
+                migrations.AddField(
+                    model_name='memoryfileobject',
+                    name='current_physical_placement',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='filehub.memoryfilephysicalplacement'),
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileMoveJob',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('idempotency_key', models.CharField(max_length=180, unique=True)),
+                        ('status', models.CharField(choices=[('planned', 'Запланировано'), ('approved', 'Согласовано'), ('copy_staged', 'Копия подготовлена'), ('verified', 'Проверено'), ('managed_active', 'Управляемая копия активна'), ('source_quarantined', 'Исходник в карантине'), ('source_purged', 'Исходник удален'), ('needs_review', 'Требует ревью'), ('failed', 'Ошибка')], default='planned', max_length=32)),
+                        ('target_storage_backend', models.CharField(default='managed_fs', max_length=32)),
+                        ('target_storage_ref', models.CharField(blank=True, max_length=1200)),
+                        ('target_relative_path', models.CharField(max_length=1000)),
+                        ('expected_sha256', models.CharField(max_length=128)),
+                        ('expected_size_bytes', models.PositiveBigIntegerField(default=0)),
+                        ('manifest', models.JSONField(blank=True, default=dict)),
+                        ('error_message', models.TextField(blank=True)),
+                        ('approved_at', models.DateTimeField(blank=True, null=True)),
+                        ('started_at', models.DateTimeField(blank=True, null=True)),
+                        ('finished_at', models.DateTimeField(blank=True, null=True)),
+                        ('retention_until', models.DateTimeField(blank=True, null=True)),
+                        ('backup_checkpoint_ref', models.CharField(blank=True, max_length=255)),
+                        ('attempts', models.PositiveIntegerField(default=0)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('approved_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='approved_memory_file_move_jobs', to=settings.AUTH_USER_MODEL)),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_move_jobs', to='memory.memorysource')),
+                        ('file_object', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='move_jobs', to='filehub.memoryfileobject')),
+                        ('proposal', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='move_jobs', to='filehub.memoryfileorganizationproposal')),
+                        ('source_placement', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='source_move_jobs', to='filehub.memoryfilephysicalplacement')),
+                    ],
+                    options={
+                        'verbose_name': 'Задание переноса файла',
+                        'verbose_name_plural': 'Задания переноса файлов',
+                        'db_table': 'memory_memoryfilemovejob',
+                        'ordering': ['status', '-created_at', '-id'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileVirtualView',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('view_kind', models.CharField(choices=[('baseline_auto', 'Автоматическая исходная структура'), ('organization_candidate', 'Кандидат общей структуры'), ('organization_accepted', 'Принятая общая структура'), ('department_view', 'Представление подразделения'), ('user_view', 'Пользовательское представление'), ('project_view', 'Проектное представление')], max_length=40)),
+                        ('slug', models.CharField(max_length=120)),
+                        ('title', models.CharField(max_length=255)),
+                        ('status', models.CharField(choices=[('draft', 'Черновик'), ('active', 'Активно'), ('archived', 'Архив')], default='draft', max_length=16)),
+                        ('is_system', models.BooleanField(default=False)),
+                        ('baseline_profile', models.CharField(blank=True, max_length=120)),
+                        ('generated_at', models.DateTimeField(blank=True, null=True)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('owner_user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='memory_file_virtual_views', to=settings.AUTH_USER_MODEL)),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_virtual_views', to='memory.memorysource')),
+                    ],
+                    options={
+                        'verbose_name': 'Виртуальная структура файлов',
+                        'verbose_name_plural': 'Виртуальные структуры файлов',
+                        'db_table': 'memory_memoryfilevirtualview',
+                        'ordering': ['source__code', 'view_kind', 'slug'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileVirtualRule',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('rule_kind', models.CharField(choices=[('classifier', 'Классификатор'), ('template', 'Шаблон'), ('manual_pin', 'Ручное закрепление'), ('inherited', 'Унаследовано')], max_length=32)),
+                        ('title', models.CharField(max_length=255)),
+                        ('pattern', models.JSONField(blank=True, default=dict)),
+                        ('target_template', models.CharField(max_length=1000)),
+                        ('confidence', models.DecimalField(decimal_places=4, default=0, max_digits=5)),
+                        ('status', models.CharField(choices=[('proposed', 'Предложено'), ('active', 'Активно'), ('rejected', 'Отклонено'), ('superseded', 'Заменено')], default='proposed', max_length=32)),
+                        ('evidence', models.JSONField(blank=True, default=list)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('view', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='rules', to='filehub.memoryfilevirtualview')),
+                    ],
+                    options={
+                        'verbose_name': 'Правило виртуальной структуры',
+                        'verbose_name_plural': 'Правила виртуальных структур',
+                        'db_table': 'memory_memoryfilevirtualrule',
+                        'ordering': ['view', 'status', 'title'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileVirtualPlacement',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('virtual_path', models.CharField(max_length=1000)),
+                        ('placement_source', models.CharField(choices=[('baseline_auto_v1', 'Автоматический baseline'), ('incoming_auto_v1', 'Автоматический входной разбор'), ('user_manual', 'Ручное пользовательское размещение'), ('admin_manual', 'Ручное административное размещение'), ('learned_rule', 'Выученное правило')], max_length=40)),
+                        ('confidence', models.DecimalField(decimal_places=4, default=0, max_digits=5)),
+                        ('status', models.CharField(choices=[('proposed', 'Предложено'), ('accepted', 'Принято'), ('rejected', 'Отклонено'), ('needs_review', 'Требует ревью'), ('superseded', 'Заменено')], default='proposed', max_length=32)),
+                        ('review_required', models.BooleanField(default=False)),
+                        ('evidence', models.JSONField(blank=True, default=list)),
+                        ('conflicts', models.JSONField(blank=True, default=list)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='memory_file_virtual_placements', to=settings.AUTH_USER_MODEL)),
+                        ('file_object', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='virtual_placements', to='filehub.memoryfileobject')),
+                        ('rule', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='placements', to='filehub.memoryfilevirtualrule')),
+                        ('view', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='placements', to='filehub.memoryfilevirtualview')),
+                    ],
+                    options={
+                        'verbose_name': 'Виртуальное размещение файла',
+                        'verbose_name_plural': 'Виртуальные размещения файлов',
+                        'db_table': 'memory_memoryfilevirtualplacement',
+                        'ordering': ['view', 'virtual_path'],
+                    },
+                ),
+                migrations.CreateModel(
+                    name='MemoryFileUsageEvent',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('event_kind', models.CharField(choices=[('baseline_accepted', 'Baseline принят'), ('virtual_move', 'Виртуальное перемещение'), ('file_opened', 'Файл открыт'), ('search_hit', 'Найден через поиск'), ('admin_override', 'Исправлено администратором'), ('proposal_decision', 'Решение по предложению')], max_length=40)),
+                        ('safe_path_hash', models.CharField(blank=True, max_length=128)),
+                        ('safe_path_bucket', models.CharField(blank=True, max_length=255)),
+                        ('metadata', models.JSONField(blank=True, default=dict)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='memory_file_usage_events', to=settings.AUTH_USER_MODEL)),
+                        ('file_object', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='usage_events', to='filehub.memoryfileobject')),
+                        ('source', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='file_usage_events', to='memory.memorysource')),
+                        ('view', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='usage_events', to='filehub.memoryfilevirtualview')),
+                    ],
+                    options={
+                        'verbose_name': 'Событие использования файловой структуры',
+                        'verbose_name_plural': 'События использования файловой структуры',
+                        'db_table': 'memory_memoryfileusageevent',
+                        'ordering': ['-created_at', '-id'],
+                    },
+                ),
+                migrations.AddField(
+                    model_name='memoryfileorganizationproposal',
+                    name='target_view',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='organization_proposals', to='filehub.memoryfilevirtualview'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobjectversion',
+                    index=models.Index(fields=['sha256', 'size_bytes'], name='memory_memo_sha256_63df61_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobjectversion',
+                    index=models.Index(fields=['storage_backend'], name='memory_memo_storage_d17c27_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobjectversion',
+                    index=models.Index(fields=['version_status'], name='memory_memo_version_aa622b_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfileobjectversion',
+                    constraint=models.UniqueConstraint(fields=('file_object', 'sha256', 'size_bytes'), name='memory_file_version_file_hash_size_uniq'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationdecision',
+                    index=models.Index(fields=['decision', '-created_at'], name='memory_memo_decisio_df7653_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationdecision',
+                    index=models.Index(fields=['proposal', '-created_at'], name='memory_memo_proposa_05b020_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationdecision',
+                    index=models.Index(fields=['actor', '-created_at'], name='memory_memo_actor_i_8cf621_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilepathalias',
+                    index=models.Index(fields=['source', 'relative_path'], name='memory_memo_source__cc6609_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilepathalias',
+                    index=models.Index(fields=['alias_kind', 'is_active'], name='memory_memo_alias_k_71ebb7_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilepathalias',
+                    constraint=models.UniqueConstraint(fields=('file_object', 'source', 'relative_path', 'alias_kind'), name='memory_file_path_alias_uniq'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilephysicalplacement',
+                    index=models.Index(fields=['storage_backend', 'path_role'], name='memory_memo_storage_cdc828_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilephysicalplacement',
+                    index=models.Index(fields=['is_current', 'placement_status'], name='memory_memo_is_curr_de28b3_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilephysicalplacement',
+                    index=models.Index(fields=['relative_path'], name='memory_memo_relativ_d5ff53_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilephysicalplacement',
+                    constraint=models.UniqueConstraint(fields=('file_object', 'storage_backend', 'physical_ref', 'path_role'), name='memory_file_physical_placement_ref_role_uniq'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobject',
+                    index=models.Index(fields=['source', 'lifecycle_status'], name='memory_memo_source__ef4775_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobject',
+                    index=models.Index(fields=['file_id'], name='memory_memo_file_id_fc82a8_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileobject',
+                    index=models.Index(fields=['last_seen_at'], name='memory_memo_last_se_6b3efd_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilemovejob',
+                    index=models.Index(fields=['source', 'status'], name='memory_memo_source__603207_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilemovejob',
+                    index=models.Index(fields=['idempotency_key'], name='memory_memo_idempot_9f8786_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilemovejob',
+                    index=models.Index(fields=['retention_until'], name='memory_memo_retenti_e42f4b_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilemovejob',
+                    constraint=models.CheckConstraint(condition=models.Q(('finished_at__isnull', True), ('started_at__isnull', True), ('started_at__lte', models.F('finished_at')), _connector='OR'), name='memory_file_move_job_time_range'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualview',
+                    index=models.Index(fields=['source', 'view_kind', 'status'], name='memory_memo_source__662fde_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualview',
+                    index=models.Index(fields=['owner_user', 'status'], name='memory_memo_owner_u_c0eb8e_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualview',
+                    index=models.Index(fields=['slug'], name='memory_memo_slug_cacbce_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilevirtualview',
+                    constraint=models.UniqueConstraint(fields=('source', 'view_kind', 'slug'), name='memory_file_virtual_view_slug_uniq'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualrule',
+                    index=models.Index(fields=['rule_kind', 'status'], name='memory_memo_rule_ki_102681_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualrule',
+                    index=models.Index(fields=['confidence'], name='memory_memo_confide_1eea1d_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualplacement',
+                    index=models.Index(fields=['status', 'review_required'], name='memory_memo_status_cee6dd_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualplacement',
+                    index=models.Index(fields=['placement_source'], name='memory_memo_placeme_ad00fb_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfilevirtualplacement',
+                    index=models.Index(fields=['virtual_path'], name='memory_memo_virtual_73aa3f_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilevirtualplacement',
+                    constraint=models.UniqueConstraint(fields=('view', 'file_object', 'virtual_path'), name='memory_file_virtual_placement_uniq'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfilevirtualplacement',
+                    constraint=models.CheckConstraint(condition=models.Q(('confidence__gte', 0), ('confidence__lte', 1)), name='memory_file_virtual_placement_confidence_0_1'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileusageevent',
+                    index=models.Index(fields=['source', 'event_kind', '-created_at'], name='memory_memo_source__1074bd_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileusageevent',
+                    index=models.Index(fields=['safe_path_hash'], name='memory_memo_safe_pa_97feef_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileusageevent',
+                    index=models.Index(fields=['safe_path_bucket'], name='memory_memo_safe_pa_278878_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationproposal',
+                    index=models.Index(fields=['source', 'status'], name='memory_memo_source__cd2428_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationproposal',
+                    index=models.Index(fields=['proposal_id'], name='memory_memo_proposa_53513a_idx'),
+                ),
+                migrations.AddIndex(
+                    model_name='memoryfileorganizationproposal',
+                    index=models.Index(fields=['confidence'], name='memory_memo_confide_cace7f_idx'),
+                ),
+                migrations.AddConstraint(
+                    model_name='memoryfileorganizationproposal',
+                    constraint=models.CheckConstraint(condition=models.Q(('confidence__gte', 0), ('confidence__lte', 1)), name='memory_file_org_proposal_confidence_0_1'),
+                ),
+            ],
+        ),
+    ]

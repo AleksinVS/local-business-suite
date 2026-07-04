@@ -8,6 +8,7 @@
   "notifications/": "Домен пользовательских уведомлений: серверная очередь, API, настройки и браузерные клиенты",
   "analytics/": "Операционные дашборды внутри Django",
   "memory/": "Метаданные сервиса AI-памяти: sources, snapshots, chunks, facts, jobs, audit",
+  "filehub/": "File Source Auto Organization: MemoryFile* модели, baseline/incoming/move сервисы и UI. Заморожен ADR-0030 решением 5",
   "settings_center/": "Reusable GUI и service layer для управляемых настроек, audit, users, env proposals и contextual help",
   "waiting_list/": "Лист ожидания клиентов"
 }

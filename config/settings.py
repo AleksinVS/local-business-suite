@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.ai",
     "apps.memory",
+    "apps.filehub",
     "apps.settings_center",
     "apps.waiting_list",
 ]

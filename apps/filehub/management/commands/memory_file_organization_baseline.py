@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.memory.file_organization_baseline import build_baseline_virtual_structure
+from apps.filehub.file_organization_baseline import build_baseline_virtual_structure
 from apps.memory.models import MemorySource
 
 

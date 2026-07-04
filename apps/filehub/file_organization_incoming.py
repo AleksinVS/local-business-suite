@@ -6,7 +6,11 @@ from pathlib import Path
 
 from django.utils import timezone
 
-from .document_ingestion import build_source_object_payload, get_source_ingestion_profile, resolve_source_root, sha256_file
+from apps.memory.document_ingestion import build_source_object_payload, get_source_ingestion_profile, resolve_source_root, sha256_file
+from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
+from apps.memory.security import scan_for_secrets
+from apps.memory.source_text_extraction import SUPPORTED_SOURCE_TEXT_EXTENSIONS
+
 from .file_organization import (
     BASELINE_VIEW_SLUG,
     create_file_organization_issue,
@@ -18,9 +22,7 @@ from .file_organization import (
     stable_file_id_for_source_object,
 )
 from .file_organization_baseline import classify_baseline_placement
-from .models import MemoryFileVirtualPlacement, MemoryFileVirtualView, MemoryIngestionIssue, MemorySource, MemorySourceObject
-from .security import scan_for_secrets
-from .source_text_extraction import SUPPORTED_SOURCE_TEXT_EXTENSIONS
+from .models import MemoryFileVirtualPlacement, MemoryFileVirtualView
 
 
 def process_incoming_folder(

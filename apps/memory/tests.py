@@ -53,9 +53,7 @@ from .models import (
     MemoryGraphSchemaProposal,
     MemoryIngestionIssue,
     MemoryIngestionRun,
-    MemoryKnowledgeCandidate,
     MemoryKnowledgeItem,
-    MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
@@ -69,7 +67,7 @@ from .file_organization_move import create_move_job_for_file, purge_ready_source
 from .file_organization_stats import build_organization_proposals, record_file_usage_event
 from .document_ingestion import sha256_file
 from .policies import can_access_search_document, can_manage_memory, effective_source_trust, user_scope_tokens
-from .review_selectors import index_document_queryset, issue_to_review_queue_item, review_issue_queryset
+from .review_selectors import index_document_queryset, issue_to_review_queue_item, pending_knowledge_queryset, review_issue_queryset
 from .review_services import apply_index_review_action, apply_issue_review_action
 from .knowledge_files import read_knowledge_item_file
 from .services import (
@@ -293,8 +291,6 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphSchemaProposal: django_admin.site._registry[MemoryGraphSchemaProposal].__class__,
             MemoryGraphReviewItem: django_admin.site._registry[MemoryGraphReviewItem].__class__,
             MemoryKnowledgeItem: MemoryKnowledgeItemAdmin,
-            MemoryKnowledgeCandidate: django_admin.site._registry[MemoryKnowledgeCandidate].__class__,
-            MemoryReviewAction: django_admin.site._registry[MemoryReviewAction].__class__,
             SecretHandle: django_admin.site._registry[SecretHandle].__class__,
             SecretAccessAudit: django_admin.site._registry[SecretAccessAudit].__class__,
         }
@@ -302,6 +298,18 @@ class MemoryAdminObservabilityTests(TestCase):
         for model, admin_class in expected_admin_classes.items():
             with self.subTest(model=model.__name__):
                 self.assertIsInstance(django_admin.site._registry[model], admin_class)
+
+    def test_memory_candidate_and_review_action_tables_are_gone_from_schema(self):
+        """ADR-0030 decision 4: MemoryKnowledgeCandidate/MemoryReviewAction are
+        removed outright, not just deprecated; candidacy and issue/index
+        review now ride pending pages + the issue queue + git history."""
+        from django.db import connection
+
+        self.assertIsNone(get_optional_memory_model("MemoryKnowledgeCandidate"))
+        self.assertIsNone(get_optional_memory_model("MemoryReviewAction"))
+        table_names = set(connection.introspection.table_names())
+        self.assertNotIn("memory_memoryknowledgecandidate", table_names)
+        self.assertNotIn("memory_memoryreviewaction", table_names)
 
     def test_memory_admin_search_fields_do_not_include_storage_paths(self):
         path_fields = {"raw_path", "safe_path", "text_path"}
@@ -331,8 +339,6 @@ class MemoryAdminObservabilityTests(TestCase):
             MemoryGraphSchemaProposal,
             MemoryGraphReviewItem,
             MemoryKnowledgeItem,
-            MemoryKnowledgeCandidate,
-            MemoryReviewAction,
             SecretHandle,
             SecretAccessAudit,
         ):
@@ -400,6 +406,10 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         self.assertNotIn("audit-person@example.com", item.safe_summary)
 
     def test_issue_detail_resolve_writes_safe_review_action(self):
+        """ADR-0030 decision 4: the removed MemoryReviewAction table's role is
+        folded into the issue itself: the resolution is a direct field
+        mutation, and a bounded safe-redacted ``review_log`` entry lives in
+        ``issue.metadata`` (no separate action-log row/table)."""
         user = self.create_review_user()
         _source, _document, issue = self.create_review_issue()
         self.client.force_login(user)
@@ -421,18 +431,14 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(response.status_code, 302)
         issue.refresh_from_db()
         self.assertEqual(issue.status, MemoryIngestionIssue.Status.RESOLVED)
-        action = MemoryReviewAction.objects.get(issue=issue, action=MemoryReviewAction.Action.RESOLVE)
-        action_payload = json.dumps(
-            {
-                "comment": action.comment,
-                "safe_metadata": action.safe_metadata,
-                "before_state": action.before_state,
-                "after_state": action.after_state,
-            },
-            ensure_ascii=False,
-        )
+        review_log = issue.metadata.get("review_log") or []
+        self.assertEqual(review_log[-1]["action"], "resolve")
+        action_payload = json.dumps(review_log, ensure_ascii=False)
         self.assertNotIn("audit-person@example.com", action_payload)
         self.assertNotIn("supersecretvalue", action_payload)
+        detail_response_2 = self.client.get(reverse("memory:review_issue_detail", kwargs={"pk": issue.pk}))
+        self.assertNotContains(detail_response_2, "audit-person@example.com")
+        self.assertNotContains(detail_response_2, "supersecretvalue")
 
     def test_index_health_enqueue_and_delete_stale_actions(self):
         user = self.create_review_user()
@@ -456,10 +462,10 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         self.assertContains(dashboard_response, "pending")
         self.assertContains(detail_response, "reindex")
         self.assertContains(detail_response, "pending")
-        self.assertEqual(
-            MemoryReviewAction.objects.get(search_document=document, action=MemoryReviewAction.Action.ENQUEUE_REINDEX).decision,
-            MemoryReviewAction.Decision.QUEUED,
-        )
+        document.refresh_from_db()
+        enqueue_log = document.metadata.get("review_log") or []
+        self.assertEqual(enqueue_log[-1]["action"], "enqueue_reindex")
+        self.assertEqual(enqueue_log[-1]["decision"], "queued")
 
         with patch("apps.memory.review_services.delete_search_document_indexes", return_value={"fulltext_deleted": 1, "vector_deleted": 1}):
             delete_response = self.client.post(
@@ -469,12 +475,8 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(delete_response.status_code, 302)
         document.refresh_from_db()
         self.assertEqual(document.index_status, MemorySearchDocument.IndexStatus.DELETED)
-        self.assertTrue(
-            MemoryReviewAction.objects.filter(
-                search_document=document,
-                action=MemoryReviewAction.Action.DELETE_STALE_INDEX,
-            ).exists()
-        )
+        delete_log = document.metadata.get("review_log") or []
+        self.assertEqual(delete_log[-1]["action"], "delete_stale_index")
 
     def test_review_queue_and_index_pages_filter_by_scope_tokens(self):
         user = self.create_review_user()
@@ -534,7 +536,7 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
             apply_index_review_action(
                 actor=user,
                 document=document,
-                action=MemoryReviewAction.Action.DELETE_STALE_INDEX,
+                action="delete_stale_index",
             )
 
         document.refresh_from_db()
@@ -544,13 +546,13 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         user = self.create_review_user(username="index-operator", group_name="memory_index_operator")
         _source, document, issue = self.create_review_issue(issue_kind=MemoryIngestionIssue.IssueKind.INDEX_FAILED)
 
-        action = apply_issue_review_action(
+        outcome = apply_issue_review_action(
             actor=user,
             issue=issue,
-            action=MemoryReviewAction.Action.ENQUEUE_REINDEX,
+            action="enqueue_reindex",
         )
 
-        self.assertEqual(action.decision, MemoryReviewAction.Decision.QUEUED)
+        self.assertEqual(outcome.decision, "queued")
         self.assertTrue(MemoryExternalConnectorJob.objects.filter(payload__document_id=document.document_id).exists())
 
     def test_index_queryset_without_gap_remains_lazy(self):
@@ -1689,7 +1691,14 @@ class MemoryChatKnowledgeTests(TestCase):
             )
 
     def test_reflection_creates_organization_candidate_for_high_importance_personal_memory(self):
+        """ADR-0030 decisions 4 & 8: personal->organization candidacy rides
+        the git propose -> pending -> review -> stable primitive. The
+        candidate is a pending org page that normal search cannot find until
+        a knowledge owner accepts it; a rejected candidate is never found and
+        the decision is recorded as a git commit."""
         from .chat_memory import propose_reflection_candidates, remember_knowledge
+        from .retrieval import memory_search
+        from .review_services import accept_pending_item
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             user, session, message = self.create_chat(text="Запомни: общий регламент alpha действует для отдела.")
@@ -1703,7 +1712,75 @@ class MemoryChatKnowledgeTests(TestCase):
             candidates = propose_reflection_candidates()
 
             self.assertEqual(len(candidates), 1)
-            self.assertEqual(candidates[0].status, MemoryKnowledgeCandidate.Status.PROPOSED)
+            candidate = candidates[0]
+            self.assertEqual(candidate.scope, MemoryKnowledgeItem.Scope.ORGANIZATION)
+            self.assertEqual(candidate.metadata.get("lifecycle"), "pending")
+            self.assertIn(candidate, list(pending_knowledge_queryset(self.superuser())))
+
+            # A second reflection pass must not create a duplicate proposal.
+            self.assertEqual(len(propose_reflection_candidates()), 0)
+
+            org_reader = User.objects.create_user(username="org-candidate-reader", password="pass")
+            not_found = memory_search(
+                actor=org_reader,
+                query="общий регламент alpha отдела",
+                scope_tokens=["org:default"],
+                sensitivity="internal",
+                request_id="req-candidate-pending-search",
+            )
+            self.assertEqual(not_found["items"], [])
+
+            reviewer = self.superuser()
+            accepted = accept_pending_item(item=candidate, actor=reviewer)
+            self.assertEqual(accepted.metadata.get("lifecycle"), "current")
+
+            found = memory_search(
+                actor=org_reader,
+                query="общий регламент alpha отдела",
+                scope_tokens=["org:default"],
+                sensitivity="internal",
+                request_id="req-candidate-accepted-search",
+            )
+            self.assertEqual(len(found["items"]), 1)
+            self.assertTrue(accepted.knowledge_file_path.startswith("org/"))
+
+    def test_rejected_organization_candidate_is_never_searchable_and_recorded_in_git(self):
+        from .chat_memory import propose_reflection_candidates, remember_knowledge
+        from .knowledge_files import _run_git_optional, knowledge_repo_root
+        from .retrieval import memory_search
+        from .review_services import reject_pending_item
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, session, message = self.create_chat(text="Запомни: черновой регламент beta для отдела.")
+            remember_knowledge(
+                actor=user,
+                session=session,
+                payload={"message_ids": [message.id], "importance": "organization_candidate"},
+                request_id="req-candidate-reject",
+            )
+            candidate = propose_reflection_candidates()[0]
+
+            rejected = reject_pending_item(item=candidate, actor=self.superuser(), reason="Не соответствует регламенту.")
+
+            self.assertEqual(rejected.status, MemoryKnowledgeItem.Status.DELETED)
+            self.assertEqual(rejected.metadata.get("lifecycle"), "rejected")
+            self.assertNotIn(rejected, list(pending_knowledge_queryset(self.superuser())))
+
+            org_reader = User.objects.create_user(username="org-candidate-reject-reader", password="pass")
+            not_found = memory_search(
+                actor=org_reader,
+                query="черновой регламент beta отдела",
+                scope_tokens=["org:default"],
+                sensitivity="internal",
+                request_id="req-candidate-rejected-search",
+            )
+            self.assertEqual(not_found["items"], [])
+
+            log_output = _run_git_optional(knowledge_repo_root(), "log", "--oneline").stdout
+            self.assertIn("Reject organization candidate", log_output)
+
+    def superuser(self):
+        return User.objects.create_superuser(username=f"memory-superuser-{User.objects.count()}", password="pass", email="")
 
     def test_owner_can_edit_and_delete_personal_memory(self):
         from .chat_memory import delete_personal_memory, edit_personal_memory, remember_knowledge
@@ -2639,3 +2716,107 @@ class MemoryReconcileTests(TestCase):
             org_summary_path = Path(tmpdir) / "knowledge_repo" / "org" / "_summary.md"
             self.assertTrue(org_index_path.exists())
             self.assertFalse(org_summary_path.exists())
+
+    def test_reconcile_regenerates_log_md_from_git_deterministically(self):
+        """ADR-0030 decision 4: log.md is generated from git log, never
+        hand-edited, and regenerating with no new commits is byte-identical
+        (the file excludes its own commit history from the query so it does
+        not grow every time it is regenerated)."""
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            user, item = self._make_item()
+
+            out = StringIO()
+            call_command("memory_reconcile", stdout=out)
+            self.assertIn("logs_written=", out.getvalue())
+
+            log_path = Path(tmpdir) / "knowledge_repo" / "users" / str(user.id) / "log.md"
+            self.assertTrue(log_path.exists())
+            first_content = log_path.read_text(encoding="utf-8")
+            self.assertIn("Remember knowledge", first_content)
+
+            out2 = StringIO()
+            call_command("memory_reconcile", stdout=out2)
+            second_content = log_path.read_text(encoding="utf-8")
+            self.assertEqual(first_content, second_content)
+
+            org_log_path = Path(tmpdir) / "knowledge_repo" / "org" / "log.md"
+            self.assertTrue(org_log_path.exists())
+
+
+class MemoryPendingReviewUITests(MemoryModelFactoryMixin, TestCase):
+    """Review UI over the git propose -> pending -> review -> stable
+    primitive (ADR-0030 decisions 4 & 8), replacing MemoryKnowledgeCandidate."""
+
+    databases = RUNTIME_DATABASES
+
+    def create_review_user(self, username="pending-reviewer", group_name="memory_admin"):
+        user = User.objects.create_user(username=username, password="pass")
+        group, _created = Group.objects.get_or_create(name=group_name)
+        user.groups.add(group)
+        return user
+
+    def _make_candidate(self, tmpdir):
+        from apps.ai.models import ChatMessage, ChatSession
+
+        from .chat_memory import propose_reflection_candidates, remember_knowledge
+
+        user = User.objects.create_user(username="pending-personal-user", password="pass")
+        session = ChatSession.objects.create(user=user, title="Memory chat")
+        message = ChatMessage.objects.create(
+            session=session, role=ChatMessage.Role.USER, content="Запомни: общий регламент gamma для отдела."
+        )
+        remember_knowledge(
+            actor=user,
+            session=session,
+            payload={"message_ids": [message.id], "importance": "organization_candidate"},
+            request_id="req-pending-ui-candidate",
+        )
+        return propose_reflection_candidates()[0]
+
+    def test_pending_list_requires_review_permission(self):
+        plain_user = User.objects.create_user(username="pending-plain-user", password="pass")
+        self.client.force_login(plain_user)
+
+        response = self.client.get(reverse("memory:review_pending_list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_pending_list_shows_candidate_and_accept_flips_lifecycle(self):
+        reviewer = self.create_review_user()
+        reviewer.is_superuser = True
+        reviewer.save(update_fields=["is_superuser"])
+        self.client.force_login(reviewer)
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            candidate = self._make_candidate(tmpdir)
+
+            list_response = self.client.get(reverse("memory:review_pending_list"))
+            self.assertEqual(list_response.status_code, 200)
+            self.assertContains(list_response, candidate.memory_id)
+
+            accept_response = self.client.post(
+                reverse("memory:review_pending_action", kwargs={"memory_id": candidate.memory_id}),
+                {"action": "accept"},
+            )
+            self.assertEqual(accept_response.status_code, 302)
+            candidate.refresh_from_db()
+            self.assertEqual(candidate.metadata.get("lifecycle"), "current")
+
+            list_response_after = self.client.get(reverse("memory:review_pending_list"))
+            self.assertNotContains(list_response_after, candidate.memory_id)
+
+    def test_pending_action_requires_organization_review_permission(self):
+        reviewer = self.create_review_user(username="pending-reviewer-no-org-perm")
+        self.client.force_login(reviewer)
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            candidate = self._make_candidate(tmpdir)
+
+            response = self.client.post(
+                reverse("memory:review_pending_action", kwargs={"memory_id": candidate.memory_id}),
+                {"action": "accept"},
+            )
+
+            self.assertEqual(response.status_code, 302)
+            candidate.refresh_from_db()
+            self.assertEqual(candidate.metadata.get("lifecycle"), "pending")

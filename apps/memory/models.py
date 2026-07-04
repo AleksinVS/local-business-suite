@@ -912,94 +912,11 @@ class MemoryIngestionIssue(models.Model):
             models.Index(fields=["assigned_to", "status"]),
             models.Index(fields=["review_due_at"]),
         ]
-        verbose_name = "Проблема загрузки памяти"
-        verbose_name_plural = "Проблемы загрузки памяти"
-
-    def __str__(self):
-        return f"{self.issue_kind}:{self.status}:{self.pk}"
-
-
-class MemoryReviewAction(models.Model):
-    class Action(models.TextChoices):
-        ACKNOWLEDGE = "acknowledge", "Принять к сведению"
-        ASSIGN = "assign", "Назначить"
-        REQUEST_EXPERT_REVIEW = "request_expert_review", "Запросить эксперта"
-        RESOLVE = "resolve", "Закрыть"
-        IGNORE = "ignore", "Игнорировать"
-        REOPEN = "reopen", "Открыть снова"
-        COMMENT = "comment", "Комментарий"
-        DRY_RUN_REINDEX = "dry_run_reindex", "Пробная переиндексация"
-        ENQUEUE_REINDEX = "enqueue_reindex", "Поставить переиндексацию в очередь"
-        RETRY_INDEX = "retry_index", "Повторить индексацию"
-        DELETE_STALE_INDEX = "delete_stale_index", "Удалить устаревший индекс"
-        MARK_INDEX_CLEANED = "mark_index_cleaned", "Отметить индекс очищенным"
-        CREATE_ISSUE = "create_issue", "Создать проблему"
-
-    class Decision(models.TextChoices):
-        APPLIED = "applied", "Применено"
-        QUEUED = "queued", "В очереди"
-        REJECTED = "rejected", "Отклонено"
-        FAILED = "failed", "Ошибка"
-        INFO = "info", "Информация"
-
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_review_actions",
-    )
-    action = models.CharField(max_length=40, choices=Action.choices)
-    decision = models.CharField(max_length=32, choices=Decision.choices, default=Decision.APPLIED)
-    issue = models.ForeignKey(
-        MemoryIngestionIssue,
-        on_delete=models.PROTECT,
-        related_name="review_actions",
-        blank=True,
-        null=True,
-    )
-    search_document = models.ForeignKey(
-        MemorySearchDocument,
-        on_delete=models.PROTECT,
-        related_name="review_actions",
-        blank=True,
-        null=True,
-    )
-    source_object = models.ForeignKey(
-        MemorySourceObject,
-        on_delete=models.PROTECT,
-        related_name="review_actions",
-        blank=True,
-        null=True,
-    )
-    index_job = models.ForeignKey(
-        "memory.MemoryExternalConnectorJob",
-        on_delete=models.PROTECT,
-        related_name="review_actions",
-        blank=True,
-        null=True,
-    )
-    access_audit = models.ForeignKey(
-        "memory.MemoryAccessAudit",
-        on_delete=models.PROTECT,
-        related_name="review_actions",
-        blank=True,
-        null=True,
-    )
-    before_state = models.JSONField(default=dict, blank=True)
-    after_state = models.JSONField(default=dict, blank=True)
-    safe_metadata = models.JSONField(default=dict, blank=True)
-    comment = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["action", "-created_at"]),
-            models.Index(fields=["decision", "-created_at"]),
-            models.Index(fields=["issue", "-created_at"]),
-            models.Index(fields=["search_document", "-created_at"]),
-            models.Index(fields=["source_object", "-created_at"]),
-            models.Index(fields=["actor", "-created_at"]),
-        ]
+        # ADR-0030 decision 4: MemoryReviewAction (the operator action-log
+        # table) is removed; these review capability permissions move here,
+        # to the issue queue that remains the operator's review home, so
+        # existing capability checks (``has_memory_review_capability``) keep
+        # working against ``memory.<codename>`` permission strings.
         permissions = [
             ("view_review_queue", "Может просматривать очередь ревью памяти"),
             ("review_issues", "Может ревьюировать проблемы памяти"),
@@ -1007,11 +924,11 @@ class MemoryReviewAction(models.Model):
             ("manage_search_index", "Может управлять поисковым индексом памяти"),
             ("view_memory_access_audit", "Может просматривать аудит доступа к памяти"),
         ]
-        verbose_name = "Действие ревью памяти"
-        verbose_name_plural = "Действия ревью памяти"
+        verbose_name = "Проблема загрузки памяти"
+        verbose_name_plural = "Проблемы загрузки памяти"
 
     def __str__(self):
-        return f"{self.action}:{self.decision}:{self.pk}"
+        return f"{self.issue_kind}:{self.status}:{self.pk}"
 
 
 class MemoryGraphEntity(models.Model):
@@ -1262,57 +1179,6 @@ class MemoryKnowledgeItem(models.Model):
 
     def __str__(self):
         return self.memory_id
-
-
-class MemoryKnowledgeCandidate(models.Model):
-    class Status(models.TextChoices):
-        PROPOSED = "proposed", "Предложено"
-        NEEDS_REVIEW = "needs_review", "Нужно ревью"
-        ACCEPTED = "accepted", "Принято"
-        REJECTED = "rejected", "Отклонено"
-        MERGED = "merged", "Объединено"
-        SUPERSEDED = "superseded", "Заменено"
-
-    source_item = models.ForeignKey(
-        MemoryKnowledgeItem,
-        on_delete=models.PROTECT,
-        related_name="organization_candidates",
-        blank=True,
-        null=True,
-    )
-    proposed_text = models.TextField()
-    proposed_payload = models.JSONField(default=dict, blank=True)
-    evidence = models.JSONField(default=list, blank=True)
-    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PROPOSED)
-    reviewer = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_candidate_reviews",
-        blank=True,
-        null=True,
-    )
-    reviewed_at = models.DateTimeField(blank=True, null=True)
-    decision = models.TextField(blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name="memory_candidates",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["status", "-created_at", "-id"]
-        indexes = [
-            models.Index(fields=["status"]),
-            models.Index(fields=["created_by", "-created_at"]),
-            models.Index(fields=["reviewer", "reviewed_at"]),
-        ]
-        verbose_name = "Кандидат знания памяти"
-        verbose_name_plural = "Кандидаты знаний памяти"
-
-    def __str__(self):
-        return f"{self.status}:{self.pk}"
 
 
 class SecretHandle(models.Model):

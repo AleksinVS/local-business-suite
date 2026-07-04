@@ -122,8 +122,8 @@
     <table>
       <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Решение</th><th>Комментарий</th></tr></thead>
       <tbody>
-        {% for item in review_actions %}
-          <tr><td>{{ item.created_at }}</td><td>{{ item.actor }}</td><td>{{ item.get_action_display }}</td><td>{{ item.get_decision_display }}</td><td>{{ item.comment }}</td></tr>
+        {% for item in review_log %}
+          <tr><td>{{ item.at }}</td><td>{{ item.actor }}</td><td>{{ item.action }}</td><td>{{ item.decision }}</td><td>{{ item.comment }}</td></tr>
         {% empty %}
           <tr><td colspan="5" class="muted">Действий пока нет.</td></tr>
         {% endfor %}

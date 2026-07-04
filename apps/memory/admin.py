@@ -24,9 +24,7 @@ from .models import (
     MemoryIngestionIssue,
     MemoryIngestionRun,
     MemoryFullTextIndex,
-    MemoryKnowledgeCandidate,
     MemoryKnowledgeItem,
-    MemoryReviewAction,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
@@ -310,41 +308,6 @@ class MemoryIngestionIssueAdmin(admin.ModelAdmin):
         self.message_user(request, f"Проигнорировано проблем памяти: {updated}.")
 
 
-@admin.register(MemoryReviewAction)
-class MemoryReviewActionAdmin(admin.ModelAdmin):
-    list_display = ("id", "action", "decision", "actor", "issue", "search_document", "source_object", "created_at")
-    list_filter = ("action", "decision", "created_at")
-    search_fields = (
-        "issue__message",
-        "search_document__document_id",
-        "source_object__relative_path",
-        "index_job__request_id",
-        "comment",
-    )
-    readonly_fields = (
-        "actor",
-        "action",
-        "decision",
-        "issue",
-        "search_document",
-        "source_object",
-        "index_job",
-        "access_audit",
-        "before_state",
-        "after_state",
-        "safe_metadata",
-        "comment",
-        "created_at",
-    )
-    autocomplete_fields = ("actor", "issue", "search_document", "source_object", "index_job", "access_audit")
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-
 @admin.register(MemoryGraphEntity)
 class MemoryGraphEntityAdmin(admin.ModelAdmin):
     list_display = ("entity_id", "entity_type", "canonical_name", "is_active", "sensitivity", "updated_at")
@@ -390,15 +353,6 @@ class MemoryKnowledgeItemAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request)
-
-
-@admin.register(MemoryKnowledgeCandidate)
-class MemoryKnowledgeCandidateAdmin(admin.ModelAdmin):
-    list_display = ("id", "status", "source_item", "created_by", "reviewer", "reviewed_at", "created_at")
-    list_filter = ("status", "created_at", "reviewed_at")
-    search_fields = ("source_item__memory_id", "decision")
-    readonly_fields = ("created_at", "updated_at")
-    autocomplete_fields = ("source_item", "created_by", "reviewer")
 
 
 @admin.register(SecretHandle)

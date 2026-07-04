@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Кандидаты памяти | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+{% include "memory/review/_nav.html" %}
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Ревью памяти</p>
+      <h1>Ожидают ревью (pending)</h1>
+      <p class="description">
+        Кандидаты personal -&gt; organization и понижения классификации, ожидающие явного решения владельца знаний
+        (git-примитив propose -&gt; pending -&gt; review -&gt; stable). Страница не видна обычному поиску, пока не принята;
+        решение фиксируется git-коммитом.
+      </p>
+    </div>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>ID знания</th>
+          <th>Область</th>
+          <th>Тип</th>
+          <th>Источник</th>
+          <th>Обновлено</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in items %}
+          <tr>
+            <td><code>{{ row.item.memory_id }}</code></td>
+            <td>{{ row.item.get_scope_display }}</td>
+            <td>{% if row.kind == "candidate" %}Кандидат в общие знания{% else %}Понижение классификации{% endif %}</td>
+            <td><code>{{ row.item.source_code }}</code></td>
+            <td>{{ row.item.updated_at }}</td>
+            <td>
+              {% if can_decide_pending %}
+                <form method="post" action="{% url 'memory:review_pending_action' row.item.memory_id %}" class="inline-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="accept">
+                  <button type="submit">Принять</button>
+                </form>
+                <form method="post" action="{% url 'memory:review_pending_action' row.item.memory_id %}" class="inline-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject">
+                  <input type="text" name="reason" placeholder="Причина отклонения" aria-label="Причина отклонения">
+                  <button type="submit">Отклонить</button>
+                </form>
+              {% else %}
+                <span class="muted">Только просмотр</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="muted">Нет знаний, ожидающих ревью.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand
 
 from apps.memory.chat_memory import propose_reflection_candidates
-from apps.memory.knowledge_files import rebuild_all_knowledge_indexes
+from apps.memory.knowledge_files import rebuild_all_knowledge_indexes, rebuild_all_knowledge_logs
 from apps.memory.models import MemoryKnowledgeItem
 
 
 class Command(BaseCommand):
-    help = "Run off-peak knowledge reflection: index.md regeneration and organization candidates."
+    help = "Run off-peak knowledge reflection: index.md/log.md regeneration and organization candidates."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Show planned reflection work without writing.")
@@ -32,10 +32,12 @@ class Command(BaseCommand):
 
         candidates = propose_reflection_candidates(limit=limit)
         indexes_written = rebuild_all_knowledge_indexes()
+        logs_written = rebuild_all_knowledge_logs()
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Knowledge reflection created {len(candidates)} candidate(s), "
-                f"regenerated {len(indexes_written)} index.md file(s)."
+                f"regenerated {len(indexes_written)} index.md file(s), "
+                f"regenerated {len(logs_written)} log.md file(s)."
             )
         )

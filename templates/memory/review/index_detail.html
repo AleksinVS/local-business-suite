@@ -103,19 +103,18 @@
   <h2>Журнал действий</h2>
   <div class="table-container">
     <table>
-      <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Решение</th><th>Задание</th><th>Комментарий</th></tr></thead>
+      <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Решение</th><th>Комментарий</th></tr></thead>
       <tbody>
-        {% for item in review_actions %}
+        {% for item in review_log %}
           <tr>
-            <td>{{ item.created_at }}</td>
+            <td>{{ item.at }}</td>
             <td>{{ item.actor }}</td>
-            <td>{{ item.get_action_display }}</td>
-            <td>{{ item.get_decision_display }}</td>
-            <td>{{ item.index_job_id|default:"" }}</td>
+            <td>{{ item.action }}</td>
+            <td>{{ item.decision }}</td>
             <td>{{ item.comment }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="6" class="muted">Действий пока нет.</td></tr>
+          <tr><td colspan="5" class="muted">Действий пока нет.</td></tr>
         {% endfor %}
       </tbody>
     </table>

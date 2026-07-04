@@ -9,56 +9,76 @@
   <div class="section-head">
     <div>
       <p class="eyebrow">Аудит</p>
-      <h1>Журнал действий ревью</h1>
+      <h1>Журнал ревью</h1>
+      <p class="description">
+        Комбинированная лента: решенные проблемы очереди ingestion, задания единой очереди памяти и
+        git-история знаний (ADR-0030: git — единственный журнал ревизий знаний).
+      </p>
     </div>
   </div>
-  <form method="get" class="memory-review-filters">
-    <select name="action">
-      <option value="">Все действия</option>
-      {% for value, label in action_choices %}
-        <option value="{{ value }}" {% if filters.action == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <select name="decision">
-      <option value="">Все решения</option>
-      {% for value, label in decision_choices %}
-        <option value="{{ value }}" {% if filters.decision == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit">Фильтр</button>
-    <a class="button-link-muted" href="{% url 'memory:review_audit' %}">Сбросить</a>
-  </form>
 </section>
 
 <section class="panel">
+  <div class="section-head"><h2>Решенные проблемы</h2></div>
   <div class="table-container">
     <table>
       <thead>
-        <tr>
-          <th>Время</th>
-          <th>Пользователь</th>
-          <th>Действие</th>
-          <th>Решение</th>
-          <th>Проблема</th>
-          <th>Документ</th>
-          <th>Задание</th>
-          <th>Комментарий</th>
-        </tr>
+        <tr><th>Проблема</th><th>Статус</th><th>Резолюция</th><th>Ревьюер</th><th>Обновлено</th></tr>
       </thead>
       <tbody>
-        {% for item in actions %}
+        {% for issue in decided_issues %}
           <tr>
-            <td>{{ item.created_at }}</td>
-            <td>{{ item.actor }}</td>
-            <td>{{ item.get_action_display }}</td>
-            <td>{{ item.get_decision_display }}</td>
-            <td>{% if item.issue_id %}<a href="{% url 'memory:review_issue_detail' item.issue_id %}">#{{ item.issue_id }}</a>{% endif %}</td>
-            <td>{% if item.search_document_id %}<a href="{% url 'memory:review_index_detail' item.search_document.document_id %}"><code>{{ item.search_document.document_id }}</code></a>{% endif %}</td>
-            <td>{{ item.index_job_id|default:"" }}</td>
-            <td>{{ item.comment }}</td>
+            <td><a href="{% url 'memory:review_issue_detail' issue.pk %}">#{{ issue.pk }} {{ issue.get_issue_kind_display }}</a></td>
+            <td>{{ issue.get_status_display }}</td>
+            <td>{{ issue.resolution_code|default:"" }}</td>
+            <td>{{ issue.reviewed_by|default:"" }}</td>
+            <td>{{ issue.updated_at }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="8" class="muted">Действий пока нет.</td></tr>
+          <tr><td colspan="5" class="muted">Решенных проблем пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>Задания очереди памяти</h2></div>
+  <div class="table-container">
+    <table>
+      <thead><tr><th>ID</th><th>Тип</th><th>Статус</th><th>Источник</th><th>Создано</th></tr></thead>
+      <tbody>
+        {% for job in recent_jobs %}
+          <tr>
+            <td>{{ job.pk }}</td>
+            <td>{{ job.job_kind }}</td>
+            <td>{{ job.status }}</td>
+            <td>{{ job.source_code|default:"" }}</td>
+            <td>{{ job.created_at }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">Заданий пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>Git-история знаний</h2></div>
+  <div class="table-container">
+    <table>
+      <thead><tr><th>Коммит</th><th>Дата</th><th>Автор</th><th>Сообщение</th></tr></thead>
+      <tbody>
+        {% for commit in recent_commits %}
+          <tr>
+            <td><code>{{ commit.hash }}</code></td>
+            <td>{{ commit.date }}</td>
+            <td>{{ commit.author }}</td>
+            <td>{{ commit.subject }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="muted">Коммитов пока нет.</td></tr>
         {% endfor %}
       </tbody>
     </table>

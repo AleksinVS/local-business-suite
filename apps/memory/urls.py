@@ -13,6 +13,8 @@ urlpatterns = [
     path("review/index/", views.MemoryIndexListView.as_view(), name="review_index_list"),
     path("review/index/<path:document_id>/action/", views.MemoryIndexActionView.as_view(), name="review_index_action"),
     path("review/index/<path:document_id>/", views.MemoryIndexDetailView.as_view(), name="review_index_detail"),
+    path("review/pending/", views.MemoryPendingListView.as_view(), name="review_pending_list"),
+    path("review/pending/<str:memory_id>/action/", views.MemoryPendingActionView.as_view(), name="review_pending_action"),
     path("review/audit/", views.MemoryReviewAuditView.as_view(), name="review_audit"),
     path("review/file-organization/", views.MemoryFileOrganizationView.as_view(), name="file_organization"),
     path(

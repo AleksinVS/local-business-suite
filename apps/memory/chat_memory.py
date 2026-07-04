@@ -12,7 +12,6 @@ from django.utils import timezone
 from apps.ai.models import ChatMessage
 
 from .models import (
-    MemoryKnowledgeCandidate,
     MemoryKnowledgeItem,
     MemorySearchDocument,
     MemorySource,
@@ -256,6 +255,18 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
 
 
 def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
+    lifecycle = str((item.metadata or {}).get("lifecycle") or "current")
+    if lifecycle != "current":
+        # ADR-0030 decisions 4 & 8: a page proposed via the git
+        # propose -> pending -> review -> stable primitive (an organization
+        # candidacy proposal, or a classification downgrade held by
+        # memory_reconcile) must not be discoverable by normal memory.search
+        # until a knowledge owner accepts it. Guard here so this holds
+        # regardless of which caller invokes indexing.
+        if item.index_status != "indexing_pending":
+            item.index_status = "indexing_pending"
+            item.save(update_fields=["index_status", "updated_at"])
+        return {"document_ids": [], "fact_ids": [], "knowledge_id": item.memory_id, "skipped": f"lifecycle:{lifecycle}"}
     source = _chat_memory_source(item.scope)
     selected_backends = set(index_backends or ())
     fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
@@ -381,22 +392,69 @@ def delete_personal_memory(*, actor, memory_id: str):
     }
 
 
-def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_by):
-    proposed_text = read_knowledge_item_file(source_item).body
-    candidate, _ = MemoryKnowledgeCandidate.objects.get_or_create(
-        source_item=source_item,
-        status=MemoryKnowledgeCandidate.Status.PROPOSED,
-        defaults={
-            "proposed_text": proposed_text,
-            "proposed_payload": {
-                "source_memory_id": source_item.memory_id,
-                "source_owner_user_id": source_item.owner_user_id,
-                "metadata": source_item.metadata,
-            },
-            "evidence": [source_item.provenance],
-            "created_by": created_by,
-        },
+def find_organization_candidate(source_item: MemoryKnowledgeItem) -> MemoryKnowledgeItem | None:
+    """Return the existing organization candidate page proposed from ``source_item``, if any."""
+    return (
+        MemoryKnowledgeItem.objects.filter(
+            scope=MemoryKnowledgeItem.Scope.ORGANIZATION,
+            metadata__candidate_source_memory_id=source_item.memory_id,
+        )
+        .order_by("-created_at", "-id")
+        .first()
     )
+
+
+def create_organization_candidate(*, source_item: MemoryKnowledgeItem, created_by) -> MemoryKnowledgeItem:
+    """Propose ``source_item`` (personal knowledge) for promotion to organization scope.
+
+    ADR-0030 decisions 4 & 8: personal->organization candidacy rides the git
+    ``propose -> pending -> review -> stable`` primitive instead of a
+    ``MemoryKnowledgeCandidate`` row. The candidate is an organization-scope
+    ``MemoryKnowledgeItem`` whose knowledge file carries ``lifecycle: pending``
+    in its frontmatter (written to the repo as a real file + git commit), but
+    ``index_knowledge_item`` skips pending items so ``memory.search`` cannot
+    find it until a knowledge owner accepts it via the review UI.
+    """
+    existing = find_organization_candidate(source_item)
+    if existing is not None:
+        return existing
+    body = _normalize_memory_text(read_knowledge_item_file(source_item).body)
+    text_hash = _sha256(body)
+    memory_id = f"chat:{MemoryKnowledgeItem.Scope.ORGANIZATION}:candidate:{source_item.pk}:{text_hash[:24]}"
+    candidate = MemoryKnowledgeItem.objects.create(
+        memory_id=memory_id,
+        scope=MemoryKnowledgeItem.Scope.ORGANIZATION,
+        owner_user=None,
+        kind=source_item.kind,
+        text_hash=text_hash,
+        sensitivity=source_item.sensitivity,
+        # The candidate is proposed *into* organization scope: it must carry
+        # organization-visible scope tokens (not the personal owner's token
+        # copied verbatim), so once accepted it is actually findable by the
+        # organization, not just the original personal owner.
+        scope_tokens=_scope_tokens_for_memory(scope=MemoryKnowledgeItem.Scope.ORGANIZATION),
+        status=MemoryKnowledgeItem.Status.ACTIVE,
+        source_refs=list(source_item.source_refs or []),
+        source_code=source_item.source_code,
+        source_kind=source_item.source_kind,
+        index_status="indexing_pending",
+        provenance={
+            "candidate_source_memory_id": source_item.memory_id,
+            "candidate_source_owner_user_id": source_item.owner_user_id,
+        },
+        metadata={
+            "lifecycle": "pending",
+            "candidate_source_memory_id": source_item.memory_id,
+            "candidate_source_owner_user_id": source_item.owner_user_id,
+        },
+        created_by=created_by,
+    )
+    write_knowledge_item_file(
+        candidate,
+        body=body,
+        commit_message=f"Propose organization candidate from {source_item.memory_id}",
+    )
+    rebuild_memory_projection(scope=MemoryKnowledgeItem.Scope.ORGANIZATION)
     return candidate
 
 
@@ -407,7 +465,7 @@ def propose_reflection_candidates(*, limit=100):
         .order_by("created_at", "id")
     )
     for item in queryset[:limit]:
-        if item.organization_candidates.exists():
+        if find_organization_candidate(item) is not None:
             continue
         importance = str((item.metadata or {}).get("importance", "")).lower()
         if importance not in {"high", "org", "organization", "organization_candidate"}:

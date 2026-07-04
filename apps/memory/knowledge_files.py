@@ -21,6 +21,7 @@ from .policies import can_access_knowledge_item
 
 FRONT_MATTER_SEPARATOR = "---"
 INDEX_FILE_NAME = "index.md"
+LOG_FILE_NAME = "log.md"
 
 
 @dataclass(frozen=True)
@@ -269,12 +270,119 @@ def rebuild_all_knowledge_indexes() -> list[str]:
     return written
 
 
+def rebuild_knowledge_log(*, scope: str, owner_user_id: int | None = None) -> str:
+    """Regenerate ``log.md`` for a scope from ``git log`` (ADR-0030 decision 4).
+
+    The revision journal is git itself; ``log.md`` is a deterministic,
+    generated-only rendering of ``git log`` for the scope directory (commit
+    hash, ISO author date, author, subject) and is never hand-edited. The
+    file excludes its own path from the ``git log`` query so regenerating it
+    is stable: a commit that only touches ``log.md`` does not appear in the
+    next generation, so re-running with no new knowledge-file commits
+    produces byte-identical content (and therefore no new commit).
+    """
+    root = ensure_knowledge_repo()
+    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
+        if owner_user_id is None:
+            raise ValidationError("owner_user_id is required for personal log.")
+        rel_dir = f"users/{owner_user_id}"
+        title = "Personal knowledge log"
+    else:
+        rel_dir = "org"
+        title = "Organization knowledge log"
+    log_relative = f"{rel_dir}/{LOG_FILE_NAME}"
+
+    entries = _git_log_entries(root, rel_dir=rel_dir, exclude_relative_paths=(log_relative,))
+    content = _log_markdown(title=title, entries=entries)
+
+    with knowledge_repo_lock(root):
+        log_path = _safe_repo_path(root, log_relative)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = log_path.with_name(log_path.name + ".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        os.replace(tmp_path, log_path)
+        _run_git(root, "add", log_relative)
+        _commit_if_needed(root, f"Update {scope} knowledge log")
+    return log_relative
+
+
+def rebuild_all_knowledge_logs() -> list[str]:
+    """Regenerate every scope's ``log.md``, mirroring ``rebuild_all_knowledge_indexes``."""
+    root = ensure_knowledge_repo()
+    written = [rebuild_knowledge_log(scope=MemoryKnowledgeItem.Scope.ORGANIZATION)]
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            try:
+                owner_user_id = int(user_dir.name)
+            except ValueError:
+                continue
+            written.append(rebuild_knowledge_log(scope=MemoryKnowledgeItem.Scope.PERSONAL, owner_user_id=owner_user_id))
+    return written
+
+
+def recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
+    """Return the most recent commits across the whole knowledge repo.
+
+    Used by the review UI's combined audit feed (ADR-0030 decision 4): unlike
+    ``rebuild_knowledge_log`` (a per-scope generated artifact committed to the
+    repo), this is a read-only query with no scope restriction and nothing is
+    written to disk.
+    """
+    root = knowledge_repo_root()
+    if not (root / ".git").exists():
+        return []
+    return _git_log_entries(root, rel_dir=None, exclude_relative_paths=(), limit=limit)
+
+
+def _git_log_entries(
+    root: Path,
+    *,
+    rel_dir: str | None,
+    exclude_relative_paths: tuple[str, ...] = (),
+    limit: int | None = None,
+) -> list[dict[str, str]]:
+    args = ["log", "--no-merges", "--date=iso-strict", "--pretty=format:%h\x1f%ad\x1f%an\x1f%s"]
+    if limit:
+        args += [f"-n{int(limit)}"]
+    pathspecs: list[str] = []
+    if rel_dir is not None:
+        pathspecs.append(rel_dir)
+        for excluded in exclude_relative_paths:
+            pathspecs.append(f":(exclude){excluded}")
+    if pathspecs:
+        args.append("--")
+        args.extend(pathspecs)
+    result = _run_git_optional(root, *args)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    entries = []
+    for line in result.stdout.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 4:
+            continue
+        commit_hash, date, author, subject = parts
+        entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject})
+    return entries
+
+
+def _log_markdown(*, title: str, entries: list[dict[str, str]]) -> str:
+    lines = [f"# {title}", ""]
+    for entry in entries:
+        lines.append(f"- `{entry['hash']}` {entry['date']} {entry['author']}: {entry['subject']}")
+    if not entries:
+        lines.append("_No commits yet._")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _walk_knowledge_files(*, root: Path, base_dir: Path) -> list[tuple[str, dict, str]]:
     entries: list[tuple[str, dict, str]] = []
     if not base_dir.exists():
         return entries
     for path in sorted(base_dir.rglob("*.md")):
-        if path.name == INDEX_FILE_NAME:
+        if path.name in (INDEX_FILE_NAME, LOG_FILE_NAME):
             continue
         try:
             content = path.read_text(encoding="utf-8")

@@ -6,11 +6,12 @@ from typing import Any
 from django.db.models import Count, Q
 from django.urls import reverse
 
+from .knowledge_files import recent_knowledge_commits
 from .models import (
     MemoryAccessAudit,
     MemoryExternalConnectorJob,
     MemoryIngestionIssue,
-    MemoryReviewAction,
+    MemoryKnowledgeItem,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
@@ -173,7 +174,7 @@ def issue_detail_context(issue: MemoryIngestionIssue, *, user) -> dict[str, Any]
         "queue_item": issue_to_review_queue_item(issue, user=user),
         "safe_metadata": safe_review_metadata(issue.metadata or {}),
         "search_document": document,
-        "review_actions": MemoryReviewAction.objects.select_related("index_job").filter(issue=issue)[:50],
+        "review_log": list(reversed((issue.metadata or {}).get("review_log") or []))[:50],
         "access_audits": access_audits,
         "available_actions": issue_available_actions(issue, user=user),
     }
@@ -269,7 +270,7 @@ def search_document_detail_context(document: MemorySearchDocument, *, user) -> d
         "diagnostics": index_diagnostics(document),
         "safe_metadata": safe_review_metadata(document.metadata or {}),
         "related_issues": related_issues[:20],
-        "review_actions": MemoryReviewAction.objects.select_related("index_job", "issue").filter(search_document=document)[:50],
+        "review_log": list(reversed((document.metadata or {}).get("review_log") or []))[:50],
         "related_jobs": _jobs_for_document(document)[:20],
         "access_audits": access_audits,
         "available_actions": index_available_actions(document, user=user),
@@ -353,25 +354,48 @@ def index_gap_flags(document: MemorySearchDocument) -> set[str]:
     return flags
 
 
-def review_actions_queryset(user, params=None):
-    queryset = MemoryReviewAction.objects.select_related(
-        "issue",
-        "search_document",
-        "source_object",
-        "index_job",
-        "access_audit",
+def review_audit_context(user, params=None) -> dict[str, Any]:
+    """Combined audit feed (ADR-0030 decision 4): the issue queue's decided
+    items, the unified queue's recent tasks, and git-derived commit history —
+    replacing the removed per-click ``MemoryReviewAction`` log table."""
+    if not can_view_memory_review_queue(user):
+        return {"decided_issues": [], "recent_jobs": [], "recent_commits": []}
+    decided_issues = list(
+        _scoped_issue_queryset(_base_issue_queryset(), user)
+        .filter(status__in=[MemoryIngestionIssue.Status.RESOLVED, MemoryIngestionIssue.Status.IGNORED])
+        .order_by("-updated_at", "-id")[:50]
     )
+    recent_jobs = list(_scoped_index_job_queryset(user)[:50])
+    recent_commits = recent_knowledge_commits(limit=50)
+    return {
+        "decided_issues": decided_issues,
+        "recent_jobs": recent_jobs,
+        "recent_commits": recent_commits,
+    }
+
+
+PENDING_REVIEW_DISPLAY_LIMIT = 200
+
+
+def pending_knowledge_queryset(user, params=None):
+    """Organization candidacy proposals and classification-downgrade holds
+    (both surfaced as ``metadata.lifecycle == "pending"`` per ADR-0030
+    decisions 4 & 8), scoped by the viewer's scope tokens."""
+    queryset = MemoryKnowledgeItem.objects.select_related("owner_user", "created_by").filter(
+        metadata__lifecycle="pending"
+    ).order_by("-updated_at", "-id")
     if not can_view_memory_review_queue(user):
         return queryset.none()
-    queryset = _scoped_review_action_queryset(queryset, user)
-    params = params or {}
-    action = _param(params, "action")
-    decision = _param(params, "decision")
-    if action:
-        queryset = queryset.filter(action=action)
-    if decision:
-        queryset = queryset.filter(decision=decision)
-    return queryset
+    if getattr(user, "is_superuser", False):
+        return queryset
+    tokens = sorted(user_scope_tokens(user))
+    if not tokens:
+        return queryset.none()
+    return queryset.filter(_scope_token_overlap_q("scope_tokens", tokens))
+
+
+def pending_item_kind(item: MemoryKnowledgeItem) -> str:
+    return "candidate" if (item.metadata or {}).get("candidate_source_memory_id") else "downgrade"
 
 
 def source_filter_options(user=None):
@@ -468,28 +492,6 @@ def _scoped_document_queryset(queryset, user):
         (Q(source_object__isnull=False) & source_object_scope_q)
         | (Q(knowledge_item__isnull=False) & knowledge_scope_q)
     )
-
-
-def _scoped_review_action_queryset(queryset, user):
-    if getattr(user, "is_superuser", False):
-        return queryset
-    tokens = sorted(user_scope_tokens(user))
-    if not tokens:
-        return queryset.none()
-    source_ids = _visible_source_ids_for_user(user)
-    issue_q = (
-        Q(issue__source_object__isnull=False)
-        & _scope_token_overlap_q("issue__source_object__metadata__scope_tokens", tokens)
-    ) | Q(issue__source_object__isnull=True, issue__source_id__in=source_ids)
-    document_q = (
-        Q(search_document__source_object__isnull=False)
-        & _scope_token_overlap_q("search_document__source_object__metadata__scope_tokens", tokens)
-    ) | (
-        Q(search_document__knowledge_item__isnull=False)
-        & _scope_token_overlap_q("search_document__knowledge_item__scope_tokens", tokens)
-    )
-    source_object_q = Q(source_object__isnull=False) & _scope_token_overlap_q("source_object__metadata__scope_tokens", tokens)
-    return queryset.filter(issue_q | document_q | source_object_q)
 
 
 def _scoped_index_job_queryset(user):

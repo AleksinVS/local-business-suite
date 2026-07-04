@@ -29,6 +29,7 @@ from apps.memory.knowledge_files import (
     knowledge_repo_root,
     parse_knowledge_file,
     rebuild_all_knowledge_indexes,
+    rebuild_all_knowledge_logs,
     sha256_text,
 )
 from apps.memory.models import MemoryKnowledgeItem
@@ -174,11 +175,15 @@ class Command(BaseCommand):
         # dataset registry projection from the wiki, like edges from `relations:`.
 
         indexes_written = []
+        logs_written = []
         if not dry_run:
             # ADR-0030 decision 4: index.md is generated from the knowledge
             # files on disk (not the DB queryset); rebuild it here so a batch
-            # of reconciled files is reflected immediately.
+            # of reconciled files is reflected immediately. log.md is
+            # generated from git log the same way, right after, since it is
+            # never hand-edited either.
             indexes_written = rebuild_all_knowledge_indexes()
+            logs_written = rebuild_all_knowledge_logs()
             state = _load_state()
             state["last_commit"] = head
             state["reconciled_at"] = timezone.now().isoformat()
@@ -187,7 +192,7 @@ class Command(BaseCommand):
         self.stdout.write(
             "Memory reconcile finished: "
             f"scanned={scanned}, reconciled={reconciled}, held={held}, "
-            f"indexes_written={len(indexes_written)}, "
+            f"indexes_written={len(indexes_written)}, logs_written={len(logs_written)}, "
             f"dry_run={dry_run}, head={head[:12] or 'none'}"
         )
 

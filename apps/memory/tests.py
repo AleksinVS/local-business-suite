@@ -2467,3 +2467,95 @@ class KnowledgeRepoLockTests(TestCase):
             worker.join(timeout=5)
             self.assertTrue(second_acquired.is_set())
             self.assertEqual(order, ["first", "second"])
+
+
+class MemoryReconcileTests(TestCase):
+    """Pull reconciler and file-as-canon behavior (ADR-0030 P01)."""
+
+    databases = RUNTIME_DATABASES
+
+    def _make_item(self):
+        from apps.ai.models import ChatMessage, ChatSession
+
+        from .chat_memory import process_memory_write_request, queue_memory_remember
+
+        user = User.objects.create_user(username="reconcile-user", password="pass")
+        session = ChatSession.objects.create(user=user, title="Memory chat")
+        message = ChatMessage.objects.create(
+            session=session, role=ChatMessage.Role.USER, content="Запомни: alpha требует калибровку."
+        )
+        queued = queue_memory_remember(
+            actor=user, session=session, payload={"message_ids": [message.id]}, request_id="req-reconcile"
+        )
+        process_memory_write_request(MemoryWriteRequest.objects.get(request_id=queued["request_id"]))
+        return user, MemoryKnowledgeItem.objects.get(owner_user=user)
+
+    def _rewrite_file(self, item, *, body=None, metadata_updates=None):
+        from .knowledge_files import (
+            KnowledgeFile,
+            _safe_repo_path,
+            knowledge_repo_root,
+            parse_knowledge_file,
+            render_knowledge_file,
+        )
+
+        path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+        parsed = parse_knowledge_file(path.read_text(encoding="utf-8"))
+        meta = dict(parsed.metadata)
+        if metadata_updates:
+            meta.update(metadata_updates)
+        new = KnowledgeFile(metadata=meta, body=body if body is not None else parsed.body)
+        path.write_text(render_knowledge_file(new), encoding="utf-8")
+
+    def test_manual_body_edit_reconciles_without_read_error(self):
+        from .knowledge_files import read_knowledge_item_file, sha256_text
+
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir), LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE=True
+        ):
+            _user, item = self._make_item()
+            new_body = "alpha калибруется ежемесячно reconciletoken777"
+            self._rewrite_file(item, body=new_body)
+
+            # Canon inversion: a manual edit must not break reads.
+            self.assertIn("reconciletoken777", read_knowledge_item_file(item).body)
+
+            out = StringIO()
+            call_command("memory_reconcile", stdout=out)
+            item.refresh_from_db()
+            self.assertEqual(item.text_hash, sha256_text(new_body))
+            self.assertIn("reconciled=1", out.getvalue())
+
+            # Idempotency: a second run with no changes reports zero reconciled.
+            out2 = StringIO()
+            call_command("memory_reconcile", stdout=out2)
+            self.assertIn("reconciled=0", out2.getvalue())
+
+    def test_manual_sensitivity_downgrade_is_held_pending(self):
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir), LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE=True
+        ):
+            _user, item = self._make_item()
+            item.sensitivity = "confidential"
+            item.save(update_fields=["sensitivity"])
+
+            # Manual edit lowers the classification: must not apply silently.
+            self._rewrite_file(item, metadata_updates={"sensitivity": "public"})
+            out = StringIO()
+            call_command("memory_reconcile", stdout=out)
+            item.refresh_from_db()
+            self.assertEqual(item.sensitivity, "confidential")
+            self.assertIn("held=1", out.getvalue())
+            self.assertEqual((item.metadata or {}).get("lifecycle"), "pending")
+
+    def test_frontmatter_has_no_derived_state(self):
+        from .knowledge_files import _safe_repo_path, knowledge_repo_root, parse_knowledge_file
+
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            _user, item = self._make_item()
+            path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+            meta = parse_knowledge_file(path.read_text(encoding="utf-8")).metadata
+            # Invariant #9: derived-layer state stays out of the canon.
+            self.assertNotIn("index_status", meta)
+            self.assertNotIn("text_hash", meta)
+            self.assertEqual(meta.get("lifecycle"), "current")

@@ -519,6 +519,14 @@ if (
         "Use LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND=postgresql or set "
         "LOCAL_BUSINESS_ALLOW_SQLITE_AUXILIARY_PRODUCTION=true for an explicit emergency override."
     )
+# ADR-0030 P01: when True the knowledge file frontmatter is the authoritative
+# source of metadata and a file/projection hash mismatch is a reconcile signal
+# (page marked needs-reconcile) rather than a read error. Default False keeps
+# the previous projection-authoritative behavior for the migration/rollback
+# window; the authority is switched only after a clean memory_verify_knowledge_files.
+LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE = env_bool(
+    "LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE", False
+)
 LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND = os.environ.get("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND", "lancedb").strip().lower()
 if LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND not in {"disabled", "lancedb", "enabled"}:
     raise ImproperlyConfigured("LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND must be one of: disabled, lancedb, enabled")

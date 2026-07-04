@@ -129,12 +129,41 @@ def read_knowledge_item_file(item: MemoryKnowledgeItem) -> KnowledgeFile:
     if not path.exists():
         raise ValidationError(f"Knowledge file for {item.memory_id} is missing.")
     content = path.read_text(encoding="utf-8")
+    parsed = parse_knowledge_file(content)
+    if file_canon_authoritative():
+        # ADR-0030 decision 1: the file is the canon. A mismatch between the
+        # file and the projection means the projection is stale (e.g. a manual
+        # edit) and is a reconcile signal, not a read error. Return the file's
+        # content; memory_reconcile marks the page needs-reconcile and rebuilds
+        # the projection.
+        return parsed
+    # Migration/rollback window (flag off): the projection is authoritative and
+    # hashes are validated so the authority can be switched only after a clean
+    # verification and rolled back by turning the flag off again.
     if item.knowledge_file_hash and sha256_text(content) != item.knowledge_file_hash:
         raise ValidationError(f"Knowledge file hash mismatch for {item.memory_id}.")
-    parsed = parse_knowledge_file(content)
     if sha256_text(parsed.body) != item.text_hash:
         raise ValidationError(f"Knowledge body hash mismatch for {item.memory_id}.")
     return parsed
+
+
+def file_canon_authoritative() -> bool:
+    return bool(getattr(settings, "LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE", False))
+
+
+def knowledge_file_body_hash(item: MemoryKnowledgeItem) -> str | None:
+    """Return the sha256 of the current file body, or None if unreadable.
+
+    Used by the reconciler as the content-hash gate: reindex only when the
+    file body hash differs from the projection's stored text_hash.
+    """
+    if not item.knowledge_file_path:
+        return None
+    path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+    if not path.exists():
+        return None
+    parsed = parse_knowledge_file(path.read_text(encoding="utf-8"))
+    return sha256_text(parsed.body)
 
 
 def read_knowledge_for_actor(*, item: MemoryKnowledgeItem, actor, request_id: str = "") -> dict[str, Any]:
@@ -313,7 +342,10 @@ def sha256_text(value: str) -> str:
 def _knowledge_file_metadata(item: MemoryKnowledgeItem, *, body: str | None = None) -> dict[str, Any]:
     now = timezone.now()
     source_refs = list(item.source_refs or _legacy_source_refs(item))
-    text_hash = sha256_text(body) if body is not None else item.text_hash
+    # ADR-0030 invariant #9: the frontmatter (canon) carries only intrinsic
+    # knowledge metadata and workflow flags (lifecycle). Derived-layer state
+    # (index_status, index versions, the file's own hashes) lives in the
+    # projection, not in the canon, so re-indexing never rewrites the file.
     return {
         "knowledge_id": item.memory_id,
         "legacy_memory_id": item.memory_id,
@@ -326,12 +358,22 @@ def _knowledge_file_metadata(item: MemoryKnowledgeItem, *, body: str | None = No
         "sensitivity": str(item.sensitivity),
         "scope_tokens": list(item.scope_tokens or []),
         "status": str(item.status),
-        "index_status": str(item.index_status),
+        "lifecycle": _knowledge_lifecycle(item),
         "created_at": (item.created_at or now).isoformat(),
         "updated_at": (item.updated_at or now).isoformat(),
-        "text_hash": f"sha256:{text_hash}",
         "metadata": _plain_value(dict(item.metadata or {})),
     }
+
+
+def _knowledge_lifecycle(item: MemoryKnowledgeItem) -> str:
+    """Workflow lifecycle flag stored in the canon frontmatter.
+
+    Distinct from ``status`` (active/deleted/superseded): lifecycle tracks the
+    review workflow (current/pending/needs-reconcile). New writes are current;
+    reconciler may move a page to needs-reconcile/pending.
+    """
+    lifecycle = (dict(item.metadata or {}).get("lifecycle") or "").strip()
+    return lifecycle or "current"
 
 
 def _plain_value(value):
@@ -383,13 +425,13 @@ def _write_schema_file(root: Path) -> None:
         "{\n"
         '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
         '  "type": "object",\n'
-        '  "required": ["knowledge_id", "scope", "source_refs", "status", "text_hash"],\n'
+        '  "required": ["knowledge_id", "scope", "source_refs", "status"],\n'
         '  "properties": {\n'
         '    "knowledge_id": {"type": "string"},\n'
         '    "scope": {"enum": ["personal", "organization"]},\n'
         '    "source_refs": {"type": "array"},\n'
         '    "status": {"type": "string"},\n'
-        '    "text_hash": {"type": "string"}\n'
+        '    "lifecycle": {"type": "string"}\n'
         "  }\n"
         "}\n",
         encoding="utf-8",

@@ -24,6 +24,7 @@
     "Не обновлять @ag-ui/client и agui_profile"
   ],
   "implementation_notes": [
+    "ВАЖНО (выявлено при слиянии ветки inventory-expansion, 2026-07-05): ADR про авто-версии ассетов AI UI фиксирует эксплуатационный инцидент 2026-06-15, когда production .env временно переключали на LOCAL_BUSINESS_AI_UI_DRIVER=legacy как обход поломки статики native-драйвера. Перед удалением legacy обязательно проверить deployment silos (deployments/<host>/.env, включая приватные) на остаточный driver=legacy и согласовать с владельцем переключение на native ДО выката; иначе ImproperlyConfigured уронит хост при обновлении.",
     "Сначала инвентаризация: grep -rn legacy по apps/ai, templates, static/src, scripts/e2e, docs, .env* — список удаляемого зафиксировать в executor report до удаления.",
     "config/settings.py: допустимые значения {copilotkit, native}; при legacy — ImproperlyConfigured с текстом о переходе на native; учесть логику LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT.",
     "Проверить, что smoke-матрица AI UI в тестах и e2e сокращена до copilotkit/native и остаётся зелёной.",

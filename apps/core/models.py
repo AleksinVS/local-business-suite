@@ -11,6 +11,13 @@ class Department(models.Model):
         related_name="children",
         verbose_name="Родительское подразделение",
     )
+    oid = models.CharField(
+        "OID",
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
 
     class Meta:
         ordering = ["parent__id", "name", "id"]

@@ -280,8 +280,20 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 actor_context.request_id,
                 actor_context.conversation_id,
                 exc.__class__.__name__,
+                exc_info=True,
             )
-            yield sse_event(run_error_event("ИИ-сервис вернул ошибку."))
+            # If upstream is rate-limited by OpenRouter, surface the reset
+            # timestamp in the user-visible message so the user knows it
+            # is a quota issue, not a connection error.
+            msg = "ИИ-сервис вернул ошибку."
+            exc_str = str(exc).lower()
+            if "rate limit" in exc_str and "free-models-per-day" in exc_str:
+                msg = (
+                    "Дневной лимит OpenRouter на бесплатные модели "
+                    "исчерпан. Сброс завтра в 16:00 UTC, либо пополните "
+                    "аккаунт на 10 кредитов."
+                )
+            yield sse_event(run_error_event(msg))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -321,10 +333,23 @@ async def chat_stream(payload: ChatRequest):
                 actor_context.request_id,
                 actor_context.conversation_id,
                 exc.__class__.__name__,
+                exc_info=True,
             )
+            # Detect OpenRouter daily-quota exhaustion and surface a
+            # user-friendly hint instead of the generic error.
+            error_code = "agent_runtime_error"
+            error_message = "ИИ-сервис вернул ошибку."
+            if "rate limit" in str(exc).lower() and "free-models-per-day" in str(exc).lower():
+                error_code = "rate_limit_exceeded"
+                error_message = (
+                    "Дневной лимит OpenRouter на бесплатные модели "
+                    "исчерпан. Сброс 1 июля в 16:00 UTC, либо пополните "
+                    "аккаунт на 10 кредитов."
+                )
             yield "data: " + json.dumps(
                 {
-                    "error": "agent_runtime_error",
+                    "error": error_code,
+                    "message": error_message,
                     "request_id": actor_context.request_id,
                     "conversation_id": actor_context.conversation_id,
                 }

@@ -3022,6 +3022,58 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+/* Form Sections — used by grouped forms (e.g. inventory/device_form.html) */
+.form-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 0;
+  background: var(--surface);
+}
+
+.form-section legend {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.form-section .input-group input[type="text"],
+.form-section .input-group input[type="number"],
+.form-section .input-group input[type="date"],
+.form-section .input-group select,
+.form-section .input-group textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.form-section .input-group .helptext,
+.form-section .input-group .form-text {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.form-section .input-group .error,
+.form-section .input-group .errorlist {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
 .memory-review-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -3215,6 +3267,105 @@ textarea:focus {
   text-align: center;
   padding: 48px;
   color: var(--text-muted);
+}
+
+/* Inventory device groups (collapsible by department) */
+.group-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.group-controls-count {
+  margin-right: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.device-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.device-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.device-group > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem 0.85rem 2.5rem;
+  background: var(--surface);
+  transition: background var(--transition, 0.15s ease);
+  user-select: none;
+  position: relative;
+}
+
+.device-group > summary:hover {
+  background: var(--bg-color, #f1f5f9);
+}
+
+.device-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.device-group > summary::marker {
+  content: "";
+}
+
+.device-group > summary::after {
+  content: "▾";
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  color: var(--text-muted, #64748b);
+  font-size: 0.85rem;
+  transition: transform var(--transition, 0.15s ease);
+}
+
+.device-group[open] > summary::after {
+  transform: translateY(-50%) rotate(0deg);
+}
+
+.device-group-title {
+  flex: 1 1 auto;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-main, #0f172a);
+  overflow-wrap: anywhere;
+}
+
+.device-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--accent-soft, rgba(19, 93, 102, 0.12));
+  color: var(--accent, #0f766e);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.device-group-table {
+  border: none;
+  border-top: 1px solid var(--border, #e2e8f0);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 @media (max-width: 960px) {

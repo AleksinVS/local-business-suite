@@ -289,6 +289,10 @@ docs: # Документация проекта
     ADR-0030-memory-alignment-hybrid-knowledge-v05.md: file # ADR: Приведение системы памяти к архитектуре hybrid-knowledge v0.5
     ADR-0031-runtime-contract-store-and-delivery.md: file # ADR: Единый слой доступа к runtime-контрактам и их доставка в agent-runtime
     ADR-0032-retire-legacy-ai-ui-driver.md: file # ADR: Вывод legacy-драйвера AI UI
+    ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md: file # ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)
+  ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
+    NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
+    NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
   architecture: # Архитектурные документы проекта
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)

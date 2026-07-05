@@ -31,5 +31,6 @@
   "ADR-0029-postgresql-primary-store-and-sqlite-fork.md": "ADR: PostgreSQL как основное хранилище и вынос SQLite-варианта",
   "ADR-0030-memory-alignment-hybrid-knowledge-v05.md": "ADR: Приведение системы памяти к архитектуре hybrid-knowledge v0.5",
   "ADR-0031-runtime-contract-store-and-delivery.md": "ADR: Единый слой доступа к runtime-контрактам и их доставка в agent-runtime",
-  "ADR-0032-retire-legacy-ai-ui-driver.md": "ADR: Вывод legacy-драйвера AI UI"
+  "ADR-0032-retire-legacy-ai-ui-driver.md": "ADR: Вывод legacy-драйвера AI UI",
+  "ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md": "ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)"
 }

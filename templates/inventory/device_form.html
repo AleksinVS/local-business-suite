@@ -3,10 +3,80 @@
 {% block content %}
 <section class="panel">
   <h1>{% if object %}Редактирование медицинского изделия{% else %}Новое медицинское изделие{% endif %}</h1>
+  {% if form.non_field_errors %}
+    <div class="flash error">{{ form.non_field_errors }}</div>
+  {% endif %}
   <form method="post" class="stack">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-primary">{% if object %}Сохранить изменения{% else %}Сохранить{% endif %}</button>
+
+    <fieldset class="form-section">
+      <legend>Основное</legend>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name in "name,device_type,manufacturer,production_country,model,serial_number,inventory_number" %}
+            <div class="input-group {% if field.name == 'notes' or field.name == 'serial_number' %}full-width{% endif %}">
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+      <legend>Регистрационные данные</legend>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name in "registration_date,registration_certificate_number,production_date,service_life_years" %}
+            <div class="input-group">
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+      <legend>Размещение</legend>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name in "department,address,location" %}
+            <div class="input-group {% if field.name == 'location' %}full-width{% endif %}">
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="form-section">
+      <legend>Эксплуатация</legend>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name in "operational_status,commissioned_at,decommissioned_at,decommission_reason,notes" %}
+            <div class="input-group {% if field.name == 'decommission_reason' or field.name == 'notes' %}full-width{% endif %}">
+              {{ field.label_tag }}
+              {{ field }}
+              {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{% if object %}Сохранить изменения{% else %}Сохранить{% endif %}</button>
+      <a href="{% url 'inventory:list' %}" class="btn btn-outline">Отмена</a>
+    </div>
   </form>
 </section>
 {% endblock %}

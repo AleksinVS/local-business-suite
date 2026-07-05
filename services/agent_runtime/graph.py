@@ -1,6 +1,10 @@
 import concurrent.futures
+import faulthandler
 import logging
+import os
+import time
 import uuid
+from pathlib import Path
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -16,14 +20,67 @@ from .task_types import resolve_task_type_for_tool
 from .tools import build_tools
 
 # Absolute wall-clock deadline for a single LLM call. LangChain's
-# `init_chat_model(..., timeout=120)` sets a per-request timeout on the
-# underlying httpx client, but in streaming mode httpx resets that
-# timer on every chunk the server sends. A slow LLM provider that
-# trickles one chunk every 30s can keep the call "alive" forever
-# without ever tripping the per-request timeout, so the uvicorn
-# worker blocks indefinitely. The ThreadPoolExecutor wrapper below
-# enforces a real deadline that the streaming timeouts cannot escape.
-LLM_DEADLINE_SECONDS = 120
+# `init_chat_model(..., timeout=120)` sets a per-request timeout on
+# the underlying httpx client, but in streaming mode httpx resets
+# that timer on every chunk the server sends. A slow LLM provider
+# that trickles one chunk every 30s can keep the call "alive"
+# forever without ever tripping the per-request timeout, so the
+# uvicorn worker blocks indefinitely. The ThreadPoolExecutor wrapper
+# below enforces a real deadline that the streaming timeouts cannot
+# escape.
+LLM_DEADLINE_SECONDS = 300
+
+# Soft deadline for documentation / logging purposes. We deliberately
+# do NOT wrap ``agent.invoke`` in ``ThreadPoolExecutor`` because
+# ``executor.shutdown(wait=False)`` does not kill the worker thread
+# of ``concurrent.futures`` — orphan threads accumulate, hold the
+# GIL, and over a few stuck requests make the uvicorn worker process
+# unresponsive even for ``/health``. The hard cap on a single agent
+# invocation therefore relies on the underlying timeouts that already
+# exist: ``httpx`` read/write inside tools (90s) and the LLM call
+# itself (120s via ``_invoke_chat_model_with_deadline``). When those
+# fire the exception already propagates through ``app.py`` to the
+# SSE consumer as ``RUN_ERROR``.
+AGENT_DEADLINE_SECONDS = 300
+
+
+def _dump_all_thread_stacks(reason: str) -> None:
+    """Append every Python thread's stack to ``.local/agent_runtime_faulthandler.log``.
+
+    Best-effort: any IO error during dump is swallowed because the
+    caller is already on the timeout-cancellation path and we don't
+    want logging noise to mask the real failure.
+    """
+    try:
+        log_dir = Path(__file__).resolve().parents[2] / ".local"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / "agent_runtime_faulthandler.log"
+        with path.open("a", encoding="utf-8") as fp:
+            fp.write(f"\n--- faulthandler dump: {reason} ---\n")
+            faulthandler.dump_traceback(file=fp, all_threads=True)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("faulthandler dump failed: %s", exc)
+
+
+def _invoke_agent_with_deadline(invoke, messages):
+    """Best-effort wrapper kept for backwards compatibility.
+
+    Historically this used ``concurrent.futures.ThreadPoolExecutor``
+    with ``shutdown(wait=False)`` to enforce a hard wall-clock cap,
+    but on this Windows host ``wait=False`` does not actually kill the
+    executor's worker thread. Orphan threads accumulate on stuck
+    requests, hold the GIL and eventually make the uvicorn worker
+    unresponsive even for ``/health``. The deadline has been
+    downgraded to a documentation constant (``AGENT_DEADLINE_SECONDS``)
+    while we look for a killable alternative (multiprocessing.Process
+    or subprocess-based isolation).
+
+    For now this just runs ``invoke`` synchronously; the LLM call
+    inside the graph is still protected by
+    ``_invoke_chat_model_with_deadline`` (120s) and tool calls by
+    ``DjangoGatewayClient.execute_tool`` (``httpx`` timeout=90s).
+    """
+    return invoke(messages)
 
 
 def _invoke_chat_model_with_deadline(invoke, messages):
@@ -152,7 +209,7 @@ def run_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0, "timeout": 120}
+    init_kwargs = {"temperature": 0, "timeout": 300}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:
@@ -279,7 +336,7 @@ def stream_agent(
         actor_version=actor_version,
     )
     tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0, "timeout": 120}
+    init_kwargs = {"temperature": 0, "timeout": 300}
     if resolved.provider:
         init_kwargs["model_provider"] = resolved.provider
     if resolved.api_key:
@@ -354,14 +411,36 @@ def stream_agent(
     history_ai_count = sum(1 for m in history_messages if isinstance(m, AIMessage))
 
     ai_yielded = 0
-    for chunk in agent.stream(history_messages, stream_mode="messages"):
-        if isinstance(chunk, tuple) and len(chunk) >= 2:
-            msg = chunk[0]
-            if not isinstance(msg, AIMessage) or msg.tool_calls:
-                continue
-            ai_yielded += 1
-            if ai_yielded <= history_ai_count:
-                continue
-            yield msg.content
+    last_yield_at = time.monotonic()
+    # Hard wall-clock deadline over the whole streaming session.
+    # ``agent.stream`` may stop yielding chunks while LangGraph is
+    # blocked internally between LLM cycles — without a deadline the
+    # SSE consumer in ``app.py:stream_generator`` sits idle and the
+    # user sees no progress. When the deadline fires we dump every
+    # thread's stack and raise, which ``app.py:chat_stream`` translates
+    # into a single ``agent_runtime_error`` SSE event.
+    deadline = AGENT_DEADLINE_SECONDS
+    try:
+        for chunk in agent.stream(history_messages, stream_mode="messages"):
+            now = time.monotonic()
+            if now - last_yield_at > deadline:
+                _dump_all_thread_stacks(
+                    f"agent stream idle for {deadline}s without yielding"
+                )
+                raise RuntimeError(
+                    f"agent stream idle for {deadline}s without yielding"
+                )
+            if isinstance(chunk, tuple) and len(chunk) >= 2:
+                msg = chunk[0]
+                if not isinstance(msg, AIMessage) or msg.tool_calls:
+                    continue
+                ai_yielded += 1
+                if ai_yielded <= history_ai_count:
+                    continue
+                last_yield_at = now
+                yield msg.content
+    except concurrent.futures.TimeoutError:  # pragma: no cover - safety net
+        _dump_all_thread_stacks(f"agent stream exceeded {deadline}s deadline")
+        raise RuntimeError(f"agent stream exceeded {deadline}s deadline")
     for command in ui_commands:
         yield {"ui_command": command}

@@ -21,7 +21,11 @@ wfastcgi.ini
 *.pem
 .local/
 .codex/
-deployments/
+# deployments/: сам каталог в Git (якорь + указатель на приватные репозитории),
+# вложенные каталоги хостов — приватные субмодули/клоны, в Git не попадают
+deployments/*
+!deployments/.desc.json
+!deployments/DEPLOY_PRIVATE.md
 VOB3/
 node_modules/
 clients/*/dist/

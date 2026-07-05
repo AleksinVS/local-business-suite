@@ -27,7 +27,7 @@
   ],
   "implementation_notes": [
     "Кандидаты на архив по расхождению backlog/workflow: architecture-review-remediation-2026-06-01 (superseded новым блоком), design-patterns-hardening-2026-06-01, memory-audit-review-ui, memory-hybrid-ranking-profiles, settings-center-gui, testing-policy-and-independent-verification, universal-right-drawer-ai-navigation — список утвердить у владельца одним вопросом.",
-    "deployments/ в .gitignore: проверить текущее правило и добавить негацию !deployments/DEPLOY_PRIVATE.md (и !deployments/.desc.json), иначе перенесённый файл выпадет из git; git mv выполнять после правки .gitignore.",
+    "УЖЕ ВЫПОЛНЕНО (2026-07-05, оркестратором по прямому указанию владельца): перенос DEPLOY_PRIVATE.md в deployments/, правило .gitignore 'deployments/*' с негациями !.desc.json/!DEPLOY_PRIVATE.md (вложенные каталоги хостов остаются вне Git — будущие приватные субмодули), deployments/.desc.json, обновление корневого .desc.json и PROJECT_STRUCTURE.yaml. В пакете — только проверить состояние, не дублировать.",
     "ARCHITECTURE.md: ссылку на AI-архитектуру заменить на актуальные документы (docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md / NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md) или удалить; заодно добавить ADR-0031/0032 в список ADR.",
     "Backlog: добавить недостающие active-направления или убрать завершённые; завершённые задачи удалять, а не помечать.",
     "Выполняется последним пакетом блока — фиксирует итоговое состояние."

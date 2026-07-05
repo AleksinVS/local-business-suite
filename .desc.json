@@ -23,7 +23,6 @@
   "CLAUDE.md": "Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)",
   "AGENTS.md": "Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)",
   "BACKLOG.md": "Корневой указатель на актуальный backlog в docs/planning/backlog.md",
-  "DEPLOY_PRIVATE.md": "Инструкции по приватному IIS-деплою через deployments/<host>/",
   "Dockerfile": "Docker-образ для web (Django + Gunicorn)",
   "docker-compose.yml": "Локальный Docker Compose (dev)",
   "docker-compose.prod.yml": "Production Docker Compose (web + agent-runtime + caddy)",

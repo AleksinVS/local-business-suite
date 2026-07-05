@@ -262,7 +262,9 @@ def search_document_source(document: MemorySearchDocument) -> MemorySource | Non
 
 
 def _user_has_role_flag(user, flag: str) -> bool:
-    role_rules = getattr(settings, "LOCAL_BUSINESS_ROLE_RULES", {}) or {}
+    from apps.core.contract_store import get_contract
+
+    role_rules = get_contract("role_rules")
     role_names = set(user.groups.values_list("name", flat=True))
     return any(bool((role_rules.get(role_name) or {}).get(flag)) for role_name in role_names)
 

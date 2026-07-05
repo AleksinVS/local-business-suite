@@ -1,3 +1,8 @@
+import json
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -7,6 +12,27 @@ from django.urls import reverse
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 from apps.notifications.models import NotificationRecipient
+
+
+@contextmanager
+def _override_contract_file(setting_name, filename, payload):
+    """Пишет payload во временный файл и указывает на него *_FILE-настройку.
+
+    После ADR-0031 политики читают контракты через contract store (файл), а не
+    через ``settings.LOCAL_BUSINESS_*`` payload-константу, поэтому тестовые
+    подмены должны переопределять путь к файлу и сбрасывать кэш store.
+    """
+    from apps.core.contract_store import _reset_for_tests
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / filename
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        with override_settings(**{setting_name: path}):
+            _reset_for_tests()
+            try:
+                yield path
+            finally:
+                _reset_for_tests()
 
 from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
@@ -175,8 +201,8 @@ class WorkOrderRoleMatrixTests(TestCase):
     def test_workorder_number_is_human_readable(self):
         self.assertEqual(self.workorder.number, str(self.workorder.pk))
 
-    @override_settings(
-        LOCAL_BUSINESS_ROLE_RULES={
+    def test_transition_rights_can_come_from_settings_defined_role(self):
+        dispatcher_rules = {
             "dispatcher": {
                 "view_scope": "all",
                 "create_workorder": True,
@@ -195,18 +221,19 @@ class WorkOrderRoleMatrixTests(TestCase):
                 "manage_roles": False,
             }
         }
-    )
-    def test_transition_rights_can_come_from_settings_defined_role(self):
-        dispatcher = User.objects.create_user(username="dispatcher", password="pass")
-        dispatcher_group, _ = Group.objects.get_or_create(name="dispatcher")
-        dispatcher.groups.add(dispatcher_group)
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", dispatcher_rules
+        ):
+            dispatcher = User.objects.create_user(username="dispatcher", password="pass")
+            dispatcher_group, _ = Group.objects.get_or_create(name="dispatcher")
+            dispatcher.groups.add(dispatcher_group)
 
-        self.assertTrue(can_view(dispatcher, self.workorder))
-        self.assertTrue(can_transition(dispatcher, self.workorder, WorkOrderStatus.ACCEPTED))
-        self.assertFalse(can_transition(dispatcher, self.workorder, WorkOrderStatus.IN_PROGRESS))
+            self.assertTrue(can_view(dispatcher, self.workorder))
+            self.assertTrue(can_transition(dispatcher, self.workorder, WorkOrderStatus.ACCEPTED))
+            self.assertFalse(can_transition(dispatcher, self.workorder, WorkOrderStatus.IN_PROGRESS))
 
-    @override_settings(
-        LOCAL_BUSINESS_WORKFLOW_RULES={
+    def test_transition_matrix_can_come_from_workflow_config(self):
+        workflow_rules = {
             "statuses": [
                 "new",
                 "accepted",
@@ -226,10 +253,11 @@ class WorkOrderRoleMatrixTests(TestCase):
                 "cancelled": [],
             },
         }
-    )
-    def test_transition_matrix_can_come_from_workflow_config(self):
-        self.assertTrue(can_transition(self.technician, self.workorder, WorkOrderStatus.ACCEPTED))
-        self.assertFalse(can_transition(self.technician, self.workorder, WorkOrderStatus.CANCELLED))
+        with _override_contract_file(
+            "LOCAL_BUSINESS_WORKFLOW_RULES_FILE", "workflow_rules.json", workflow_rules
+        ):
+            self.assertTrue(can_transition(self.technician, self.workorder, WorkOrderStatus.ACCEPTED))
+            self.assertFalse(can_transition(self.technician, self.workorder, WorkOrderStatus.CANCELLED))
 
 
 class WorkOrderViewPermissionTests(TestCase):

@@ -2,7 +2,6 @@ from collections import OrderedDict
 import json
 from urllib.parse import urlencode
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
@@ -111,10 +110,9 @@ def _filter_values(request, key):
 
 
 def _workorder_status_color_style():
-    statuses = getattr(settings, "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS", {}).get(
-        "statuses",
-        {},
-    )
+    from apps.core.contract_store import get_contract
+
+    statuses = get_contract("workorder_status_colors").get("statuses", {})
     declarations = []
     for status, config in statuses.items():
         color = config.get("color")

@@ -60,7 +60,36 @@ def health_details(request):
         health_status["services"]["ai_runtime"] = {"status": "unreachable", "message": str(e)}
         # We don't set overall_ok = False here to allow portal to work even if AI is down
 
-    # 3. LDAP Connectivity (if configured)
+    # 3. Contract store health (ADR-0031) — активная проверка, а не только флаг
+    # текущего воркера: get_contract() перечитывает файл при изменении ключа
+    # метаданных (дёшево — один stat при неизменном файле), поэтому health видит
+    # фактическое состояние рабочих копий. Если файл перестал читаться после
+    # валидного старта — store отдаёт последний валидный снимок и помечает
+    # деградацию; если валидного снимка нет вовсе — фиксируем ошибку контракта.
+    from apps.core.contract_store import (
+        ContractStoreError,
+        get_contract,
+        get_degradation_state,
+        registered_contracts,
+    )
+
+    contract_errors = {}
+    for contract_name in registered_contracts():
+        try:
+            get_contract(contract_name)
+        except ContractStoreError as exc:
+            contract_errors[contract_name] = str(exc)
+    degraded_contracts = {**get_degradation_state()["contracts"], **contract_errors}
+    if degraded_contracts:
+        logger.error("Health check: contract store degraded: %s", degraded_contracts)
+        health_status["services"]["contracts"] = {
+            "status": "degraded",
+            "contracts": degraded_contracts,
+        }
+    else:
+        health_status["services"]["contracts"] = {"status": "ok"}
+
+    # 4. LDAP Connectivity (if configured)
     auth_mode = getattr(settings, "DJANGO_AUTH_MODE", "local")
     if auth_mode in ["ldap", "remote_user", "hybrid"]:
         # We could add a more robust LDAP ping here if ldap3 is available

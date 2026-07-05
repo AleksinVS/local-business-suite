@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -5,9 +6,11 @@ from tempfile import TemporaryDirectory
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
 
 from .contract_services import apply_contract_payload
@@ -115,6 +118,42 @@ class SettingsCenterContractTests(TestCase):
             self.assertTrue(change.masked_diff["changed"])
             self.assertEqual(load_json_file(role_file)[first_role]["display_name"], "Changed role name")
 
+    def test_apply_with_stale_base_hash_is_rejected(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="stale-admin", password="pass", is_staff=True)
+        with TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            payload = load_json_file("contracts/role_rules.json")
+            role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            first_role = next(role for role in payload if role != "$schema")
+
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                _reset_for_tests()
+                self.addCleanup(_reset_for_tests)
+                # Читаем версию, которую собираемся править, и запоминаем её хеш.
+                stale_hash = normalized_hash(get_contract("role_rules"))
+
+                # Конкурентная правка того же файла другим процессом.
+                concurrent = copy.deepcopy(payload)
+                concurrent[first_role]["display_name"] = "Concurrent change"
+                role_file.write_text(json.dumps(concurrent, ensure_ascii=False), encoding="utf-8")
+
+                attempted = copy.deepcopy(payload)
+                attempted[first_role]["display_name"] = "My lost update"
+                with self.assertRaisesMessage(ValidationError, "изменён другим процессом"):
+                    apply_contract_payload(
+                        actor=actor,
+                        setting_id="core.contract.role_rules",
+                        raw_payload=json.dumps(attempted, ensure_ascii=False),
+                        confirmed=True,
+                        base_hash=stale_hash,
+                    )
+
+                # Потерянного обновления нет: на диске осталась конкурентная версия.
+                saved = load_json_file(role_file)
+                self.assertEqual(saved[first_role]["display_name"], "Concurrent change")
+
     def test_workflow_transition_matrix_view_can_allow_all_transitions(self):
         actor = User.objects.create_user(username="workflow-admin", password="pass", is_staff=True)
         payload = {
@@ -147,7 +186,10 @@ class SettingsCenterContractTests(TestCase):
                 self.assertEqual(set(saved["transitions"]["new"]), {"accepted", "closed"})
                 self.assertEqual(set(saved["transitions"]["accepted"]), {"new", "closed"})
                 self.assertEqual(set(saved["transitions"]["closed"]), {"new", "accepted"})
-                self.assertEqual(settings.LOCAL_BUSINESS_WORKFLOW_RULES, saved)
+                # После ADR-0031 согласованность обеспечивает contract store, а не
+                # присваивание settings.* в текущем воркере: store перечитывает
+                # обновлённый файл по ключу метаданных.
+                self.assertEqual(get_contract("workflow_rules"), saved)
             self.assertEqual(SettingsChange.objects.filter(setting_id="core.contract.workflow_rules").count(), 1)
 
     def test_workorder_status_color_palette_view_updates_contract(self):

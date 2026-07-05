@@ -665,16 +665,16 @@ def update_role_permissions_for_actor(*, actor, payload):
     """
     Изменяет права роли через Settings Center service layer.
 
-    Так AI-инструмент использует тот же путь записи, что и UI: валидацию,
-    атомарную запись в рабочий контракт и SettingsChange audit.
+    AI-инструмент и UI используют один и тот же путь записи
+    ``apply_contract_payload``: валидацию, атомарную запись в рабочий контракт,
+    SettingsChange audit и оптимистическую проверку версии по хешу.
     """
     if not actor.is_superuser:
         raise PermissionDenied("Критичное действие: менять права ролей могут только администраторы с полными правами.")
 
-    from django.conf import settings
     from apps.settings_center.contract_services import apply_contract_payload
+    from apps.core.contract_store import get_contract, normalized_hash
     import json
-    import copy
 
     role_name = payload.get("role_name")
     permissions_map = payload.get("permissions_map", {})
@@ -684,7 +684,8 @@ def update_role_permissions_for_actor(*, actor, payload):
     if not isinstance(permissions_map, dict):
         raise ValidationError("permissions_map должен быть JSON-объектом.")
 
-    current_rules = copy.deepcopy(settings.LOCAL_BUSINESS_ROLE_RULES)
+    current_rules = get_contract("role_rules")
+    base_hash = normalized_hash(current_rules)
     if role_name not in current_rules:
         raise ValidationError(f"Роль '{role_name}' не существует.")
 
@@ -702,6 +703,7 @@ def update_role_permissions_for_actor(*, actor, payload):
         setting_id="core.contract.role_rules",
         raw_payload=json.dumps(current_rules, ensure_ascii=False),
         confirmed=True,
+        base_hash=base_hash,
     )
     return {
         "ok": True,
@@ -715,8 +717,8 @@ def get_role_rules_for_actor(*, actor, payload):
     """Returns the current role configuration from role_rules.json."""
     if not actor.is_authenticated:
         raise PermissionDenied("Требуется вход в систему.")
-    from django.conf import settings
-    return {"rules": settings.LOCAL_BUSINESS_ROLE_RULES}
+    from apps.core.contract_store import get_contract
+    return {"rules": get_contract("role_rules")}
 
 def list_users_for_actor(*, actor, payload):
     """Lists users with their roles and departments. Only for superusers."""

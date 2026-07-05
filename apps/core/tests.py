@@ -581,6 +581,284 @@ class DepartmentViewTests(TestCase):
                 self.assertFalse(saved["manager"]["manage_roles"])
                 self.assertEqual(saved["manager"]["view_scope"], "authored")
 
+    def test_saving_invalid_role_rules_via_ui_is_rejected_and_file_unchanged(self):
+        from apps.core.contract_store import _reset_for_tests
+        from apps.settings_center.models import SettingsChange
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "role_rules.json"
+            initial_payload = {
+                "manager": {
+                    "view_scope": "all",
+                    "create_workorder": True,
+                    "edit_scope": "all",
+                    "comment_scope": "visible",
+                    "upload_attachment_scope": "visible",
+                    "confirm_closure_scope": "all",
+                    "rate_scope": "all",
+                    "transition_scope": "all",
+                    "transition_targets": "*",
+                    "manage_inventory": True,
+                    "manage_board_columns": True,
+                    "manage_assignments": True,
+                    "view_analytics": True,
+                    "manage_departments": True,
+                    "manage_roles": True,
+                }
+            }
+            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
+            before = config_path.read_text(encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
+                _reset_for_tests()
+                self.addCleanup(_reset_for_tests)
+                self.client.force_login(self.manager)
+                response = self.client.post(
+                    reverse("core:role_rules"),
+                    {
+                        "role_manager_manage_roles": "on",
+                        "role_manager_view_scope": "totally_invalid_scope",
+                    },
+                )
+                # Невалидный view_scope отклоняется валидатором в service layer.
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(config_path.read_text(encoding="utf-8"), before)
+                self.assertEqual(
+                    SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
+                    0,
+                )
+
+    def test_saving_role_rules_via_ui_creates_settings_change(self):
+        from apps.core.contract_store import _reset_for_tests
+        from apps.settings_center.models import SettingsChange
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "role_rules.json"
+            initial_payload = {
+                "manager": {
+                    "view_scope": "all",
+                    "create_workorder": True,
+                    "edit_scope": "all",
+                    "comment_scope": "visible",
+                    "upload_attachment_scope": "visible",
+                    "confirm_closure_scope": "all",
+                    "rate_scope": "all",
+                    "transition_scope": "all",
+                    "transition_targets": "*",
+                    "manage_inventory": True,
+                    "manage_board_columns": True,
+                    "manage_assignments": True,
+                    "view_analytics": True,
+                    "manage_departments": True,
+                    "manage_roles": True,
+                }
+            }
+            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
+                _reset_for_tests()
+                self.addCleanup(_reset_for_tests)
+                self.client.force_login(self.manager)
+                response = self.client.post(
+                    reverse("core:role_rules"),
+                    {
+                        "role_manager_manage_roles": "on",
+                        "role_manager_create_workorder": "on",
+                        "role_manager_view_scope": "authored",
+                    },
+                )
+                self.assertEqual(response.status_code, 302)
+                changes = SettingsChange.objects.filter(setting_id="core.contract.role_rules")
+                self.assertEqual(changes.count(), 1)
+                self.assertEqual(changes.first().status, SettingsChange.Status.APPLIED)
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["manager"]["view_scope"], "authored")
+
+    def test_role_rules_form_rejects_lost_update_with_stale_hidden_hash(self):
+        """Классический lost update: два администратора открыли форму,
+        второй сохраняет позже — его запись со старым hidden base_hash
+        отклоняется, конкурентная правка не перезаписывается."""
+        import copy
+
+        from apps.core.contract_store import _reset_for_tests
+        from apps.settings_center.contract_services import apply_contract_payload
+        from apps.settings_center.models import SettingsChange
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "role_rules.json"
+            initial_payload = {
+                "manager": {
+                    "view_scope": "all",
+                    "create_workorder": True,
+                    "edit_scope": "all",
+                    "comment_scope": "visible",
+                    "upload_attachment_scope": "visible",
+                    "confirm_closure_scope": "all",
+                    "rate_scope": "all",
+                    "transition_scope": "all",
+                    "transition_targets": "*",
+                    "manage_inventory": True,
+                    "manage_board_columns": True,
+                    "manage_assignments": True,
+                    "view_analytics": True,
+                    "manage_departments": True,
+                    "manage_roles": True,
+                }
+            }
+            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
+                _reset_for_tests()
+                self.addCleanup(_reset_for_tests)
+                self.client.force_login(self.manager)
+
+                # Администратор №2 открывает форму: hidden base_hash в контексте.
+                response = self.client.get(reverse("core:role_rules"))
+                stale_hash = response.context["role_rules_base_hash"]
+                self.assertContains(response, 'name="base_hash"')
+
+                # Администратор №1 сохраняет свою правку раньше (через service layer).
+                concurrent = copy.deepcopy(initial_payload)
+                concurrent["manager"]["view_scope"] = "department_branch"
+                apply_contract_payload(
+                    actor=self.manager,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(concurrent, ensure_ascii=False),
+                    confirmed=True,
+                )
+
+                # Администратор №2 сохраняет форму со старым hidden base_hash.
+                response = self.client.post(
+                    reverse("core:role_rules"),
+                    {
+                        "base_hash": stale_hash,
+                        "role_manager_manage_roles": "on",
+                        "role_manager_create_workorder": "on",
+                        "role_manager_view_scope": "authored",
+                    },
+                    follow=True,
+                )
+
+                # Запись отклонена: файл хранит конкурентную версию, второй
+                # SettingsChange не создан, пользователю показана ошибка.
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["manager"]["view_scope"], "department_branch")
+                self.assertEqual(
+                    SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
+                    1,
+                )
+                self.assertContains(response, "изменён другим процессом")
+
+
+class ContractStoreTests(TestCase):
+    def setUp(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        _reset_for_tests()
+        self.addCleanup(_reset_for_tests)
+        self.base = json_utils.load_json_file("contracts/role_rules.json")
+
+    def _write(self, path, payload):
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    def test_cache_invalidates_on_metadata_key_change(self):
+        from apps.core.contract_store import get_contract
+        from apps.core.json_utils import atomic_write_json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            self._write(role_file, self.base)
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                first = get_contract("role_rules")
+                self.assertIn("manager", first)
+                self.assertNotEqual(first["manager"].get("display_name"), "Изменённый менеджер")
+
+                changed = json.loads(json.dumps(self.base))
+                changed["manager"]["display_name"] = "Изменённый менеджер"
+                # Атомарная запись через os.replace меняет inode -> ключ
+                # (st_mtime_ns, st_size, st_ino) отличается, кэш инвалидируется.
+                atomic_write_json(role_file, changed)
+
+                second = get_contract("role_rules")
+                self.assertEqual(second["manager"].get("display_name"), "Изменённый менеджер")
+
+    def test_independent_workers_see_change_after_apply(self):
+        from apps.core.contract_store import _reset_for_tests, get_contract
+        from apps.settings_center.contract_services import apply_contract_payload
+
+        actor = User.objects.create_user(username="store-admin", password="pass", is_staff=True)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            self._write(role_file, self.base)
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                # "Воркер A" читает и кэширует текущую версию.
+                worker_a_before = get_contract("role_rules")
+                self.assertNotEqual(
+                    worker_a_before["manager"].get("display_name"), "Роль обновлена"
+                )
+
+                changed = json.loads(json.dumps(self.base))
+                changed["manager"]["display_name"] = "Роль обновлена"
+                apply_contract_payload(
+                    actor=actor,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(changed, ensure_ascii=False),
+                    confirmed=True,
+                )
+
+                # Тот же процесс без in-process refresh перечитывает новую версию.
+                worker_a_after = get_contract("role_rules")
+                self.assertEqual(worker_a_after["manager"].get("display_name"), "Роль обновлена")
+
+                # Независимый "воркер B" (пустой кэш) видит ту же новую версию.
+                _reset_for_tests()
+                worker_b = get_contract("role_rules")
+                self.assertEqual(worker_b["manager"].get("display_name"), "Роль обновлена")
+
+    def test_returned_payload_mutation_does_not_corrupt_cache(self):
+        from apps.core.contract_store import get_contract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            self._write(role_file, self.base)
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                first = get_contract("role_rules")
+                original_scope = first["manager"]["view_scope"]
+                first["manager"]["view_scope"] = "none"
+                first["__injected__"] = {"x": 1}
+
+                second = get_contract("role_rules")
+                self.assertEqual(second["manager"]["view_scope"], original_scope)
+                self.assertNotIn("__injected__", second)
+
+    def test_first_read_of_broken_file_fails_fast(self):
+        from apps.core.contract_store import ContractStoreError, get_contract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            role_file.write_text("{ broken json ", encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                with self.assertRaises(ContractStoreError):
+                    get_contract("role_rules")
+
+    def test_broken_file_after_valid_read_serves_last_valid_and_flags_degradation(self):
+        from apps.core.contract_store import get_contract, get_degradation_state
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            self._write(role_file, self.base)
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                valid = get_contract("role_rules")
+                self.assertIn("manager", valid)
+                self.assertFalse(get_degradation_state()["degraded"])
+
+                # Ломаем файл: размер и mtime меняются -> ключ отличается ->
+                # store пытается перечитать, ловит ошибку и отдаёт последний валидный.
+                role_file.write_text("{ broken json ", encoding="utf-8")
+                served = get_contract("role_rules")
+                self.assertEqual(served["manager"], valid["manager"])
+
+                state = get_degradation_state()
+                self.assertTrue(state["degraded"])
+                self.assertIn("role_rules", state["contracts"])
+
 
 class DiagnosticEndpointTests(TestCase):
     def setUp(self):
@@ -603,6 +881,34 @@ class DiagnosticEndpointTests(TestCase):
         response = self.client.get(reverse("core:health_details"))
         self.assertEqual(response.status_code, 200)
         self.assertIn("services", response.json())
+
+    def test_health_details_reports_contract_store_degradation(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        _reset_for_tests()
+        self.addCleanup(_reset_for_tests)
+        self.client.force_login(self.staff)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_file = Path(tmpdir) / "role_rules.json"
+            role_file.write_text(
+                json_utils.pretty_json(json_utils.load_json_file("contracts/role_rules.json")),
+                encoding="utf-8",
+            )
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+                # Health активно читает контракты через store: первый запрос
+                # валиден (и заполняет кэш воркера).
+                response = self.client.get(reverse("core:health_details"))
+                self.assertEqual(response.json()["services"]["contracts"], {"status": "ok"})
+
+                # Порчу файла обнаруживает сам health-запрос, без предварительных
+                # чтений контракта другим кодом (активная проверка, не только
+                # пассивный флаг текущего воркера).
+                role_file.write_text("{ broken json ", encoding="utf-8")
+                response = self.client.get(reverse("core:health_details"))
+                contracts = response.json()["services"]["contracts"]
+                self.assertEqual(contracts["status"], "degraded")
+                self.assertIn("role_rules", contracts["contracts"])
 
 
 class ArchitectureContractTests(TestCase):

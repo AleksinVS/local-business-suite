@@ -1,17 +1,18 @@
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.core.exceptions import ValidationError
 from django.shortcuts import redirect
 from django.db.models import Count
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
+from apps.core.contract_store import get_contract, normalized_hash
 from apps.workorders.policies import (
     can_manage_departments,
     can_manage_inventory,
     can_manage_roles,
 )
-from .forms import DepartmentForm, RoleRulesForm
+from .forms import DepartmentForm
 from .models import Department
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import WorkOrder, WorkOrderStatus
@@ -86,8 +87,13 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["role_rules"] = settings.LOCAL_BUSINESS_ROLE_RULES
-        
+        role_rules = get_contract("role_rules", request=self.request)
+        context["role_rules"] = role_rules
+        # Хеш отрисованной версии уходит в форму hidden-полем: защита от
+        # потерянного обновления «два администратора открыли форму, второй
+        # сохранил позже» — запись со старым хешом будет отклонена.
+        context["role_rules_base_hash"] = normalized_hash(role_rules)
+
         # Define common boolean flags for UI
         context["available_flags"] = [
             ("create_workorder", "Создание заявок"),
@@ -109,14 +115,21 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
 
     def post(self, request, *args, **kwargs):
         import json
-        from .json_utils import pretty_json, atomic_write_json
-        
-        # Load current rules to maintain fields we don't edit in simple UI
-        current_rules = settings.LOCAL_BUSINESS_ROLE_RULES.copy()
-        
-        # Update based on form data
+
+        from apps.settings_center.contract_services import apply_contract_payload
+
+        current_rules = get_contract("role_rules", request=request)
+        # Хеш версии, которую пользователь видел при открытии формы (hidden-поле
+        # из get_context_data). Если файл с тех пор изменился — запись отклонит
+        # оптимистическая проверка. Отсутствие поля (прямые POST старых клиентов)
+        # означает запись без проверки — обратная совместимость.
+        base_hash = request.POST.get("base_hash") or None
+
+        # Обновляем только поля, которыми управляет упрощённый UI; остальные поля
+        # ролей (в т.ч. $schema) сохраняются как есть.
         for role_name, rules in current_rules.items():
-            # Update boolean flags
+            if not isinstance(rules, dict):
+                continue
             for flag, _ in [
                 ("create_workorder", "Создание заявок"),
                 ("manage_inventory", "Управление инвентарем"),
@@ -127,15 +140,23 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
                 ("manage_roles", "Управление ролями"),
             ]:
                 rules[flag] = request.POST.get(f"role_{role_name}_{flag}") == "on"
-            
-            # Update view_scope
+
             view_scope = request.POST.get(f"role_{role_name}_view_scope")
             if view_scope:
                 rules["view_scope"] = view_scope
 
-        # Save back to file
-        atomic_write_json(settings.LOCAL_BUSINESS_ROLE_RULES_FILE, current_rules)
-        settings.LOCAL_BUSINESS_ROLE_RULES = current_rules
-        
+        # Единственный путь записи: валидация + атомарная запись + SettingsChange.
+        try:
+            apply_contract_payload(
+                actor=request.user,
+                setting_id="core.contract.role_rules",
+                raw_payload=json.dumps(current_rules, ensure_ascii=False),
+                confirmed=True,
+                base_hash=base_hash,
+            )
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("core:role_rules")
+
         messages.success(request, "Права ролей успешно обновлены.")
         return redirect("core:role_rules")

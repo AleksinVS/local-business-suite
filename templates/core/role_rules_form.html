@@ -17,6 +17,7 @@
 
   <form method="post" class="role-rules-form">
     {% csrf_token %}
+    <input type="hidden" name="base_hash" value="{{ role_rules_base_hash }}">
     <div class="table-container">
       <table class="data-table">
         <thead>

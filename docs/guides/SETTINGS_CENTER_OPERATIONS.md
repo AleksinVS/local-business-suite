@@ -34,6 +34,27 @@ Runtime contracts редактируются как полный JSON payload:
 
 Write выполняется атомарно через runtime contract path в `data/contracts/`. Default contracts в `contracts/` остаются Git-managed baseline.
 
+После ADR-0031 чтение `role_rules`, `workflow_rules` и `workorder_status_colors` идет через
+`apps.core.contract_store.get_contract(name)`: каждый процесс перечитывает рабочую копию по
+ключу метаданных файла `(st_mtime_ns, st_size, st_ino)`, поэтому изменение контракта
+применяется во всех gunicorn-воркерах без перезапуска. Единственный путь записи —
+`apps.settings_center.contract_services.apply_contract_payload` (валидация, атомарная запись,
+audit `SettingsChange`). Против потерянного обновления при конкурентной правке запись
+принимает `base_hash` — sha256 нормализованной прочитанной версии; при несовпадении с
+фактическим файлом запись отклоняется с предложением перечитать.
+
+Если рабочая копия контракта перестала читаться после валидного старта (битый JSON, ошибка
+валидации), store продолжает отдавать последний валидный снимок, пишет ERROR в лог и
+выставляет сигнал деградации: он виден в `/health/details/` в блоке `services.contracts`
+(endpoint активно перечитывает зарегистрированные контракты) и доступен программно через
+`apps.core.contract_store.get_degradation_state()`. Деградация — повод немедленно починить
+файл в `data/contracts/`, а не штатный режим.
+
+Store отдает файл как есть, без legacy-нормализации: на старых копиях `role_rules` без
+ключей `view_analytics`/`manage_departments`/`manage_roles` роли не получат этих прав
+(fail-closed), поэтому при обновлении старых установок пересохраните `role_rules` через
+Settings Center — запись допишет недостающие ключи.
+
 Для переходов статусов заявок есть отдельный экран `/settings/workflow/transitions/`. Он редактирует тот же `workflow_rules` contract, но показывает матрицу `из статуса -> в статус`. Кнопка `Разрешить все` включает все переходы между разными статусами; права ролей из `role_rules` продолжают применяться отдельно.
 
 После изменения memory sources/profiles/routing/ingestion profiles может потребоваться reindex. После изменения role/workflow rules нужно проверить доступы на тестовом пользователе.

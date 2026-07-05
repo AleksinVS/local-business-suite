@@ -1,4 +1,4 @@
-from django.conf import settings
+from apps.core.contract_store import get_contract
 
 from .models import WorkOrder, WorkOrderStatus
 
@@ -13,11 +13,11 @@ def user_roles(user):
 
 
 def role_rules():
-    return settings.LOCAL_BUSINESS_ROLE_RULES
+    return get_contract("role_rules")
 
 
 def workflow_rules():
-    return settings.LOCAL_BUSINESS_WORKFLOW_RULES
+    return get_contract("workflow_rules")
 
 
 def status_transitions():

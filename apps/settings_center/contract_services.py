@@ -6,6 +6,7 @@ import json
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
+from apps.core.contract_store import normalized_hash
 from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
@@ -73,7 +74,9 @@ def preview_contract_payload(*, descriptor, raw_payload: str):
     }
 
 
-def apply_contract_payload(*, actor, setting_id: str, raw_payload: str, confirmed: bool):
+def apply_contract_payload(
+    *, actor, setting_id: str, raw_payload: str, confirmed: bool, base_hash: str | None = None
+):
     descriptor = get_registry().get(setting_id)
     if descriptor.storage_kind != "runtime_contract":
         raise ValidationError("Настройка не связана с рабочим контрактом.")
@@ -83,9 +86,16 @@ def apply_contract_payload(*, actor, setting_id: str, raw_payload: str, confirme
         raise ValidationError("Для изменения контракта нужно явное подтверждение.")
 
     before = read_contract_value(descriptor)
+    # Оптимистическая проверка против потерянного обновления при конкурентной
+    # правке: если вызывающий передал хеш прочитанной версии, а файл уже
+    # изменился — отклоняем запись и предлагаем перечитать.
+    if base_hash is not None and normalized_hash(before) != base_hash:
+        raise ValidationError(
+            "Контракт уже изменён другим процессом. Перечитайте актуальную версию "
+            "и повторите изменение."
+        )
     after = parse_and_validate_payload(descriptor, raw_payload)
     atomic_write_json(_contract_path(descriptor), after)
-    _refresh_inprocess_setting(descriptor, after)
     return record_settings_change(
         actor=actor,
         descriptor=descriptor,
@@ -116,9 +126,3 @@ def _contract_path(descriptor):
     if not setting_name:
         raise ValidationError("Дескриптор не задает settings_path.")
     return getattr(settings, setting_name)
-
-
-def _refresh_inprocess_setting(descriptor, payload):
-    settings_attr = descriptor.metadata.get("settings_payload_attr")
-    if settings_attr:
-        setattr(settings, settings_attr, payload)

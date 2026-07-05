@@ -27,7 +27,9 @@ def can_manage_ai_skills(user: Any) -> bool:
     has_perm = getattr(user, "has_perm", None)
     if callable(has_perm) and has_perm(AI_MANAGE_SKILLS_PERMISSION):
         return True
-    role_rules = getattr(settings, "LOCAL_BUSINESS_ROLE_RULES", {}) or {}
+    from apps.core.contract_store import get_contract
+
+    role_rules = get_contract("role_rules")
     role_names = set(user.groups.values_list("name", flat=True))
     return any(bool(role_rules.get(role, {}).get("manage_ai_skills")) for role in role_names)
 

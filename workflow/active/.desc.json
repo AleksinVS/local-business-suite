@@ -21,6 +21,6 @@
   "copilotkit-ai-ui-chat-development": "Workflow: разработка ИИ-чата в режиме CopilotKit UI",
   "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата",
   "postgresql-primary-store-migration": "Workflow: миграция основного хранилища на PostgreSQL",
-  "memory-hybrid-knowledge-v05-alignment": "Workflow: приведение памяти к архитектуре hybrid-knowledge v0.5 (ADR-0030)",
-  "architecture-review-remediation-2026-07-04": "Workflow: устранение находок архитектурного ревью 2026-07-04 (12 task packets)"
+  "architecture-review-remediation-2026-07-04": "Workflow: устранение находок архитектурного ревью 2026-07-04 (12 task packets)",
+  "memory-alignment-hardening": "Workflow: доводка памяти после ревью целевой архитектуры (3 task packets)"
 }

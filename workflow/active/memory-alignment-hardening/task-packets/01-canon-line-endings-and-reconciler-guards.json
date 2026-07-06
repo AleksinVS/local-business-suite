@@ -1,0 +1,43 @@
+{
+  "task_id": "01-canon-line-endings-and-reconciler-guards",
+  "title": "LF-нормализация канона и защита reconciler",
+  "status": "ready",
+  "objective": "Гарантировать, что файлы канона всегда LF и хэши платформонезависимы; что пометка страницы reconciler'ом не создает петлю повторной обработки; что два процесса memory_reconcile не работают одновременно.",
+  "write_scope": [
+    "apps/memory/knowledge_files.py",
+    "apps/memory/management/commands/memory_reconcile.py",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "requirements": [
+    "Шаг 1. LF-нормализация. В apps/memory/knowledge_files.py добавить функцию normalize_newlines(text: str) -> str, которая заменяет CRLF на LF, затем одиночные CR на LF, и ничего больше не меняет. Применить ее: (а) в write_knowledge_item_file к body сразу после существующей строки body = (body or '').strip(); (б) в render_knowledge_file к возвращаемой строке; (в) в sha256_text НЕ трогать - вместо этого нормализовать аргумент в местах вычисления text_hash и file_hash внутри write_knowledge_item_file, read_knowledge_item_file и verify_knowledge_item_file (нормализовать прочитанное из файла содержимое перед хешированием и парсингом).",
+    "Шаг 2. Запись без конверсий ОС. В write_knowledge_item_file заменить tmp_path.write_text(content, encoding='utf-8') на запись через open(tmp_path, 'w', encoding='utf-8', newline='') - параметр newline='' запрещает Python подменять LF на CRLF на Windows. Проверить остальные места записи файлов канона (index.md, log.md, pending-страницы, redirect-стабы) и применить тот же способ записи.",
+    "Шаг 3. .gitattributes. В ensure_knowledge_repo после создания каталога и до git init: если файла .gitattributes нет в корне knowledge_repo - создать его с ровно одним содержимым: строка '* -text' плюс перевод строки; затем в местах, где выполняется git add схемы (см. существующую обработку schemas/knowledge_file.schema.json в write_knowledge_item_file), добавлять и .gitattributes, если он еще не закоммичен.",
+    "Шаг 4. Тест LF: создать знание, передав body со вставками '\\r\\n'; проверить, что (а) в файле на диске нет ни одного байта '\\r' (читать файл в бинарном режиме); (б) text_hash совпадает с хэшем того же body, переданного с '\\n'; (в) memory_verify_knowledge_files дает ok=true.",
+    "Шаг 5. Тест отсутствия петли: подготовить страницу, вызвать полный цикл, которым reconciler помечает страницу (lifecycle needs-reconcile или pending - использовать существующий механизм из memory_reconcile), затем запустить memory_reconcile повторно и проверить, что он сообщает ноль обработанных файлов. Если тест падает (пометка выглядит новым изменением): (а) выполнять коммиты reconciler от выделенного git-автора: git -c user.name='memory-reconciler' -c user.email='memory-reconciler@local' commit ...; (б) при сканировании изменений пропускать коммиты автора memory-reconciler, у которых изменены только ключи frontmatter lifecycle и/или audit; (в) обновлять reconcile_state.json после пометки. Реализовать минимально достаточный из пунктов (а)-(в), чтобы тест прошел.",
+    "Шаг 6. Синглтон memory_reconcile. В начале handle() команды: если connection.vendor == 'postgresql' - выполнить SELECT pg_try_advisory_lock(hashtext('memory_reconcile')); при False вывести 'memory_reconcile: already running, skip' и завершиться кодом 0; в finally выполнить SELECT pg_advisory_unlock(hashtext('memory_reconcile')). Если vendor != 'postgresql' (dev SQLite) - создать lock-файл data/memory/reconcile.lock через os.open с флагами O_CREAT|O_EXCL; если файл уже существует - тот же вывод и код 0; в finally удалить lock-файл. Учесть, что lock должен браться и в --dry-run.",
+    "Шаг 7. Тест синглтона: для SQLite-ветки - заранее создать data/memory/reconcile.lock, вызвать команду, проверить вывод 'already running' и что файлы не обрабатывались; после удаления lock-файла команда работает. Для PostgreSQL-ветки достаточно unit-теста, который мокает pg_try_advisory_lock -> False и проверяет ранний выход.",
+    "Шаг 8. Тест платформенных веток блокировки записи: unit-тест, который через monkeypatch скрывает модуль fcntl (ImportError) и проверяет, что knowledge_repo_lock использует Windows/файловую ветку и реально не пускает второй вход (в пределах возможного на POSIX - проверить выбор ветки и отсутствие исключений). Отметить в docstring теста, что полный Windows-прогон выполняется при внедрении на Windows (остаточный риск ретроспективы ADR-0030).",
+    "Шаг 9. Обновить docs/architecture/MEMORY_MVP_CURRENT_STATE.md: добавить в раздел 'Что работает' строки про LF-нормализацию канона и синглтон reconciler.",
+    "ЗАПРЕЩЕНО: массово переписывать существующие файлы знаний; менять формат frontmatter; менять публичный контракт memory.remember/memory.search."
+  ],
+  "acceptance_checks": [
+    "Body с CRLF -> файл на диске без байтов '\\r'; text_hash равен хэшу LF-варианта; memory_verify_knowledge_files ok.",
+    ".gitattributes создается на чистом каталоге knowledge_repo и содержит ровно '* -text'.",
+    "Повторный memory_reconcile после пометки страницы сообщает ноль обработанных файлов.",
+    "При существующем data/memory/reconcile.lock команда завершается кодом 0 с сообщением 'already running' и ничего не обрабатывает.",
+    "Тест ветки блокировки без fcntl проходит.",
+    "python manage.py test apps.memory.tests - зеленый на SQLite и PostgreSQL."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_reconcile --dry-run",
+    "python manage.py memory_verify_knowledge_files",
+    "python manage.py memory_alignment_acceptance_e2e"
+  ],
+  "notes": [
+    "Рискованный пакет (путь записи канона): независимая проверка субагентом по AGENTS.md.",
+    "Основание: ADR-0030, дополнение 2026-07-06, пункты про LF, петлю и синглтон."
+  ]
+}

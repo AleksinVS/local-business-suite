@@ -1,0 +1,38 @@
+{
+  "task_id": "02-eval-golden-set-and-recovery-matrix",
+  "title": "Golden set memory_eval и матрица восстановления",
+  "status": "ready",
+  "objective": "Сделать критерии возврата отложенных контуров проверяемыми: наполнить MemoryEvalCase черновым golden set (не менее 20 кейсов) и получить отчет memory_eval; дополнить MEMORY_DEPLOYMENT.md матрицей восстановления.",
+  "write_scope": [
+    "apps/memory/management/commands/memory_eval_seed.py",
+    "apps/memory/tests.py",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "requirements": [
+    "Шаг 1. Изучить модель MemoryEvalCase (apps/memory/models.py, поля: code, title, suite, status, question, expected_source_codes, expected_document_ids, forbidden_source_codes, forbidden_scope_tokens, metadata) и команду memory_eval (apps/memory/management/commands/memory_eval.py) - как кейсы читаются и что считается прохождением.",
+    "Шаг 2. Создать команду memory_eval_seed с параметрами --suite golden --limit 20 --dry-run. Логика: взять активные организационные знания (MemoryKnowledgeItem, scope=organization, status=active) в порядке created_at, для каждого прочитать тело файла знания через существующий reader и создать MemoryEvalCase: code='golden-<knowledge_id>', suite='golden', title=первые 60 символов тела, question=первые 12 слов тела (без переносов), expected_document_ids=[document_id соответствующего MemorySearchDocument], metadata={'origin': 'seed', 'reviewed': false}. Если организационных знаний меньше limit - добрать персональными знаниями владельца портала. Повторный запуск не создает дубли (get_or_create по code).",
+    "Шаг 3. Прогнать python manage.py memory_eval по suite golden; отчет сохранить в data/memory/eval/ (существующий путь runtime eval reports по AGENTS.md). Если memory_eval не поддерживает выбор suite - добавить параметр --suite с фильтрацией queryset.",
+    "Шаг 4. В docs/guides/MEMORY_USER_GUIDE.md добавить короткий раздел 'Golden set поиска': кейсы создаются memory_eval_seed как черновик (metadata.reviewed=false), владелец знаний просматривает и правит question/expected через админку, после проверки ставит metadata.reviewed=true; критерии возврата профилей ранжирования и graph runtime search опираются на прогоны memory_eval по suite golden.",
+    "Шаг 5. В docs/deployment/MEMORY_DEPLOYMENT.md, в существующий раздел про backup, добавить подраздел 'Матрица восстановления' с дословно следующим содержимым (адаптировать только форматирование): Невосстановимое (обязательный backup): PostgreSQL - SecretHandle, SecretAccessAudit, MemoryAccessAudit, MemoryIngestionIssue, таблица-очередь (MemoryExternalConnectorJob), MemoryEvalCase; data/knowledge_repo/ (включая .git/); data/media/. Пересобираемое (backup не требуется): MemoryKnowledgeItem/MemorySearchDocument проекции, MemoryFullTextIndex, векторный индекс, MemoryKnowledgeEdge, index.md, log.md. Порядок восстановления: 1) восстановить PostgreSQL из backup; 2) восстановить/клонировать data/knowledge_repo/; 3) python manage.py memory_reconcile --force; 4) python manage.py memory_verify_knowledge_files.",
+    "Шаг 6. Unit-тесты: memory_eval_seed создает не более limit кейсов, идемпотентен, question не пустой; memory_eval по suite golden выполняется без ошибок на тестовых данных.",
+    "ЗАПРЕЩЕНО: менять логику ранжирования и memory.search; удалять существующие eval-кейсы; добавлять новые поля в MemoryEvalCase без необходимости (использовать metadata)."
+  ],
+  "acceptance_checks": [
+    "После memory_eval_seed --suite golden --limit 20 в базе не менее 20 кейсов suite=golden (или столько, сколько есть знаний, с явным сообщением команды).",
+    "Повторный запуск memory_eval_seed не создает дубли.",
+    "memory_eval по suite golden завершается и пишет отчет в data/memory/eval/.",
+    "MEMORY_DEPLOYMENT.md содержит подраздел 'Матрица восстановления' с четырехшаговым порядком восстановления.",
+    "python manage.py test apps.memory.tests - зеленый."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_eval --dry-run"
+  ],
+  "notes": [
+    "Черновой golden set - механическая заготовка; содержательное ревью кейсов выполняет владелец (шаг 4). Отчет прогонa приложить к executor report.",
+    "Основание: ADR-0030, дополнение 2026-07-06, пункты про golden set и матрицу восстановления."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "task_id": "03-edge-emission-and-retro-leftovers",
+  "title": "Эмиссия relations семантическим проходом и остатки ретроспективы",
+  "status": "ready",
+  "objective": "Назначить производителя рёбер: семантический проход рефлексии получает инструкцию эмиссии relations: против словаря; вычистить неиспользуемые ranking_profiles; исправить фильтр очереди в review-UI.",
+  "write_scope": [
+    "apps/memory/management/commands/knowledge_reflection_worker.py",
+    "apps/memory/chat_memory.py",
+    "apps/memory/review_selectors.py",
+    "apps/memory/views.py",
+    "apps/memory/tests.py",
+    "contracts/ai/memory_profiles.json",
+    "contracts/ai/memory_graph_schema.json",
+    "templates/",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Шаг 1. Изучить, как семантический проход обрабатывает страницы: apps/memory/management/commands/knowledge_reflection_worker.py и связанный код в apps/memory/chat_memory.py. Найти место, где формируется задание/промпт для LLM-прохода по странице (или где страница переписывается).",
+    "Шаг 2. Добавить в конфигурацию семантического прохода инструкцию эмиссии рёбер (константа или блок промпта в коде воркера со ссылкой на словарь): при ре-консолидации страницы агент может добавить в frontmatter блок relations: со структурой {type, target, provenance}, где type - только из словаря contracts/ai/memory_graph_schema.json, target - существующий путь концепта, provenance - ссылка на immutable-источник; невалидные рёбра отбрасываются существующим валидатором. Эмиссия выполняется ТОЛЬКО семантическим проходом: в memory.remember (горячий путь) кода эмиссии быть не должно - проверить и при необходимости оставить рядом с DEBT-маркером поясняющий комментарий.",
+    "Шаг 3. Тест эмиссии без LLM: unit-тест, что инструкция присутствует в конфигурации воркера (константа непустая и содержит слово relations и путь contracts/ai/memory_graph_schema.json); существующий тест материализатора (страница с валидным relations: попадает в MemoryKnowledgeEdge) остается зеленым.",
+    "Шаг 4. contracts/ai/memory_profiles.json: в ranking_profiles оставить только 'balanced'; удалить precise, semantic_heavy, source_content, source_semantic, graph_future. Прогнать validate_architecture_contracts; если схема контракта или код ссылаются на удаленные ключи - обновить ссылки (поиск по репозиторию строк 'semantic_heavy', 'source_semantic', 'graph_future'). Runtime-копию data/contracts/ai/memory_profiles.json обновить тем же изменением.",
+    "Шаг 5. Review-UI, фильтр очереди (apps/memory/review_selectors.py, выборки MemoryExternalConnectorJob около строк 498 и 547): заменить фильтр по source_code на фильтры по kind (вид задачи) и status; параметр 'source' в этих выборках удалить из UI-формы или пометить неприменимым. Обновить шаблон соответствующего экрана и view-тест.",
+    "Шаг 6. Обновить docs/architecture/MEMORY_MVP_CURRENT_STATE.md (эмиссия рёбер назначена семантическому проходу; один профиль ранжирования в контракте) и docs/guides/MEMORY_USER_GUIDE.md (короткий абзац: откуда берутся связи между знаниями).",
+    "ЗАПРЕЩЕНО: включать graph-канал в memory.search; менять словарь типов рёбер; менять RRF-логику; трогать memory.remember сверх комментария."
+  ],
+  "acceptance_checks": [
+    "Конфигурация семантического прохода содержит инструкцию эмиссии с ссылкой на contracts/ai/memory_graph_schema.json; grep 'relations' по knowledge_reflection_worker.py находит инструкцию.",
+    "grep кода эмиссии relations в chat_memory.py (горячий путь remember) ничего не находит, кроме DEBT-маркера и комментария.",
+    "ranking_profiles в contracts/ai/memory_profiles.json и data/contracts/ai/memory_profiles.json содержит ровно один ключ balanced; validate_architecture_contracts зеленый.",
+    "Экран очереди review-UI фильтрует по kind/status; view-тест проходит.",
+    "python manage.py test apps.memory.tests apps.ai.tests - зеленый."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_alignment_acceptance_e2e"
+  ],
+  "notes": [
+    "Первые реальные рёбра появятся после прогонов рефлексии - пустая таблица MemoryKnowledgeEdge сразу после пакета ожидаема.",
+    "Основание: ADR-0030, дополнение 2026-07-06 (эмиссия, dead-config, review-UI); RETROSPECTIVE блока выравнивания."
+  ]
+}

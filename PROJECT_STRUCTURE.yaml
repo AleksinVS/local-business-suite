@@ -596,7 +596,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Brief for the knowledge-driven business analytics workflow
       EXECUTOR_REPORT.knowledge-driven-business-analytics.md: file # Executor report for the MVP implementation slice
       TASK_ACCEPTANCE.knowledge-driven-business-analytics.md: file # Acceptance report for the MVP implementation slice
-    memory-alignment-hardening: # Workflow: доводка памяти после ревью целевой архитектуры (дополнение ADR-0030 от 2026-07-06)
+    memory-alignment-hardening: # Workflow: доводка памяти после ревью целевой архитектуры (дополнения ADR-0030 от 2026-07-06 и 2026-07-07)
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов
       BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока

@@ -2,10 +2,12 @@
   "task_id": "01-canon-line-endings-and-reconciler-guards",
   "title": "LF-нормализация канона и защита reconciler",
   "status": "ready",
-  "objective": "Гарантировать, что файлы канона всегда LF и хэши платформонезависимы; что пометка страницы reconciler'ом не создает петлю повторной обработки; что два процесса memory_reconcile не работают одновременно.",
+  "objective": "Гарантировать, что файлы канона всегда LF и хэши платформонезависимы; что пометка страницы reconciler'ом не создает петлю повторной обработки; что два процесса memory_reconcile не работают одновременно; что обход reconciler идет от канона (файлы - источник, проекция догоняет) и его базисы пересчитываемы из git.",
   "write_scope": [
     "apps/memory/knowledge_files.py",
     "apps/memory/management/commands/memory_reconcile.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
     "apps/memory/tests.py",
     "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
   ],
@@ -19,6 +21,9 @@
     "Шаг 7. Тест синглтона: для SQLite-ветки - заранее создать data/memory/reconcile.lock, вызвать команду, проверить вывод 'already running' и что файлы не обрабатывались; после удаления lock-файла команда работает. Для PostgreSQL-ветки достаточно unit-теста, который мокает pg_try_advisory_lock -> False и проверяет ранний выход.",
     "Шаг 8. Тест платформенных веток блокировки записи: unit-тест, который через monkeypatch скрывает модуль fcntl (ImportError) и проверяет, что knowledge_repo_lock использует Windows/файловую ветку и реально не пускает второй вход (в пределах возможного на POSIX - проверить выбор ветки и отсутствие исключений). Отметить в docstring теста, что полный Windows-прогон выполняется при внедрении на Windows (остаточный риск ретроспективы ADR-0030).",
     "Шаг 9. Обновить docs/architecture/MEMORY_MVP_CURRENT_STATE.md: добавить в раздел 'Что работает' строки про LF-нормализацию канона и синглтон reconciler.",
+    "Шаг 10. Канон-ориентированный обход (кросс-ревью 2026-07-06). Заменить в memory_reconcile итерацию только по MemoryKnowledgeItem на двухфазный обход. Фаза А: пройти файлы канона на диске (тот же walk, что в rebuild_all_knowledge_indexes; пропускать index.md, log.md, _summary.md, .gitattributes и каталог schemas/). Для каждого файла прочитать frontmatter и knowledge_id: (а) есть строка проекции с этим knowledge_id и тем же путем - сверять как сейчас; (б) строка есть, но knowledge_file_path другой - это перенос файла: обновить knowledge_file_path (идентичность по knowledge_id), дубль не создавать; (в) строки нет - создать MemoryKnowledgeItem из frontmatter (scope, owner_user_id из пути users/<id>/... или поля frontmatter, kind, sensitivity, scope_tokens, status, source_refs) и проиндексировать. Фаза Б: для строк проекции, чей файл не найден и чей knowledge_id не встретился в фазе А, - создать MemoryIngestionIssue с новым issue_kind canon_file_missing (добавить в choices + миграция); повторный прогон не создает дубль issue (get_or_create по knowledge_id и issue_kind).",
+    "Шаг 11. Базисы из git при --force (кросс-ревью 2026-07-06). (а) Гард понижения классификации при --force сравнивает sensitivity/scope_tokens файла не со строкой проекции, а с последней закоммиченной версией файла: git show HEAD:<относительный путь> и парсинг frontmatter; если файл еще не закоммичен - гард пропускается с предупреждением в вывод. (б) После --force очередь семантической ре-консолидации пересчитывается из git-истории: в очередь ставятся страницы, у которых есть коммиты НЕ от автора memory-reconciler позже knowledge_file_commit их строки проекции. (в) В help/docstring команды зафиксировать: очередь - best-effort проекция; при пересборке она теряется и восстанавливается этим пересчетом.",
+    "Шаг 12. Дедуп-ключ очереди включает причину: idempotency_key задач ре-консолидации формировать строго как '<kind>:<relative_path>:<content_hash>', где kind - вид задачи. Разные причины по одной странице сосуществуют в очереди и обрабатываются независимо.",
     "ЗАПРЕЩЕНО: массово переписывать существующие файлы знаний; менять формат frontmatter; менять публичный контракт memory.remember/memory.search."
   ],
   "acceptance_checks": [
@@ -27,6 +32,11 @@
     "Повторный memory_reconcile после пометки страницы сообщает ноль обработанных файлов.",
     "При существующем data/memory/reconcile.lock команда завершается кодом 0 с сообщением 'already running' и ничего не обрабатывает.",
     "Тест ветки блокировки без fcntl проходит.",
+    "Файл знания, добавленный в репозиторий напрямую (мимо memory.remember), после memory_reconcile получает строку проекции и находится поиском.",
+    "Перенос файла на новый путь при том же knowledge_id обновляет knowledge_file_path и не создает дубль строки.",
+    "Удаление файла с диска дает MemoryIngestionIssue canon_file_missing; повторный прогон не создает второй issue.",
+    "При --force понижение sensitivity ловится сравнением с git-версией файла (тест: правка рабочего дерева с понижением против закоммиченной версии).",
+    "Две задачи разных kind по одной странице сосуществуют в очереди (разные idempotency_key).",
     "python manage.py test apps.memory.tests - зеленый на SQLite и PostgreSQL."
   ],
   "verification_commands": [

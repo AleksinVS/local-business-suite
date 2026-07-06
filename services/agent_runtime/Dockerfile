@@ -6,8 +6,15 @@ ENV HOME=/home/app
 
 WORKDIR /app
 
+# Собственный lock: agent-runtime собирается из отдельного минимального
+# requirements.txt (не из корневого), поэтому и зафиксированные транзитивные
+# версии должны быть отдельными — иначе пришлось бы тянуть в образ пакеты
+# корневого requirements.lock (Django, gevent, Pillow, psycopg и т.д.), не
+# нужные этому сервису. requirements.txt остаётся человекочитаемым входом для
+# `make lock-agent-runtime` / pip-compile.
 COPY services/agent_runtime/requirements.txt /tmp/agent-runtime-requirements.txt
-RUN pip install --no-cache-dir -r /tmp/agent-runtime-requirements.txt
+COPY services/agent_runtime/requirements.lock /tmp/agent-runtime-requirements.lock
+RUN pip install --no-cache-dir -r /tmp/agent-runtime-requirements.lock
 
 COPY services/ /app/services/
 COPY contracts/ /app/contracts/

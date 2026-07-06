@@ -121,7 +121,7 @@ git clone https://github.com/AleksinVS/local-business-suite.git
 cd local-business-suite
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 cp .env.example .env
 
 python manage.py migrate
@@ -136,13 +136,30 @@ git clone https://github.com/AleksinVS/local-business-suite.git
 cd local-business-suite
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 copy .env.example .env
 
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
+
+### Воспроизводимая установка зависимостей
+
+Установка и сборка образов (`Dockerfile`, `services/agent_runtime/Dockerfile`, `make install`)
+идут из lock-файлов (`requirements.lock`, `services/agent_runtime/requirements.lock`),
+сгенерированных `pip-compile` — они фиксируют версии всех транзитивных
+зависимостей, а не только верхнеуровневых пакетов из `requirements.txt`.
+`requirements.txt` остается человекочитаемым источником: новые/измененные
+зависимости добавляются туда, после чего lock перегенерируется:
+
+```bash
+make lock                 # requirements.lock из requirements.txt
+make lock-agent-runtime   # services/agent_runtime/requirements.lock
+```
+
+Обе цели требуют `pip-tools` (`pip install pip-tools`) — это dev-инструмент,
+не входящий в рантайм-зависимости проекта.
 
 ## Проверка проекта
 

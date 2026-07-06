@@ -15,8 +15,12 @@ ENV HOME=/home/app
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Ставим зависимости из requirements.lock (сгенерирован pip-compile), а не из
+# requirements.txt: requirements.lock фиксирует версии всех транзитивных
+# зависимостей и делает сборку образа воспроизводимой. requirements.txt
+# остаётся человекочитаемым входом для `make lock` / pip-compile.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY apps/ /app/apps/
 COPY config/ /app/config/

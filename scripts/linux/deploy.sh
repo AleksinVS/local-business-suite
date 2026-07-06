@@ -60,6 +60,10 @@ echo -e "${YELLOW}Rebuilding containers...${NC}"
 ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" <<EOF
 set -euo pipefail
 cd '${PROJECT_DIR}'
+# docker-compose.prod.yml host-agnostic: путь к env-файлу хоста задаётся здесь,
+# в host-специфичном деплой-скрипте, а не в самом compose (см. AGENTS.md,
+# изоляция сред развёртывания).
+export LOCAL_BUSINESS_ENV_FILE=deployments/test-host/.env
 # Ensure local .env exists for compose if needed (though prod uses env_file)
 cp deployments/test-host/.env .env
 docker network inspect '${SHARED_NETWORK}' >/dev/null 2>&1 || docker network create '${SHARED_NETWORK}' >/dev/null

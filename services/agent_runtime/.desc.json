@@ -10,6 +10,8 @@
   "prompting.py": "Системные промпты для агента",
   "schemas.py": "Pydantic-схемы данных (запросы, ответы)",
   "mcp_server.py": "MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities",
+  "requirements.txt": "Зависимости этого сервиса (человекочитаемый вход pip-compile)",
+  "requirements.lock": "Lock-файл зависимостей этого сервиса (pip-compile), отдельный от корневого requirements.lock",
   "protocols/": "Версионируемые AI UI protocol adapters, включая AG-UI-compatible слой",
   "tests/test_normalization.py": "Тесты нормализации данных",
   "tests/test_contracts.py": "Тесты резолвера AI-контрактов и кэша с инвалидацией по метаданным (ADR-0031)"

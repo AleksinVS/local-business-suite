@@ -428,6 +428,8 @@ services: # Автономные сервисы (вне Django)
     graph.py: file # LangGraph graph — логика агента, активация skills и вызов инструментов
     mcp_server.py: file # MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities
     prompting.py: file # Системные промпты для агента
+    requirements.lock: file # Lock-файл зависимостей этого сервиса (pip-compile), отдельный от корневого requirements.lock
+    requirements.txt: file # Зависимости этого сервиса (человекочитаемый вход pip-compile)
     schemas.py: file # Pydantic-схемы данных (запросы, ответы)
     task_types.py: file # Обработчики типов задач (workorders, lookup, inventory, analytics)
     tools.py: file # Клиент для вызова инструментов Django (HTTP → gateway)

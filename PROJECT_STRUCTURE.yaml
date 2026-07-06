@@ -372,12 +372,14 @@ docs: # Документация проекта
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
       interface-russification-and-localization.md: file # Активный план русификации интерфейса портала и подготовки к локализации
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
+      memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
       memory-audit-review-ui.md: file # Активный план UI аудита и ревью проблем памяти и поискового индекса
       memory-file-source-auto-organization.md: file # Активный план автоупорядочивания файловых источников
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       module-registered-agent-skills-and-mcp-facade.md: file # Активный план модульных AI skills и registry-driven MCP-фасада
       native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
       postgresql-primary-store-migration.md: file # Активный план миграции основного хранилища на PostgreSQL
+      project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
       settings-center-gui.md: file # Активный план Settings Center, GUI настроек и контекстной справки
       universal-right-drawer-ai-navigation.md: file # Активный план универсального открытия правого сайдбара ИИ-ботом
@@ -389,10 +391,6 @@ docs: # Документация проекта
     backlog.md: file # Актуальный backlog без архивного раздела
     README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
-learning: # Учебный модуль владельца проекта по Python и устройству local-business-suite
-  LESSON_01_PYTHON_LANGUAGE_OVERVIEW.md: file # Урок 1: обзор Python как языка, синтаксиса и структуры программ
-  PYTHON_LEARNING_PROGRAM.md: file # Учебная программа по Python на базе проекта
-  README.md: file # Описание учебного модуля и связи с основным проектом
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
@@ -598,6 +596,10 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Brief for the knowledge-driven business analytics workflow
       EXECUTOR_REPORT.knowledge-driven-business-analytics.md: file # Executor report for the MVP implementation slice
       TASK_ACCEPTANCE.knowledge-driven-business-analytics.md: file # Acceptance report for the MVP implementation slice
+    memory-alignment-hardening: # Workflow: доводка памяти после ревью целевой архитектуры (дополнение ADR-0030 от 2026-07-06)
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов
+      BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
     memory-audit-review-ui: # Workflow: UI аудита и ревью проблем памяти и поискового индекса
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для UI ревью памяти

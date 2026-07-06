@@ -391,6 +391,10 @@ docs: # Документация проекта
     backlog.md: file # Актуальный backlog без архивного раздела
     README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
+learning: # Учебный модуль владельца проекта по Python и устройству local-business-suite
+  LESSON_01_PYTHON_LANGUAGE_OVERVIEW.md: file # Урок 1: обзор Python как языка, синтаксиса и структуры программ
+  PYTHON_LEARNING_PROGRAM.md: file # Учебная программа по Python на базе проекта
+  README.md: file # Описание учебного модуля и связи с основным проектом
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json

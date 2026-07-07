@@ -12,6 +12,8 @@
   "chat_memory.py": "Синхронный memory.remember (файл+commit+индекс), personal/org chat knowledge writer path, organization candidacy (pending pages) и reflection",
   "knowledge_files.py": "Файловый Git-репозиторий знаний: Markdown+YAML формат, безопасная запись/чтение, cross-platform lock, генерация index.md и log.md из git",
   "knowledge_edges.py": "Валидатор блока relations: frontmatter против контролируемого словаря типов рёбер и детерминированный материализатор MemoryKnowledgeEdge (ADR-0030 решение 3, без LLM)",
+  "contracts.py": "Валидаторы доменных контрактов памяти (sources, profiles, routing, trust/claims policy, retrieval budget, graph schema, ingestion и file organization), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)",
+  "tests/": "Пакет тестов приложения памяти, разбитый по темам (admin/review UI, ingestion, sources/models, policy/privacy, chat knowledge, external connectors, indexing, reconcile/edges, data store); общий preamble и фикстуры в _common.py",
   "external_connectors.py": "External API connector landing zone, database/sqlite queue backends and memory handoff",
   "policies.py": "Политики доступа к search documents, knowledge items, scope tokens и trusted source decisions",
   "acl.py": "ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens",

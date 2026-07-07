@@ -24,6 +24,8 @@ from django.conf import settings
 from apps.core.json_utils import (
     load_json_file,
     pretty_json,
+)
+from apps.workorders.contracts import (
     validate_role_rules_payload,
     validate_workflow_rules_payload,
     validate_workorder_status_colors_payload,

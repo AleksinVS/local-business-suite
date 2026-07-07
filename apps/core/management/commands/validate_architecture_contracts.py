@@ -8,7 +8,24 @@ from apps.core.contract_drift import (
     format_contract_drift_report,
     has_reportable_drift,
 )
-from apps.core.json_utils import (
+from apps.core.json_utils import load_json_file
+from apps.core.contracts import (
+    validate_change_plan_payload,
+    validate_integration_registry_payload,
+    validate_task_brief_payload,
+)
+from apps.ai.contracts import (
+    validate_ai_chat_settings_payload,
+    validate_ai_identity_model_alignment,
+    validate_ai_registry_payload,
+    validate_ai_task_types_payload,
+    validate_ai_task_types_slot_coverage,
+    validate_ai_task_types_tool_alignment,
+    validate_ai_tools_drift,
+    validate_ai_tools_payload,
+    validate_ai_write_confirmation_alignment,
+)
+from apps.analytics.contracts import (
     validate_analytics_business_facts_payload,
     validate_analytics_dedup_rules_payload,
     validate_analytics_diagnostic_playbooks_payload,
@@ -18,32 +35,23 @@ from apps.core.json_utils import (
     validate_analytics_scope_rules_payload,
     validate_analytics_sources_payload,
     validate_analytics_workflow_routes_payload,
-    load_json_file,
-    validate_ai_identity_model_alignment,
-    validate_ai_chat_settings_payload,
-    validate_ai_registry_payload,
-    validate_ai_task_types_payload,
-    validate_ai_task_types_slot_coverage,
-    validate_ai_task_types_tool_alignment,
-    validate_ai_tools_drift,
-    validate_ai_tools_payload,
-    validate_ai_write_confirmation_alignment,
-    validate_change_plan_payload,
     validate_dataset_registry_payload,
-    validate_integration_registry_payload,
-    validate_memory_profiles_payload,
+)
+from apps.memory.contracts import (
     validate_memory_claims_policy_payload,
-    validate_memory_graph_schema_payload,
     validate_memory_file_organization_profiles_payload,
+    validate_memory_graph_schema_payload,
     validate_memory_ingestion_profiles_payload,
+    validate_memory_profiles_payload,
     validate_memory_retrieval_budget_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
     validate_memory_trust_policy_payload,
+)
+from apps.workorders.contracts import (
     validate_role_rules_payload,
-    validate_task_brief_payload,
-    validate_workorder_status_colors_payload,
     validate_workflow_rules_payload,
+    validate_workorder_status_colors_payload,
 )
 from services.agent_runtime.task_types import STATUS_ALIASES
 

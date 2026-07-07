@@ -18,5 +18,6 @@
   "skills_service.py": "Сервис каталога AI skills из модульного registry и contract-файлов",
   "skill_authoring.py": "Валидация и атомарная запись runtime AI skills",
   "ai_skills.py": "Системные AI skills приложения AI, включая ai.skill_creator",
-  "tests.py": "Тесты AI-приложения"
+  "contracts.py": "Валидаторы доменных контрактов ИИ (реестр, инструменты, типы задач, настройки чата, семантические кросс-проверки), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)",
+  "tests/": "Пакет тестов AI-приложения, разбитый по темам (views, проброс identity/trace context, семантические валидаторы, контракт типов задач, валидация identity_model, видимость tool-сообщений, context processors)"
 }

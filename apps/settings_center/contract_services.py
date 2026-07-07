@@ -10,16 +10,22 @@ from apps.core.contract_store import normalized_hash
 from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
+)
+from apps.ai.contracts import (
     validate_ai_chat_settings_payload,
     validate_ai_registry_payload,
     validate_ai_task_types_payload,
     validate_ai_tools_payload,
+)
+from apps.memory.contracts import (
     validate_memory_file_organization_profiles_payload,
     validate_memory_profiles_payload,
     validate_memory_graph_schema_payload,
     validate_memory_ingestion_profiles_payload,
     validate_memory_routing_payload,
     validate_memory_sources_payload,
+)
+from apps.workorders.contracts import (
     validate_role_rules_payload,
     validate_workorder_status_colors_payload,
     validate_workflow_rules_payload,

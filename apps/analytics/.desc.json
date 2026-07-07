@@ -1,6 +1,7 @@
 {
   ".": "Операционные дашборды внутри Django",
   "management": "Management commands for analytics ingestion, extraction, deduplication, metrics and diagnostics",
+  "contracts.py": "Валидаторы доменных контрактов аналитики (реестр датасетов, источники, scope-правила, бизнес-факты, метрики, мониторы, playbook-и, workflow-маршруты, dedup и retention), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)",
   "models.py": "Модели аналитики",
   "services.py": "Сервисы knowledge-driven analytics pipeline и analytics projection из SourceObjectEnvelope",
   "views.py": "Представления дашбордов",

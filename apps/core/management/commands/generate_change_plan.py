@@ -5,8 +5,8 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.core.json_utils import (
     load_json_file,
     pretty_json,
-    validate_task_brief_payload,
 )
+from apps.core.contracts import validate_task_brief_payload
 
 
 class Command(BaseCommand):

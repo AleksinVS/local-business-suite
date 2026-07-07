@@ -3,7 +3,8 @@ import json
 from django import forms
 from django.conf import settings
 
-from .json_utils import pretty_json, validate_role_rules_payload
+from .json_utils import pretty_json
+from apps.workorders.contracts import validate_role_rules_payload
 from .models import Department
 
 

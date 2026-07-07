@@ -18,7 +18,8 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 import apps.core.json_utils as json_utils
-from apps.core.json_utils import (
+import apps.memory.contracts as memory_contracts
+from apps.memory.contracts import (
     validate_memory_claims_policy_payload,
     validate_memory_file_organization_profiles_payload,
     validate_memory_profiles_payload,
@@ -63,7 +64,9 @@ User = get_user_model()
 
 
 def get_optional_json_validator(test_case, validator_name):
-    validator = getattr(json_utils, validator_name, None)
+    # Доменные валидаторы контрактов памяти переехали в apps.memory.contracts
+    # (правила 3/5 AGENTS.md); универсальные примитивы остаются в json_utils.
+    validator = getattr(memory_contracts, validator_name, None) or getattr(json_utils, validator_name, None)
     if validator is None:
         test_case.skipTest(f"{validator_name} is not implemented yet")
     return validator

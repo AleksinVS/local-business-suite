@@ -9,6 +9,7 @@
   "health_views.py": "Health-check endpoint (/health/)",
   "json_utils.py": "Утилиты валидации JSON-контрактов",
   "contract_store.py": "Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)",
+  "contract_drift.py": "Диагностика дрейфа default (contracts/) vs runtime (data/contracts/) по всем контрактам реестра Settings Center: три исхода (совпадает / рабочая копия изменена / кандидат на перенос из дефолта), только диагностика без автослияния (ADR-0031 п.4)",
   "performance.py": "Опциональный сбор latency-событий и расчет p50/p95 для базовой наблюдаемости",
   "source_adapters.py": "Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников",
   "right_panels.py": "Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре",

@@ -1101,6 +1101,109 @@ class ArchitectureContractTests(TestCase):
             self.assertEqual(payload["status"], "draft")
 
 
+class ContractDriftTests(TestCase):
+    """Диагностика дрейфа default (contracts/) <-> runtime (data/contracts/), пакет 08.
+
+    ``evaluate_contract_drift`` сравнивает два файла напрямую (без обращения к
+    реестру настроек), поэтому тесты на искусственный дрейф и на идентичные
+    файлы изолированы от реального состояния ``data/contracts/`` в этой
+    рабочей копии репозитория (оно и само может содержать ожидаемый дрейф —
+    это не ошибка, см. ``STATUS_RUNTIME_CHANGED``).
+    """
+
+    def _write_json(self, path, payload):
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    def test_new_default_key_is_reported_as_migration_candidate(self):
+        from apps.core.contract_drift import STATUS_CANDIDATE_FOR_MIGRATION, evaluate_contract_drift
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            default_path = Path(tmpdir) / "default.json"
+            runtime_path = Path(tmpdir) / "runtime.json"
+            self._write_json(default_path, {"a": 1, "b": 2, "new_option": {"enabled": True}})
+            self._write_json(runtime_path, {"a": 1, "b": 2})
+
+            entry = evaluate_contract_drift("demo.contract", default_path, runtime_path)
+
+            self.assertEqual(entry.status, STATUS_CANDIDATE_FOR_MIGRATION)
+            self.assertEqual(entry.missing_keys_in_runtime, ("new_option",))
+            self.assertIn("new_option", entry.detail)
+
+    def test_identical_files_report_no_drift(self):
+        from apps.core.contract_drift import STATUS_IDENTICAL, evaluate_contract_drift, has_reportable_drift
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            default_path = Path(tmpdir) / "default.json"
+            runtime_path = Path(tmpdir) / "runtime.json"
+            payload = {"a": 1, "nested": {"b": [1, 2, 3]}}
+            # Разное форматирование/порядок ключей не должно считаться дрейфом:
+            # сравнение идет по нормализованному хешу (sort_keys), а не побайтово.
+            default_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            runtime_path.write_text(json.dumps(payload, sort_keys=False, indent=4), encoding="utf-8")
+
+            entry = evaluate_contract_drift("demo.contract", default_path, runtime_path)
+
+            self.assertEqual(entry.status, STATUS_IDENTICAL)
+            self.assertFalse(entry.is_drift)
+            self.assertFalse(has_reportable_drift([entry]))
+
+    def test_runtime_value_change_without_new_keys_is_expected_not_a_candidate(self):
+        from apps.core.contract_drift import STATUS_RUNTIME_CHANGED, evaluate_contract_drift
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            default_path = Path(tmpdir) / "default.json"
+            runtime_path = Path(tmpdir) / "runtime.json"
+            self._write_json(default_path, {"a": 1, "b": "default value"})
+            self._write_json(runtime_path, {"a": 1, "b": "admin edited this via Settings Center"})
+
+            entry = evaluate_contract_drift("demo.contract", default_path, runtime_path)
+
+            self.assertEqual(entry.status, STATUS_RUNTIME_CHANGED)
+            self.assertEqual(entry.missing_keys_in_runtime, ())
+            self.assertTrue(entry.is_drift)
+
+    def test_fail_on_drift_flag_exits_nonzero_only_when_drift_present(self):
+        from unittest.mock import patch
+
+        from apps.core.contract_drift import ContractDriftEntry, STATUS_CANDIDATE_FOR_MIGRATION, STATUS_IDENTICAL
+
+        drifted_entry = ContractDriftEntry(
+            name="demo.contract",
+            default_path=Path("contracts/demo.json"),
+            runtime_path=Path("data/contracts/demo.json"),
+            status=STATUS_CANDIDATE_FOR_MIGRATION,
+            missing_keys_in_runtime=("new_option",),
+        )
+        clean_entry = ContractDriftEntry(
+            name="demo.contract",
+            default_path=Path("contracts/demo.json"),
+            runtime_path=Path("data/contracts/demo.json"),
+            status=STATUS_IDENTICAL,
+        )
+
+        target = "apps.core.management.commands.validate_architecture_contracts.collect_contract_drift"
+        with patch(target, return_value=[drifted_entry]):
+            with self.assertRaises(CommandError):
+                call_command("validate_architecture_contracts", "--fail-on-drift")
+            # Без флага дрейф остается диагностикой — команда не падает.
+            call_command("validate_architecture_contracts")
+
+        with patch(target, return_value=[clean_entry]):
+            call_command("validate_architecture_contracts", "--fail-on-drift")
+
+    def test_collect_contract_drift_covers_settings_center_registry_contracts(self):
+        from apps.core.contract_drift import collect_contract_drift
+        from apps.settings_center.registry import get_registry
+
+        expected_names = {
+            descriptor.setting_id
+            for descriptor in get_registry().all()
+            if descriptor.storage_kind == "runtime_contract" and descriptor.metadata.get("settings_path")
+        }
+        entries = collect_contract_drift()
+        self.assertEqual({entry.name for entry in entries}, expected_names)
+
+
 class MemoryIngestionContractExpectationTests(TestCase):
     def test_memory_ingestion_profiles_accept_expected_bootstrap_shape(self):
         validator = get_optional_json_validator(self, "validate_memory_ingestion_profiles_payload")

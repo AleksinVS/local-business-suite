@@ -1,8 +1,13 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from apps.ai.tool_definitions import TOOLS
+from apps.core.contract_drift import (
+    collect_contract_drift,
+    format_contract_drift_report,
+    has_reportable_drift,
+)
 from apps.core.json_utils import (
     validate_analytics_business_facts_payload,
     validate_analytics_dedup_rules_payload,
@@ -45,6 +50,18 @@ from services.agent_runtime.task_types import STATUS_ALIASES
 
 class Command(BaseCommand):
     help = "Validate AI-first / Code-first JSON contracts used by the project."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--fail-on-drift",
+            action="store_true",
+            dest="fail_on_drift",
+            help=(
+                "Завершить команду ненулевым кодом, если default- и runtime-копии "
+                "хотя бы одного контракта расходятся (для CI-сценариев). По умолчанию "
+                "дрейф — не ошибка команды, отчет только печатается."
+            ),
+        )
 
     def handle(self, *args, **options):
         min_stream_timeout = int(settings.LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT) + 30
@@ -123,3 +140,16 @@ class Command(BaseCommand):
                 f"STATUS_ALIASES keys do not match workflow_rules.json statuses: {'; '.join(msg_parts)}."
             )
         self.stdout.write(self.style.SUCCESS("Architecture contracts are valid."))
+
+        # Диагностика дрейфа default (contracts/) <-> runtime (data/contracts/)
+        # по всем контрактам реестра Settings Center (ADR-0031 п.4). Дрейф —
+        # не ошибка команды: отчет печатается всегда, exit code остается 0,
+        # если явно не запрошен --fail-on-drift (CI-сценарий).
+        drift_entries = collect_contract_drift()
+        self.stdout.write("")
+        self.stdout.write(format_contract_drift_report(drift_entries))
+        if options.get("fail_on_drift") and has_reportable_drift(drift_entries):
+            raise CommandError(
+                "Обнаружен дрейф между дефолтными контрактами и рабочими копиями "
+                "(см. отчет выше). Команда завершена с ошибкой из-за --fail-on-drift."
+            )

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
-const aiUiDriver = process.env.E2E_AI_UI_DRIVER || "legacy";
+const aiUiDriver = process.env.E2E_AI_UI_DRIVER || "native";
 
 async function login(page) {
   await page.goto("/accounts/login/");

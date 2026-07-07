@@ -38,7 +38,7 @@ COPILOTKIT_RUNTIME_PORT=3100
 COPILOTKIT_TELEMETRY_DISABLED=true
 ```
 
-Глобальный режим по умолчанию проекта - `native`. Для включения CopilotKit deployment нужно явно поставить `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`; `legacy` используется только как rollback.
+Глобальный режим по умолчанию проекта - `native`. Для включения CopilotKit deployment нужно явно поставить `LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit`. Rollback выполняется обратной сменой значения на `native` (драйвер `legacy` выведен из проекта, ADR-0032).
 
 Для service-to-service auth добавить отдельный секрет в приватный deployment repo:
 
@@ -161,7 +161,7 @@ Cookie/session rules:
 
 ## Rollback
 
-1. Поставить `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`.
+1. Поставить `LOCAL_BUSINESS_AI_UI_DRIVER=native`.
 2. Перезапустить Django web.
 3. Убрать `/copilotkit` из reverse proxy или остановить `copilot_runtime`.
 4. Проверить текущий AI sidebar.

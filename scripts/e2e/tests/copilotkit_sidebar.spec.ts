@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
-const aiUiDriver = process.env.E2E_AI_UI_DRIVER || (process.env.E2E_COPILOTKIT_ENABLED === "true" ? "copilotkit" : "legacy");
+const aiUiDriver = process.env.E2E_AI_UI_DRIVER || (process.env.E2E_COPILOTKIT_ENABLED === "true" ? "copilotkit" : "native");
 const copilotkitEnabled = aiUiDriver === "copilotkit";
 const agentRuntimeUrl = process.env.E2E_AGENT_RUNTIME_URL || "http://127.0.0.1:8090";
 const copilotRuntimeUrl = process.env.E2E_COPILOT_RUNTIME_URL || "http://127.0.0.1:3100";

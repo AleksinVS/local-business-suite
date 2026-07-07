@@ -50,7 +50,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=native
 - `/copilotkit` может быть недоступен;
 - работает основной самописный AG-UI sidebar без Copilot Runtime.
 
-Для аварийного возврата к старому HTMX sidebar используется `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`.
+Драйвер `legacy` выведен из проекта (ADR-0032): `LOCAL_BUSINESS_AI_UI_DRIVER=legacy` роняет
+Django на старте с `ImproperlyConfigured`. Аварийный откат - `native`.
 
 ### Pilot
 
@@ -262,7 +263,7 @@ POST /ai/ui/session/new/
 
 ```text
 LOCAL_BUSINESS_COPILOTKIT_ENABLED=false
-LOCAL_BUSINESS_AI_UI_DRIVER=legacy
+LOCAL_BUSINESS_AI_UI_DRIVER=native
 ```
 
 Если добавлен отдельный service:

@@ -478,66 +478,6 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class AISidebarChatView(LoginRequiredMixin, TemplateView):
-    template_name = "ai/partials/sidebar_chat.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        session = get_or_create_sidebar_session(self.request.user)
-        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
-        recent_limit = int(settings_payload.get("recent_message_limit", 8))
-        messages_qs = session.messages.prefetch_related("attachments").order_by("-created_at", "-id")[:recent_limit]
-        sidebar_messages = list(messages_qs)
-        sidebar_messages.reverse()
-        context.update(
-            {
-                "sidebar_chat_session": session,
-                "sidebar_chat_messages": sidebar_messages,
-                "sidebar_ai_models": settings.LOCAL_BUSINESS_AI_MODELS,
-                "sidebar_current_model_id": session.metadata.get("model_id", ""),
-                "sidebar_chat_settings": settings_payload,
-                "sidebar_predefined_commands": get_predefined_commands(),
-                "sidebar_custom_commands": list(
-                    SlashCommand.objects.filter(user=self.request.user).values(
-                        "id", "name", "shortcut", "description", "template"
-                    )
-                ),
-            }
-        )
-        return context
-
-
-class AISidebarChatClearView(LoginRequiredMixin, TemplateView):
-    template_name = "ai/partials/sidebar_chat.html"
-    http_method_names = ["post"]
-
-    def post(self, request, *args, **kwargs):
-        session = get_or_create_sidebar_session(request.user)
-        clear_sidebar_session(session)
-        return self.render_to_response(self.get_context_data())
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        session = get_or_create_sidebar_session(self.request.user)
-        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
-        context.update(
-            {
-                "sidebar_chat_session": session,
-                "sidebar_chat_messages": [],
-                "sidebar_ai_models": settings.LOCAL_BUSINESS_AI_MODELS,
-                "sidebar_current_model_id": session.metadata.get("model_id", ""),
-                "sidebar_chat_settings": settings_payload,
-                "sidebar_predefined_commands": get_predefined_commands(),
-                "sidebar_custom_commands": list(
-                    SlashCommand.objects.filter(user=self.request.user).values(
-                        "id", "name", "shortcut", "description", "template"
-                    )
-                ),
-            }
-        )
-        return context
-
-
 class AIPageContextUpdateView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 

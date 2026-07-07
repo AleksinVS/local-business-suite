@@ -14,16 +14,17 @@ from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, TestCase, override_settings
 
 from apps.ai import context_processors
 from apps.ai.context_processors import sidebar_ai_chat
 from apps.ai.ui_runtime.drivers import (
     DRIVER_COPILOTKIT,
-    DRIVER_LEGACY,
     DRIVER_NATIVE,
 )
 from apps.workorders.policies import ROLE_MANAGER
+from config.settings import _validate_ai_ui_driver
 
 User = get_user_model()
 
@@ -132,16 +133,16 @@ class SidebarAiChatDispatcherTests(TestCase):
         self.assertTrue(ctx["native_ai_ui_enabled"])
         self.assertFalse(ctx["copilotkit_enabled"])
         self.assertEqual(ctx["ai_ui_driver"], DRIVER_NATIVE)
-        self.assertTrue(ctx["show_sidebar_ai_chat"])
 
-    def test_legacy_driver_disables_both_native_and_copilotkit(self):
-        ctx = self._context({"LOCAL_BUSINESS_AI_UI_DRIVER": "legacy"})
-        self.assertFalse(ctx["native_ai_ui_enabled"])
-        self.assertFalse(ctx["copilotkit_enabled"])
-        self.assertEqual(ctx["ai_ui_driver"], DRIVER_LEGACY)
-        # ``show_sidebar_ai_chat`` всё равно True для аутентифицированного
-        # пользователя — это контейнер для HTMX-чата.
-        self.assertTrue(ctx["show_sidebar_ai_chat"])
+    def test_legacy_ai_ui_driver_raises_improperly_configured_with_native_hint(self):
+        """Драйвер ``legacy`` выведен из проекта (ADR-0032). Явное значение
+        ``LOCAL_BUSINESS_AI_UI_DRIVER=legacy`` в окружении не должно давать
+        тихий fallback на другой драйвер — конфигурация обязана упасть сразу
+        и явно объяснить, чем заменить настройку."""
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            _validate_ai_ui_driver("legacy")
+        self.assertIn("legacy", str(ctx.exception))
+        self.assertIn("native", str(ctx.exception))
 
     def test_copilotkit_driver_enables_only_copilotkit_branch(self):
         ctx = self._context(
@@ -153,7 +154,6 @@ class SidebarAiChatDispatcherTests(TestCase):
         self.assertTrue(ctx["copilotkit_enabled"])
         self.assertFalse(ctx["native_ai_ui_enabled"])
         self.assertEqual(ctx["ai_ui_driver"], DRIVER_COPILOTKIT)
-        self.assertTrue(ctx["show_sidebar_ai_chat"])
 
     def test_context_includes_both_native_and_copilotkit_versions(self):
         ctx = self._context({"LOCAL_BUSINESS_AI_UI_DRIVER": "native"})

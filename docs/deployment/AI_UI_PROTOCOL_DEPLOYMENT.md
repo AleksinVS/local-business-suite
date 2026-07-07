@@ -8,14 +8,7 @@ Accepted for pilot. Production-включение любого нового др
 
 ## Процессы по драйверам
 
-### `legacy`
-
-```text
-Django web
-agent_runtime FastAPI
-```
-
-Дополнительный Node-процесс не нужен.
+Драйвер `legacy` выведен из проекта (ADR-0032); допустимая матрица - `copilotkit`, `native`.
 
 ### `copilotkit`
 
@@ -49,7 +42,8 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL=http://agent-runtime:8090
 LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL=http://agent-runtime:8090/ag-ui
 ```
 
-Если `LOCAL_BUSINESS_AI_UI_DRIVER` отсутствует, Django также выбирает `native`. `legacy` задается явно только для rollback.
+Если `LOCAL_BUSINESS_AI_UI_DRIVER` отсутствует, Django также выбирает `native`. Значение
+`legacy` не поддерживается: Django падает при старте с `ImproperlyConfigured`.
 
 CopilotKit:
 
@@ -85,8 +79,7 @@ protocol metadata: agui_profile
 
 - обновить `@ag-ui/client`, связанные `@copilotkit/*` зависимости, если это необходимо, и `LOCAL_BUSINESS_AI_UI_AGUI_PROFILE`;
 - проверить `/ag-ui` stream и protocol metadata;
-- пройти e2e matrix для `legacy`, `copilotkit`, `native`;
-- проверить rollback на `LOCAL_BUSINESS_AI_UI_DRIVER=legacy`;
+- пройти e2e matrix для `copilotkit`, `native`;
 - обновить ADR, operations guide и deployment note.
 
 ## Reverse proxy
@@ -133,11 +126,11 @@ HTML должен подключать их с version query string. Root servic
 
 ## Rollback
 
-```text
-LOCAL_BUSINESS_AI_UI_DRIVER=legacy
-```
-
-После изменения перезапустить Django web. Для CopilotKit можно дополнительно остановить `copilot_runtime`.
+Драйвер `legacy` выведен из проекта (ADR-0032) и не является допустимым значением для
+`LOCAL_BUSINESS_AI_UI_DRIVER`. Rollback между `native` и `copilotkit` выполняется сменой
+значения переменной и перезапуском Django web. Для CopilotKit можно дополнительно
+остановить `copilot_runtime`. Откат к `legacy`-функциональности возможен только через
+git-историю.
 
 ## Проверка перед включением
 

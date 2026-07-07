@@ -6,7 +6,6 @@
   "js/ai_chat.js": "JavaScript для AI-чата (HTMX streaming, UI)",
   "js/page_context.js": "Browser bridge для безопасного контекста текущего окна AI-чата",
   "js/right_panel.js": "Browser bridge для выполнения безопасных команд открытия объектов в общем правом сайдбаре",
-  "js/sidebar_chat.js": "JavaScript компактного AI-чата в левой боковой панели",
   "js/pwa.js": "Регистрация service worker для PWA-режима портала",
   "js/notifications.js": "Клиент центра уведомлений: polling, browser permission, отметки состояний",
   "js/workorder_tree.js": "JavaScript для раскрытия дерева заявок, клавиатурной навигации и обновления текущего режима",

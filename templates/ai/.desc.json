@@ -2,6 +2,5 @@
   ".": "Шаблоны чат-интерфейса AI",
   "chat_detail.html": "Основной шаблон чата (HTMX streaming, sidebar, commands)",
   "hub.html": "Панель управления AI (инструменты, типы задач, сессии)",
-  "partials/": "Переиспользуемые части AI-интерфейса, включая встроенный sidebar-чат",
   "copilotkit_chat.html": "Страница CopilotKit-чата для режима LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit"
 }

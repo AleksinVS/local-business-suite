@@ -3,17 +3,16 @@ from __future__ import annotations
 from django.conf import settings
 
 
-DRIVER_LEGACY = "legacy"
 DRIVER_COPILOTKIT = "copilotkit"
 DRIVER_NATIVE = "native"
-VALID_AI_UI_DRIVERS = {DRIVER_LEGACY, DRIVER_COPILOTKIT, DRIVER_NATIVE}
+VALID_AI_UI_DRIVERS = {DRIVER_COPILOTKIT, DRIVER_NATIVE}
 
 
 def normalize_ai_ui_driver(value: str | None) -> str:
     driver = (value or "").strip().lower()
     if driver in VALID_AI_UI_DRIVERS:
         return driver
-    return DRIVER_LEGACY
+    return DRIVER_NATIVE
 
 
 def configured_ai_ui_driver() -> str:
@@ -28,7 +27,7 @@ def configured_ai_ui_driver() -> str:
 
 def authenticated_ai_ui_driver(user) -> str:
     if not getattr(user, "is_authenticated", False):
-        return DRIVER_LEGACY
+        return DRIVER_NATIVE
     return configured_ai_ui_driver()
 
 

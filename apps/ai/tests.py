@@ -1072,28 +1072,6 @@ class AIViewsTests(TestCase):
         self.assertNotContains(response, 'id="copilotkit-sidebar-root"')
         self.assertNotContains(response, reverse("ai:copilotkit_config"))
 
-    def test_sidebar_chat_clear_deletes_sidebar_messages_and_summary(self):
-        self.client.force_login(self.customer)
-        session = ChatSession.objects.create(
-            user=self.customer,
-            channel=ChatSession.Channel.SIDEBAR,
-            title="Боковой чат",
-            metadata={"model_id": "test-model", "sidebar_summary": {"text": "старое резюме"}},
-        )
-        ChatMessage.objects.create(session=session, role=ChatMessage.Role.USER, content="Старый вопрос")
-        ChatMessage.objects.create(session=session, role=ChatMessage.Role.ASSISTANT, content="Старый ответ")
-
-        response = self.client.post(reverse("ai:sidebar_chat_clear"), HTTP_HX_REQUEST="true")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Задайте вопрос по текущей странице")
-        self.assertContains(response, 'aria-label="Очистить чат"')
-        self.assertEqual(ChatMessage.objects.filter(session=session).count(), 0)
-        session.refresh_from_db()
-        self.assertIsNone(session.last_message_at)
-        self.assertEqual(session.metadata.get("model_id"), "test-model")
-        self.assertNotIn("sidebar_summary", session.metadata)
-
     def test_tool_gateway_accepts_non_uuid_session_id(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
@@ -2654,32 +2632,6 @@ class ChatToolMessageVisibilityTests(TestCase):
             ).count(),
             1,
         )
-
-    def test_sidebar_chat_hides_tool_messages(self):
-        sidebar_session = ChatSession.objects.create(
-            user=self.user,
-            channel=ChatSession.Channel.SIDEBAR,
-            title="Sidebar tool chat",
-        )
-        ChatMessage.objects.create(
-            session=sidebar_session, role=ChatMessage.Role.USER,
-            content="Что в окне?",
-        )
-        ChatMessage.objects.create(
-            session=sidebar_session, role=ChatMessage.Role.TOOL,
-            tool_name="page.context.get", content="Tool page.context.get executed successfully.",
-        )
-        ChatMessage.objects.create(
-            session=sidebar_session, role=ChatMessage.Role.ASSISTANT,
-            content="Ответ по окну…",
-        )
-
-        response = self.client.get(reverse("ai:sidebar_chat"))
-        self.assertEqual(response.status_code, 200)
-        body = response.content.decode("utf-8")
-        self.assertNotIn("Tool page.context.get executed successfully.", body)
-        self.assertIn("Что в окне?", body)
-        self.assertIn("Ответ по окну…", body)
 
     def test_sidebar_summary_skips_tool_messages(self):
         """The condensed sidebar summary that the runtime uses as

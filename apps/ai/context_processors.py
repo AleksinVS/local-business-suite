@@ -96,7 +96,6 @@ def sidebar_ai_chat(request):
     copilotkit_enabled = is_authenticated and ai_ui_driver == DRIVER_COPILOTKIT
     native_ai_ui_enabled = is_authenticated and ai_ui_driver == DRIVER_NATIVE
     return {
-        "show_sidebar_ai_chat": is_authenticated,
         "ai_ui_driver": ai_ui_driver,
         "copilotkit_enabled": copilotkit_enabled,
         "native_ai_ui_enabled": native_ai_ui_enabled,

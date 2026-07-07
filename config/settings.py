@@ -610,10 +610,34 @@ if not LOCAL_BUSINESS_AI_UI_DRIVER and LOCAL_BUSINESS_COPILOTKIT_ENABLED:
     LOCAL_BUSINESS_AI_UI_DRIVER = "copilotkit"
 if not LOCAL_BUSINESS_AI_UI_DRIVER:
     LOCAL_BUSINESS_AI_UI_DRIVER = "native"
-if LOCAL_BUSINESS_AI_UI_DRIVER not in {"legacy", "copilotkit", "native"}:
-    raise ImproperlyConfigured(
-        "LOCAL_BUSINESS_AI_UI_DRIVER must be one of: legacy, copilotkit, native"
-    )
+
+
+def _validate_ai_ui_driver(value: str) -> None:
+    """Проверяет допустимость ``LOCAL_BUSINESS_AI_UI_DRIVER``.
+
+    Драйвер ``legacy`` выведен из проекта (ADR-0032): тройная матрица
+    драйверов (legacy/copilotkit/native) утраивала поверхность сопровождения
+    (шаблоны, статика, тесты) ради страховки, которая ни разу не понадобилась
+    после того, как ``native`` стал режимом по умолчанию. Явное значение
+    ``legacy`` в окружении сегодня почти всегда — забытый env со времен
+    старой конфигурации (см. инцидент 2026-06-15), поэтому вместо тихого
+    fallback конфигурация должна упасть сразу и понятно, а не оставить
+    приложение в неожиданном состоянии.
+    """
+    if value == "legacy":
+        raise ImproperlyConfigured(
+            "LOCAL_BUSINESS_AI_UI_DRIVER=legacy больше не поддерживается: драйвер "
+            "legacy выведен из проекта (ADR-0032). Уберите эту настройку из .env "
+            "или замените её на LOCAL_BUSINESS_AI_UI_DRIVER=native (режим по "
+            "умолчанию) либо =copilotkit."
+        )
+    if value not in {"copilotkit", "native"}:
+        raise ImproperlyConfigured(
+            "LOCAL_BUSINESS_AI_UI_DRIVER must be one of: copilotkit, native"
+        )
+
+
+_validate_ai_ui_driver(LOCAL_BUSINESS_AI_UI_DRIVER)
 LOCAL_BUSINESS_AI_UI_PROTOCOL_VERSION = os.environ.get(
     "LOCAL_BUSINESS_AI_UI_PROTOCOL_VERSION", "1.0"
 )

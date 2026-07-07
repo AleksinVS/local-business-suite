@@ -906,6 +906,55 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         self.assertEqual(events[0]["code"], "invalid_actor_signature")
         run_agent_mock.assert_not_called()
 
+    def test_ag_ui_run_rejects_expired_actor_signature(self):
+        # Корректно подписанный, но просроченный по TTL actor-токен должен
+        # отклоняться: проверяет ветку TTL в app._agui_signature_is_valid
+        # (default LOCAL_BUSINESS_AI_UI_ACTOR_TOKEN_TTL_SECONDS=900).
+        from services.agent_runtime.app import _agui_signature_payload, ag_ui_run
+        from services.agent_runtime.schemas import AGUIActorPayload, AGUIRunAgentInput
+
+        expired_payload = {
+            "session_id": "sidebar-session",
+            "model_id": "test-model",
+            "origin_channel": "copilotkit",
+            "actor_version": "copilotkit-ag-ui-v1",
+            "issued_at": int(time.time()) - 100000,
+            "actor": {
+                "user_id": 17,
+                "username": "doctor",
+                "roles": ["engineer"],
+                "is_superuser": False,
+                "channel": "sidebar",
+                "source": "django-copilotkit",
+                "origin_channel": "copilotkit",
+                "actor_version": "copilotkit-ag-ui-v1",
+            },
+        }
+        actor_payload = AGUIActorPayload.model_validate(expired_payload)
+        expired_payload["signature"] = hmac.new(
+            b"test-gateway-token",
+            _agui_signature_payload(actor_payload).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-3",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка"}],
+            forwardedProps=expired_payload,
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual(events[0]["type"], "RUN_ERROR")
+        self.assertEqual(events[0]["code"], "invalid_actor_signature")
+        run_agent_mock.assert_not_called()
+
     def test_ag_ui_run_returns_run_error_when_llm_key_is_missing(self):
         from services.agent_runtime.app import ag_ui_run
         from services.agent_runtime.schemas import AGUIRunAgentInput

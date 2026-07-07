@@ -426,6 +426,64 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("некорректный user_id", response.json()["error"])
 
+    def test_tool_gateway_rejects_wrong_token(self):
+        # Непустой, но неверный токен шлюза должен отклоняться так же, как
+        # отсутствующий (hmac.compare_digest, apps/ai/views.py:gateway_token_is_valid).
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": self.customer.id, "channel": "internal"},
+                    "payload": {"status": WorkOrderStatus.NEW},
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="wrong-token",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(AgentActionLog.objects.count(), 0)
+
+    def test_tool_gateway_rejects_nonexistent_user_id(self):
+        # Валидный токен, но user_id, которого нет в базе: actor не должен
+        # быть привязан к несуществующему пользователю (validate_gateway_actor).
+        missing_user_id = self.customer.id + self.manager.id + 100000
+        self.assertFalse(User.objects.filter(pk=missing_user_id).exists())
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": missing_user_id, "channel": "internal"},
+                    "payload": {"status": WorkOrderStatus.NEW},
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("не найден", response.json()["error"])
+        self.assertEqual(AgentActionLog.objects.count(), 0)
+
+    def test_tool_gateway_rejects_inactive_user(self):
+        # Валидный токен и существующий, но деактивированный пользователь:
+        # gateway обязан отклонить (User.objects.filter(is_active=True)).
+        inactive_user = User.objects.create_user(
+            username="inactive-ai", password="pass", is_active=False
+        )
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
+            data=json.dumps(
+                {
+                    "actor": {"user_id": inactive_user.id, "channel": "internal"},
+                    "payload": {"status": WorkOrderStatus.NEW},
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("не найден", response.json()["error"])
+        self.assertEqual(AgentActionLog.objects.count(), 0)
+
     def test_list_workorders_tool_returns_visible_items_and_logs_action(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),

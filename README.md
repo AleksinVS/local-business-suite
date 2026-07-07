@@ -124,10 +124,13 @@ source .venv/bin/activate
 pip install -r requirements.lock
 cp .env.example .env
 
+python manage.py bootstrap_runtime
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 ```
+
+`bootstrap_runtime` — идемпотентная подготовка runtime при первом запуске: создаёт каталоги `data/` и копирует дефолтные контракты в `data/contracts/`. Импорт `config/settings.py` этого больше не делает (никакой записи на диск при импорте), а валидация контрактов вынесена в system check `python manage.py check --tag contracts` (её выполняет и обычный `python manage.py check`).
 
 ### Windows
 
@@ -139,6 +142,7 @@ python -m venv .venv
 pip install -r requirements.lock
 copy .env.example .env
 
+python manage.py bootstrap_runtime
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver

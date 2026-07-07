@@ -295,14 +295,18 @@ VPS_HOST=example.com VPS_USER=deploy VPS_PORT=22 PROJECT_DIR=/opt/local-business
 ## Как работает production-старт
 
 `web` запускается через [docker/entrypoint.prod.sh](docker/entrypoint.prod.sh), который перед запуском Gunicorn выполняет:
+- `python manage.py bootstrap_runtime` — идемпотентная подготовка runtime: создаёт каталоги `data/` и копирует дефолтные контракты в `data/contracts/` (только если рабочей копии ещё нет). Выполняется до `migrate`, не требует БД;
 - `python manage.py migrate --noinput`
 - `python manage.py collectstatic --noinput`
 - `python manage.py seed_roles`
 
 Это защищает от типовых проблем первого запуска:
+- не созданы каталоги `data/` и рабочие копии контрактов;
 - нет таблиц в SQLite;
 - не собрана статика;
 - не созданы role groups.
+
+`bootstrap_runtime` заменяет побочные эффекты, которые раньше выполнялись на импорте `config/settings.py` (создание каталогов и копирование контрактов). Импорт настроек теперь чистый, без записи на диск; валидация контрактов вынесена в Django system check (`python manage.py check --tag contracts`), которую выполняет и обычная фаза system checks перед `migrate`, поэтому битый контракт по-прежнему останавливает деплой. Команда идемпотентна — повторный запуск ничего не ломает и не затирает отредактированные рабочие копии.
 
 `agent-runtime` запускается отдельно и читает provider variables из `.env.production`.
 

@@ -1,7 +1,14 @@
 #!/bin/sh
 set -eu
 
-mkdir -p /app/data/db /app/data/media /app/data/logs /app/data/contracts /app/staticfiles
+mkdir -p /app/staticfiles
+
+# Идемпотентная первичная подготовка runtime: каталоги data/ и копии дефолтных
+# контрактов в data/contracts/. Заменяет побочные эффекты, которые раньше
+# выполнялись на импорте config/settings.py. Выполняется ДО migrate, не требует БД
+# и не запускает system checks (иначе проверка контрактов сработала бы до того,
+# как рабочие копии скопированы). Повторный запуск безопасен.
+python manage.py bootstrap_runtime
 
 python manage.py wait_for_database --timeout "${LOCAL_BUSINESS_DB_WAIT_TIMEOUT:-60}"
 python manage.py migrate --noinput

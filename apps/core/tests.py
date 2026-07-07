@@ -1,5 +1,8 @@
 import json
+import os
 import sqlite3
+import subprocess
+import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -9,6 +12,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import CommandError, call_command
+from django.core.management.base import SystemCheckError
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -1558,3 +1562,92 @@ class CheckStaticfilesCommandTests(TestCase):
         out, _, raised = self._run()
         self.assertFalse(raised)
         self.assertIn("синхр", out.lower() + out)
+
+
+class BootstrapRuntimeCommandTests(TestCase):
+    """`bootstrap_runtime` — идемпотентная подготовка runtime вместо побочек импорта."""
+
+    def test_creates_directories_and_copies_contracts_idempotently(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            runtime_contracts = data_dir / "contracts"
+            with override_settings(DATA_DIR=data_dir, RUNTIME_CONTRACTS_DIR=runtime_contracts):
+                call_command("bootstrap_runtime", stdout=StringIO())
+
+                # Каталоги data/ созданы.
+                for relative in ("db", "logs", "queues", "cache"):
+                    self.assertTrue((data_dir / relative).is_dir(), relative)
+                self.assertTrue((data_dir / "indexes" / "fulltext").is_dir())
+                self.assertTrue((data_dir / "processing" / "raw_quarantine").is_dir())
+                for sub in ("ai", "integrations", "analytics"):
+                    self.assertTrue((runtime_contracts / sub).is_dir(), sub)
+
+                # Дефолтные контракты скопированы в рабочую копию.
+                self.assertTrue((runtime_contracts / "role_rules.json").is_file())
+                self.assertTrue((runtime_contracts / "workflow_rules.json").is_file())
+                self.assertTrue((runtime_contracts / "ai" / "tools.json").is_file())
+                self.assertTrue((runtime_contracts / "analytics" / "sources.json").is_file())
+                self.assertTrue((runtime_contracts / "integrations" / "registry.json").is_file())
+
+                # Схемы и .desc.json НЕ попадают в рабочую копию.
+                self.assertFalse((runtime_contracts / "schemas").exists())
+                self.assertFalse((runtime_contracts / ".desc.json").exists())
+
+                # Повторный запуск не ломается и не затирает отредактированную
+                # рабочую копию (идемпотентность + сохранение правок админа).
+                edited = runtime_contracts / "role_rules.json"
+                edited.write_text('{"edited_by_admin": true}', encoding="utf-8")
+                call_command("bootstrap_runtime", stdout=StringIO())
+                self.assertEqual(
+                    json.loads(edited.read_text(encoding="utf-8")),
+                    {"edited_by_admin": True},
+                )
+
+    def test_dry_run_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            runtime_contracts = data_dir / "contracts"
+            with override_settings(DATA_DIR=data_dir, RUNTIME_CONTRACTS_DIR=runtime_contracts):
+                call_command("bootstrap_runtime", "--dry-run", stdout=StringIO())
+            self.assertFalse(data_dir.exists(), "--dry-run не должен создавать каталоги")
+
+
+class SettingsImportSideEffectTests(TestCase):
+    """Импорт config.settings не должен писать на диск (ADR-0031)."""
+
+    def test_importing_settings_without_data_dir_creates_nothing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Каталог данных, которого ещё нет: импорт не должен его создавать.
+            data_dir = Path(tmpdir) / "fresh_data"
+            env = {
+                **os.environ,
+                "LOCAL_BUSINESS_DATA_DIR": str(data_dir),
+            }
+            result = subprocess.run(
+                [sys.executable, "-c", "import config.settings"],
+                cwd=str(settings.BASE_DIR),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(
+                data_dir.exists(),
+                "импорт settings в чистой среде не должен создавать каталоги data/",
+            )
+
+
+class ContractSystemCheckTests(TestCase):
+    """Валидация контрактов доступна как Django system check (тег `contracts`)."""
+
+    def test_check_contracts_tag_passes_for_valid_contracts(self):
+        # Не должно поднимать SystemCheckError на валидных рабочих контрактах.
+        call_command("check", tags=["contracts"])
+
+    def test_check_contracts_tag_detects_broken_contract(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            broken = Path(tmpdir) / "role_rules.json"
+            broken.write_text("{ это не валидный json ", encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=broken):
+                with self.assertRaises(SystemCheckError):
+                    call_command("check", tags=["contracts"])

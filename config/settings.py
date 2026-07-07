@@ -1,64 +1,23 @@
-import json
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from django.core.exceptions import ValidationError
 from django.core.exceptions import ImproperlyConfigured
 
-from apps.core.json_utils import (
-    validate_analytics_business_facts_payload,
-    validate_analytics_dedup_rules_payload,
-    validate_analytics_diagnostic_playbooks_payload,
-    validate_analytics_metrics_payload,
-    validate_analytics_monitors_payload,
-    validate_analytics_retention_profiles_payload,
-    validate_analytics_scope_rules_payload,
-    validate_analytics_sources_payload,
-    validate_analytics_workflow_routes_payload,
-    validate_ai_registry_payload,
-    validate_ai_chat_settings_payload,
-    validate_ai_task_types_payload,
-    validate_ai_tools_payload,
-    load_json_file,
-    validate_change_plan_payload,
-    validate_dataset_registry_payload,
-    validate_integration_registry_payload,
-    validate_memory_profiles_payload,
-    validate_memory_claims_policy_payload,
-    validate_memory_graph_schema_payload,
-    validate_memory_file_organization_profiles_payload,
-    validate_memory_ingestion_profiles_payload,
-    validate_memory_retrieval_budget_payload,
-    validate_memory_routing_payload,
-    validate_memory_sources_payload,
-    validate_memory_trust_policy_payload,
-    validate_role_rules_payload,
-    validate_task_brief_payload,
-    validate_workorder_status_colors_payload,
-    validate_workflow_rules_payload,
-)
+from apps.core.json_utils import load_json_file
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-for runtime_dir in (
-    DATA_DIR / "db",
-    DATA_DIR / "media",
-    DATA_DIR / "logs",
-    DATA_DIR / "contracts",
-    DATA_DIR / "knowledge_repo",
-    DATA_DIR / "queues",
-    DATA_DIR / "indexes" / "fulltext",
-    DATA_DIR / "indexes" / "vector",
-    DATA_DIR / "indexes" / "graph",
-    DATA_DIR / "processing" / "raw_quarantine",
-    DATA_DIR / "processing" / "safe_work",
-    DATA_DIR / "processing" / "extraction_packets",
-    DATA_DIR / "processing" / "cleanup_manifests",
-    DATA_DIR / "cache",
-    DATA_DIR / "analytics" / "duckdb",
-):
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+# Расположение изменяемого runtime-состояния. По умолчанию — ``<repo>/data``
+# (расположение НЕ меняется), переменная окружения позволяет вынести данные в
+# другой каталог для деплоя или изолированного теста.
+#
+# ВАЖНО: импорт настроек больше НЕ создаёт эти каталоги и не копирует дефолты.
+# Первичную подготовку runtime выполняет идемпотентная команда
+# ``python manage.py bootstrap_runtime`` (см. ADR-0031, README и
+# docs/deployment/DEPLOYMENT.md). Побочная запись на диск при импорте конфигурации
+# ломала read-only и параллельные запуски и заставляла каждую manage.py-команду
+# платить за создание каталогов и копирование файлов.
+DATA_DIR = Path(os.environ.get("LOCAL_BUSINESS_DATA_DIR", BASE_DIR / "data"))
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -179,10 +138,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Security flags read from environment (defaults safe for local dev)
-SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "False") == "True"
-SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SESSION_COOKIE_SECURE", "False") == "True"
-CSRF_COOKIE_SECURE = os.environ.get("DJANGO_CSRF_COOKIE_SECURE", "False") == "True"
+# Security flags read from environment (defaults safe for local dev).
+# env_bool — единый разбор булевых флагов ({"1","true","yes","on"}); он принимает
+# документированные в DEPLOYMENT.md значения True/False и заодно устраняет прежний
+# строгий `== "True"`, который молча игнорировал, например, `=1`.
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", False)
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", False)
 
 LOGGING = {
     "version": 1,
@@ -202,12 +164,20 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        # delay=True — файл открывается лениво, при первой записи, а не при
+        # применении LOGGING в django.setup(). Это обязательное следствие выноса
+        # bootstrap-побочек из импорта settings: раньше каталог data/logs/
+        # создавался на импорте, теперь его создаёт `bootstrap_runtime`, поэтому
+        # конфигурация логирования не должна требовать существующего каталога до
+        # bootstrap (иначе любая manage.py-команда в чистой среде падала бы на
+        # "Unable to configure handler 'file'").
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": DATA_DIR / "logs" / "app.log",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",
+            "delay": True,
         },
         # IIS PATH_INFO-фикс: отдельный файл вместо жёстко зашитого Windows-пути
         # и open() внутри middleware (см. apps/core/middleware.py). delay=True —
@@ -253,9 +223,7 @@ LOGGING = {
     },
 }
 
-LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED = os.environ.get(
-    "LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED", "false"
-).strip().lower() in {"1", "true", "yes", "on"}
+LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED = env_bool("LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED", False)
 LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH = Path(
     os.environ.get(
         "LOCAL_BUSINESS_PERFORMANCE_METRICS_PATH",
@@ -444,22 +412,63 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 RUNTIME_CONTRACTS_DIR = DATA_DIR / "contracts"
 DEFAULT_CONTRACTS_DIR = BASE_DIR / "contracts"
 
-os.makedirs(RUNTIME_CONTRACTS_DIR / "ai", exist_ok=True)
-os.makedirs(RUNTIME_CONTRACTS_DIR / "integrations", exist_ok=True)
-os.makedirs(RUNTIME_CONTRACTS_DIR / "analytics", exist_ok=True)
-
 def get_contract_path(filename, env_var, sub_dir=None):
-    default_path = DEFAULT_CONTRACTS_DIR / (sub_dir or "") / filename
+    """Возвращает путь к рабочей копии контракта БЕЗ побочных эффектов.
+
+    Только вычисляет путь: переопределение через переменную окружения (семантика
+    env-override не меняется) либо рабочая копия в ``data/contracts/``. Импорт
+    настроек больше не создаёт каталоги и не копирует дефолты — это делает
+    идемпотентная команда ``python manage.py bootstrap_runtime`` (каталоги +
+    копии default->runtime для контрактов, которых ещё нет в рабочей копии).
+
+    Возвращается ВСЕГДА путь рабочей копии (или явного env-override), а не
+    дефолта, — чтобы запись через Settings Center
+    (``apps.settings_center.contract_services``) шла строго в ``data/contracts/``
+    и не затрагивала read-only дефолты из git. Отказоустойчивость чтения при
+    отсутствии рабочей копии обеспечивается отдельно: для
+    role_rules/workflow_rules/workorder_status_colors — через
+    ``apps.core.contract_store``, для payload-констант ниже — через
+    ``_load_contract_payload`` с откатом на упакованный дефолт.
+    """
     runtime_path = RUNTIME_CONTRACTS_DIR / (sub_dir or "") / filename
-    runtime_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # If runtime contract doesn't exist, copy from default (one-time setup)
-    if not runtime_path.exists() and default_path.exists():
-        import shutil
-        shutil.copy(default_path, runtime_path)
-        
     override = os.environ.get(env_var, "").strip()
     return Path(override) if override else runtime_path
+
+
+def _contract_default_path(runtime_path):
+    """Путь упакованного дефолта для рабочего пути контракта.
+
+    Рабочий путь и дефолт отличаются только корнем (``RUNTIME_CONTRACTS_DIR`` vs
+    ``DEFAULT_CONTRACTS_DIR``), относительная часть общая. Если путь переопределён
+    переменной окружения и не лежит под ``RUNTIME_CONTRACTS_DIR``, упакованного
+    дефолта нет — тогда откат при чтении невозможен и используется только сам путь.
+    """
+    runtime_path = Path(runtime_path)
+    try:
+        relative = runtime_path.relative_to(RUNTIME_CONTRACTS_DIR)
+    except ValueError:
+        return None
+    return DEFAULT_CONTRACTS_DIR / relative
+
+
+def _load_contract_payload(path):
+    """Грузит payload контракта для settings-констант БЕЗ побочек и БЕЗ падения импорта.
+
+    Читает рабочую копию; при её отсутствии/ошибке — упакованный дефолт; при
+    полном провале возвращает ``None`` (импорт настроек не должен падать в среде
+    без выполненного ``bootstrap_runtime``). ВАЛИДАЦИЯ здесь НЕ выполняется — она
+    перенесена в Django system check ``apps.core.checks`` (тег ``contracts``,
+    который читает именно рабочие копии и падает на битом контракте).
+    """
+    path = Path(path)
+    for candidate in (path, _contract_default_path(path)):
+        if candidate is None:
+            continue
+        try:
+            return load_json_file(candidate)
+        except (OSError, ValueError):
+            continue
+    return None
 
 LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUSINESS_ROLE_RULES_FILE")
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
@@ -603,9 +612,7 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
 )
-LOCAL_BUSINESS_COPILOTKIT_ENABLED = os.environ.get(
-    "LOCAL_BUSINESS_COPILOTKIT_ENABLED", "false"
-).strip().lower() in {"1", "true", "yes", "on"}
+LOCAL_BUSINESS_COPILOTKIT_ENABLED = env_bool("LOCAL_BUSINESS_COPILOTKIT_ENABLED", False)
 _LOCAL_BUSINESS_AI_UI_DRIVER_ENV = os.environ.get("LOCAL_BUSINESS_AI_UI_DRIVER", "").strip().lower()
 LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT = bool(_LOCAL_BUSINESS_AI_UI_DRIVER_ENV)
 LOCAL_BUSINESS_AI_UI_DRIVER = _LOCAL_BUSINESS_AI_UI_DRIVER_ENV
@@ -648,7 +655,7 @@ LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS = int(
     os.environ.get("LOCAL_BUSINESS_AI_PENDING_ACTION_TTL_SECONDS", "900")
 )
 LOCAL_BUSINESS_SECRET_VAULT_BASE_URL = os.environ.get("LOCAL_BUSINESS_SECRET_VAULT_BASE_URL", "")
-SETTINGS_CENTER_ENABLED = os.environ.get("SETTINGS_CENTER_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+SETTINGS_CENTER_ENABLED = env_bool("SETTINGS_CENTER_ENABLED", True)
 SETTINGS_CENTER_ENV_APPLY_MODE = os.environ.get("SETTINGS_CENTER_ENV_APPLY_MODE", "proposal").strip().lower()
 if SETTINGS_CENTER_ENV_APPLY_MODE not in {"read_only", "proposal", "local_file"}:
     raise ImproperlyConfigured(
@@ -661,9 +668,7 @@ SETTINGS_CENTER_ENV_PROPOSAL_DIR = Path(
         DATA_DIR / "settings_center" / "env_proposals",
     )
 )
-SETTINGS_CENTER_HELP_AI_ENABLED = os.environ.get(
-    "SETTINGS_CENTER_HELP_AI_ENABLED", "true"
-).strip().lower() in {"1", "true", "yes", "on"}
+SETTINGS_CENTER_HELP_AI_ENABLED = env_bool("SETTINGS_CENTER_HELP_AI_ENABLED", True)
 SETTINGS_CENTER_HELP_MODEL_PROFILE = os.environ.get(
     "SETTINGS_CENTER_HELP_MODEL_PROFILE", "local_admin_help_v1"
 )
@@ -673,11 +678,11 @@ SETTINGS_CENTER_HELP_MAX_CONTEXT_CHARS = int(
 SETTINGS_CENTER_AUDIT_RETENTION_DAYS = int(
     os.environ.get("SETTINGS_CENTER_AUDIT_RETENTION_DAYS", "365")
 )
-ACCOUNTS_AD_LINK_ENABLED = os.environ.get("ACCOUNTS_AD_LINK_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+ACCOUNTS_AD_LINK_ENABLED = env_bool("ACCOUNTS_AD_LINK_ENABLED", True)
 ACCOUNTS_AD_LINK_MODE = os.environ.get("ACCOUNTS_AD_LINK_MODE", "manual").strip().lower()
-ACCOUNTS_AD_GROUP_ROLE_SYNC = os.environ.get("ACCOUNTS_AD_GROUP_ROLE_SYNC", "false").strip().lower() in {"1", "true", "yes", "on"}
-MEMORY_ACL_INHERITANCE_ENABLED = os.environ.get("MEMORY_ACL_INHERITANCE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
-MEMORY_ACL_FAIL_CLOSED = os.environ.get("MEMORY_ACL_FAIL_CLOSED", "true").strip().lower() in {"1", "true", "yes", "on"}
+ACCOUNTS_AD_GROUP_ROLE_SYNC = env_bool("ACCOUNTS_AD_GROUP_ROLE_SYNC", False)
+MEMORY_ACL_INHERITANCE_ENABLED = env_bool("MEMORY_ACL_INHERITANCE_ENABLED", True)
+MEMORY_ACL_FAIL_CLOSED = env_bool("MEMORY_ACL_FAIL_CLOSED", True)
 MEMORY_ACL_UNRESOLVED_POLICY = os.environ.get("MEMORY_ACL_UNRESOLVED_POLICY", "block").strip().lower()
 if MEMORY_ACL_UNRESOLVED_POLICY not in {"block", "admin_only", "fallback_scope_rule"}:
     raise ImproperlyConfigured(
@@ -705,106 +710,45 @@ if DJANGO_ENV == "production":
             f"required>={min_stream_timeout}."
         )
 
-try:
-    LOCAL_BUSINESS_WORKFLOW_RULES = load_json_file(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
-    validate_workflow_rules_payload(LOCAL_BUSINESS_WORKFLOW_RULES)
-
-    LOCAL_BUSINESS_ROLE_RULES = load_json_file(LOCAL_BUSINESS_ROLE_RULES_FILE)
-    validate_role_rules_payload(
-        LOCAL_BUSINESS_ROLE_RULES,
-        workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
-    )
-
-    LOCAL_BUSINESS_WORKORDER_STATUS_COLORS = load_json_file(LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE)
-    validate_workorder_status_colors_payload(
-        LOCAL_BUSINESS_WORKORDER_STATUS_COLORS,
-        workflow_payload=LOCAL_BUSINESS_WORKFLOW_RULES,
-    )
-
-    LOCAL_BUSINESS_INTEGRATION_REGISTRY = load_json_file(
-        LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE
-    )
-    validate_integration_registry_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY)
-
-    LOCAL_BUSINESS_ANALYTICS_DATASETS = load_json_file(
-        LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE
-    )
-    validate_dataset_registry_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS)
-    LOCAL_BUSINESS_ANALYTICS_SOURCES = load_json_file(LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)
-    validate_analytics_sources_payload(LOCAL_BUSINESS_ANALYTICS_SOURCES)
-    LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES = load_json_file(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE)
-    validate_analytics_scope_rules_payload(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES)
-    LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS = load_json_file(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE)
-    validate_analytics_business_facts_payload(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS)
-    LOCAL_BUSINESS_ANALYTICS_METRICS = load_json_file(LOCAL_BUSINESS_ANALYTICS_METRICS_FILE)
-    validate_analytics_metrics_payload(LOCAL_BUSINESS_ANALYTICS_METRICS)
-    LOCAL_BUSINESS_ANALYTICS_MONITORS = load_json_file(LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE)
-    validate_analytics_monitors_payload(LOCAL_BUSINESS_ANALYTICS_MONITORS)
-    LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS = load_json_file(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
-    validate_analytics_diagnostic_playbooks_payload(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS)
-    LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES = load_json_file(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE)
-    validate_analytics_workflow_routes_payload(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES)
-    LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES = load_json_file(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE)
-    validate_analytics_dedup_rules_payload(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES)
-    LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES = load_json_file(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE)
-    validate_analytics_retention_profiles_payload(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES)
-
-    LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = load_json_file(
-        LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE
-    )
-    validate_task_brief_payload(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE)
-
-    LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = load_json_file(
-        LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE
-    )
-    validate_change_plan_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE)
-
-    LOCAL_BUSINESS_AI_REGISTRY = load_json_file(LOCAL_BUSINESS_AI_REGISTRY_FILE)
-    validate_ai_registry_payload(LOCAL_BUSINESS_AI_REGISTRY)
-
-    LOCAL_BUSINESS_AI_TOOLS = load_json_file(LOCAL_BUSINESS_AI_TOOLS_FILE)
-    validate_ai_tools_payload(LOCAL_BUSINESS_AI_TOOLS)
-
-    LOCAL_BUSINESS_AI_TASK_TYPES = load_json_file(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
-    validate_ai_task_types_payload(LOCAL_BUSINESS_AI_TASK_TYPES)
-
-    LOCAL_BUSINESS_AI_MODELS = load_json_file(LOCAL_BUSINESS_AI_MODELS_FILE)
-
-    LOCAL_BUSINESS_AI_CHAT_SETTINGS = load_json_file(LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE)
-    validate_ai_chat_settings_payload(LOCAL_BUSINESS_AI_CHAT_SETTINGS)
-
-    LOCAL_BUSINESS_MEMORY_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
-    validate_memory_profiles_payload(LOCAL_BUSINESS_MEMORY_PROFILES)
-
-    LOCAL_BUSINESS_MEMORY_ROUTING = load_json_file(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
-    validate_memory_routing_payload(LOCAL_BUSINESS_MEMORY_ROUTING)
-
-    LOCAL_BUSINESS_MEMORY_TRUST_POLICY = load_json_file(LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE)
-    validate_memory_trust_policy_payload(LOCAL_BUSINESS_MEMORY_TRUST_POLICY)
-
-    LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY = load_json_file(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE)
-    validate_memory_claims_policy_payload(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY)
-
-    LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET = load_json_file(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE)
-    validate_memory_retrieval_budget_payload(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET)
-
-    LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
-    validate_memory_ingestion_profiles_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES)
-
-    LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES = load_json_file(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE)
-    validate_memory_file_organization_profiles_payload(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES)
-
-    LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA = load_json_file(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE)
-    validate_memory_graph_schema_payload(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA)
-
-    LOCAL_BUSINESS_MEMORY_SOURCES = load_json_file(LOCAL_BUSINESS_MEMORY_SOURCES_FILE)
-    validate_memory_sources_payload(
-        LOCAL_BUSINESS_MEMORY_SOURCES,
-        profiles_payload=LOCAL_BUSINESS_MEMORY_PROFILES,
-        routing_payload=LOCAL_BUSINESS_MEMORY_ROUTING,
-        ingestion_profiles_payload=LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES,
-    )
-except (OSError, json.JSONDecodeError, ValidationError) as exc:
-    raise ImproperlyConfigured(
-        f"Invalid Корпоративный портал ВОБ №3 configuration: {exc}"
-    ) from exc
+# Payload-константы контрактов для рантайм-читателей (apps.ai / apps.memory /
+# apps.filehub / apps.core.forms / apps.analytics и т.д., многие через
+# ``getattr(settings, "...", default)``). Раньше здесь же выполнялась ВАЛИДАЦИЯ
+# всех контрактов на импорте — она перенесена в Django system check
+# ``apps.core.checks`` (тег ``contracts``), который выполняют и обычный
+# ``manage.py check`` (его зовёт ``make check``), и ``check --tag contracts``, и
+# system-check-фаза перед ``migrate`` в ``docker/entrypoint.prod.sh``.
+#
+# Здесь остаётся только ЧТЕНИЕ без побочек и без падения импорта: отсутствующая
+# рабочая копия молча откатывается на упакованный дефолт (см.
+# ``_load_contract_payload``), поэтому dev-запуск без ``bootstrap_runtime`` не
+# падает на импорте настроек, а битый контракт по-прежнему ловит system check.
+LOCAL_BUSINESS_WORKFLOW_RULES = _load_contract_payload(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
+LOCAL_BUSINESS_ROLE_RULES = _load_contract_payload(LOCAL_BUSINESS_ROLE_RULES_FILE)
+LOCAL_BUSINESS_WORKORDER_STATUS_COLORS = _load_contract_payload(LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE)
+LOCAL_BUSINESS_INTEGRATION_REGISTRY = _load_contract_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE)
+LOCAL_BUSINESS_ANALYTICS_DATASETS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE)
+LOCAL_BUSINESS_ANALYTICS_SOURCES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)
+LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE)
+LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE)
+LOCAL_BUSINESS_ANALYTICS_METRICS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_METRICS_FILE)
+LOCAL_BUSINESS_ANALYTICS_MONITORS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE)
+LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
+LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE)
+LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE)
+LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE)
+LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = _load_contract_payload(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE)
+LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = _load_contract_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE)
+LOCAL_BUSINESS_AI_REGISTRY = _load_contract_payload(LOCAL_BUSINESS_AI_REGISTRY_FILE)
+LOCAL_BUSINESS_AI_TOOLS = _load_contract_payload(LOCAL_BUSINESS_AI_TOOLS_FILE)
+LOCAL_BUSINESS_AI_TASK_TYPES = _load_contract_payload(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
+LOCAL_BUSINESS_AI_MODELS = _load_contract_payload(LOCAL_BUSINESS_AI_MODELS_FILE)
+LOCAL_BUSINESS_AI_CHAT_SETTINGS = _load_contract_payload(LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE)
+LOCAL_BUSINESS_MEMORY_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
+LOCAL_BUSINESS_MEMORY_ROUTING = _load_contract_payload(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
+LOCAL_BUSINESS_MEMORY_TRUST_POLICY = _load_contract_payload(LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE)
+LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY = _load_contract_payload(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE)
+LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET = _load_contract_payload(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE)
+LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
+LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE)
+LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA = _load_contract_payload(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE)
+LOCAL_BUSINESS_MEMORY_SOURCES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_SOURCES_FILE)

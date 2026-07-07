@@ -316,18 +316,9 @@ else:
     }
 
 DATABASES = {"default": default_database}
-DATABASE_ROUTERS = []
-
-LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES = {
-    "default": Path(os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_DEFAULT_PATH", DATA_DIR / "db" / "main_vault.sqlite3")),
-    "chat": Path(os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_CHAT_PATH", DATA_DIR / "db" / "chat.sqlite3")),
-    "knowledge_meta": Path(
-        os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_KNOWLEDGE_META_PATH", DATA_DIR / "db" / "knowledge_meta.sqlite3")
-    ),
-    "analytics_control": Path(
-        os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_ANALYTICS_CONTROL_PATH", DATA_DIR / "db" / "analytics_control.sqlite3")
-    ),
-}
+# DATABASE_ROUTERS не задаётся: проект работает с единственной базой ``default``
+# (ADR-0029). Пути к архивным SQLite-файлам эпохи раздельных баз нужны только
+# инструментам миграции и живут в apps.core.postgresql_migration, а не здесь.
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -548,7 +539,6 @@ LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_PATH = Path(
         DATA_DIR / "memory" / "queues" / "external_connectors.sqlite3",
     )
 )
-LOCAL_BUSINESS_DB_SPLIT_ENABLED = False
 LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR = Path(
     os.environ.get("LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR", DATA_DIR / "knowledge_repo")
 )

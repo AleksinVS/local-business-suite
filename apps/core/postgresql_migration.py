@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import subprocess
 from dataclasses import dataclass
@@ -43,9 +44,28 @@ def default_export_dir() -> Path:
 
 
 def legacy_sqlite_databases() -> dict[str, Path]:
+    """Пути к архивным SQLite-файлам эпохи раздельных баз (до ADR-0029).
+
+    Это конфигурация инструмента миграции, а не глобальная настройка Django,
+    поэтому словарь строится здесь напрямую из переменных окружения, а не
+    читается из ``settings``. Нужен, пока не пройден production cutover на
+    PostgreSQL: этими путями пользуются export/import/validate-команды и
+    команды переноса legacy chat/analytics баз.
+    """
+    data_dir = settings.DATA_DIR
     return {
-        alias: Path(path)
-        for alias, path in getattr(settings, "LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES", {}).items()
+        "default": Path(
+            os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_DEFAULT_PATH", data_dir / "db" / "main_vault.sqlite3")
+        ),
+        "chat": Path(os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_CHAT_PATH", data_dir / "db" / "chat.sqlite3")),
+        "knowledge_meta": Path(
+            os.environ.get("LOCAL_BUSINESS_LEGACY_SQLITE_KNOWLEDGE_META_PATH", data_dir / "db" / "knowledge_meta.sqlite3")
+        ),
+        "analytics_control": Path(
+            os.environ.get(
+                "LOCAL_BUSINESS_LEGACY_SQLITE_ANALYTICS_CONTROL_PATH", data_dir / "db" / "analytics_control.sqlite3"
+            )
+        ),
     }
 
 

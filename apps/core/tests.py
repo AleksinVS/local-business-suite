@@ -150,13 +150,18 @@ class DatabaseConfigTests(TestCase):
         self.assertIn("Database is available", out.getvalue())
 
     def test_postgres_migration_export_reads_legacy_sqlite_manifest(self):
+        from unittest.mock import patch
+
         with tempfile.TemporaryDirectory() as tmpdir:
             sqlite_path = Path(tmpdir) / "legacy.sqlite3"
             with sqlite3.connect(sqlite_path) as connection:
                 connection.execute("CREATE TABLE core_department (id integer primary key, name text, parent_id integer)")
                 connection.execute("INSERT INTO core_department (name) VALUES (?)", ("demo",))
 
-            with override_settings(LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={"default": sqlite_path}):
+            with patch(
+                "apps.core.postgresql_migration.legacy_sqlite_databases",
+                return_value={"default": sqlite_path},
+            ):
                 manifest = write_export_package(Path(tmpdir) / "export", dry_run=True)
 
         table = manifest["tables"][0]
@@ -166,6 +171,8 @@ class DatabaseConfigTests(TestCase):
         self.assertEqual(table["row_count"], 1)
 
     def test_postgres_migration_export_prefers_domain_sqlite_source(self):
+        from unittest.mock import patch
+
         with tempfile.TemporaryDirectory() as tmpdir:
             default_path = Path(tmpdir) / "default.sqlite3"
             chat_path = Path(tmpdir) / "chat.sqlite3"
@@ -177,11 +184,12 @@ class DatabaseConfigTests(TestCase):
                 connection.execute("INSERT INTO ai_chatmessage (id) VALUES (2)")
                 connection.execute("INSERT INTO ai_chatmessage (id) VALUES (3)")
 
-            with override_settings(
-                LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={
+            with patch(
+                "apps.core.postgresql_migration.legacy_sqlite_databases",
+                return_value={
                     "default": default_path,
                     "chat": chat_path,
-                }
+                },
             ):
                 manifest = write_export_package(Path(tmpdir) / "export", dry_run=True)
 
@@ -191,6 +199,8 @@ class DatabaseConfigTests(TestCase):
         self.assertEqual(table["row_count"], 2)
 
     def test_postgres_migration_package_validation_checks_jsonl_counts(self):
+        from unittest.mock import patch
+
         with tempfile.TemporaryDirectory() as tmpdir:
             sqlite_path = Path(tmpdir) / "legacy.sqlite3"
             with sqlite3.connect(sqlite_path) as connection:
@@ -198,7 +208,10 @@ class DatabaseConfigTests(TestCase):
                 connection.execute("INSERT INTO core_department (name) VALUES (?)", ("demo",))
 
             output_dir = Path(tmpdir) / "export"
-            with override_settings(LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES={"default": sqlite_path}):
+            with patch(
+                "apps.core.postgresql_migration.legacy_sqlite_databases",
+                return_value={"default": sqlite_path},
+            ):
                 write_export_package(output_dir)
 
             result = validate_export_package(output_dir)

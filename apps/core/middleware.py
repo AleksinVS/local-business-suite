@@ -1,13 +1,27 @@
-import os
-from datetime import datetime
-from django.conf import settings
+import logging
+
+logger = logging.getLogger("apps.core.iis_path_debug")
 
 
 class PathInfoDebugMiddleware:
+    """Фикс PATH_INFO для IIS/FastCGI (wfastcgi искажает PATH_INFO в "/").
+
+    Подключается в ``MIDDLEWARE`` только когда ``LOCAL_BUSINESS_IIS_COMPAT_ENABLED=true``
+    (см. ``config/settings.py:build_middleware``) — на Linux/Docker-развёртываниях
+    без IIS этот middleware вообще не участвует в обработке запроса. Сама эвристика
+    исправления PATH_INFO ниже не менялась и специфична для IIS/FastCGI, не для
+    других веб-серверов.
+
+    Диагностический лог пишется штатным ``logging`` (не через ``open()``) в
+    ``DATA_DIR/logs/iis_path_debug.log`` — см. ``LOGGING["loggers"]["apps.core.iis_path_debug"]``
+    в ``config/settings.py``. По умолчанию уровень этого логгера — WARNING, а запись
+    ниже идёт на уровне INFO, поэтому по умолчанию ничего не пишется и файл не
+    создаётся (у обработчика ``delay=True``). Подробный лог включается уровнем
+    логгера через ``LOCAL_BUSINESS_IIS_PATH_DEBUG_LOG_LEVEL=INFO`` (или ``DEBUG``).
+    """
+
     def __init__(self, get_response):
         self.get_response = get_response
-        self.log_file = "C:\\inetpub\\portal\\debug_path.log"
-        self.debug = getattr(settings, "DEBUG", False)
 
     def __call__(self, request):
         # Fix IIS PATH_INFO issue - only apply if there's a clear mismatch
@@ -38,15 +52,14 @@ class PathInfoDebugMiddleware:
                 request.path = path
                 request.path_info = path
 
-        # Only log in debug mode
-        if self.debug:
-            log_entry = f"{datetime.now()} - Path: {request.path} | Path Info: {request.path_info} | SCRIPT_NAME: {request.META.get('SCRIPT_NAME', '')} | PATH_INFO: {request.META.get('PATH_INFO')} | REQUEST_URI: {request.META.get('REQUEST_URI')}\n"
-
-            try:
-                with open(self.log_file, "a", encoding="utf-8") as f:
-                    f.write(log_entry)
-            except Exception as e:
-                pass
+        logger.info(
+            "Path: %s | Path Info: %s | SCRIPT_NAME: %s | PATH_INFO: %s | REQUEST_URI: %s",
+            request.path,
+            request.path_info,
+            request.META.get("SCRIPT_NAME", ""),
+            request.META.get("PATH_INFO"),
+            request.META.get("REQUEST_URI"),
+        )
 
         response = self.get_response(request)
         return response

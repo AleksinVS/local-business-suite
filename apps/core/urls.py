@@ -27,5 +27,9 @@ urlpatterns = [
     path("settings/roles/", RoleRulesUpdateView.as_view(), name="role_rules"),
 ]
 
-if settings.DEBUG:
+# debug_request выводит переменные окружения процесса (staff-only, но всё равно
+# диагностический контур с широким доступом к META/environ) — регистрируется
+# только при DEBUG и явно включённом LOCAL_BUSINESS_IIS_COMPAT_ENABLED (см.
+# config/settings.py). При выключенном флаге маршрут отсутствует -> 404.
+if settings.DEBUG and settings.LOCAL_BUSINESS_IIS_COMPAT_ENABLED:
     urlpatterns.append(path("debug-request/", debug_request, name="debug_request"))

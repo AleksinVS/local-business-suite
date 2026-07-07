@@ -9,6 +9,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import CommandError, call_command
+from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
@@ -909,6 +910,156 @@ class DiagnosticEndpointTests(TestCase):
                 contracts = response.json()["services"]["contracts"]
                 self.assertEqual(contracts["status"], "degraded")
                 self.assertIn("role_rules", contracts["contracts"])
+
+
+class IisCompatContourTests(TestCase):
+    """Пакет 04: PathInfoDebugMiddleware/debug_request изолированы флагом
+    ``LOCAL_BUSINESS_IIS_COMPAT_ENABLED`` (default false), лог идёт через
+    ``logging`` в ``DATA_DIR/logs/iis_path_debug.log``, а не через жёстко зашитый
+    Windows-путь и ``open()`` внутри middleware."""
+
+    LEGACY_WINDOWS_LOG_NAME = "C:\\inetpub\\portal\\debug_path.log"
+
+    @staticmethod
+    def _reload_core_urls():
+        """``apps/core/urls.py`` строит urlpatterns один раз при импорте модуля
+        по значению settings в этот момент — override_settings сам по себе не
+        меняет уже собранный список. Перезагружаем модуль и модуль корневого
+        urlconf (который держит вложенный ``URLResolver`` с закэшированным
+        ``url_patterns`` для ``include("apps.core.urls")``), затем сбрасываем
+        кэш резолвера — только так реально проверяются обе ветки флага через
+        HTTP-клиент, а не только сборка списка."""
+        import importlib
+
+        from django.urls import clear_url_caches
+
+        import apps.core.urls as core_urls
+        import config.urls as config_urls
+
+        importlib.reload(core_urls)
+        importlib.reload(config_urls)
+        clear_url_caches()
+
+    def setUp(self):
+        # Гарантируем, что после теста urlpatterns снова собраны по реальным
+        # (не переопределённым) settings — иначе следующий тест в наборе может
+        # неожиданно увидеть/не увидеть debug-request маршрут.
+        self.addCleanup(self._reload_core_urls)
+
+    def test_middleware_excluded_from_build_when_flag_disabled(self):
+        from config.settings import build_middleware
+
+        self.assertNotIn(
+            "apps.core.middleware.PathInfoDebugMiddleware",
+            build_middleware(False),
+        )
+
+    def test_middleware_included_in_build_when_flag_enabled(self):
+        from config.settings import build_middleware
+
+        self.assertIn(
+            "apps.core.middleware.PathInfoDebugMiddleware",
+            build_middleware(True),
+        )
+
+    def test_request_with_flag_disabled_creates_no_files(self):
+        from config.settings import build_middleware
+
+        legacy_log = Path(settings.BASE_DIR) / self.LEGACY_WINDOWS_LOG_NAME
+        iis_log = Path(settings.DATA_DIR) / "logs" / "iis_path_debug.log"
+        self.assertFalse(legacy_log.exists())
+
+        with override_settings(MIDDLEWARE=build_middleware(False)):
+            response = self.client.get(reverse("core:health_check"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(legacy_log.exists())
+        self.assertFalse(iis_log.exists())
+
+    def test_path_info_fix_rewrites_mismatched_request_uri_when_enabled(self):
+        """Фиксирует существующее поведение PATH_INFO-фикса (написан до правки
+        логирования в middleware.py — сама эвристика фикса не менялась, см.
+        non-goals пакета 04)."""
+        from apps.core.middleware import PathInfoDebugMiddleware
+
+        def get_response(inner_request):
+            return HttpResponse("ok")
+
+        request = RequestFactory().get("/")
+        request.META["REQUEST_URI"] = "/workorders/"
+        request.META["PATH_INFO"] = "/"
+
+        response = PathInfoDebugMiddleware(get_response)(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.META["PATH_INFO"], "/workorders/")
+        self.assertEqual(request.META["SCRIPT_NAME"], "")
+        self.assertEqual(request.path, "/workorders/")
+        self.assertEqual(request.path_info, "/workorders/")
+
+    def test_path_info_fix_skips_favicon_and_static_when_enabled(self):
+        """Тоже существующее поведение: favicon/static не переписываются."""
+        from apps.core.middleware import PathInfoDebugMiddleware
+
+        def get_response(inner_request):
+            return HttpResponse("ok")
+
+        request = RequestFactory().get("/")
+        request.META["REQUEST_URI"] = "/favicon.ico"
+        request.META["PATH_INFO"] = "/"
+
+        PathInfoDebugMiddleware(get_response)(request)
+
+        self.assertEqual(request.META["PATH_INFO"], "/")
+        self.assertEqual(request.path, "/")
+        self.assertEqual(request.path_info, "/")
+
+    def test_middleware_logs_via_standard_logging_not_open(self):
+        """Лог идёт через logging (logger 'apps.core.iis_path_debug'), не через
+        open() на жёстко зашитый путь — регрессия к прежнему поведению
+        middleware.py:9 (`C:\\inetpub\\portal\\debug_path.log`)."""
+        import logging
+
+        from apps.core.middleware import PathInfoDebugMiddleware
+
+        def get_response(inner_request):
+            return HttpResponse("ok")
+
+        request = RequestFactory().get("/workorders/")
+
+        logger = logging.getLogger("apps.core.iis_path_debug")
+        with self.assertLogs(logger, level="INFO"):
+            PathInfoDebugMiddleware(get_response)(request)
+
+        legacy_log = Path(settings.BASE_DIR) / self.LEGACY_WINDOWS_LOG_NAME
+        self.assertFalse(legacy_log.exists())
+
+    @override_settings(LOCAL_BUSINESS_IIS_COMPAT_ENABLED=False, DEBUG=True)
+    def test_debug_request_is_404_when_flag_disabled(self):
+        self._reload_core_urls()
+
+        response = self.client.get("/debug-request/")
+
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(LOCAL_BUSINESS_IIS_COMPAT_ENABLED=True, DEBUG=True)
+    def test_debug_request_is_registered_when_flag_and_debug_enabled(self):
+        self._reload_core_urls()
+        staff = User.objects.create_user(username="iis-staff", password="pass", is_staff=True)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("core:debug_request"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Request Information")
+
+    @override_settings(LOCAL_BUSINESS_IIS_COMPAT_ENABLED=True, DEBUG=False)
+    def test_debug_request_is_404_when_debug_disabled_even_if_flag_enabled(self):
+        self._reload_core_urls()
+
+        response = self.client.get("/debug-request/")
+
+        self.assertEqual(response.status_code, 404)
 
 
 class ArchitectureContractTests(TestCase):

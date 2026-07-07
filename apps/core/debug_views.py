@@ -5,12 +5,17 @@ import os
 
 @staff_member_required
 def debug_request(request):
-    """Debug view to show request information"""
+    """Debug view to show request information.
+
+    Регистрируется в ``apps/core/urls.py`` только при ``DEBUG`` и
+    ``LOCAL_BUSINESS_IIS_COMPAT_ENABLED=true`` — не регистрируется вовсе (404)
+    в обычной эксплуатации, т.к. выводит переменные окружения процесса.
+    """
     lines = []
     lines.append("=== Request Information ===")
     lines.append(f"Path: {request.path}")
     lines.append(f"Path Info: {request.path_info}")
-    lines.append(f"Script Name: {request.script_name}")
+    lines.append(f"Script Name: {request.META.get('SCRIPT_NAME', '')}")
     lines.append(f"Method: {request.method}")
     lines.append(f"GET: {request.GET}")
     lines.append(f"POST: {request.POST}")

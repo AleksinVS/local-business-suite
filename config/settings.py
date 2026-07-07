@@ -71,6 +71,14 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 DJANGO_ENV = os.environ.get("DJANGO_ENV", "development").strip().lower()
 if DJANGO_ENV not in {"development", "production"}:
     raise ImproperlyConfigured("DJANGO_ENV must be one of: development, production")
+
+TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def env_bool(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in TRUE_VALUES
+
+
 APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Корпоративный портал ВОБ №3")
 ALLOWED_HOSTS = [
     host.strip()
@@ -106,19 +114,44 @@ INSTALLED_APPS = [
     "apps.waiting_list",
 ]
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "apps.core.middleware.PathInfoDebugMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "apps.core.performance.PerformanceMetricsMiddleware",
-    "django_htmx.middleware.HtmxMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-]
+# IIS-совместимый отладочный контур (PATH_INFO-фикс для IIS/FastCGI, см.
+# apps/core/middleware.py:PathInfoDebugMiddleware, плюс staff-only debug_request в
+# apps/core/urls.py) включается только явным флагом деплоя. По умолчанию выключен:
+# на Linux/Docker-хосте PATH_INFO не искажается, и безусловное включение раньше
+# приводило к жёстко зашитому Windows-пути и записи файла на каждый запрос даже
+# вне IIS (см. docs/deployment/IIS_SSO.md).
+LOCAL_BUSINESS_IIS_COMPAT_ENABLED = env_bool("LOCAL_BUSINESS_IIS_COMPAT_ENABLED", False)
+
+
+def build_middleware(iis_compat_enabled):
+    """Собирает список MIDDLEWARE.
+
+    Вынесено в отдельную функцию (а не встроено в условие внутри списка), чтобы
+    решение "добавлять ли PathInfoDebugMiddleware" можно было проверить тестом
+    напрямую по значению флага, не полагаясь на runtime ``override_settings``
+    (``MIDDLEWARE`` собирается один раз при импорте settings).
+    """
+
+    middleware = [
+        "django.middleware.security.SecurityMiddleware",
+        "whitenoise.middleware.WhiteNoiseMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+    ]
+    if iis_compat_enabled:
+        middleware.append("apps.core.middleware.PathInfoDebugMiddleware")
+    middleware += [
+        "django.middleware.common.CommonMiddleware",
+        "apps.core.performance.PerformanceMetricsMiddleware",
+        "django_htmx.middleware.HtmxMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+        "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    ]
+    return middleware
+
+
+MIDDLEWARE = build_middleware(LOCAL_BUSINESS_IIS_COMPAT_ENABLED)
 
 ROOT_URLCONF = "config.urls"
 
@@ -176,6 +209,19 @@ LOGGING = {
             "backupCount": 5,
             "formatter": "verbose",
         },
+        # IIS PATH_INFO-фикс: отдельный файл вместо жёстко зашитого Windows-пути
+        # и open() внутри middleware (см. apps/core/middleware.py). delay=True —
+        # файл не создаётся, пока логгер ниже не пропустит хотя бы одну запись
+        # (по умолчанию его уровень WARNING выше, чем INFO, которым пишет
+        # middleware, поэтому при отключённом подробном логировании файла нет).
+        "iis_path_debug_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": DATA_DIR / "logs" / "iis_path_debug.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 3,
+            "formatter": "verbose",
+            "delay": True,
+        },
     },
     "loggers": {
         "django": {
@@ -193,6 +239,16 @@ LOGGING = {
         "services": {
             "handlers": ["console", "file"],
             "level": "INFO",
+        },
+        # Подробность IIS PATH_INFO-диагностики управляется уровнем логгера, а не
+        # отдельным вторым env-флагом: по умолчанию WARNING гасит INFO-записи
+        # middleware (тихо, файл не создаётся); для диагностики на IIS-стенде
+        # временно поднимите уровень через LOCAL_BUSINESS_IIS_PATH_DEBUG_LOG_LEVEL=INFO.
+        # propagate=False — записи не дублируются в app.log/console.
+        "apps.core.iis_path_debug": {
+            "handlers": ["iis_path_debug_file"],
+            "level": os.environ.get("LOCAL_BUSINESS_IIS_PATH_DEBUG_LOG_LEVEL", "WARNING").strip().upper(),
+            "propagate": False,
         },
     },
 }
@@ -219,12 +275,6 @@ LOCAL_BUSINESS_PERFORMANCE_METRICS_EXCLUDE_PREFIXES = tuple(
     ).split(",")
     if prefix.strip()
 )
-
-TRUE_VALUES = {"1", "true", "yes", "on"}
-
-
-def env_bool(name, default=False):
-    return os.environ.get(name, str(default)).strip().lower() in TRUE_VALUES
 
 
 def database_config_from_url(database_url):

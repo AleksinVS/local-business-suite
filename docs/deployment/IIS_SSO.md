@@ -250,6 +250,21 @@ http://local-business-suite/
 
 Для fallback-формы через `/accounts/login/` настройте IIS так, чтобы этот путь мог открываться anonymous. Иначе IIS перехватит запрос раньше Django.
 
+### `/media/` обслуживает только Django, не IIS
+
+Вложения заявок лежат в `data/media/workorders/...`, но раздаёт их авторизованный
+Django-view (`/media/workorders/<path>` → `serve_workorder_attachment`, `login_required`
++ `can_view`), а не IIS как статический контент. Это правило важно на IIS:
+
+- **Не создавайте** для `/media/` отдельный static-обработчик, virtual directory или
+  правило, которое отдаёт файлы напрямую с диска в обход FastCGI-handler'а. Такой
+  обход раздал бы файлы заявок без проверки прав и мимо доменной авторизации.
+- Handler mapping в примере `web.config` уже ловит `path="*"` и направляет все запросы
+  (включая `/media/...`) в Python FastCGI handler — этого достаточно, отдельная
+  настройка `/media/` не нужна.
+- То же относится к любому reverse proxy перед IIS/Django: `/media/` не проксируется
+  на файловую систему напрямую, только на приложение.
+
 ## Безопасное хранение секретов
 
 Хранить пароли в `web.config` небезопасно. Рекомендуется использовать Environment Variables.

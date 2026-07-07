@@ -1,14 +1,17 @@
 from collections import OrderedDict
 import json
+from pathlib import Path
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Count
 
 User = get_user_model()
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -43,6 +46,7 @@ from .policies import (
     can_rate,
     can_transition,
     can_upload_attachment,
+    can_view,
 )
 from .selectors import (
     visible_boards_queryset,
@@ -836,3 +840,45 @@ class KanbanColumnDisplayView(LoginRequiredMixin, View):
             "workorders/partials/column_config_card.html",
             column_card_context(column),
         )
+
+
+@login_required
+def serve_workorder_attachment(request, path):
+    """Авторизованная выдача файла вложения заявки.
+
+    Файл резолвится не по «сырому» пути из URL, а через доменный объект:
+    относительный путь сопоставляется с полем ``WorkOrderAttachment.file``
+    (там хранится ровно это значение), из вложения берётся заявка, и право её
+    видеть проверяется штатной политикой ``can_view``. Так авторизация всегда
+    привязана к бизнес-объекту, а не к строке пути.
+
+    Раздача идёт через ``FileResponse`` (стриминг) и работает одинаково в dev и
+    production — в отличие от снятого ``static(MEDIA_URL, ...)``, который в dev
+    отдавал файлы без проверки прав, а при ``DEBUG=0`` вовсе отключался.
+    """
+    # Null-байт в пути ломает Path.resolve() (ValueError: embedded null byte).
+    # Отсекаем его явно как 404, иначе неперехваченный ValueError -> HTTP 500.
+    if "\x00" in path:
+        raise Http404("Файл не найден")
+
+    # Защита от path traversal: итоговый абсолютный путь обязан лежать строго
+    # внутри MEDIA_ROOT. Любая попытка выйти за его пределы (../../) -> 404.
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    absolute_path = (media_root / "workorders" / path).resolve()
+    if not absolute_path.is_relative_to(media_root):
+        raise Http404("Файл не найден")
+
+    relative_name = f"workorders/{path}"
+    attachment = get_object_or_404(WorkOrderAttachment, file=relative_name)
+    if not can_view(request.user, attachment.workorder):
+        # 404, а не 403: не раскрываем сам факт существования файла — тот же
+        # приём, что и в WorkOrderDetailView через visible-queryset.
+        raise Http404("Файл не найден")
+
+    if not absolute_path.is_file():
+        raise Http404("Файл не найден")
+
+    response = FileResponse(absolute_path.open("rb"), filename=attachment.filename)
+    if attachment.content_type:
+        response["Content-Type"] = attachment.content_type
+    return response

@@ -315,6 +315,18 @@ VPS_HOST=example.com VPS_USER=deploy VPS_PORT=22 PROJECT_DIR=/opt/local-business
 
 Если позже понадобится HTTPS через домен, Caddy можно перевести с `:80` на доменное имя и включить автоматические сертификаты.
 
+### Медиа-файлы (`/media/`) раздаются только через Django
+
+Пользовательские файлы (вложения заявок) хранятся в `data/media/workorders/...`, но
+reverse proxy (Caddy/IIS/Nginx) **не должен раздавать `/media/` как статику напрямую**.
+Все запросы к `/media/workorders/<path>` обязаны идти в Django: за этим URL стоит
+авторизованный view `serve_workorder_attachment` (`apps/workorders/views.py`) с
+`login_required` и проверкой права `can_view` на связанную заявку. Прямая раздача
+`/media/` в обход Django вернула бы файлы без проверки прав и мимо бизнес-политики.
+Раздача статикой через `static(MEDIA_URL, ...)` из `config/urls.py` снята: она работала
+только при `DEBUG=1` (в production — 404) и не проверяла права. Теперь dev и production
+идут одним кодом (см. пакет `03-protected-media-serving`).
+
 ## IIS и доменная авторизация
 
 Для Windows/IIS доступны четыре режима авторизации через `DJANGO_AUTH_MODE`: `local`, `ldap`, `remote_user`, `hybrid`.

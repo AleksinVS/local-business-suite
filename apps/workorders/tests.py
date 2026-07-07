@@ -1,8 +1,10 @@
 import json
+import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -984,3 +986,116 @@ class StepperContextTests(TestCase):
         self.assertIn("transition_choices_vals", response.context)
         self.assertIn("status_choices", response.context)
         self.assertEqual(response.context["workorder"].status, WorkOrderStatus.CLOSED)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class WorkOrderAttachmentServingTests(TestCase):
+    """Авторизованная выдача файлов вложений через view.
+
+    MEDIA_ROOT подменяется на временный каталог, чтобы записанные в тесте файлы
+    не попадали в data/media/. Раздача идёт через тот же URL /media/workorders/,
+    что и ``attachment.file.url`` в шаблонах, но за ним теперь стоит view с
+    login_required + can_view вместо снятого static(MEDIA_URL, ...).
+    """
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.department = Department.objects.create(name="Лаборатория")
+        self.device = MedicalDevice.objects.create(
+            name="Анализатор",
+            serial_number="SN-ATT-01",
+            department=self.department,
+        )
+        self.customer = User.objects.create_user(
+            username="att_customer", password="pass", department=self.department
+        )
+        self.technician = User.objects.create_user(username="att_tech", password="pass")
+        self.outsider = User.objects.create_user(username="att_outsider", password="pass")
+
+        tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        self.technician.groups.add(tech_group)
+        self.customer.groups.add(customer_group)
+
+        self.board = Board.objects.create(title="Attach Board", slug="attach-board")
+        self.board.allowed_groups.add(tech_group, customer_group)
+        self.workorder = WorkOrder.objects.create(
+            title="Заявка с вложением",
+            description="Есть прикреплённый файл.",
+            department=self.department,
+            author=self.customer,
+            board=self.board,
+            assignee=self.technician,
+            device=self.device,
+        )
+        self.attachment = WorkOrderAttachment.objects.create(
+            workorder=self.workorder,
+            uploaded_by=self.customer,
+            file=SimpleUploadedFile(
+                "photo.jpg", b"binary-image-bytes", content_type="image/jpeg"
+            ),
+            content_type="image/jpeg",
+        )
+        self.file_url = self.attachment.file.url
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get(self.file_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_outsider_without_access_gets_404(self):
+        self.client.force_login(self.outsider)
+        response = self.client.get(self.file_url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_user_with_access_receives_file_with_content_type(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(self.file_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        self.assertEqual(b"".join(response.streaming_content), b"binary-image-bytes")
+
+    def test_path_traversal_attempt_returns_404(self):
+        # Секрет за пределами MEDIA_ROOT; пытаемся достать его через ../../.
+        secret = Path(settings.MEDIA_ROOT).resolve().parent / "wo_secret.txt"
+        secret.write_bytes(b"top-secret")
+        self.addCleanup(secret.unlink, missing_ok=True)
+
+        self.client.force_login(self.customer)
+        response = self.client.get("/media/workorders/../../wo_secret.txt")
+        self.assertEqual(response.status_code, 404)
+        self.assertNotContains(response, "top-secret", status_code=404)
+
+    def test_url_encoded_traversal_attempt_returns_404(self):
+        # URL-кодированный обход (%2e%2e%2f == ../): WSGI декодирует его в
+        # PATH_INFO до Django, поэтому guard обязан отбить и такой вариант.
+        secret = Path(settings.MEDIA_ROOT).resolve().parent / "wo_secret_enc.txt"
+        secret.write_bytes(b"top-secret")
+        self.addCleanup(secret.unlink, missing_ok=True)
+
+        self.client.force_login(self.customer)
+        for url in (
+            "/media/workorders/%2e%2e%2f%2e%2e%2fwo_secret_enc.txt",
+            "/media/workorders/..%2f..%2fwo_secret_enc.txt",
+        ):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 404, url)
+            self.assertNotContains(response, "top-secret", status_code=404)
+
+    def test_null_byte_in_path_returns_404_not_500(self):
+        # Null-байт ломает Path.resolve() (ValueError); без явного отсечения это
+        # был бы неперехваченный HTTP 500. Ожидаем аккуратный 404.
+        self.client.force_login(self.customer)
+        response = self.client.get("/media/workorders/photo\x00.jpg")
+        self.assertEqual(response.status_code, 404)
+
+    def test_missing_file_on_disk_returns_404(self):
+        # Запись о вложении есть, а файла на диске нет — не 500, а 404.
+        Path(self.attachment.file.path).unlink()
+        self.client.force_login(self.customer)
+        response = self.client.get(self.file_url)
+        self.assertEqual(response.status_code, 404)

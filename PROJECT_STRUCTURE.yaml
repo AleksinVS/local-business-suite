@@ -367,7 +367,6 @@ docs: # Документация проекта
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
       ai-ui-protocol-foundation.md: file # Активный план версионируемой основы AI UI протоколов
-      architecture-review-remediation-2026-06-01.md: file # Superseded план ревью 2026-06-01; задачи поглощены планом 2026-07-04
       architecture-review-remediation-2026-07-04.md: file # Активный план устранения находок архитектурного ревью 2026-07-04
       context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
       copilotkit-ag-ui-integration.md: file # Активный план интеграции CopilotKit и AG-UI в основной Django UI
@@ -378,7 +377,6 @@ docs: # Документация проекта
       interface-russification-and-localization.md: file # Активный план русификации интерфейса портала и подготовки к локализации
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
-      memory-audit-review-ui.md: file # Активный план UI аудита и ревью проблем памяти и поискового индекса
       memory-file-source-auto-organization.md: file # Активный план автоупорядочивания файловых источников
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       module-registered-agent-skills-and-mcp-facade.md: file # Активный план модульных AI skills и registry-driven MCP-фасада
@@ -386,8 +384,6 @@ docs: # Документация проекта
       postgresql-primary-store-migration.md: file # Активный план миграции основного хранилища на PostgreSQL
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
-      settings-center-gui.md: file # Активный план Settings Center, GUI настроек и контекстной справки
-      universal-right-drawer-ai-navigation.md: file # Активный план универсального открытия правого сайдбара ИИ-ботом
       universal-source-adapters-memory-analytics.md: file # Активный план универсальных источников для памяти и аналитики
       workorder-tree-view.md: file # Активный план дерева заявок и режимов просмотра доски
     archive: # Архив закрытых или остановленных планов
@@ -549,10 +545,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого реализационного среза общей основы AI UI протоколов
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза общей основы AI UI протоколов
       TASK_ACCEPTANCE.implementation.md: file # Приемка первого реализационного среза общей основы AI UI протоколов
-    architecture-review-remediation-2026-06-01: # Workflow: исправления по архитектурному ревью 2026-06-01
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для исправлений по архитектурному ревью
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки исправлений по архитектурному ревью
     architecture-review-remediation-2026-07-04: directory... # Workflow: устранение находок архитектурного ревью 2026-07-04 (12 task packets)
     context-aware-sidebar-ai-chat: # Workflow: контекстный ИИ-чат в левой боковой панели
       task-packets: file
@@ -608,13 +600,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов
       BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
-    memory-audit-review-ui: # Workflow: UI аудита и ревью проблем памяти и поискового индекса
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для UI ревью памяти
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки UI ревью памяти
-      EXECUTOR_REPORT.memory-audit-review-ui.md: file # Отчет реализации UI ревью памяти
-      RETROSPECTIVE.md: file # Краткая ретроспектива по реализации UI ревью памяти
-      TASK_ACCEPTANCE.memory-audit-review-ui.md: file # Приемка реализации UI ревью памяти
     memory-file-source-auto-organization: # Workflow: автоупорядочивание файловых источников
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для автоупорядочивания файловых источников
@@ -653,28 +638,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание целей, границ и приемки миграции на PostgreSQL
       EXECUTOR_REPORT.postgresql-code-slice.md: file # Отчет реализации кодового среза миграции на PostgreSQL
       TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
-    settings-center-gui: # Workflow: Settings Center, GUI настроек и контекстная справка
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets
-      BLOCK_BRIEF.md: file # Краткое описание цели, scope и acceptance
-      HANDOFF_REPORT.md: file # Отчет реализации workflow-блока Settings Center GUI
-      RETROSPECTIVE.md: file # Шаблон ретроспективы workflow-блока
-      TASK_ACCEPTANCE.settings-center-gui.md: file # Шаблон приемки workflow-блока
-    testing-policy-and-independent-verification: # Workflow: политика тестирования и независимая проверка субагентом
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план документационного workflow-блока
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки документации по тестированию
-      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения по созданию политики тестирования
-      EXECUTOR_REPORT.test-runtime-acceleration.md: file # Отчет исполнения по ускорению повторных тестовых прогонов
-      RETROSPECTIVE.md: file # Ретроспектива создания политики тестирования
-      TASK_ACCEPTANCE.documentation.md: file # Приемка документационной задачи по политике тестирования
-      TASK_ACCEPTANCE.test-runtime-acceleration.md: file # Приемка задачи по test-fast и guide ускорения тестов
-    universal-right-drawer-ai-navigation: # Workflow: универсальное открытие правого сайдбара ИИ-ботом
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для universal right drawer AI navigation
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки универсального правого сайдбара
-      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения MVP универсального правого сайдбара
-      TASK_ACCEPTANCE.implementation.md: file # Приемка MVP универсального правого сайдбара
     universal-source-adapters-memory-analytics: # Workflow: универсальные источники для памяти и аналитики
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для универсальных source adapters
@@ -693,7 +656,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков
     2026: # Архив workflow-блоков за 2026 год
+      architecture-review-remediation-2026-06-01: file
       block-ai-memory-service-2026-05-19: file
+      memory-audit-review-ui: file
       memory-chat-reflection-secret-handles: file
       memory-external-systems-connector: file
       memory-file-backed-knowledge: file
@@ -703,6 +668,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
       memory-mvp-simplification: file
       memory-snapshot-chunk-removal: file
       memory-trusted-sources-claims-retrieval: file
+      settings-center-gui: file
+      testing-policy-and-independent-verification: file
+      universal-right-drawer-ai-navigation: file
     README.md: file # Правила и описание архива workflow-блоков
   templates: directory... # Шаблоны workflow-артефактов
 .dockerignore: file # Исключения из Docker build context

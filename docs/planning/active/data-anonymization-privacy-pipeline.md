@@ -26,7 +26,7 @@
 - `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - `contracts/ai/memory_routing.json`;
 - `contracts/ai/memory_ingestion_profiles.json`;
-- `docs/planning/active/settings-center-gui.md`.
+- `docs/planning/archive/2026/settings-center-gui.md`.
 
 Текущие реализации, которые нужно переиспользовать:
 

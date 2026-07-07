@@ -8,7 +8,7 @@
 - workflow-блок: `workflow/active/architecture-review-remediation-2026-07-04/`;
 - ADR: `docs/adr/ADR-0031-runtime-contract-store-and-delivery.md` (Accepted 2026-07-05,
   с уточнениями реализации), `docs/adr/ADR-0032-retire-legacy-ai-ui-driver.md` (Accepted);
-- поглощаемый блок: `workflow/active/architecture-review-remediation-2026-06-01/`
+- поглощаемый блок: `workflow/archive/2026/architecture-review-remediation-2026-06-01/`
   (superseded, см. раздел «Связь с блоком 2026-06-01»).
 
 ## Цель
@@ -150,7 +150,7 @@ Center при нескольких воркерах (или его честна�
 - 04 (debug log, ссылки, структура) — поглощена пакетами 04 и 12.
 
 Старый блок помечен `SUPERSEDED.md` и архивируется пакетом 12 вместе с его планом
-`docs/planning/active/architecture-review-remediation-2026-06-01.md`.
+`docs/planning/archive/2026/architecture-review-remediation-2026-06-01.md`.
 
 ## Definition of Done блока
 

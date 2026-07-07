@@ -12,5 +12,9 @@
   "memory-snapshot-chunk-removal.md": "Архивный план удаления MemorySnapshot/MemoryChunk из активного пути памяти",
   "memory-system-completion.md": "Архивный план завершения системы памяти из раннего среза",
   "memory-trusted-sources-claims-retrieval.md": "Архивный план trusted sources и отложенного claim/belief слоя",
-  "mlflow-memory-evaluation-and-tracing.md": "Архивный черновой план MLflow для оценки качества и трассировки памяти"
+  "mlflow-memory-evaluation-and-tracing.md": "Архивный черновой план MLflow для оценки качества и трассировки памяти",
+  "architecture-review-remediation-2026-06-01.md": "Архивный план (superseded) ревью 2026-06-01; задачи поглощены планом 2026-07-04",
+  "memory-audit-review-ui.md": "Архивный план UI аудита и ревью проблем памяти и поискового индекса (implemented)",
+  "settings-center-gui.md": "Архивный план Settings Center, GUI настроек и контекстной справки (implemented)",
+  "universal-right-drawer-ai-navigation.md": "Архивный план универсального открытия правого сайдбара ИИ-ботом (implemented MVP)"
 }

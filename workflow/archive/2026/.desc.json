@@ -9,5 +9,10 @@
   "memory-mvp-remediation": "Архивный workflow-блок исправления разрывов MVP-памяти",
   "memory-mvp-simplification": "Архивный workflow-блок упрощения MVP-архитектуры памяти",
   "memory-snapshot-chunk-removal": "Архивный workflow-блок удаления MemorySnapshot/MemoryChunk из активного пути памяти",
-  "memory-trusted-sources-claims-retrieval": "Архивный workflow-блок trusted sources, claim/belief layer и lightweight retrieval"
+  "memory-trusted-sources-claims-retrieval": "Архивный workflow-блок trusted sources, claim/belief layer и lightweight retrieval",
+  "architecture-review-remediation-2026-06-01": "Архивный workflow-блок (superseded): исправления по ревью 2026-06-01, поглощён блоком 2026-07-04",
+  "memory-audit-review-ui": "Архивный workflow-блок UI аудита и ревью проблем памяти и поискового индекса (implemented, принят владельцем 2026-07-07)",
+  "settings-center-gui": "Архивный workflow-блок Settings Center, GUI настроек и контекстной справки (implemented, принят владельцем 2026-07-07)",
+  "testing-policy-and-independent-verification": "Архивный workflow-блок политики тестирования и независимой проверки субагентом (implemented, принят владельцем 2026-07-07)",
+  "universal-right-drawer-ai-navigation": "Архивный workflow-блок универсального открытия правого сайдбара ИИ-ботом (implemented MVP, принят владельцем 2026-07-07)"
 }

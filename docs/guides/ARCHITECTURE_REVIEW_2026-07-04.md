@@ -5,7 +5,7 @@
 Статус: review saved, remediation planned.
 
 Предыдущее ревью: `docs/guides/ARCHITECTURE_REVIEW_2026-06-01.md`. Его remediation-блок
-`workflow/active/architecture-review-remediation-2026-06-01/` не был исполнен (нет executor reports);
+`workflow/archive/2026/architecture-review-remediation-2026-06-01/` не был исполнен (нет executor reports);
 незакрытые задачи из него поглощаются новым блоком
 `workflow/active/architecture-review-remediation-2026-07-04/` (см. раздел «Связь с ревью 2026-06-01»).
 

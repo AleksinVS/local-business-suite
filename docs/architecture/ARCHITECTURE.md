@@ -17,7 +17,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[Blueprint](blueprint.md)**: The foundational document describing the architectural vision, principles (Local-first, Server-driven UI, Policy-first), and the overall tech stack.
 - **[Domain Model](DOMAIN_MODEL.md)**: High-level overview of the main business entities and modules.
 - **[Policy Model](POLICY_MODEL.md)**: Detailed description of the role-based access control and declarative policy system.
-- **[AI Architecture](../../ai/chat_agent/ARCHITECTURE.md)**: Technical details of the AI agent, tool gateway, and confirmation flows.
+- **[AI UI Protocol Foundation](AI_UI_PROTOCOL_FOUNDATION_PLAN.md)** & **[Native AG-UI Chat Development](NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md)**: Technical design of the AI chat surface, UI protocol/driver matrix, tool gateway and confirmation flows.
 - **[Integrations](INTEGRATIONS.md)**: Strategy for connecting with legacy enterprise systems (Bridges).
 - **[Analytics Model](ANALYTICS_MODEL.md)**: Design of the analytical layer (Parquet + DuckDB + Evidence).
 - **[Observability Baseline](OBSERVABILITY_BASELINE.md)**: Minimal p50/p95 metrics and local latency event reporting before performance or stack decisions.
@@ -54,3 +54,7 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0024: Service extraction readiness](../adr/ADR-0024-service-extraction-readiness.md)
 - [ADR-0026: PWA-first notifications and optional Tauri client](../adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md)
 - [ADR-0029: PostgreSQL primary store and SQLite fork](../adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md)
+- [ADR-0030: Memory alignment to hybrid-knowledge v0.5](../adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md)
+- [ADR-0031: Runtime contract store and delivery](../adr/ADR-0031-runtime-contract-store-and-delivery.md)
+- [ADR-0032: Retire legacy AI UI driver](../adr/ADR-0032-retire-legacy-ai-ui-driver.md)
+- [ADR-0033: Native AI UI asset versions and staticfiles sync](../adr/ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md)

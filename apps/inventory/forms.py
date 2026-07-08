@@ -20,7 +20,8 @@ class DepartmentChoiceField(forms.ModelChoiceField):
 
 class MedicalDeviceForm(forms.ModelForm):
     department = DepartmentChoiceField(
-        queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+        label="Структурное подразделение",
+        queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id"),
     )
 
     def __init__(self, *args, **kwargs):

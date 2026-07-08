@@ -77,7 +77,7 @@ class WaitingListEntryForm(forms.ModelForm):
 class WaitingListStatusForm(forms.ModelForm):
     """Form for quick status transitions."""
 
-    status = forms.ChoiceField(choices=WaitingListStatus.choices)
+    status = forms.ChoiceField(choices=WaitingListStatus.choices, label="Статус")
 
     class Meta:
         model = WaitingListEntry

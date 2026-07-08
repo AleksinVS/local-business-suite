@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block content %}
 <section class="panel">
@@ -9,7 +10,7 @@
     {% endif %}
   </div>
   <div class="toolbar">
-    <form method="get" class="filters">
+    <form method="get" class="filters filters--adaptive">
       <div class="input-group input-group--search">
         <label for="searchInput">Поиск</label>
         <input type="search" id="searchInput" name="q" value="{{ filters.q }}" placeholder="Поиск по названию, модели, серийному номеру, рег. номеру">
@@ -104,4 +105,9 @@
     </div>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script src="{% static 'src/js/filter_overflow.js' %}"></script>
 {% endblock %}

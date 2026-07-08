@@ -602,6 +602,14 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
 )
+# Единый источник правды для httpx read-timeout стримингового чата
+# (``runtime_client.chat_stream`` / ``ag_ui_stream``). Чат теперь всегда
+# идёт через стриминг, поэтому gunicorn-воркер удерживается до этого
+# таймаута, и floor GUNICORN_TIMEOUT считается именно от него, а не от
+# синхронного LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT.
+LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT = float(
+    os.environ.get("LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT", "600")
+)
 LOCAL_BUSINESS_COPILOTKIT_ENABLED = env_bool("LOCAL_BUSINESS_COPILOTKIT_ENABLED", False)
 _LOCAL_BUSINESS_AI_UI_DRIVER_ENV = os.environ.get("LOCAL_BUSINESS_AI_UI_DRIVER", "").strip().lower()
 LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT = bool(_LOCAL_BUSINESS_AI_UI_DRIVER_ENV)
@@ -716,12 +724,13 @@ if DJANGO_ENV == "production":
         raise ImproperlyConfigured(
             "LOCAL_BUSINESS_AI_GATEWAY_TOKEN must be set to a non-default value in production"
         )
-    min_stream_timeout = int(LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT) + 30
+    min_stream_timeout = int(LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT) + 30
     if GUNICORN_TIMEOUT < min_stream_timeout:
         raise ImproperlyConfigured(
-            "GUNICORN_TIMEOUT must be at least LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT + 30 seconds "
-            f"for AI streaming requests. Current GUNICORN_TIMEOUT={GUNICORN_TIMEOUT}, "
-            f"required>={min_stream_timeout}."
+            "GUNICORN_TIMEOUT must be at least LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT + 30 seconds "
+            "for AI streaming requests (chat is streaming-only; a worker is held up to the "
+            "stream read timeout). "
+            f"Current GUNICORN_TIMEOUT={GUNICORN_TIMEOUT}, required>={min_stream_timeout}."
         )
 
 # Payload-константы контрактов для рантайм-читателей (apps.ai / apps.memory /

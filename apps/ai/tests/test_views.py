@@ -1063,47 +1063,69 @@ class AIViewsTests(TestCase):
         session = ChatSession.objects.get(user=self.customer)
         self.assertEqual(session.external_id, normalize_session_external_id("external-session-42"))
 
-    @patch("apps.ai.views.AgentRuntimeClient.chat")
-    def test_chat_send_stores_user_and_assistant_messages(self, chat_mock):
-        chat_mock.return_value = {
-            "assistant_message": "Найдено 1 новая заявка.",
-            "tool_trace": [{"tool": "workorders.list"}],
-        }
+    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
+    def test_chat_send_and_stream_store_user_and_assistant_messages(self, stream_mock):
+        # Нормальный ход диалога хранит ОБА сообщения, но через два шага:
+        # /send/ (AJAX) сохраняет только сообщение пользователя и отдаёт
+        # message_id, а ответ ассистента появляется на стриминговом пути.
+        stream_mock.return_value = [
+            'data: {"content": "Найдено 1 новая заявка."}',
+            "data: [DONE]",
+        ]
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(user=self.customer, title="Проверка AI")
-        response = self.client.post(
+
+        send_response = self.client.post(
             reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
             {"prompt": "Покажи новые заявки"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(send_response.status_code, 200)
+        send_payload = send_response.json()
+        self.assertEqual(send_payload["status"], "ok")
+        message_id = send_payload["message_id"]
+        self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
+        self.assertFalse(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).exists())
+
+        stream_response = self.client.post(
+            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"msg_id": message_id}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        body = b"".join(stream_response.streaming_content).decode("utf-8")
+        self.assertEqual(stream_response.status_code, 200)
+        self.assertIn("Найдено 1", body)
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).count(), 1)
-        self.assertTrue(ChatMessage.objects.filter(session=session, content__icontains="Найдено 1").exists())
+        assistant = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
+        self.assertEqual(assistant.content, "Найдено 1 новая заявка.")
+        self.assertTrue(assistant.metadata.get("streamed"))
 
-    @patch("apps.ai.views.AgentRuntimeClient.chat")
-    def test_chat_send_runtime_error_is_user_safe_and_audited(self, chat_mock):
-        chat_mock.side_effect = AgentRuntimeError("runtime exploded")
+    def test_chat_send_does_not_perform_synchronous_llm_call(self):
+        # Регрессия: /send/ больше НЕ делает синхронный LLM-вызов. Раньше это
+        # был синхронный вызов AgentRuntimeClient.chat с таймаутом 90s, который
+        # при рассинхроне с LLM_DEADLINE (300s) мог осиротить write-инструмент.
+        # Ответ ассистента (в т.ч. user-safe ошибки, см.
+        # test_chat_stream_runtime_error_is_returned_saved_and_audited) теперь
+        # приходит только со стримингового пути.
         self.client.force_login(self.customer)
-        session = ChatSession.objects.create(user=self.customer, title="Проверка ошибки")
-
-        with self.assertLogs("apps.ai.views", level="WARNING") as captured:
+        session = ChatSession.objects.create(user=self.customer, title="Без синхронного LLM")
+        with patch("apps.ai.views.AgentRuntimeClient") as client_class:
             response = self.client.post(
                 reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
                 {"prompt": "Проверь память"},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
             )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertNotIn("runtime exploded", "\n".join(captured.output))
-        action = AgentActionLog.objects.get(tool_code="agent_runtime.chat")
-        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
-        self.assertIn("runtime exploded", action.error_message)
-        self.assertEqual(action.request_payload["prompt_length"], len("Проверь память"))
-        self.assertNotIn("Проверь память", json.dumps(action.request_payload, ensure_ascii=False))
-        error_message = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
-        self.assertTrue(error_message.metadata["error"])
-        self.assertEqual(error_message.metadata["technical_trace_id"], action.id)
-        self.assertIn("Технический идентификатор", error_message.content)
-        self.assertNotIn("runtime exploded", error_message.content)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("message_id", payload)
+        # Клиент рантайма не конструируется и LLM не вызывается на /send/.
+        client_class.assert_not_called()
+        self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
+        self.assertFalse(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).exists())
+        self.assertFalse(AgentActionLog.objects.filter(session=session).exists())
 
     @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
     def test_chat_stream_runtime_error_is_returned_saved_and_audited(self, stream_mock):

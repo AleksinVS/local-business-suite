@@ -7,19 +7,15 @@
  * потомками того же <form>, поэтому GET/HTMX submit и связки <label for>
  * сохраняются при переносе.
  *
- * СТАДИЯ 1 (широкие экраны, innerWidth >= COLLAPSE_BP): контролы держат
- * естественную ширину; когда полный набор не помещается, ВСЕ фильтры и
- * переключатель вида уезжают в меню «Ещё фильтры ▾» целиком (без частичного
- * показа отдельных фильтров) — снаружи остаются только поиск, выбор доски и
- * кнопки действия. Подписи текстовые.
+ * СТАДИЯ 1 (широкие экраны): контролы держат ширину; когда полный набор не
+ * помещается, ВСЕ фильтры (multi-filter dropdown'ы) уезжают в «Ещё фильтры ▾»
+ * целиком. Снаружи остаются поиск, выбор доски, переключатель вида и кнопки
+ * действия; поиск сжимается по ширине, чтобы остальное влезло в одну строку.
  *
- * СТАДИЯ 2 (узкие/мобильные, innerWidth < COLLAPSE_BP): панель сворачивается в
- * компактный ряд из иконок. Для доски заявок это ровно ЧЕТЫРЕ элемента:
- *   1) маленький поиск (иконка «Поиск»),
- *   2) выбор доски (иконка «Доска», компактный select),
- *   3) «Ещё фильтры» (иконка-воронка) — держит 4 multi-filter dropdown'а и
- *      переключатель вида,
- *   4) кнопка «Создать заявку» (иконка «плюс»).
+ * СТАДИЯ 2 (узкие/мобильные): панель сворачивается в ряд иконок. Для доски:
+ * поиск, выбор доски, переключатель вида (пиктограммы «Доска»/«Дерево»),
+ * «Ещё фильтры» (воронка — держит только multi-filter dropdown'ы) и кнопка
+ * «Создать заявку». Поиск сжимается, остальное — иконки.
  * На остальных страницах состав подбирается по тем же принципам: самые важные
  * контролы остаются иконками, остальное — в воронку. Все подписи заменяются
  * пиктограммами (inline SVG), каждый icon-only контрол сохраняет доступное имя
@@ -43,6 +39,8 @@
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>',
     plus:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    tree:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v3.5M6 16v-2h12v2"/></svg>',
     expand:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>',
     collapse:
@@ -138,6 +136,23 @@
       }
     });
 
+    // Переключатель вида остаётся снаружи «Ещё фильтры»; его опции показываются
+    // пиктограммами в компактном режиме (текст скрыт, но сохранён для a11y+title).
+    this.items.forEach(function (it) {
+      if (it.role !== "view") return;
+      var opts = it.el.querySelectorAll(".segmented-option");
+      Array.prototype.forEach.call(opts, function (opt) {
+        var target = (opt.dataset && opt.dataset.workorderViewTarget) || "";
+        var iconName = target === "tree" ? "tree" : "board";
+        var text = opt.textContent.replace(/\s+/g, " ").trim();
+        if (!opt.getAttribute("title")) opt.setAttribute("title", text);
+        var lbl = document.createElement("span");
+        lbl.className = "filter-btn-label";
+        lbl.textContent = text;
+        opt.replaceChildren(iconSpan(iconName, "filter-btn-icon"), lbl);
+      });
+    });
+
     // Overflow-триггер: нативный <details> — доступен с клавиатуры, каретка/стили
     // наследуются от .multi-filter-dropdown.
     var overflow = document.createElement("details");
@@ -220,11 +235,22 @@
     // Все контролы в строку перед триггером для замера естественной ширины.
     this.items.forEach(function (it) { self.form.insertBefore(it.el, self.overflow); });
     this.pinned.forEach(function (p) { self.form.appendChild(p.el); });
+    // Поиск меряем в СЖАТОМ виде (узкий input), чтобы раскладка держала контролы
+    // в строке, а сжимался именно поиск (по требованию владельца).
     var searchEls = this.items.filter(function (it) { return it.role === "search"; });
-    searchEls.forEach(function (it) { it.el.style.flex = "0 0 auto"; });
+    searchEls.forEach(function (it) {
+      var input = it.el.querySelector("input");
+      it._savedW = input ? input.style.width : null;
+      if (input) input.style.width = "40px";
+      it.el.style.flex = "0 0 auto";
+    });
     void this.form.offsetWidth;
     this.items.forEach(function (it) { it.w = it.el.getBoundingClientRect().width; });
-    searchEls.forEach(function (it) { it.el.style.flex = ""; });
+    searchEls.forEach(function (it) {
+      var input = it.el.querySelector("input");
+      if (input) input.style.width = it._savedW || "";
+      it.el.style.flex = "";
+    });
     this.pinned.forEach(function (p) { p.w = p.el.getBoundingClientRect().width; });
 
     var wasHidden = this.overflow.hasAttribute("hidden");
@@ -273,7 +299,7 @@
 
     // Стадия 2 (компакт), если экран узкий ИЛИ даже минимальный набор
     // (поиск + submit-кнопки формы + воронка) не помещается в стадии 1.
-    var pinItems = this.items.filter(function (it) { return it.role === "search" || it.role === "board"; });
+    var pinItems = this.items.filter(function (it) { return it.role === "search" || it.role === "board" || it.role === "view"; });
     var forceCompact = window.innerWidth < COLLAPSE_BP;
     if (!forceCompact && this.widthNeeded(pinItems, true) > available) forceCompact = true;
 
@@ -282,16 +308,16 @@
   };
 
   Controller.prototype.planWide = function (width) {
-    // Пинуются только поиск и выбор доски. Всё остальное (фильтры + переключатель
-    // вида) уходит в «Ещё фильтры» ЦЕЛИКОМ, как только полный набор не помещается,
-    // без частичного показа отдельных фильтров (по требованию владельца).
+    // Пинуются поиск, выбор доски и переключатель вида. Фильтры (multi-filter
+    // dropdown'ы) уходят в «Ещё фильтры» ЦЕЛИКОМ, как только полный набор не
+    // помещается, без частичного показа отдельных фильтров (по требованию владельца).
     var menuNodes = [];
     var funnelVisible;
     if (this.widthNeeded(this.items, false) <= width) {
       funnelVisible = false;
     } else {
       this.items.forEach(function (it) {
-        if (it.role !== "search" && it.role !== "board") menuNodes.push(it.el);
+        if (it.role !== "search" && it.role !== "board" && it.role !== "view") menuNodes.push(it.el);
       });
       funnelVisible = true;
     }
@@ -301,9 +327,10 @@
   Controller.prototype.planCompact = function () {
     var self = this;
     var menuNodes = [];
-    // В воронку уходит всё, кроме поиска и выбора доски; затем submit формы.
+    // В воронку уходит всё, кроме поиска, выбора доски и переключателя вида;
+    // затем submit формы.
     this.items.forEach(function (it) {
-      if (it.role !== "search" && it.role !== "board") menuNodes.push(it.el);
+      if (it.role !== "search" && it.role !== "board" && it.role !== "view") menuNodes.push(it.el);
     });
     this.pinned.forEach(function (p) { menuNodes.push(p.el); });
     this.apply(menuNodes, true, "compact");

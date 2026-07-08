@@ -2356,8 +2356,8 @@ select:focus {
   min-width: 0;
 }
 .toolbar .filters--adaptive .input-group--search {
-  flex: 1 1 220px;
-  min-width: 150px;
+  flex: 1 1 120px;
+  min-width: 72px;
 }
 .toolbar .filters--adaptive .btn {
   flex: 0 0 auto;
@@ -2490,6 +2490,21 @@ select:focus {
   min-width: 0;
 }
 
+/* Compact view switcher: segmented options become square icon toggles. */
+.toolbar.filters-collapsed .view-switcher-group {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+.toolbar.filters-collapsed .view-switcher-group .segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  gap: 0;
+}
+
 /* Funnel summary: centred icon + count, drop caret to stay tight. */
 .toolbar.filters-collapsed .filters-overflow summary {
   justify-content: center;
@@ -2519,6 +2534,7 @@ select:focus {
 /* Visually hide the text the pictograms replace (kept for a11y + title). */
 .toolbar.filters-collapsed .input-group--search > label,
 .toolbar.filters-collapsed [data-filter-board] > label,
+.toolbar.filters-collapsed .view-switcher-group > label,
 .toolbar.filters-collapsed .filters-overflow-label,
 .toolbar.filters-collapsed .filter-btn-label,
 .toolbar.filters-collapsed .group-controls-count {

@@ -57,6 +57,9 @@ from apps.core.right_panels import (
     registered_right_panel_providers,
 )
 from apps.workorders.policies import ROLE_MANAGER
+from apps.inventory.models import MedicalDevice
+from apps.waiting_list.models import WaitingListEntry
+from apps.workorders.models import WorkOrder
 from config.settings import database_config_from_url
 from .models import Department
 
@@ -1469,6 +1472,45 @@ class DemoSeedCommandTests(TestCase):
         call_command("seed_hospital_demo")
         self.assertTrue(Department.objects.filter(name="Стационар").exists())
         self.assertTrue(User.objects.filter(username="chief_manager").exists())
+
+    def test_seed_demo_data_creates_marked_dataset(self):
+        call_command("seed_demo_data")
+        self.assertTrue(Department.objects.filter(name="[demo] Отделение реанимации").exists())
+        self.assertTrue(User.objects.filter(username="demo_manager1").exists())
+        self.assertTrue(User.objects.get(username="demo_customer1").check_password("DemoPortal-2026!"))
+        self.assertGreaterEqual(
+            MedicalDevice.objects.filter(inventory_number__startswith="DEMO-").count(), 15
+        )
+        self.assertGreaterEqual(
+            WorkOrder.objects.filter(title__startswith="[demo]").count(), 20
+        )
+        self.assertGreaterEqual(
+            WaitingListEntry.objects.filter(comment__startswith="[demo]").count(), 10
+        )
+
+    def test_seed_demo_data_is_idempotent(self):
+        call_command("seed_demo_data")
+        call_command("seed_demo_data")
+        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 9)
+        self.assertEqual(
+            MedicalDevice.objects.filter(inventory_number__startswith="DEMO-").count(), 26
+        )
+        self.assertEqual(WorkOrder.objects.filter(title__startswith="[demo]").count(), 30)
+        self.assertEqual(
+            WaitingListEntry.objects.filter(comment__startswith="[demo]").count(), 10
+        )
+
+    def test_seed_demo_data_flush_removes_marked_objects(self):
+        call_command("seed_demo_data")
+        call_command("seed_demo_data", flush=True)
+        self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 9)
+        self.assertEqual(WorkOrder.objects.filter(title__startswith="[demo]").count(), 30)
+        # Общий агрегатор не должен затрагиваться флашем демо-подразделений.
+        self.assertTrue(
+            Department.objects.filter(
+                parent=None, name="Вологодская областная больница №3"
+            ).exists()
+        )
 
 
 class CheckStaticfilesCommandTests(TestCase):

@@ -8,6 +8,20 @@
 
 Проект уже использует модульный Django-монолит, contracts, Settings Center, AI gateway, `SourceAdapter`/`SourceObjectEnvelope` и audit-модели. Основной риск — не отсутствие паттернов, а разные пути выполнения одного сценария в UI, AI, командах и будущих workers.
 
+## Пере-скоуп (2026-07-07)
+
+Часть исходного scope уже закрыта смежными блоками — при старте вычесть сделанное
+(подробности: `docs/planning/active/design-patterns-hardening-2026-06-01.md`,
+раздел «Пере-скоуп»):
+- идентичность gateway/MCP (не доверять `user_id` из тела) — **сделано** (срез
+  2026-06-01 + пакет 05 ревью 2026-07-04, CONFIRMED);
+- `SourceAdapter`/`SourceObjectEnvelope` как единая граница — **сделано** блоком
+  universal-source-adapters (принят);
+- role/contract write-path через Settings Center — **сделано**.
+
+Открытый приоритет: outbox/idempotency (пакет 05) → доменные write-path →
+command-flow всех AI write-tools → policies/selectors + развязка core→workorders.
+
 ## Write Scope
 
 Предполагаемый write scope для будущей реализации:

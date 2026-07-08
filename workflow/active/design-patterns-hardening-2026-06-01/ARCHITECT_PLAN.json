@@ -1,7 +1,7 @@
 {
   "block_id": "design-patterns-hardening-2026-06-01",
   "title": "Внедрение архитектурных паттернов",
-  "status": "planned",
+  "status": "re-scoped-2026-07-07",
   "source_review": "docs/architecture/DESIGN_PATTERNS_REVIEW_2026-06-01.md",
   "planning_doc": "docs/planning/active/design-patterns-hardening-2026-06-01.md",
   "tasks": [
@@ -9,31 +9,36 @@
       "task_id": "01-service-layer-and-write-paths",
       "packet": "task-packets/01-service-layer-and-write-paths.json",
       "risk": "high",
-      "summary": "Свести write-сценарии UI, AI и management commands к доменным сервисам."
+      "summary": "Свести write-сценарии UI, AI и management commands к доменным сервисам.",
+      "rescope": "Частично сделано: role/contract write-path через Settings Center + contract store. Остаток: доменные сценарии заявок/инвентаря к сервисам."
     },
     {
       "task_id": "02-ai-command-flow-and-gateway-identity",
       "packet": "task-packets/02-ai-command-flow-and-gateway-identity.json",
-      "risk": "high",
-      "summary": "Оформить AI write tools как команды и усилить проверку пользователя, сессии и служебной идентичности."
+      "risk": "medium",
+      "summary": "Оформить AI write tools как команды и усилить проверку пользователя, сессии и служебной идентичности.",
+      "rescope": "Идентичность/сессия/служебный токен gateway/MCP — сделано и проверено (2026-06-01 + п.05). Остаток: command-flow (PendingAction/подтверждение/trace) для ВСЕХ write-инструментов, не только роли."
     },
     {
       "task_id": "03-policies-selectors-and-read-models",
       "packet": "task-packets/03-policies-selectors-and-read-models.json",
       "risk": "medium",
-      "summary": "Унифицировать политики доступа, повторяемые выборки и read models для памяти и аналитики."
+      "summary": "Унифицировать политики доступа, повторяемые выборки и read models для памяти и аналитики.",
+      "rescope": "Добавлена развязка core→workorders (contract_store/forms → реестр валидаторов, следствие п.11 ревью 2026-07-04)."
     },
     {
       "task_id": "04-source-adapters-and-integration-boundaries",
       "packet": "task-packets/04-source-adapters-and-integration-boundaries.json",
-      "risk": "medium",
-      "summary": "Закрепить SourceAdapter/SourceObjectEnvelope как единую границу памяти, аналитики и внешних источников."
+      "risk": "low",
+      "summary": "Закрепить SourceAdapter/SourceObjectEnvelope как единую границу памяти, аналитики и внешних источников.",
+      "rescope": "SourceObjectEnvelope/SourceAdapter/registry реализованы блоком universal-source-adapters (принят, архив 2026-07-07). Остаток: закрепить границу (adapter_check для остальных источников)."
     },
     {
       "task_id": "05-outbox-workers-and-idempotency",
       "packet": "task-packets/05-outbox-workers-and-idempotency.json",
       "risk": "high",
-      "summary": "Спроектировать и внедрить минимальный job/outbox contract для фоновых задач с повторным выполнением без дублей."
+      "summary": "Спроектировать и внедрить минимальный job/outbox contract для фоновых задач с повторным выполнением без дублей.",
+      "rescope": "Не начато — наивысший открытый приоритет блока."
     },
     {
       "task_id": "06-docs-tests-and-acceptance",
@@ -50,5 +55,6 @@
     "git diff --check"
   ],
   "adr_required": "conditional",
-  "adr_note": "ADR нужен перед изменением модели доверия AI gateway/MCP, вводом production worker/message broker, новым storage backend или изменением SourceObjectEnvelope."
+  "adr_note": "ADR нужен перед изменением модели доверия AI gateway/MCP, вводом production worker/message broker, новым storage backend или изменением SourceObjectEnvelope.",
+  "rescope_note": "2026-07-07: идентичность gateway/MCP (пакет 02) и SourceAdapter-граница (пакет 04) уже реализованы смежными блоками; role/contract write-path (пакет 01) закрыт. Открытый приоритет: пакет 05 (outbox/idempotency) > остаток 01 (доменные write-path) > остаток 02 (command-flow всех write-tools) > 03 (policies/selectors + развязка core→workorders). Подробности — в planning-doc, раздел «Пере-скоуп»."
 }

@@ -2,7 +2,7 @@
 
 Дата: 2026-06-01.
 
-Статус: in progress.
+Статус: re-scoped (2026-07-07) — часть исходного scope закрыта смежными блоками, см. раздел «Пере-скоуп».
 
 Основание: `docs/architecture/DESIGN_PATTERNS_REVIEW_2026-06-01.md`.
 
@@ -147,11 +147,11 @@ Gateway обязан проверять:
 
 ## Порядок Реализации
 
-1. Закрыть пересечения с `architecture-review-remediation-2026-06-01`: логи prompt, роли, AI gateway, migration path.
+1. Закрыть пересечения с `architecture-review-remediation-2026-06-01`: логи prompt, роли, AI gateway, migration path. — **выполнено** (scope поглощён блоком 2026-07-04, который заархивирован 2026-07-07).
 2. Перенести write-действия AI к доменным сервисам и Settings Center service layer.
 3. Добавить атомарность и блокировки в критичные сценарии записи.
 4. Оформить command flow для AI tools и pending confirmations.
-5. Закрепить service identity и session ownership в AI gateway/MCP.
+5. Закрепить service identity и session ownership в AI gateway/MCP. — **выполнено** (срез 2026-06-01 + пакет 05 ревью 2026-07-04, все пункты CONFIRMED).
 6. Описать и внедрить минимальный job/outbox contract для фоновых задач.
 7. Расширить selectors/querysets для повторяющихся read-сценариев.
 8. Добавить или обновить unit/integration/e2e проверки.
@@ -171,6 +171,48 @@ Gateway обязан проверять:
 - `AgentActionLog.request_payload` получил command metadata: tool, action kind, actor, session, confirmation state и список ключей payload без дублирования значений.
 
 Исполнительный отчет: `workflow/active/design-patterns-hardening-2026-06-01/EXECUTOR_REPORT.ai-gateway-and-role-write-path.md`.
+
+## Пере-скоуп (2026-07-07)
+
+После исполнения блока `architecture-review-remediation-2026-07-04` и приёмки
+смежных блоков часть исходного scope уже закрыта — план сокращён, чтобы не
+переделывать сделанное.
+
+**Уже реализовано (вычитается из блока):**
+- **Строгий AI-шлюз / идентичность** (§5, пакет 02): служебный токен, связь
+  пользователь↔сессия, отклонение несуществующего/неактивного/некорректного
+  `actor.user_id`, TTL подписи актора — реализованы и НЕЗАВИСИМО проверены
+  (срез 2026-06-01 + пакет 05 ревью 2026-07-04, все пункты CONFIRMED). Модель
+  доверия gateway/MCP зафиксирована и в этом блоке НЕ меняется → ADR не нужен.
+- **Write-path ролей и runtime-контрактов** (§1, пакет 01): идёт через
+  `settings_center.contract_services.apply_contract_payload` (валидация,
+  атомарная запись, `SettingsChange`) + contract store ADR-0031 (пакет 01
+  ревью). В обход валидации/аудита роли/контракты больше не пишутся.
+- **Единый конверт источников** (§4, пакет 04): `SourceObjectEnvelope`,
+  `SourceAdapter`, registry, privacy-profiles и адаптеры workorders/waiting_list
+  реализованы блоком `universal-source-adapters-memory-analytics` (принят,
+  архив 2026-07-07). Остаётся только «закрепить» границу (adapter_check для
+  остальных источников), а не заводить её заново.
+- **Безопасное логирование runtime + command-metadata в `AgentActionLog`**
+  (§2, частично) — из среза 2026-06-01.
+
+**Остаётся (реальный открытый scope, приоритет сверху вниз):**
+1. **Outbox/job contract + идемпотентность** (§6/§7, пакет 05) — не начато,
+   наивысшая ценность: ingestion, reindex, reflection, пересчёт аналитики,
+   внешние коннекторы и уведомления получают `job_id`/`idempotency_key`/
+   `content_hash`; повтор после сбоя чинит состояние, а не плодит дубли.
+2. **Широкая консолидация write-path** (§1, остаток пакета 01) — свести
+   доменные сценарии заявок/инвентаря к сервисам (роль/контракты уже сделаны).
+3. **Command-flow для всех AI write tools** (§2, остаток пакета 02) —
+   `PendingAction`+подтверждение+trace для каждого write-инструмента, не только
+   обновления роли; инструмент — тонкая прослойка к доменному сервису.
+4. **Единые policy entrypoints, selectors и read models** (§3/§8, пакет 03),
+   плюс развязка `core → workorders`: `contract_store`/`forms` тянут доменные
+   валидаторы (следствие разноса `json_utils`, п.11 ревью 2026-07-04) — вынести
+   в реестр валидаторов, чтобы ядро не зависело от домена.
+
+**Стартовое решение владельца:** какие доменные write-сценарии входят в первый
+срез. ADR на данном этапе не требуется (см. раздел «ADR»).
 
 ## Acceptance Checks
 

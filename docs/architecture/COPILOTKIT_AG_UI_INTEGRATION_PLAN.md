@@ -6,9 +6,9 @@ Accepted. В ветке добавлен первый рабочий срез: A
 
 Архитектурное решение: `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`.
 
-Активный план: `docs/planning/active/copilotkit-ag-ui-integration.md`.
+Активный план: `docs/planning/archive/2026/copilotkit-ag-ui-integration.md`.
 
-Workflow-блок: `workflow/active/copilotkit-ag-ui-integration/`.
+Workflow-блок: `workflow/archive/2026/copilotkit-ag-ui-integration/`.
 
 ## Методологическая заметка
 

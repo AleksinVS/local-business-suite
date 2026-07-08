@@ -21,7 +21,7 @@ LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
 - `docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md`;
 - `docs/guides/AI_UI_PROTOCOL_OPERATIONS.md`;
 - `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`;
-- `workflow/active/copilotkit-ai-ui-chat-development/`.
+- `workflow/archive/2026/copilotkit-ai-ui-chat-development/`.
 
 Новый ADR не создается: архитектурные решения уже зафиксированы в ADR-0027 и ADR-0028. Этот документ описывает следующий проектный срез разработки продукта поверх принятой архитектуры.
 

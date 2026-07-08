@@ -14,5 +14,15 @@
   "memory-audit-review-ui": "Архивный workflow-блок UI аудита и ревью проблем памяти и поискового индекса (implemented, принят владельцем 2026-07-07)",
   "settings-center-gui": "Архивный workflow-блок Settings Center, GUI настроек и контекстной справки (implemented, принят владельцем 2026-07-07)",
   "testing-policy-and-independent-verification": "Архивный workflow-блок политики тестирования и независимой проверки субагентом (implemented, принят владельцем 2026-07-07)",
-  "universal-right-drawer-ai-navigation": "Архивный workflow-блок универсального открытия правого сайдбара ИИ-ботом (implemented MVP, принят владельцем 2026-07-07)"
+  "universal-right-drawer-ai-navigation": "Архивный workflow-блок универсального открытия правого сайдбара ИИ-ботом (implemented MVP, принят владельцем 2026-07-07)",
+  "architecture-review-remediation-2026-07-04": "Архивный workflow-блок устранения находок архитектурного ревью 2026-07-04 (12 task packets, принят владельцем 2026-07-07)",
+  "interface-russification": "Архивный workflow-блок русификации интерфейса портала (implemented, принят владельцем 2026-07-07)",
+  "workorder-tree-view": "Архивный workflow-блок дерева заявок и режимов просмотра доски (implemented, принят владельцем 2026-07-07)",
+  "module-registered-agent-skills-and-mcp-facade": "Архивный workflow-блок модульных AI skills и registry-driven MCP-фасада (implemented, принят владельцем 2026-07-07)",
+  "universal-source-adapters-memory-analytics": "Архивный workflow-блок универсальных источников для памяти и аналитики (implemented, принят владельцем 2026-07-07)",
+  "memory-file-source-auto-organization": "Архивный workflow-блок автоупорядочивания файловых источников (implemented, принят владельцем 2026-07-07)",
+  "ai-ui-protocol-foundation": "Архивный workflow-блок версионируемой основы AI UI протоколов (implemented, принят владельцем 2026-07-07)",
+  "copilotkit-ai-ui-chat-development": "Архивный workflow-блок ИИ-чата CopilotKit UI (заморожен как референс-драйвер; native — канон; 2026-07-07)",
+  "copilotkit-ag-ui-integration": "Архивный workflow-блок CopilotKit/AG-UI интеграции (поглощён copilotkit-ai-ui-chat-development, заморожен; 2026-07-07)",
+  "context-aware-sidebar-ai-chat": "Архивный workflow-блок контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09; концепции перешли в native)"
 }

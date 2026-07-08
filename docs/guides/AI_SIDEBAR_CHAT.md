@@ -7,8 +7,8 @@
 Связанные документы:
 
 - `docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md`
-- `docs/planning/active/context-aware-sidebar-ai-chat.md`
-- `workflow/active/context-aware-sidebar-ai-chat/`
+- `docs/planning/archive/2026/context-aware-sidebar-ai-chat.md`
+- `workflow/archive/2026/context-aware-sidebar-ai-chat/`
 
 ## Что изменилось
 

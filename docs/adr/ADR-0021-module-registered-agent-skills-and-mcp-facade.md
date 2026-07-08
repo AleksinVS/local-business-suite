@@ -348,4 +348,4 @@ Resources не должны раскрывать секреты, PII, raw paths,
 
 ## Статус реализации
 
-Не реализовано. Исполнительный план: `docs/planning/active/module-registered-agent-skills-and-mcp-facade.md`.
+Не реализовано. Исполнительный план: `docs/planning/archive/2026/module-registered-agent-skills-and-mcp-facade.md`.

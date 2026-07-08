@@ -10,7 +10,7 @@ Accepted for pilot. Первый рабочий срез реализован з
 - `docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md`;
 - `docs/guides/AI_UI_PROTOCOL_OPERATIONS.md`;
 - `docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md`;
-- `workflow/active/copilotkit-ag-ui-integration/`.
+- `workflow/archive/2026/copilotkit-ag-ui-integration/`.
 
 ## Назначение
 

@@ -362,4 +362,4 @@ UI/domain event
 - `docs/adr/ADR-0003-ai-memory-service.md`
 - `docs/adr/ADR-0007-settings-center-and-contextual-help.md`
 - `docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md`
-- `docs/planning/active/context-aware-sidebar-ai-chat.md`
+- `docs/planning/archive/2026/context-aware-sidebar-ai-chat.md`

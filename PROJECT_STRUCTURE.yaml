@@ -366,26 +366,16 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
-      ai-ui-protocol-foundation.md: file # Активный план версионируемой основы AI UI протоколов
-      architecture-review-remediation-2026-07-04.md: file # Активный план устранения находок архитектурного ревью 2026-07-04
-      context-aware-sidebar-ai-chat.md: file # Активный план контекстного ИИ-чата в левой боковой панели
-      copilotkit-ag-ui-integration.md: file # Активный план интеграции CopilotKit и AG-UI в основной Django UI
-      copilotkit-ai-ui-chat-development.md: file # Активный план разработки ИИ-чата в режиме CopilotKit UI
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
-      interface-russification-and-localization.md: file # Активный план русификации интерфейса портала и подготовки к локализации
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
-      memory-file-source-auto-organization.md: file # Активный план автоупорядочивания файловых источников
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
-      module-registered-agent-skills-and-mcp-facade.md: file # Активный план модульных AI skills и registry-driven MCP-фасада
       native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
       postgresql-primary-store-migration.md: file # Активный план миграции основного хранилища на PostgreSQL
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
-      universal-source-adapters-memory-analytics.md: file # Активный план универсальных источников для памяти и аналитики
-      workorder-tree-view.md: file # Активный план дерева заявок и режимов просмотра доски
     archive: # Архив закрытых или остановленных планов
       2026: file
       README.md: file # Описание архива planning-файлов
@@ -537,37 +527,6 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   base.html: file # Базовый шаблон (navbar, sidebar, общий правый сайдбар, HTMX скрипты)
 workflow: # Исполнительные workflow-пакеты для сложных работ
   active: # Активные workflow-блоки
-    ai-ui-protocol-foundation: # Workflow: версионируемая основа AI UI протоколов
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для общей основы AI UI протоколов
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки общей основы AI UI протоколов
-      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза общей основы AI UI протоколов
-      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого реализационного среза общей основы AI UI протоколов
-      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза общей основы AI UI протоколов
-      TASK_ACCEPTANCE.implementation.md: file # Приемка первого реализационного среза общей основы AI UI протоколов
-    architecture-review-remediation-2026-07-04: directory... # Workflow: устранение находок архитектурного ревью 2026-07-04 (12 task packets)
-    context-aware-sidebar-ai-chat: # Workflow: контекстный ИИ-чат в левой боковой панели
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для контекстного sidebar AI-чата
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки контекстного sidebar AI-чата
-      EXECUTOR_REPORT.01-06.md: file # Отчет исполнения task packets 01-06
-      TASK_ACCEPTANCE.01-06.md: file # Приемочный отчет реализации task packets 01-06
-    copilotkit-ag-ui-integration: # Workflow: CopilotKit и AG-UI в основном Django UI
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для CopilotKit/AG-UI интеграции
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки интеграции CopilotKit через AG-UI
-      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза CopilotKit/AG-UI
-      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого среза реализации CopilotKit/AG-UI
-      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза CopilotKit/AG-UI
-      TASK_ACCEPTANCE.implementation.md: file # Приемка первого среза реализации CopilotKit/AG-UI
-    copilotkit-ai-ui-chat-development: # Workflow: разработка ИИ-чата в режиме CopilotKit UI
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Машиночитаемый план исполнения для разработки CopilotKit AI UI chat
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ, scope и приемки workflow-блока
-      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза
-      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого runtime hardening среза
-      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза
-      TASK_ACCEPTANCE.implementation.md: file # Приемка первого runtime hardening среза
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов
@@ -584,12 +543,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза уведомлений
       TASK_ACCEPTANCE.implementation.md: file # Техническая приемка реализации этапа 1 PWA/browser notifications
       TASK_ACCEPTANCE.tauri.md: file # Техническая приемка этапа 2 Tauri desktop notifier
-    interface-russification: # Workflow: русификация интерфейса портала и подготовка к локализации
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для русификации UI
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки русификации UI
-      EXECUTOR_REPORT.implementation.md: file # Отчет реализации русификации интерфейса
-      TASK_ACCEPTANCE.implementation.md: file # Приемка реализации русификации интерфейса
     knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
       task-packets: file
       ARCHITECT_PLAN.json: file # Architect execution plan for knowledge-driven business analytics
@@ -600,12 +553,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов
       BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
-    memory-file-source-auto-organization: # Workflow: автоупорядочивание файловых источников
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для автоупорядочивания файловых источников
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки автоупорядочивания файловых источников
-      EXECUTOR_REPORT.implementation.md: file # Отчет реализации MVP автоупорядочивания файловых источников
-      TASK_ACCEPTANCE.implementation.md: file # Техническая приемка MVP автоупорядочивания файловых источников
     memory-hybrid-ranking-profiles: # Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets
@@ -613,13 +560,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.memory-hybrid-ranking-profiles.md: file # Отчет исполнения по профилям ранжирования, source semantic search и policy reindex
       RETROSPECTIVE.md: file # Краткая ретроспектива по результатам реализации
       TASK_ACCEPTANCE.memory-hybrid-ranking-profiles.md: file # Приемка workflow-блока по реализации профилей памяти
-    module-registered-agent-skills-and-mcp-facade: # Workflow: модульные AI skills и registry-driven MCP-фасад
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для module skills и MCP-фасада
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки module skills и MCP-фасада
-      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения реализации module skills, admin skill creator и MCP resources
-      RETROSPECTIVE.md: file # Ретроспектива реализации module skills и MCP-фасада
-      TASK_ACCEPTANCE.implementation.md: file # Приемка реализации module skills, runtime skill authoring и e2e-документации
     native-ag-ui-chat-development: # Workflow: разработка самописного AG-UI ИИ-чата
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для native AG-UI чата
@@ -638,39 +578,35 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание целей, границ и приемки миграции на PostgreSQL
       EXECUTOR_REPORT.postgresql-code-slice.md: file # Отчет реализации кодового среза миграции на PostgreSQL
       TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
-    universal-source-adapters-memory-analytics: # Workflow: универсальные источники для памяти и аналитики
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets для универсальных source adapters
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки универсальных source adapters
-      EXECUTOR_REPORT.01-07.md: file # Отчет исполнения task packets 01-07
-      TASK_ACCEPTANCE.01-07.md: file # Приемочный отчет реализации task packets 01-07
-    workorder-tree-view: # Workflow: дерево заявок и режимы просмотра доски
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Исполнительный план task packets для дерева заявок
-      BLOCK_BRIEF.md: file # Краткое описание цели, границ, доступа и приемки дерева заявок
-      EXECUTOR_REPORT.documentation.md: file # Отчет о подготовке проектной и исполнительной документации
-      EXECUTOR_REPORT.implementation.md: file # Отчет о реализации дерева заявок
-      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза дерева заявок
-      TASK_ACCEPTANCE.implementation.md: file # Приемка реализации дерева заявок
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков
     2026: # Архив workflow-блоков за 2026 год
+      ai-ui-protocol-foundation: file
       architecture-review-remediation-2026-06-01: file
+      architecture-review-remediation-2026-07-04: file
       block-ai-memory-service-2026-05-19: file
+      context-aware-sidebar-ai-chat: file
+      copilotkit-ag-ui-integration: file
+      copilotkit-ai-ui-chat-development: file
+      interface-russification: file
       memory-audit-review-ui: file
       memory-chat-reflection-secret-handles: file
       memory-external-systems-connector: file
       memory-file-backed-knowledge: file
       memory-file-content-search: file
       memory-file-only-knowledge-body: file
+      memory-file-source-auto-organization: file
       memory-mvp-remediation: file
       memory-mvp-simplification: file
       memory-snapshot-chunk-removal: file
       memory-trusted-sources-claims-retrieval: file
+      module-registered-agent-skills-and-mcp-facade: file
       settings-center-gui: file
       testing-policy-and-independent-verification: file
       universal-right-drawer-ai-navigation: file
+      universal-source-adapters-memory-analytics: file
+      workorder-tree-view: file
     README.md: file # Правила и описание архива workflow-блоков
   templates: directory... # Шаблоны workflow-артефактов
 .dockerignore: file # Исключения из Docker build context

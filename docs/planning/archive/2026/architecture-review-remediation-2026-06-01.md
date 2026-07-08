@@ -1,7 +1,7 @@
 # Исправления по архитектурному ревью 2026-06-01
 
 Статус: superseded (2026-07-04) — план не исполнялся; задачи поглощены планом
-`docs/planning/active/architecture-review-remediation-2026-07-04.md`
+`docs/planning/archive/2026/architecture-review-remediation-2026-07-04.md`
 (см. `workflow/active/architecture-review-remediation-2026-06-01/SUPERSEDED.md`).
 
 Связанные материалы:

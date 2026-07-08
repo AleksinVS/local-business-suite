@@ -3,7 +3,7 @@
 Дата: 2026-07-04.
 
 Блок не исполнялся (executor reports отсутствуют). Его задачи поглощены блоком
-`workflow/active/architecture-review-remediation-2026-07-04/` по итогам архитектурного
+`workflow/archive/2026/architecture-review-remediation-2026-07-04/` по итогам архитектурного
 ревью `docs/guides/ARCHITECTURE_REVIEW_2026-07-04.md`:
 
 - задача 01 (миграции раздельных runtime-баз) — неактуальна после ADR-0029

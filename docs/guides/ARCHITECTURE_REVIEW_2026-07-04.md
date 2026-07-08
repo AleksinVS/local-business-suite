@@ -7,7 +7,7 @@
 Предыдущее ревью: `docs/guides/ARCHITECTURE_REVIEW_2026-06-01.md`. Его remediation-блок
 `workflow/archive/2026/architecture-review-remediation-2026-06-01/` не был исполнен (нет executor reports);
 незакрытые задачи из него поглощаются новым блоком
-`workflow/active/architecture-review-remediation-2026-07-04/` (см. раздел «Связь с ревью 2026-06-01»).
+`workflow/archive/2026/architecture-review-remediation-2026-07-04/` (см. раздел «Связь с ревью 2026-06-01»).
 
 ## Краткий вывод
 
@@ -192,7 +192,7 @@ e2e-команды приёмки как первоклассные артефа
 
 ## Связанные материалы
 
-- План: `docs/planning/active/architecture-review-remediation-2026-07-04.md`.
-- Workflow-блок: `workflow/active/architecture-review-remediation-2026-07-04/`.
+- План: `docs/planning/archive/2026/architecture-review-remediation-2026-07-04.md`.
+- Workflow-блок: `workflow/archive/2026/architecture-review-remediation-2026-07-04/`.
 - ADR: `docs/adr/ADR-0031-runtime-contract-store-and-delivery.md`,
   `docs/adr/ADR-0032-retire-legacy-ai-ui-driver.md`.

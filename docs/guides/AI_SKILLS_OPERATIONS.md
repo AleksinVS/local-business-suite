@@ -7,8 +7,8 @@
 Связанные документы:
 
 - `docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md`
-- `docs/planning/active/module-registered-agent-skills-and-mcp-facade.md`
-- `workflow/active/module-registered-agent-skills-and-mcp-facade/`
+- `docs/planning/archive/2026/module-registered-agent-skills-and-mcp-facade.md`
+- `workflow/archive/2026/module-registered-agent-skills-and-mcp-facade/`
 
 ## Назначение
 

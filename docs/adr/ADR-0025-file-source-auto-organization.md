@@ -271,8 +271,8 @@ s3:
 ## Требуемые действия
 
 - Создать проектный план `docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md`.
-- Создать active plan `docs/planning/active/memory-file-source-auto-organization.md`.
-- Создать workflow-блок `workflow/active/memory-file-source-auto-organization/`.
+- Создать active plan `docs/planning/archive/2026/memory-file-source-auto-organization.md`.
+- Создать workflow-блок `workflow/archive/2026/memory-file-source-auto-organization/`.
 - Спроектировать модели stable file identity, virtual views, organization proposals, move jobs и storage backend.
 - Добавить contracts для source organization profile и policy.
 - Реализовать baseline virtual structure generator после primary discovery.

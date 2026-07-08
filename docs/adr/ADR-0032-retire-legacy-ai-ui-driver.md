@@ -66,7 +66,7 @@ Accepted
 
 ## Реализационные правила
 
-- Работы идут в пакете 09 блока `workflow/active/architecture-review-remediation-2026-07-04/`.
+- Работы идут в пакете 09 блока `workflow/archive/2026/architecture-review-remediation-2026-07-04/`.
 - Перед удалением — инвентаризация ссылок на `legacy` по коду, шаблонам, статике, тестам,
   документации и deployment-профилям (включая `LOCAL_BUSINESS_AI_UI_DRIVER_EXPLICIT`-логику).
 - Уточняет ADR-0028: допустимая матрица драйверов становится `copilotkit | native`.
@@ -77,4 +77,4 @@ Accepted
 - `docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md`
 - `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`
 - `docs/guides/ARCHITECTURE_REVIEW_2026-07-04.md` — раздел 3 и решения владельца.
-- `docs/planning/active/architecture-review-remediation-2026-07-04.md`
+- `docs/planning/archive/2026/architecture-review-remediation-2026-07-04.md`

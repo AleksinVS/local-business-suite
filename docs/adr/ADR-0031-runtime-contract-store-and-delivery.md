@@ -130,7 +130,7 @@ Accepted (принят 2026-07-05 с уточнениями реализации
 
 ## Реализационные правила
 
-- Работы идут в блоке `workflow/active/architecture-review-remediation-2026-07-04/`
+- Работы идут в блоке `workflow/archive/2026/architecture-review-remediation-2026-07-04/`
   (пакеты 01, 02, 08).
 - Порядок перевода чтений: `role_rules` и `workflow_rules` → AI-контракты (`tools`,
   `task_types`, `chat_settings`) → memory/analytics контракты.
@@ -152,4 +152,4 @@ Accepted (принят 2026-07-05 с уточнениями реализации
 - `docs/adr/ADR-0002-config-driven-policy-and-workflow.md` — исходное решение о контрактах.
 - `docs/adr/ADR-0007-settings-center-and-contextual-help.md` — service layer и audit записи.
 - `docs/adr/ADR-0024-service-extraction-readiness.md` — правила выноса сервисов.
-- `docs/planning/active/architecture-review-remediation-2026-07-04.md` — план работ.
+- `docs/planning/archive/2026/architecture-review-remediation-2026-07-04.md` — план работ.

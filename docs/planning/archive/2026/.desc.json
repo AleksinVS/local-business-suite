@@ -16,5 +16,15 @@
   "architecture-review-remediation-2026-06-01.md": "Архивный план (superseded) ревью 2026-06-01; задачи поглощены планом 2026-07-04",
   "memory-audit-review-ui.md": "Архивный план UI аудита и ревью проблем памяти и поискового индекса (implemented)",
   "settings-center-gui.md": "Архивный план Settings Center, GUI настроек и контекстной справки (implemented)",
-  "universal-right-drawer-ai-navigation.md": "Архивный план универсального открытия правого сайдбара ИИ-ботом (implemented MVP)"
+  "universal-right-drawer-ai-navigation.md": "Архивный план универсального открытия правого сайдбара ИИ-ботом (implemented MVP)",
+  "architecture-review-remediation-2026-07-04.md": "Архивный план устранения находок архитектурного ревью 2026-07-04 (12 packets, принят 2026-07-07)",
+  "interface-russification-and-localization.md": "Архивный план русификации интерфейса портала (implemented, принят 2026-07-07)",
+  "workorder-tree-view.md": "Архивный план дерева заявок и режимов просмотра доски (implemented, принят 2026-07-07)",
+  "module-registered-agent-skills-and-mcp-facade.md": "Архивный план модульных AI skills и registry-driven MCP-фасада (implemented, принят 2026-07-07)",
+  "universal-source-adapters-memory-analytics.md": "Архивный план универсальных источников для памяти и аналитики (implemented, принят 2026-07-07)",
+  "memory-file-source-auto-organization.md": "Архивный план автоупорядочивания файловых источников (implemented, принят 2026-07-07)",
+  "ai-ui-protocol-foundation.md": "Архивный план версионируемой основы AI UI протоколов (implemented, принят 2026-07-07)",
+  "copilotkit-ai-ui-chat-development.md": "Архивный план ИИ-чата CopilotKit UI (заморожен как референс-драйвер; native — канон; 2026-07-07)",
+  "copilotkit-ag-ui-integration.md": "Архивный план CopilotKit/AG-UI интеграции (поглощён планом copilotkit-ai-ui-chat-development, заморожен; 2026-07-07)",
+  "context-aware-sidebar-ai-chat.md": "Архивный план контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09)"
 }

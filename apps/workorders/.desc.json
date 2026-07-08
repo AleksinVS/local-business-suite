@@ -18,5 +18,6 @@
   "apps.py": "Конфигурация приложения",
   "signals.py": "Сигналы Django",
   "tests.py": "Тесты приложения",
-  "management/": "Django management-команды приложения (например, сидинг канбан-доски)"
+  "management/": "Django management-команды приложения (например, сидинг канбан-доски)",
+  "media_policies.py": "Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки"
 }

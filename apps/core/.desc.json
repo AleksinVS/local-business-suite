@@ -32,5 +32,6 @@
   "management/commands/postgres_migration_validate.py": "Валидация PostgreSQL import по migration manifest",
   "management/commands/wait_for_database.py": "Ожидание готовности default database перед production-стартом",
   "management/commands/generate_change_plan.py": "Генерация плана изменений",
-  "management/commands/seed_hospital_demo.py": "Сидирование демо-данных больницы"
+  "management/commands/seed_hospital_demo.py": "Сидирование демо-данных больницы",
+  "media.py": "Единый защищённый media-dispatcher: реестр доменных политик по префиксу первого сегмента пути (register_media_policy) + hardening (null-байт, path traversal); ядро не импортирует доменные модели, приложения сами регистрируют политику в ready() (правила 3/5 AGENTS.md)"
 }

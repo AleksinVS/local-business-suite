@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth.decorators import login_required
 from django.urls import include, path, re_path
 
 from apps.accounts.views import PortalLoginView, PortalLogoutView
+from apps.core.media import serve_protected_media
 from apps.notifications.views import service_worker
-from apps.workorders.views import serve_workorder_attachment
 
 from . import views as config_views
 
@@ -32,13 +33,15 @@ urlpatterns = [
     path("service-worker.js", service_worker, name="service_worker"),
     path("workorders/", include("apps.workorders.urls")),
     path("waiting-list/", include("apps.waiting_list.urls")),
-    # Вложения заявок раздаются только через авторизованный view (login_required
-    # + can_view) в любом окружении. Раньше здесь стоял static(MEDIA_URL, ...),
-    # который в dev отдавал файлы без проверки прав, а при DEBUG=0 отключался.
-    # URL сохранён как /media/workorders/<path>, чтобы совпадать с file.url.
+    # Медиа раздаётся только через авторизованный dispatcher (login_required +
+    # доменная политика доступа по префиксу первого сегмента пути) в любом
+    # окружении. Раньше здесь стоял static(MEDIA_URL, ...), который в dev отдавал
+    # файлы без проверки прав, а при DEBUG=0 отключался. Единый маршрут
+    # /media/<prefix>/<path> совпадает с file.url и разбирается по политикам,
+    # которые приложения регистрируют в apps.core.media.
     re_path(
-        r"^media/workorders/(?P<path>.*)$",
-        serve_workorder_attachment,
+        r"^media/(?P<path>.*)$",
+        login_required(serve_protected_media),
         name="workorder_attachment",
     ),
 ]

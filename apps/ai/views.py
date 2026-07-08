@@ -871,71 +871,13 @@ class AIChatMessageCreateView(LoginRequiredMixin, View):
             compact_sidebar_session(session)
             return JsonResponse({"status": "ok", "message_id": user_msg.id, "model_id": model_id})
 
-        # Non-AJAX fallback (synchronous call)
-        try:
-            response = AgentRuntimeClient().chat(
-                user=request.user,
-                session_id=session.external_id,
-                prompt=prompt,
-                history=serialize_session_history(session),
-                conversation_id=conversation_id,
-                request_id=request_id,
-                origin_channel=session.channel,
-                model_id=model_id,
-                page_context=build_runtime_page_context(user_msg)
-                if chat_settings.get("context_tool_enabled", True)
-                else {},
-            )
-        except AgentRuntimeError as exc:
-            payload = record_chat_runtime_error(
-                session=session,
-                actor=request.user,
-                user_message=user_msg,
-                exc=exc,
-                conversation_id=conversation_id,
-                request_id=request_id,
-                origin_channel=session.channel,
-                model_id=model_id,
-                runtime_method="chat",
-            )
-            logger.warning(
-                "AI chat runtime error: request_id=%s action_id=%s error_type=%s",
-                request_id,
-                payload.get("technical_trace_id"),
-                exc.__class__.__name__,
-            )
-            messages.error(request, payload["message"])
-            return redirect("ai:chat_detail", external_id=session.external_id)
-
-        tool_trace = response.get("tool_trace", [])
-        runtime_conversation_id = response.get("conversation_id") or conversation_id
-        runtime_request_id = response.get("request_id") or request_id
-        for entry in tool_trace:
-            entry["conversation_id"] = runtime_conversation_id
-            entry["request_id"] = runtime_request_id
-            entry["origin_channel"] = session.channel
-
-        assistant_msg = append_chat_message(
-            session=session,
-            role=ChatMessage.Role.ASSISTANT,
-            content=response["assistant_message"],
-            metadata={
-                "tool_trace": tool_trace,
-                "ui_commands": response.get("ui_commands", []),
-                "conversation_id": runtime_conversation_id,
-                "request_id": runtime_request_id,
-                **context_trace_metadata(user_msg),
-            },
-        )
-
-        session.metadata = {
-            **session.metadata,
-            "conversation_id": runtime_conversation_id,
-            "request_ids": [*session.metadata.get("request_ids", []), runtime_request_id],
-        }
-        session.save(update_fields=["metadata", "updated_at"])
-        compact_sidebar_session(session)
-
+        # Чат идёт ТОЛЬКО через стриминговый путь (ai:chat_stream): ответ
+        # ассистента отрисовывает SSE-клиент. Синхронный LLM-вызов удалён —
+        # он держал соединение лишь до LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT
+        # (90s), тогда как agent-runtime работает до LLM_DEADLINE_SECONDS
+        # (300s); из-за этого рассинхрона write-инструмент мог осиротеть уже
+        # после того, как пользователь получил ошибку. Не-AJAX запрос просто
+        # возвращается к детальной странице сессии.
         return redirect("ai:chat_detail", external_id=session.external_id)
 
 
@@ -1055,6 +997,17 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                         **context_trace_metadata(user_msg),
                     },
                 )
+                # Сохраняем trace-контекст на уровне сессии (conversation_id +
+                # накопленные request_ids). Раньше эту аудит-запись вёл
+                # синхронный путь AIChatMessageCreateView; после перехода на
+                # streaming-only чат её ведёт стриминговый путь, чтобы не
+                # терять корреляцию диалога между ходами.
+                session.metadata = {
+                    **session.metadata,
+                    "conversation_id": conversation_id,
+                    "request_ids": [*session.metadata.get("request_ids", []), request_id],
+                }
+                session.save(update_fields=["metadata", "updated_at"])
                 compact_sidebar_session(session)
 
         return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")

@@ -1245,6 +1245,26 @@ table { width: 100%; border-collapse: collapse; }
   gap: 1rem;
   margin-bottom: 0.75rem; /* Reduced margin */
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Панель фильтров должна следовать за ВИДИМОЙ шириной, а не растягиваться широкой
+   канбан-доской: этим контейнерам даём min-width:0, чтобы они сжимались ниже
+   ширины колонок, а горизонтальный скролл держал собственный .board-scroll
+   (overflow-x:auto). Тогда тулбар остаётся шириной с видимую область и адаптивное
+   сворачивание фильтров реально срабатывает. */
+.workorders-board-context,
+.workorders-view,
+.board-scroll {
+  min-width: 0;
+}
+
+/* Страница доски: page-container — grid-элемент page-shell; по умолчанию его
+   min-width:auto растит его до ширины колонок и растягивает тулбар. Ограничиваем
+   его треком (видимой шириной) ТОЛЬКО на доске (через :has), чтобы не влиять на
+   остальные страницы; горизонтальный скролл держит .board-scroll. */
+.page-container:has(> .workorders-board-context) {
+  min-width: 0;
 }
 .checkline { display: inline-flex; align-items: center; gap: 0.4rem; }
 .stack { display: grid; gap: 0.5rem; }

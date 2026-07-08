@@ -18,7 +18,7 @@
   <form method="get" class="filters">
     <input type="hidden" name="view" value="{{ current_view }}">
 
-    <div class="input-group">
+    <div class="input-group input-group--search">
       <label for="boardSearch">Поиск</label>
       <input
         type="search"
@@ -45,7 +45,7 @@
       </select>
     </div>
 
-    <div class="input-group">
+    <div class="input-group input-group--dropdown">
       <label for="boardDept">Подразделение</label>
       <details
         id="boardDept"
@@ -80,7 +80,7 @@
         </div>
       </details>
     </div>
-    <div class="input-group">
+    <div class="input-group input-group--dropdown">
       <label for="boardStatus">Статус</label>
       <details
         id="boardStatus"
@@ -113,7 +113,7 @@
         </div>
       </details>
     </div>
-    <div class="input-group">
+    <div class="input-group input-group--dropdown">
       <label for="boardAssignee">Исполнитель</label>
       <details
         id="boardAssignee"
@@ -148,7 +148,7 @@
         </div>
       </details>
     </div>
-    <div class="input-group">
+    <div class="input-group input-group--dropdown">
       <label for="boardDevice">Изделие</label>
       <details
         id="boardDevice"

@@ -2081,32 +2081,84 @@ table { width: 100%; border-collapse: collapse; }
 .toolbar {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
+  gap: 0.6rem;
   background: var(--surface);
-  padding: 8px 16px;
+  padding: 0.5rem 0.7rem;
   border-radius: 12px;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
+/* Single-line, compact filter row: the form grows to fill the toolbar and
+   never wraps; individual controls shrink (not below their min-width)
+   instead of dropping to a second line. */
 .toolbar .filters {
   display: flex;
-  gap: 16px;
-  flex: 1;
+  gap: 0.4rem;
+  flex: 1 1 auto;
   align-items: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0; /* allow the form to shrink below its content's natural width */
+  margin-top: 0;
 }
 
 .toolbar .input-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  flex: 0 1 130px;
+  min-width: 88px;
 }
 
 .toolbar .input-group label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search fields get first claim on any slack space in the row. */
+.toolbar .filters .input-group--search {
+  flex: 1 1 190px;
+  min-width: 140px;
+}
+
+/* Multi-option widgets (a multi-filter-dropdown trigger or the board/tree
+   view switcher) keep their natural size instead of being squeezed: the
+   wrapper must not impose a floor smaller than what its inner control
+   already enforces, or the control would overflow/overlap its neighbour. */
+.toolbar .filters .input-group--dropdown,
+.toolbar .filters .view-switcher-group {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.toolbar .filters input[type="text"],
+.toolbar .filters input[type="date"],
+.toolbar .filters input[type="search"],
+.toolbar .filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.toolbar .filters .checkbox-group {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Submit/reset controls inside the filter form are pinned to the end of
+   the row, after any slack space left by non-growing controls. */
+.toolbar .filters .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 /* Form Elements */
@@ -2134,21 +2186,22 @@ select:focus {
 
 .multi-filter-dropdown {
   position: relative;
-  min-width: 170px;
+  flex: 0 0 auto;
+  min-width: 112px;
 }
 
 .multi-filter-dropdown summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.65rem;
-  min-height: 36px;
-  padding: 8px 12px;
+  gap: 0.5rem;
+  min-height: 32px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text-main);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
   list-style: none;
@@ -2177,13 +2230,13 @@ select:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .multi-filter-menu {
@@ -2235,6 +2288,29 @@ select:focus {
   padding: 0.65rem 0.75rem;
   color: var(--text-muted);
   font-size: 0.84rem;
+}
+
+/* Narrow/mobile fallback: let the toolbar and the filter row wrap and
+   stack instead of forcing a single compact line. */
+@media (max-width: 960px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .toolbar .filters {
+    flex-wrap: wrap;
+  }
+  .toolbar .input-group,
+  .toolbar .filters .input-group--dropdown,
+  .multi-filter-dropdown {
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
+  .toolbar .filters .view-switcher-group,
+  .toolbar .filters .checkbox-group,
+  .toolbar .filters .btn {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
 }
 
 textarea {

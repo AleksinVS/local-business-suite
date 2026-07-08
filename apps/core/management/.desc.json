@@ -1,0 +1,4 @@
+{
+  ".": "Пакет management-команд core",
+  "commands": "Management-команды core: bootstrap runtime, синхронизация AI tool registry, валидация контрактов, отчет по производительности, миграция в PostgreSQL, ожидание базы данных, генерация плана изменений, сидирование демо-данных (seed_hospital_demo, seed_demo_data)"
+}

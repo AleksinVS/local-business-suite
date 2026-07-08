@@ -8,10 +8,10 @@
  * сохраняются при переносе.
  *
  * СТАДИЯ 1 (широкие экраны, innerWidth >= COLLAPSE_BP): контролы держат
- * естественную ширину; когда строка не помещается, контролы с наименьшим
- * приоритетом (сначала multi-filter dropdown'ы, затем обычные select'ы,
- * затем переключатель вида) уезжают в конечное меню «Ещё фильтры ▾». Поиск и
- * кнопки действия всегда видимы. Подписи текстовые.
+ * естественную ширину; когда полный набор не помещается, ВСЕ фильтры и
+ * переключатель вида уезжают в меню «Ещё фильтры ▾» целиком (без частичного
+ * показа отдельных фильтров) — снаружи остаются только поиск, выбор доски и
+ * кнопки действия. Подписи текстовые.
  *
  * СТАДИЯ 2 (узкие/мобильные, innerWidth < COLLAPSE_BP): панель сворачивается в
  * компактный ряд из иконок. Для доски заявок это ровно ЧЕТЫРЕ элемента:
@@ -273,35 +273,28 @@
 
     // Стадия 2 (компакт), если экран узкий ИЛИ даже минимальный набор
     // (поиск + submit-кнопки формы + воронка) не помещается в стадии 1.
-    var searchItems = this.items.filter(function (it) { return it.role === "search"; });
+    var pinItems = this.items.filter(function (it) { return it.role === "search" || it.role === "board"; });
     var forceCompact = window.innerWidth < COLLAPSE_BP;
-    if (!forceCompact && this.widthNeeded(searchItems, true) > available) forceCompact = true;
+    if (!forceCompact && this.widthNeeded(pinItems, true) > available) forceCompact = true;
 
     if (forceCompact) this.planCompact();
     else this.planWide(available);
   };
 
   Controller.prototype.planWide = function (width) {
-    var chosen;
+    // Пинуются только поиск и выбор доски. Всё остальное (фильтры + переключатель
+    // вида) уходит в «Ещё фильтры» ЦЕЛИКОМ, как только полный набор не помещается,
+    // без частичного показа отдельных фильтров (по требованию владельца).
+    var menuNodes = [];
     var funnelVisible;
     if (this.widthNeeded(this.items, false) <= width) {
-      chosen = this.items.slice();
       funnelVisible = false;
     } else {
-      var searchItem = this.items.filter(function (it) { return it.role === "search"; });
-      var others = this.items.filter(function (it) { return it.role !== "search"; })
-        .sort(function (a, b) { return (b.priority - a.priority) || (a.index - b.index); });
-      chosen = searchItem.slice();
-      for (var i = 0; i < others.length; i++) {
-        var trial = chosen.concat([others[i]]);
-        if (this.widthNeeded(trial, true) <= width) chosen.push(others[i]);
-        else break;
-      }
+      this.items.forEach(function (it) {
+        if (it.role !== "search" && it.role !== "board") menuNodes.push(it.el);
+      });
       funnelVisible = true;
     }
-    var chosenSet = new Set(chosen);
-    var menuNodes = [];
-    this.items.forEach(function (it) { if (!chosenSet.has(it)) menuNodes.push(it.el); });
     this.apply(menuNodes, funnelVisible, "wide");
   };
 

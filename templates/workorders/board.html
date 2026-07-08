@@ -15,7 +15,7 @@
 {% block content %}
 <div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}" style="{{ workorder_status_color_style }}">
 <div class="toolbar">
-  <form method="get" class="filters">
+  <form method="get" class="filters filters--adaptive">
     <input type="hidden" name="view" value="{{ current_view }}">
 
     <div class="input-group input-group--search">
@@ -34,7 +34,7 @@
       >
     </div>
 
-    <div class="input-group">
+    <div class="input-group" data-filter-board>
       <label for="boardSelect">Доска</label>
       <select id="boardSelect" onchange="window.location.href=this.value">
         {% for board in visible_boards %}
@@ -358,4 +358,5 @@
     })();
   </script>
   <script src="{% static 'src/js/workorder_tree.js' %}"></script>
+  <script src="{% static 'src/js/filter_overflow.js' %}"></script>
 {% endblock %}

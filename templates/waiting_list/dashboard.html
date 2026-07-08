@@ -12,7 +12,7 @@
 {% block content %}
   {# Toolbar with Filters #}
   <div class="toolbar">
-    <form method="get" class="filters" id="filter-form">
+    <form method="get" class="filters filters--adaptive" id="filter-form">
       <div class="input-group">
         <label for="filterService">Услуга</label>
         <select
@@ -169,6 +169,7 @@
 
 {% block extra_scripts %}
 {{ block.super }}
+<script src="{% static 'src/js/filter_overflow.js' %}"></script>
 <script>
   // Sort state management
   let currentSort = { field: 'created_at', asc: false };

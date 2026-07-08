@@ -2313,6 +2313,227 @@ select:focus {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Adaptive filter toolbar — priority+ / overflow-menu pattern (Brad Frost
+   "priority plus"). Active ONLY when the .filters--adaptive class is present
+   (flag LOCAL_BUSINESS_ADAPTIVE_FILTERS, default on). filter_overflow.js
+   measures the row with a ResizeObserver and moves the lowest-priority
+   controls (multi-filter dropdowns first, then plain selects, then the view
+   switcher) into a trailing "Ещё фильтры"/"Фильтры" overflow <details>, so the
+   toolbar always stays on exactly one row with no horizontal scroll and no
+   clipped popover. ROLLBACK: set LOCAL_BUSINESS_ADAPTIVE_FILTERS=0 — the class
+   and script are then omitted and the flex-nowrap fallback above is used
+   unchanged.
+   -------------------------------------------------------------------------- */
+
+/* Force one non-wrapping row at every width, overriding the max-width:960px
+   wrap fallback (which is still used when the flag is off). */
+.toolbar .filters--adaptive {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+
+/* Keep the whole toolbar (filter form + trailing action buttons / group
+   controls) on one row at every width, overriding the max-width:960px wrap
+   fallback. JS adds .toolbar--adaptive when it takes over the toolbar. */
+.toolbar.toolbar--adaptive {
+  flex-wrap: nowrap;
+}
+
+/* The overflow popover must not be laid out while the funnel is closed, so a
+   closed funnel can never contribute geometry or paint an empty popover. */
+.filters--adaptive .filters-overflow:not([open]) .filters-overflow-menu {
+  display: none;
+}
+
+/* Under the adaptive engine every control keeps its natural width (no shrink)
+   so JS measures real overflow; the search box absorbs any leftover slack. */
+.toolbar .filters--adaptive .input-group,
+.toolbar .filters--adaptive .input-group--dropdown,
+.toolbar .filters--adaptive .view-switcher-group,
+.toolbar .filters--adaptive .checkbox-group {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.toolbar .filters--adaptive .input-group--search {
+  flex: 1 1 220px;
+  min-width: 150px;
+}
+.toolbar .filters--adaptive .btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Overflow trigger: reuses the .multi-filter-dropdown pill so it inherits the
+   native <details> open/close, keyboard support and caret. JS toggles [hidden]. */
+.filters--adaptive .filters-overflow {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.filters--adaptive .filters-overflow[hidden] {
+  display: none;
+}
+
+/* Overflow popover: right-aligned so it never spills past the row's right edge
+   (page-shell promotes overflow-x, which would otherwise clip a left-aligned
+   popover); scrolls internally instead of clipping its contents. */
+.filters--adaptive .filters-overflow-menu {
+  right: 0;
+  left: auto;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+  min-width: 240px;
+  max-width: min(360px, 90vw);
+  max-height: min(70vh, 460px);
+}
+
+/* Controls relocated into the popover become full-width stacked rows. */
+.filters--adaptive .filters-overflow-menu .input-group,
+.filters--adaptive .filters-overflow-menu .checkbox-group,
+.filters--adaptive .filters-overflow-menu .view-switcher-group {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+.filters--adaptive .filters-overflow-menu .input-group input,
+.filters--adaptive .filters-overflow-menu .input-group select {
+  width: 100%;
+}
+.filters--adaptive .filters-overflow-menu .segmented-control {
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* A multi-filter dropdown nested inside the popover expands INLINE (static)
+   rather than opening its own absolute popover, so it can never be clipped by
+   the popover's own overflow:auto. */
+.filters--adaptive .filters-overflow-menu .multi-filter-dropdown {
+  position: static;
+  width: 100%;
+  min-width: 0;
+}
+.filters--adaptive .filters-overflow-menu .multi-filter-menu {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  min-width: 0;
+  max-width: none;
+  max-height: 220px;
+  margin-top: 4px;
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   Stage 2 icons + compact mode. Pictograms are inline SVG (CSP forbids icon
+   fonts / CDNs). They are hidden in stage 1 (text labels shown) and revealed
+   when filter_overflow.js adds .filters-collapsed to the .toolbar
+   (window.innerWidth < 768). Replaced text is kept in the DOM but visually
+   hidden so accessible names + title tooltips survive.
+   -------------------------------------------------------------------------- */
+.toolbar .filter-lead-icon,
+.toolbar .filter-btn-icon,
+.toolbar .filters-overflow-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.toolbar .filter-btn-icon {
+  color: currentColor;
+}
+.toolbar .filter-lead-icon svg,
+.toolbar .filter-btn-icon svg,
+.toolbar .filters-overflow-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar.filters-collapsed {
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  align-items: center;
+}
+.toolbar.filters-collapsed .filters--adaptive {
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* Small icon-prefixed search: absorbs slack, can shrink hard. */
+.toolbar.filters-collapsed .input-group--search {
+  flex: 1 1 90px;
+  min-width: 44px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.toolbar.filters-collapsed .input-group--search input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Compact icon-triggered board picker (narrow native select + board icon). */
+.toolbar.filters-collapsed [data-filter-board] {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.toolbar.filters-collapsed [data-filter-board] select {
+  max-width: 66px;
+  min-width: 0;
+}
+
+/* Funnel summary: centred icon + count, drop caret to stay tight. */
+.toolbar.filters-collapsed .filters-overflow summary {
+  justify-content: center;
+  gap: 0.3rem;
+}
+.toolbar.filters-collapsed .filters-overflow summary::after {
+  display: none;
+}
+
+/* Reveal the pictograms. */
+.toolbar.filters-collapsed .filter-lead-icon,
+.toolbar.filters-collapsed .filter-btn-icon,
+.toolbar.filters-collapsed .filters-overflow-icon {
+  display: inline-flex;
+}
+
+/* Icon-only action buttons collapse to squares. */
+.toolbar.filters-collapsed .btn {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  gap: 0;
+}
+.toolbar.filters-collapsed .group-controls {
+  gap: 0.3rem;
+}
+
+/* Visually hide the text the pictograms replace (kept for a11y + title). */
+.toolbar.filters-collapsed .input-group--search > label,
+.toolbar.filters-collapsed [data-filter-board] > label,
+.toolbar.filters-collapsed .filters-overflow-label,
+.toolbar.filters-collapsed .filter-btn-label,
+.toolbar.filters-collapsed .group-controls-count {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 textarea {
   width: 100%;
   padding: 8px 12px;

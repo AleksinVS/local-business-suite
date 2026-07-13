@@ -387,10 +387,6 @@ docs: # Документация проекта
     backlog.md: file # Актуальный backlog без архивного раздела
     README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
-learning: # Учебный модуль владельца проекта по Python и устройству local-business-suite
-  LESSON_01_PYTHON_LANGUAGE_OVERVIEW.md: file # Урок 1: обзор Python как языка, синтаксиса и структуры программ
-  PYTHON_LEARNING_PROGRAM.md: file # Учебная программа по Python на базе проекта
-  README.md: file # Описание учебного модуля и связи с основным проектом
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
@@ -583,6 +579,10 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Краткое описание целей, границ и приемки миграции на PostgreSQL
       EXECUTOR_REPORT.postgresql-code-slice.md: file # Отчет реализации кодового среза миграции на PostgreSQL
       TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
+    project-knowledge-base-mvp: # Workflow: MVP базы проектных знаний для ИИ-агентов (kb) — исполнение спецификации T0–T6
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, ключевые ловушки для исполнителя со слабой LLM
+      BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков

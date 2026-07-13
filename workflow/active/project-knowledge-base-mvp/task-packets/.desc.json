@@ -1,0 +1,9 @@
+{
+  ".": "Task packets блока project-knowledge-base-mvp",
+  "01-canon-skeleton-and-cli-frame.json": "Скелет канона docs/knowledge/ по §3 плана (T0) + каркас kb.py и базовые функции с тестами U1–U7 (T1)",
+  "02-sync-core-and-lint.json": "Ядро sync (DDL §4, подготовка/материализация/завершение), lint E1–E4 и W1–W5, тестовый бандл-фикстура (T2)",
+  "03-actors-detectors-queue.json": "Батч git, акторная атрибуция, детекторы human-edited/source-drift/prose-changed/invalid-frontmatter/contradiction, kb queue, W6–W9 (T3)",
+  "04-read-commands-and-impact.json": "kb query/neighbors/page/log и kb impact — сверка на записи (T4)",
+  "05-extension-detectors-and-eval.json": "Детекторы dup-candidate/rename-candidate/desc-mismatch, kb eval, W10 (T5)",
+  "06-integration-adr-acceptance.json": "e2e E1, ADR (Proposed), раздел в AGENTS.md, чек-лист приёмки §11 (T6)"
+}

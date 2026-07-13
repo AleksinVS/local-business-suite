@@ -7,5 +7,6 @@
   "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
   "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата",
   "postgresql-primary-store-migration": "Workflow: миграция основного хранилища на PostgreSQL",
-  "memory-alignment-hardening": "Workflow: доводка памяти после ревью целевой архитектуры (3 task packets)"
+  "memory-alignment-hardening": "Workflow: доводка памяти после ревью целевой архитектуры (3 task packets)",
+  "project-knowledge-base-mvp": "Workflow: MVP базы проектных знаний для ИИ-агентов kb (6 task packets)"
 }

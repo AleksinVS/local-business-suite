@@ -584,7 +584,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
     project-knowledge-base-mvp: # Workflow: MVP базы проектных знаний для ИИ-агентов (kb) — исполнение спецификации T0–T6
       task-packets: file
-      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, ключевые ловушки для исполнителя со слабой LLM
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, ключевые ловушки для исполнителя
       BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan

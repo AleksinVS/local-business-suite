@@ -57,6 +57,8 @@ from .tree import build_workorder_tree
 VIEW_BOARD = "board"
 VIEW_TREE = "tree"
 VIEW_MODES = {VIEW_BOARD, VIEW_TREE}
+# Ключ сессии для запоминания последнего выбранного режима (доска/дерево).
+VIEW_SESSION_KEY = "workorders:view_mode"
 
 
 def quick_transition_choices_for(user, workorder):
@@ -125,10 +127,22 @@ def _workorder_status_color_style():
 
 
 def _requested_view_mode(request):
-    view_mode = request.GET.get("view", VIEW_BOARD).strip()
-    if view_mode not in VIEW_MODES:
-        return VIEW_BOARD
-    return view_mode
+    """Режим просмотра заявок (доска/дерево).
+
+    Явный валидный ``?view=`` имеет приоритет и запоминается в сессии, чтобы при
+    следующем заходе без параметра восстановить последний выбор пользователя.
+    Отсутствующий/некорректный параметр → запомненное значение, иначе доска.
+    """
+    raw = request.GET.get("view")
+    if raw is not None and raw.strip() in VIEW_MODES:
+        view_mode = raw.strip()
+        if request.session.get(VIEW_SESSION_KEY) != view_mode:
+            request.session[VIEW_SESSION_KEY] = view_mode
+        return view_mode
+    remembered = request.session.get(VIEW_SESSION_KEY)
+    if remembered in VIEW_MODES:
+        return remembered
+    return VIEW_BOARD
 
 
 def _with_query(url, params):

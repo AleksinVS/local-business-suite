@@ -1,6 +1,6 @@
 {
   ".": "Task packets блока memory-alignment-hardening",
-  "01-canon-line-endings-and-reconciler-guards.json": "LF-нормализация канона, .gitattributes, тест отсутствия петли needs-reconcile, синглтон memory_reconcile, канон-ориентированный обход и базисы из git",
+  "01-canon-line-endings-and-reconciler-guards.json": "LF-нормализация канона, .gitattributes, тест отсутствия петли needs-reconcile, синглтон memory_reconcile, канон-ориентированный обход и базисы из git (per-file), детектор knowledge_contradiction и авто-снятие reconciler-issues",
   "02-eval-golden-set-and-recovery-matrix.json": "Команда memory_eval_seed, golden set (>=20 кейсов), отчет memory_eval, матрица восстановления в MEMORY_DEPLOYMENT.md",
   "03-edge-emission-and-retro-leftovers.json": "Инструкция эмиссии relations для семантического прохода с протоколом противоречия, входящие рёбра при supersede, команда memory_impact (сверка на записи), чистка ranking_profiles до balanced, фикс фильтра очереди review-UI"
 }

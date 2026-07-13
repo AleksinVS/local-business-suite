@@ -1,4 +1,4 @@
-﻿# Import Portal Configuration from Migration Bundle
+# Import Portal Configuration from Migration Bundle
 # Восстанавливает Portal из бандла, снятого export_portal.ps1.
 #
 # Назначение: штатная миграция portal на новый Windows-хост
@@ -7,20 +7,21 @@
 # Использование:
 #   .\import_portal.ps1 -BundlePath C:\temp\portal-export-20260702-153045.zip
 #   .\import_portal.ps1 -BundlePath <zip> -NewHostname stc-web2
+#   .\import_portal.ps1 -BundlePath <zip> -AppPoolUser 'MSCHER\svc_portal' -AppPoolPassword '***'
 #   .\import_portal.ps1 -BundlePath <zip> -SkipIIS -SkipTask   # только код и venv
 #   .\import_portal.ps1 -BundlePath <zip> -DryRun             # показать, что будет сделано
 #
 # Что делает:
 #   1. Распаковывает бандл
-#   2. Включает IIS-фичи (DISM на клиентских Windows)
+#   2. Включает полный набор IIS-фич (DISM на клиентских Windows)
 #   3. Открывает порты 80/443 в брандмауэре
 #   4. Копирует код в C:\inetpub\portal
-#   5. Восстанавливает .env с подстановкой hostname (если задан -NewHostname)
-#   6. Пересоздаёт .venv из requirements.txt
-#   7. Создаёт App Pool и сайт в IIS
-#   8. Регистрирует wfastcgi handler
+#   5. Восстанавливает .env (без BOM) с подстановкой hostname (если задан -NewHostname)
+#   6. Пересоздаёт .venv из requirements.txt и выполняет collectstatic
+#   7. Создаёт App Pool (identity из манифеста/параметра) и сайт в IIS
+#   8. Регистрирует wfastcgi handler и валидирует пути в web.config
 #   9. Импортирует Scheduled Task и запускает runtime
-#  10. Проверяет /health на runtime и корень на IIS
+#  10. Проверяет /health, корень IIS, домен и доступность LDAP-портов
 
 [CmdletBinding()]
 param(
@@ -33,6 +34,9 @@ param(
     [string]$TaskPath = "\Portal\",
     [string]$PythonExe = "$env:ProgramFiles\Python311\python.exe",
     [string]$NewHostname,
+    [string]$AppPoolUser,       # доменная учётка для пула (если нужен SpecificUser)
+    [string]$AppPoolPassword,   # пароль к ней (appcmd его не экспортирует)
+    [string]$LdapServer,        # DC/LDAP-хост для проверки доступности (по умолчанию из домена)
     [int]$RuntimePort = 8090,
     [switch]$SkipIIS,
     [switch]$SkipCode,
@@ -72,12 +76,17 @@ if ($TaskPath -and -not $TaskPath.EndsWith("\"))    { $TaskPath = "$TaskPath\" }
 
 # --- Утилиты -----------------------------------------------------------------
 function Write-Step($name) { Write-Host ""; Write-Host "[$name]" -ForegroundColor Cyan }
-function Write-Ok($msg)    { Write-Host "  ✓ $msg" -ForegroundColor Green }
-function Write-Warn($msg)  { Write-Host "  ⚠ $msg" -ForegroundColor Yellow }
-function Write-Skip($msg)  { Write-Host "  - $msg" -ForegroundColor Gray }
+function Write-Ok($msg)    { Write-Host "  OK  $msg" -ForegroundColor Green }
+function Write-Warn($msg)  { Write-Host "  !   $msg" -ForegroundColor Yellow }
+function Write-Skip($msg)  { Write-Host "  -   $msg" -ForegroundColor Gray }
 function Run-Or-Dry([scriptblock]$action, [string]$what) {
     if ($DryRun) { Write-Host "  [DRY-RUN] $what" -ForegroundColor Magenta }
     else         { & $action }
+}
+# Запись текста в UTF-8 БЕЗ BOM (важно для .env: BOM ломает разбор в python-dotenv).
+function Write-Utf8NoBom([string]$path, [string]$content) {
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($path, $content, $enc)
 }
 
 # --- Pre-flight: проверка бандла ---------------------------------------------
@@ -88,7 +97,7 @@ if (-not (Test-Path $BundlePath)) {
     exit 1
 }
 Write-Ok "BundlePath: $BundlePath"
-$bundleSize = [math]::Round((Get-Item $BundlePath).Length / 1MB, 2)
+$bundleSize = [math]::Round(((Get-Item $BundlePath).Length / 1MB), 2)
 Write-Host "  Размер: $bundleSize MB" -ForegroundColor Gray
 
 $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
@@ -117,6 +126,13 @@ $bundleNameSrc = $manifest.bundle_name
 $srcHost = $manifest.source_host
 Write-Ok "manifest.json: bundle=$bundleNameSrc, source_host=$srcHost"
 
+# host.json — детали источника (список IIS-фич, домен)
+$hostJson = $null
+$hostJsonPath = Join-Path $workDir "manifests\host.json"
+if (Test-Path $hostJsonPath) {
+    try { $hostJson = Get-Content $hostJsonPath -Raw | ConvertFrom-Json } catch {}
+}
+
 # Имена из manifest, если не переданы явно
 if (-not $PSBoundParameters.ContainsKey('SiteName') -and $manifest.iis_site)        { $SiteName = $manifest.iis_site }
 if (-not $PSBoundParameters.ContainsKey('AppPoolName') -and $manifest.iis_apppool) { $AppPoolName = $manifest.iis_apppool }
@@ -142,16 +158,26 @@ if (-not $NewHostname) {
     }
 }
 
-# --- Включение IIS-фич (на Windows 10 Pro это DISM, на Server — Install-WindowsFeature) -
+# --- Включение IIS-фич -------------------------------------------------------
+# На Server — Install-WindowsFeature (Web-*), на Windows 10 Pro — DISM (IIS-*).
+# Имена не мапятся один в один, поэтому на каждой ветке — свой полный список,
+# включающий статический контент, дефолт-документ, обработку ошибок и фильтрацию.
 Write-Step "IIS-фичи"
 
 if ($SkipIIS) {
     Write-Skip "пропущено (SkipIIS)"
 } else {
+    if ($hostJson -and $hostJson.iis_features_server) {
+        Write-Host "  На источнике было включено ролей IIS (Web-*): $($hostJson.iis_features_server.Count)" -ForegroundColor Gray
+    }
+
     $hasInstallWindowsFeature = Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue
     if ($hasInstallWindowsFeature) {
         # Windows Server
-        $features = @("Web-Server", "Web-CGI", "Web-Static-Content")
+        $features = @(
+            "Web-Server", "Web-CGI", "Web-Static-Content", "Web-Default-Doc",
+            "Web-Http-Errors", "Web-Filtering", "Web-Mgmt-Console"
+        )
         foreach ($f in $features) {
             $state = Get-WindowsFeature $f -ErrorAction SilentlyContinue
             if ($state -and -not $state.Installed) {
@@ -162,13 +188,26 @@ if ($SkipIIS) {
             }
         }
     } else {
-        # Windows 10 Pro / клиентские редакции
-        $iisCgi = Get-WindowsOptionalFeature -Online -FeatureName "IIS-CGI" -ErrorAction SilentlyContinue
-        if ($iisCgi -and $iisCgi.State -ne "Enabled") {
-            Run-Or-Dry { Enable-WindowsOptionalFeature -Online -FeatureName "IIS-WebServer", "IIS-CGI" -NoRestart -ErrorAction Stop | Out-Null } "Enable-WindowsOptionalFeature IIS-CGI"
-            Write-Ok "Включены IIS-WebServer, IIS-CGI"
+        # Windows 10 Pro / клиентские редакции — полный минимум для Django+wfastcgi
+        $clientFeatures = @(
+            "IIS-WebServerRole", "IIS-WebServer", "IIS-CommonHttpFeatures",
+            "IIS-StaticContent", "IIS-DefaultDocument", "IIS-HttpErrors",
+            "IIS-RequestFiltering", "IIS-CGI",
+            "IIS-WebServerManagementTools", "IIS-ManagementConsole"
+        )
+        $toEnable = @()
+        foreach ($f in $clientFeatures) {
+            $st = Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction SilentlyContinue
+            if ($st -and $st.State -ne "Enabled") { $toEnable += $f }
+            elseif (-not $st) { Write-Warn "компонент $f не найден в этой редакции ОС" }
+        }
+        if ($toEnable.Count -gt 0) {
+            Run-Or-Dry {
+                Enable-WindowsOptionalFeature -Online -FeatureName $toEnable -All -NoRestart -ErrorAction Stop | Out-Null
+            } "Enable-WindowsOptionalFeature: $($toEnable -join ', ')"
+            Write-Ok "включены: $($toEnable -join ', ')"
         } else {
-            Write-Skip "IIS-CGI уже включён"
+            Write-Skip "все нужные IIS-компоненты уже включены"
         }
     }
 
@@ -259,14 +298,17 @@ if ($SkipCode) {
         Write-Ok ".env из бандла"
     } elseif (Test-Path $envExamplePath) {
         Run-Or-Dry { Copy-Item -Path $envExamplePath -Destination $envPath -Force } "скопировать .env из .env.example"
-        Write-Warn ".env создан из .env.example — заполните секреты вручную"
+        Write-Warn ".env создан из .env.example — заполните секреты вручную (в т.ч. LDAP bind/base DN)"
     } else {
         Write-Warn ".env не найден — приложение может не стартовать без секретов"
     }
 
-    # Подстановка hostname
+    # Подстановка hostname + запись БЕЗ BOM
     if ($NewHostname -and (Test-Path $envPath) -and -not $DryRun) {
         $envContent = Get-Content $envPath -Raw
+        # Снять возможный BOM, пришедший из исходного .env
+        $envContent = $envContent.TrimStart([char]0xFEFF)
+
         $allowedOld = ([regex]::Match($envContent, '(?m)^DJANGO_ALLOWED_HOSTS\s*=\s*(.+)$')).Groups[1].Value
         if ($allowedOld) {
             $allowedOldClean = $allowedOld.Trim().Trim('"').Trim("'")
@@ -281,7 +323,8 @@ if ($SkipCode) {
             $envContent = $envContent -replace '(?m)^DJANGO_AI_GATEWAY_URL\s*=.*$', "DJANGO_AI_GATEWAY_URL=`"$newGw`""
             Write-Ok "DJANGO_AI_GATEWAY_URL = $newGw"
         }
-        Set-Content -Path $envPath -Value $envContent -Encoding UTF8 -NoNewline
+        Write-Utf8NoBom $envPath $envContent
+        Write-Ok ".env записан без BOM"
     }
 }
 
@@ -321,6 +364,20 @@ if ($SkipCode) {
         Write-Ok "venv создан и зависимости установлены"
     }
 
+    # collectstatic — иначе статика отдаётся 404 (staticfiles в бандл не входит)
+    $managePy = Join-Path $PortalRoot "manage.py"
+    $venvPy = Join-Path $venvDir "Scripts\python.exe"
+    if ((Test-Path $managePy) -and (Test-Path $venvPy)) {
+        Run-Or-Dry {
+            Push-Location $PortalRoot
+            try { & $venvPy $managePy collectstatic --noinput | Out-Null }
+            finally { Pop-Location }
+        } "manage.py collectstatic --noinput"
+        Write-Ok "collectstatic выполнен"
+    } else {
+        Write-Skip "collectstatic пропущен (нет manage.py или venv)"
+    }
+
     # wfastcgi — критичный для IIS пакет
     $wfastcgiExe = Join-Path $venvDir "Scripts\wfastcgi-enable.exe"
     if (Test-Path $wfastcgiExe) {
@@ -338,6 +395,22 @@ if ($SkipIIS) {
 } else {
     Import-Module WebAdministration -ErrorAction Stop
 
+    # Определяем identity пула: приоритет — параметр, затем manifest/apppool XML,
+    # иначе ApplicationPoolIdentity. Для доменного пула (LDAP/Kerberos/UNC) важно
+    # НЕ потерять исходную учётку.
+    $identityType = "ApplicationPoolIdentity"
+    $poolUser = $null
+    $poolXmlFile = Get-ChildItem (Join-Path $workDir "iis") -Filter "apppool-*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($poolXmlFile) {
+        try {
+            [xml]$px = Get-Content $poolXmlFile.FullName -Raw
+            $pm = $px.SelectSingleNode("//processModel")
+            if ($pm -and $pm.identityType) { $identityType = $pm.identityType }
+            if ($pm -and $pm.userName)     { $poolUser = $pm.userName }
+        } catch { Write-Warn "не удалось разобрать apppool XML: $($_.Exception.Message)" }
+    }
+    if ($AppPoolUser) { $identityType = "SpecificUser"; $poolUser = $AppPoolUser }
+
     if (Test-Path "IIS:\AppPools\$AppPoolName") {
         Run-Or-Dry {
             if ((Get-WebAppPoolState -Name $AppPoolName).Value -ne "Stopped") {
@@ -352,9 +425,26 @@ if ($SkipIIS) {
         New-WebAppPool -Name $AppPoolName -Force | Out-Null
         Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name managedRuntimeVersion -Value ""
         Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name startMode -Value "AlwaysRunning"
-        Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.identityType -Value "ApplicationPoolIdentity"
-    } "создать AppPool $AppPoolName"
-    Write-Ok "AppPool $AppPoolName создан (No Managed Code, AlwaysRunning)"
+
+        if ($identityType -eq "SpecificUser") {
+            if ($AppPoolPassword) {
+                Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.identityType -Value "SpecificUser"
+                Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.userName -Value $poolUser
+                Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.password -Value $AppPoolPassword
+            } else {
+                Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.identityType -Value "ApplicationPoolIdentity"
+            }
+        } else {
+            Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.identityType -Value $identityType
+        }
+    } "создать AppPool $AppPoolName (identity=$identityType)"
+
+    if ($identityType -eq "SpecificUser" -and -not $AppPoolPassword) {
+        Write-Warn "источник использует доменную учётку '$poolUser', но пароль не задан (-AppPoolPassword)."
+        Write-Warn "Поставлен ApplicationPoolIdentity — LDAP/Kerberos-бинд и доступ к шарам могут не работать."
+    } else {
+        Write-Ok "AppPool $AppPoolName создан (No Managed Code, AlwaysRunning, identity=$identityType)"
+    }
 }
 
 # --- IIS: Site + wfastcgi ----------------------------------------------------
@@ -377,7 +467,7 @@ if ($SkipIIS) {
     } "New-Website $SiteName -> $PortalRoot :80"
     Write-Ok "сайт $SiteName создан"
 
-    # wfastcgi регистрация
+    # wfastcgi регистрация (прописывает <fastCgi> application в applicationHost)
     $wfastcgiExe = Join-Path $PortalRoot ".venv\Scripts\wfastcgi-enable.exe"
     if (Test-Path $wfastcgiExe) {
         Run-Or-Dry {
@@ -386,6 +476,28 @@ if ($SkipIIS) {
         Write-Ok "wfastcgi зарегистрирован"
     } else {
         Write-Warn "wfastcgi-enable.exe не найден — handler придётся настроить вручную"
+    }
+
+    # Валидация абсолютных путей в web.config: скопированный конфиг ссылается на
+    # scriptProcessor (python.exe|wfastcgi.py). Если пути не совпадают с этим
+    # хостом — IIS отдаёт 500. Проверяем существование и предупреждаем.
+    $wc = Join-Path $PortalRoot "web.config"
+    if ((Test-Path $wc) -and -not $DryRun) {
+        try {
+            $wcText = Get-Content $wc -Raw
+            $found = [regex]::Matches($wcText, '[A-Za-z]:\\[^"''<>|]+\.(?:exe|py)')
+            $bad = @()
+            foreach ($m in $found) {
+                $p = $m.Value.Trim()
+                if (-not (Test-Path $p)) { $bad += $p }
+            }
+            if ($bad.Count -gt 0) {
+                Write-Warn "web.config ссылается на несуществующие пути (правьте вручную):"
+                foreach ($b in ($bad | Select-Object -Unique)) { Write-Host "      $b" -ForegroundColor Yellow }
+            } else {
+                Write-Ok "пути в web.config существуют"
+            }
+        } catch { Write-Warn "не удалось проверить web.config: $($_.Exception.Message)" }
     }
 }
 
@@ -408,8 +520,11 @@ if ($SkipTask) {
         }
 
         Run-Or-Dry {
+            # Снимаем возможный BOM — Register-ScheduledTask -Xml его не переваривает.
+            $taskXml = Get-Content $taskXmlInBundle.FullName -Raw
+            $taskXml = $taskXml.TrimStart([char]0xFEFF)
             Register-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath `
-                -Xml (Get-Content $taskXmlInBundle.FullName -Raw) `
+                -Xml $taskXml `
                 -User "SYSTEM" -RunLevel Highest -Force | Out-Null
         } "Register-ScheduledTask"
         Write-Ok "задача $TaskPath$TaskName зарегистрирована"
@@ -443,7 +558,7 @@ if ($NoStart) {
     }
 }
 
-# IIS health (HEAD /)
+# IIS health (GET /)
 try {
     $req = [System.Net.HttpWebRequest]::Create("http://localhost/")
     $req.Method = "GET"
@@ -460,6 +575,44 @@ try {
     Write-Warn "IIS localhost не отвечает: $errMsg"
 }
 
+# --- Домен и LDAP ------------------------------------------------------------
+# Без домена SYSTEM-рантайм не пройдёт Kerberos, а LDAP-бинд Django упадёт молча.
+Write-Step "Домен и LDAP"
+
+if ($DryRun) {
+    Write-Skip "пропущено (DryRun)"
+} else {
+    $domain = $null
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+            $domain = $cs.Domain
+            Write-Ok "хост в домене: $domain"
+        } else {
+            Write-Warn "хост НЕ введён в домен — LDAP по Kerberos и доступ к шарам от SYSTEM работать не будут"
+        }
+    } catch { Write-Warn "не удалось определить членство в домене: $($_.Exception.Message)" }
+
+    # Куда проверять LDAP: параметр -> LOGONSERVER -> имя домена
+    $ldapTarget = $LdapServer
+    if (-not $ldapTarget) {
+        $ls = $env:LOGONSERVER -replace '^\\\\', ''
+        if ($ls) { $ldapTarget = $ls } elseif ($domain) { $ldapTarget = $domain }
+    }
+    if ($ldapTarget) {
+        foreach ($port in @(389, 636)) {
+            try {
+                $r = Test-NetConnection -ComputerName $ldapTarget -Port $port -WarningAction SilentlyContinue
+                if ($r.TcpTestSucceeded) { Write-Ok "LDAP ${ldapTarget}:$port доступен" }
+                else                     { Write-Warn "LDAP ${ldapTarget}:$port НЕ доступен" }
+            } catch { Write-Warn "проверка LDAP ${ldapTarget}:$port не выполнена: $($_.Exception.Message)" }
+        }
+    } else {
+        Write-Warn "не удалось определить LDAP-сервер — задайте -LdapServer <dc> для проверки"
+    }
+    Write-Warn "финальный тест: залогиньтесь доменным пользователем в портал ДО переключения DNS"
+}
+
 Write-Host ""
 Write-Host "=== Импорт завершён ===" -ForegroundColor Green
 Write-Host ""
@@ -468,6 +621,7 @@ if (-not $NewHostname) {
     Write-Host "  1. Проверьте DJANGO_ALLOWED_HOSTS в .env — там должно быть имя этого хоста" -ForegroundColor White
     Write-Host "  2. Проверьте DJANGO_AI_GATEWAY_URL — оно должно использовать имя из ALLOWED_HOSTS" -ForegroundColor White
 }
-Write-Host "  3. Если используется HTTPS — импортируйте сертификаты и добавьте привязку 443 в IIS" -ForegroundColor White
+Write-Host "  3. Если используется HTTPS — импортируйте .pfx в LocalMachine\My и добавьте привязку 443" -ForegroundColor White
+Write-Host "     (LDAP-логин по HTTP шлёт учётные данные открытым текстом — HTTPS желателен)" -ForegroundColor White
 Write-Host "  4. Перезагрузите хост и убедитесь, что Scheduled Task поднимает runtime автоматически" -ForegroundColor White
-Write-Host "  5. Откройте портал в браузере, проверьте чат ИИ с реальным запросом данных" -ForegroundColor White
+Write-Host "  5. Откройте портал, залогиньтесь доменным пользователем, проверьте чат ИИ с реальным запросом данных" -ForegroundColor White

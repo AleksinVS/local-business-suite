@@ -331,6 +331,7 @@ docs: # Документация проекта
     OBSERVABILITY_BASELINE.md: file # Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report
     POLICY_MODEL.md: file # Модель политик доступа
     POSTGRESQL_PRIMARY_STORE_PLAN.md: file # План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта
+    PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md: file # Обзор моделей-кандидатов глубокого слоя обезличивания (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) и оценка применимости
     project-knowledge-system-v0.1.md: file # Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)
     PWA_AND_TAURI_NOTIFICATIONS_PLAN.md: file # План PWA-first уведомлений и опционального Tauri-клиента
     SERVICE_EXTRACTION_GUIDE.md: file # Правила безопасного выноса технических сервисов из Django
@@ -406,6 +407,8 @@ scripts: # Скрипты и инструменты разработки
     verify_ui.py: file # Верификация UI через локальный браузерный сценарий
   windows: # Windows-скрипты запуска, IIS-подготовки и автозапуска
     check_agent_runtime_autostart.ps1: file # Диагностика задач планировщика и процессов Agent Runtime
+    export_portal.ps1: file # Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост
+    import_portal.ps1: file # Восстановление Portal из бандла на новом хосте: IIS-фичи, файрвол, код, venv, AppPool+сайт, wfastcgi, scheduled task, health-check
     init_project.ps1: file # Инициализация каталогов и прав для IIS deployment
     run_agent_runtime.ps1: file # Временный запуск Agent Runtime в PowerShell Job
     run_windows.ps1: file # Локальный запуск Django и Agent Runtime на Windows

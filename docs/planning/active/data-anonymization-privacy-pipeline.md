@@ -22,6 +22,7 @@
 Связанные документы:
 
 - `docs/adr/ADR-0012-data-anonymization-and-privacy-pipeline.md`;
+- `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md` — обзор моделей-кандидатов глубокого слоя;
 - `docs/adr/ADR-0003-ai-memory-service.md`;
 - `docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md`;
 - `contracts/ai/memory_routing.json`;
@@ -168,12 +169,15 @@ data/contracts/privacy/anonymization_profiles.json
 - текущие regex из `deidentification.py`;
 - новые cheap validators для русских и бизнес-идентификаторов.
 
-Следующие слои:
+Следующие слои (кандидаты по обзору 2026-07-13, см. `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`):
 
-- Presidio-compatible adapter;
-- русские NER-модели;
+- Presidio-compatible adapter с RU-движком (Natasha/Slovnet или spaCy `ru_core_news_lg`) — основная детекция свободного русского текста;
+- `openai/privacy-filter` (ONNX, CPU, за feature flag) — дополнительный распознаватель секретов и латинских/формато-подобных PII на границах `before_cloud_llm` и `before_external_export`, сначала в режиме `observe`;
+- GLiNER2-PII — кандидат на гибкое расширение таксономии, участник eval-прогона;
 - медицинские и бизнес-распознаватели;
 - OCR quality checks.
+
+Зависимости глубокого слоя не добавляются в основной `requirements.txt`: отдельный набор зависимостей (по образцу `services/agent_runtime/requirements.lock`) и/или `privacy-worker`. Веса моделей хранятся в приватном deployment-контуре, не в репозитории.
 
 ### Audit и issue queue
 

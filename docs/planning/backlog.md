@@ -187,6 +187,7 @@ Generic external connector MVP архивирован как reference implement
 Контекст:
 - черновое архитектурное решение находится в `docs/adr/ADR-0012-data-anonymization-and-privacy-pipeline.md`;
 - черновой план находится в `docs/planning/active/data-anonymization-privacy-pipeline.md`;
+- обзор моделей-кандидатов глубокого слоя (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) — в `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`;
 - связанный Settings Center план (реализован, принят) — в архиве: `docs/planning/archive/2026/settings-center-gui.md`.
 
 Предварительный scope:

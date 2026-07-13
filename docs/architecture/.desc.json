@@ -6,6 +6,7 @@
   "INTEGRATIONS.md": "Интеграции с внешними системами",
   "POLICY_MODEL.md": "Модель политик доступа",
   "DESIGN_PATTERNS_REVIEW_2026-06-01.md": "Анализ полезных паттернов проектирования для текущей архитектуры",
+  "PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md": "Обзор моделей-кандидатов глубокого слоя обезличивания (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) и оценка применимости",
   "ANALYTICS_MODEL.md": "Модель аналитики (экспорт данных)",
   "OBSERVABILITY_BASELINE.md": "Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report",
   "SERVICE_EXTRACTION_GUIDE.md": "Правила безопасного выноса технических сервисов из Django",

@@ -3,7 +3,7 @@
   "title": "Детекторы расширения и kb eval (T5)",
   "status": "ready",
   "objective": "Реализовать детекторы dup-candidate, rename-candidate, desc-mismatch, команду kb eval по golden set и правило W10.",
-  "plan_sections": ["§6.4 (детекторы фазы 1.5)", "§7 (W10)", "§8.6", "§9 T5", "§10 U27-U31"],
+  "plan_sections": ["§6.4 (детекторы фазы 1.5)", "§7 (W10)", "§8.6", "§9 T5", "§10 U27-U31, S2"],
   "write_scope": [
     "scripts/dev/kb.py",
     "scripts/dev/tests/test_kb.py",
@@ -16,6 +16,7 @@
     "Шаг 4. §8.6 kb eval [--k 3]: загрузить eval/golden.yaml; для каждого case прогнать §8.1 п. 1-3 (без соседей), взять топ-k id; попадание = пересечение с expect непусто; expect-id, отсутствующие в pages, пометить '[нет такой страницы]' и исключить case из знаменателя; вывод 'hit-rate: H/N = X.XX' + список промахов; код выхода всегда 0.",
     "Шаг 5. Правило W10 (§7): пересечение зон covers двух страниц на одном уровне - предупреждение; вложенность разной глубины - НЕ предупреждение (deepest-match).",
     "Шаг 6. Тесты U27-U31 (§10); для kb eval пополнить golden.yaml фикстуры непустым набором case в формате §3.6 (поля строго q/expect).",
+    "Шаг 7. Сценарный тест S2 (§10 плана, сверка на слиянии §7.7 проекта): ветка с новым contradicts-ребром и страницей-дублем -> merge --no-ff в main -> инкрементальный sync взводит contradiction и dup-candidate; контрольная ветвь: sync --full вместо инкрементального contradiction НЕ взводит.",
     "ЗАПРЕЩЕНО: наполнять боевой docs/knowledge/eval/golden.yaml (он пополняется в фазе 2); менять формат case."
   ],
   "acceptance_checks": [
@@ -23,7 +24,8 @@
     "U28: dup-candidate по равному title.",
     "U29: desc-mismatch при коммите .desc.json позже timestamp страницы.",
     "U30: eval верно считает попадание и промах; U31: несуществующий expect-id исключает case из знаменателя.",
-    "kb eval на непустом golden set фикстуры печатает hit-rate и промахи, код 0."
+    "kb eval на непустом golden set фикстуры печатает hit-rate и промахи, код 0.",
+    "S2 зелёный целиком (обе ветви: инкрементальный sync взводит, --full не взводит contradiction)."
   ],
   "verification_commands": [
     "python -m pytest scripts/dev/tests -q",

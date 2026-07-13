@@ -237,7 +237,7 @@ Generic external connector MVP архивирован как reference implement
 Спроектирована локальная система знаний о проекте для агентов-архитекторов и агентов-разработчиков (адаптация гибридной концепции управления знаниями): markdown-канон `docs/knowledge/` + производная SQLite-проекция (FTS5, граф рёбер, очередь), CLI `kb`, двухуровневый контур качества с сессией-уборщиком. Проект прошёл внутреннее ревью и перенос применимых находок ревью основной системы знаний (версия 0.5); исполнительная спецификация T0–T6 готова — DDL, алгоритмы и форматы заданы дословно, исполнение воспроизводимо любой моделью.
 
 Контекст:
-- проектный документ: `docs/architecture/project-knowledge-system-v0.1.md` (v0.8, Proposed);
+- проектный документ: `docs/architecture/project-knowledge-system-v0.1.md` (v0.9, Proposed);
 - исполнительный план: `docs/planning/active/project-knowledge-system-mvp.md`;
 - workflow-блок: `workflow/active/project-knowledge-base-mvp/` (6 task packets, готов к исполнению);
 - базовая концепция: `docs/architecture/hybrid-knowledge-architecture-v0.5.md`.

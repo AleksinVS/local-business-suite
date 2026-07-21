@@ -1,4 +1,4 @@
-﻿# Import Portal Configuration from Migration Bundle
+# Import Portal Configuration from Migration Bundle
 # Восстанавливает Portal из бандла, снятого export_portal.ps1.
 #
 # Назначение: штатная миграция portal на новый Windows-хост
@@ -23,47 +23,28 @@
 #   9. Импортирует Scheduled Task и запускает runtime
 #  10. Проверяет /health, корень IIS, домен и доступность LDAP-портов
 
-[CmdletBinding(DefaultParameterSetName = 'StandardImport')]
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, ParameterSetName = 'StandardImport')]
+    [Parameter(Mandatory = $true)]
     [string]$BundlePath,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [string]$PortalRoot = "C:\inetpub\portal",
-    [Parameter(ParameterSetName = 'StandardImport')]
     [string]$SiteName = "portal",
-    [Parameter(ParameterSetName = 'StandardImport')]
     [string]$AppPoolName = "portal",
-    [Parameter(ParameterSetName = 'StandardImport')]
     [string]$TaskName = "Portal Agent Runtime",
-    [Parameter(ParameterSetName = 'StandardImport')]
-    [string]$TaskPath = "\Portal",
-    [Parameter(ParameterSetName = 'StandardImport')]
+    [string]$TaskPath = "\Portal\",
     [string]$PythonExe = "$env:ProgramFiles\Python311\python.exe",
-    [Parameter(ParameterSetName = 'StandardImport')]
     [string]$NewHostname,
-    [Parameter(ParameterSetName = 'StandardImport')]
-    [string]$AppPoolUser,
-    [Parameter(ParameterSetName = 'StandardImport')]
-    [string]$AppPoolPassword,
-    [Parameter(ParameterSetName = 'StandardImport')]
-    [string]$LdapServer,
-    [Parameter(ParameterSetName = 'StandardImport')]
+    [string]$AppPoolUser,       # доменная учётка для пула (если нужен SpecificUser)
+    [string]$AppPoolPassword,   # пароль к ней (appcmd его не экспортирует)
+    [string]$LdapServer,        # DC/LDAP-хост для проверки доступности (по умолчанию из домена)
     [int]$RuntimePort = 8090,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$SkipIIS,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$SkipCode,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$SkipVenv,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$SkipTask,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$SkipFirewall,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$NoStart,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$DryRun,
-    [Parameter(ParameterSetName = 'StandardImport')]
     [switch]$Force
 )
 
@@ -281,17 +262,15 @@ if (-not (Test-Path $sourceDir)) {
         Run-Or-Dry { New-Item -ItemType Directory -Path $PortalRoot -Force | Out-Null } "создать $PortalRoot"
     }
     if (-not $DryRun) {
-        # robocopy /E копирует файлы с перезаписью, но НЕ удаляет файлы, которых нет в source
-        # /XD - исключает папку scripts из копирования
-        # /XF - исключает перезапись файла .env
-        $rc = & robocopy "`"$sourceDir`"" "`"$PortalRoot`"" /E /IS /IT /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /XD "scripts" /XF ".env"
+        # robocopy /MIR перезапишет содержимое PortalRoot содержимым source
+        $rc = & robocopy "`"$sourceDir`"" "`"$PortalRoot`"" /MIR /R:1 /W:1 /NFL /NDL /NP /NJH /NJS
         if ($rc -ge 8) {
             Write-Warn "robocopy вернул код $rc — есть ошибки"
         } else {
             Write-Ok "код скопирован"
         }
     } else {
-        Write-Host "  [DRY-RUN] robocopy source -> $PortalRoot /E (перезапись без удаления, с исключением scripts/.env)" -ForegroundColor Magenta
+        Write-Host "  [DRY-RUN] robocopy source -> $PortalRoot /MIR" -ForegroundColor Magenta
     }
 
     # web.config — отдельно кладём из бандла/iis, если есть
@@ -365,13 +344,6 @@ if ($SkipCode) {
     Write-Ok "Python: $PythonExe"
 
     $venvDir = Join-Path $PortalRoot ".venv"
-    Write-Host "  venv путь: $venvDir" -ForegroundColor Gray
-
-    if (-not $PortalRoot) {
-        Write-Host "ОШИБКА: PortalRoot не определён" -ForegroundColor Red
-        exit 1
-    }
-
     if (Test-Path $venvDir) {
         if ($Force) {
             Run-Or-Dry { Remove-Item -Path $venvDir -Recurse -Force } "удалить существующий venv"
@@ -551,7 +523,9 @@ if ($SkipTask) {
             # Снимаем возможный BOM — Register-ScheduledTask -Xml его не переваривает.
             $taskXml = Get-Content $taskXmlInBundle.FullName -Raw
             $taskXml = $taskXml.TrimStart([char]0xFEFF)
-            Register-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath -Xml $taskXml | Out-Null
+            Register-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath `
+                -Xml $taskXml `
+                -User "SYSTEM" -RunLevel Highest -Force | Out-Null
         } "Register-ScheduledTask"
         Write-Ok "задача $TaskPath$TaskName зарегистрирована"
     }

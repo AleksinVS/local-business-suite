@@ -1,0 +1,56 @@
+<div id="attachments-panel">
+  <div class="block-header">
+    <span class="detail-label">Вложения ({{ workorder.attachments.count }})</span>
+    {% if can_upload_attachment %}
+      <label for="attachment-input" class="btn btn-ghost btn-xs cursor-pointer">Добавить</label>
+    {% endif %}
+  </div>
+  
+  <div class="attachment-grid">
+    {% for attachment in workorder.attachments.all %}
+      <div class="attachment-card">
+        <a href="{{ attachment.file.url }}" target="_blank" class="attachment-preview">
+          {% if attachment.is_image %}
+            <img src="{{ attachment.file.url }}" alt="{{ attachment.filename }}">
+          {% else %}
+            <span class="attachment-preview-icon">📄</span>
+          {% endif %}
+        </a>
+        <div class="attachment-info">
+          <span title="{{ attachment.filename }}">{{ attachment.filename }}</span>
+        </div>
+      </div>
+    {% empty %}
+      <div class="empty-text-xs">Нет вложений</div>
+    {% endfor %}
+  </div>
+
+  {% if can_upload_attachment %}
+  {% if attachment_form.errors %}
+    <div class="form-errors">
+      {% for field in attachment_form %}
+        {% for error in field.errors %}
+          <div>{{ error }}</div>
+        {% endfor %}
+      {% endfor %}
+      {% for error in attachment_form.non_field_errors %}
+        <div>{{ error }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <form
+    method="post"
+    enctype="multipart/form-data"
+    action="{% url 'workorders:attachment' workorder.pk %}"
+    class="hidden-form"
+    hx-post="{% url 'workorders:attachment' workorder.pk %}"
+    hx-encoding="multipart/form-data"
+    hx-target="#attachments-panel"
+    hx-swap="outerHTML"
+    hx-trigger="change from:#attachment-input"
+  >
+    {% csrf_token %}
+    <input type="file" id="attachment-input" name="file" class="hidden">
+  </form>
+  {% endif %}
+</div>

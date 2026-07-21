@@ -1,0 +1,51 @@
+{
+  "task_id": "02-tree-projection-and-view-mode",
+  "status": "completed",
+  "title": "Tree projection and view mode",
+  "goal": "Build server-side tree rows for workorders and wire board/tree mode selection into WorkOrderBoardView.",
+  "read_scope": [
+    "apps/workorders/views.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/models.py",
+    "apps/core/models.py",
+    "apps/inventory/models.py",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/board_columns.html",
+    "apps/workorders/tests.py"
+  ],
+  "write_scope": [
+    "apps/workorders/tree.py",
+    "apps/workorders/views.py",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/workorder_view_switcher.html",
+    "templates/workorders/partials/tree_view.html",
+    "templates/workorders/partials/tree_row.html",
+    "apps/workorders/tests.py",
+    "apps/workorders/.desc.json",
+    "templates/workorders/partials/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Use query parameter view=board|tree.",
+    "Preserve board mode behavior by default.",
+    "Build tree rows from the filtered visible queryset, not from all workorders.",
+    "Represent organization as a virtual root node.",
+    "Include Department ancestors needed to show paths for visible workorders.",
+    "Group workorders by MedicalDevice under their department branch.",
+    "Place workorders without device under a stable fallback node.",
+    "Auto-expand ancestors for search matches.",
+    "Add counts for total and active workorders on branch and device nodes.",
+    "Expose page_ai_context_json with page.view=tree for tree mode."
+  ],
+  "acceptance": [
+    "GET /workorders/?view=tree renders tree mode.",
+    "GET /workorders/?view=board renders existing board mode.",
+    "Search and filters affect tree and board consistently.",
+    "HTMX requests return the correct partial for the active target.",
+    "Tree output contains no inaccessible foreign-branch data for customer."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    ".venv/bin/python manage.py check"
+  ]
+}

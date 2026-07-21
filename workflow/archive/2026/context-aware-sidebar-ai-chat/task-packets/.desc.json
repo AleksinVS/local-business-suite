@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для контекстного ИИ-чата в левой боковой панели",
+  "01-page-context-contract-and-server-resolver.json": "PageContextEnvelope, server-side snapshot и resolver выбранного объекта",
+  "02-browser-context-bridge.json": "Browser bridge для data-ai-context, HTMX swaps и публикации контекста окна",
+  "03-all-functions-menu.json": "Выпадающее меню Все функции вместо навигации в левой панели",
+  "04-sidebar-chat-surface.json": "Встроенная sidebar-поверхность AI-чата и суммаризация истории",
+  "05-agent-runtime-context-prompts.json": "Инструмент ui.get_current_context, runtime context и подсказки агента",
+  "06-e2e-docs-and-handoff.json": "E2E, скриншоты, документация и handoff"
+}

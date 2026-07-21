@@ -1,0 +1,35 @@
+{
+  "brief_id": "TASK-0001",
+  "title": "Describe the planned change",
+  "status": "draft",
+  "summary": "Short explanation of what will change and why.",
+  "assumptions": [],
+  "affected_files": [],
+  "steps": [
+    {
+      "id": "step-1",
+      "title": "Inspect current behavior",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "step-2",
+      "title": "Implement the change",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "step-3",
+      "title": "Verify and document the outcome",
+      "status": "pending",
+      "notes": ""
+    }
+  ],
+  "verification": [
+    {
+      "type": "command",
+      "command": "./.venv/bin/python manage.py test"
+    }
+  ],
+  "risks": []
+}

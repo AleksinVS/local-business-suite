@@ -1,0 +1,55 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-backend-spikes",
+  "task_id": "task-memory-backend-spikes",
+  "goal": "Run bounded backend spikes and write a recommendation report for graph/vector/backend choices.",
+  "risk_class": "R1",
+  "read_files": [
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "requirements.txt"
+  ],
+  "write_files": [
+    ".local/**",
+    "data/memory/eval/**",
+    "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+  ],
+  "forbidden_moves": [
+    "Do not modify production code in this spike task.",
+    "Do not commit generated indexes, model caches, or raw experiment data.",
+    "Do not add dependencies to requirements.txt from spike results without a follow-up accepted task."
+  ],
+  "required_docs": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "required_checks": [
+    "Document spike commands and outcomes in the executor report"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Backend spike report",
+    "Recommendation: LanceDB or Qdrant for first implementation",
+    "Recommendation: Graphiti adapter or own graph extractor first",
+    "Known risks and dependency notes"
+  ],
+  "escalation_path": [
+    "A production dependency must be added before the spike can proceed",
+    "Graphiti requires a graph backend that conflicts with ADR-0003",
+    "The spike finds embedded storage is not viable"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Use .local/ for disposable scripts and notes.",
+    "Use only synthetic or public non-sensitive data.",
+    "Report exact package versions tested."
+  ]
+}

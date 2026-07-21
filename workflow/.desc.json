@@ -1,0 +1,7 @@
+{
+  ".": "Исполнительные workflow-пакеты для сложных работ",
+  "active": "Активные workflow-блоки",
+  "archive": "Архив принятых workflow-блоков",
+  "templates": "Шаблоны workflow-артефактов",
+  "ai_artifacts": "Legacy-шаблоны agent workflow и change plan"
+}

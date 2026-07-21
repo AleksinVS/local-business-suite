@@ -1,0 +1,48 @@
+{
+  "task_id": "03-workorder-event-producers-and-preferences",
+  "title": "Workorder event producers and preferences",
+  "status": "pending",
+  "objective": "Connect workorder domain events to notifications while keeping recipient selection and privacy rules server-side.",
+  "read_scope": [
+    "apps/workorders/models.py",
+    "apps/workorders/services.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/tests.py",
+    "contracts/role_rules.json",
+    "contracts/workflow_rules.json"
+  ],
+  "write_scope": [
+    "apps/workorders/notification_events.py",
+    "apps/workorders/services.py",
+    "apps/workorders/tests.py",
+    "apps/notifications/models.py",
+    "apps/notifications/services.py",
+    "apps/notifications/tests.py"
+  ],
+  "non_goals": [
+    "Do not bypass visible_workorders_queryset or policy helpers.",
+    "Do not notify users about source objects they cannot open.",
+    "Do not include full workorder descriptions in system notifications.",
+    "Do not introduce workflow rule changes unless separately approved."
+  ],
+  "requirements": [
+    "Workorder create, transition, assignment and comment events must map to notification event types.",
+    "Recipients must be derived through workorder visibility and role semantics.",
+    "Authors should not receive noisy notifications about their own actions unless preferences require it.",
+    "Notification preferences must allow disabling low-priority categories.",
+    "Events must be safe and idempotent where service retries are possible."
+  ],
+  "acceptance_checks": [
+    "New assigned workorder notifies the assignee.",
+    "A user outside visibility scope does not receive the notification.",
+    "Transition to resolved can notify author or responsible role according to preference.",
+    "Comment notification excludes sensitive comment body from system notification text.",
+    "Preference disabling a category stops new deliveries for that category."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.workorders.tests apps.notifications.tests",
+    "python manage.py validate_architecture_contracts"
+  ]
+}

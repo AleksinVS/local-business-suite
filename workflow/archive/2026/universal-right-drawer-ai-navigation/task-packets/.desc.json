@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для универсального открытия правого сайдбара ИИ-ботом",
+  "01-right-panel-provider-contract.json": "Контракт RightPanelProvider, descriptor и registry",
+  "02-global-drawer-host-and-browser-bridge.json": "Общий right drawer host и browser bridge для UI-команд",
+  "03-workorders-and-waiting-list-providers.json": "Провайдеры правого сайдбара для заявок и листа ожидания",
+  "04-ai-tool-and-runtime-delivery.json": "Инструмент ui.open_right_panel, runtime wrapper и доставка UI-команд",
+  "05-e2e-docs-and-handoff.json": "E2E, документация, отчеты исполнения и handoff"
+}

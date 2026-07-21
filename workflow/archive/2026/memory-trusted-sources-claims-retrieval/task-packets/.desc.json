@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для trusted sources, claims and lightweight retrieval",
+  "01-contracts-and-source-trust-policy.json": "Contracts and validators for source trust policy",
+  "02-retrieval-trust-gate.json": "Retrieval trusted-source gate",
+  "03-claim-belief-model.json": "Claim/belief governance model",
+  "04-lightweight-retrieval-orchestration.json": "Deterministic lightweight retrieval orchestration",
+  "05-reflection-digests-and-eval.json": "Belief digests, reflection scoring and security eval"
+}

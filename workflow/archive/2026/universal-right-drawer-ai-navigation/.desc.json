@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: универсальное открытие правого сайдбара ИИ-ботом",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки универсального правого сайдбара",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для universal right drawer AI navigation",
+  "task-packets": "Task packets для provider registry, global drawer, module providers, AI tool и e2e",
+  "EXECUTOR_REPORT.implementation.md": "Отчет исполнения MVP универсального правого сайдбара",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка MVP универсального правого сайдбара"
+}

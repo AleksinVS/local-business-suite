@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для общей основы AI UI протоколов",
+  "01-adr-and-project-documentation.json": "ADR, проектная документация и planning для версионируемого AI UI протокола",
+  "02-django-ui-runtime-foundation.json": "Общий Django-side runtime для actor context, подписи и выбора UI-драйвера",
+  "03-agent-runtime-protocol-layer.json": "Версионируемые protocol adapters в services.agent_runtime",
+  "04-copilotkit-driver-refactor.json": "Перевод CopilotKit-пилота на общий protocol foundation",
+  "05-native-ag-ui-compatible-ui.json": "Самописный UI driver с AG-UI-compatible stream",
+  "06-e2e-security-deployment.json": "E2E matrix, security checks и deployment profile docs"
+}

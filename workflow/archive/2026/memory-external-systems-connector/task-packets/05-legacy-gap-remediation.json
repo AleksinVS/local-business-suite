@@ -1,0 +1,54 @@
+{
+  "task_id": "05-legacy-gap-remediation",
+  "status": "implemented",
+  "title": "External connector legacy gap remediation",
+  "goal": "Close pre-pilot gaps in the external connector MVP vertical slice without adding a source-specific adapter.",
+  "read_scope": [
+    "apps/memory/external_connectors.py",
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md",
+    "docs/architecture/MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md",
+    "docs/planning/active/memory-external-connector-legacy-gap-remediation.md"
+  ],
+  "write_scope": [
+    "apps/memory/external_connectors.py",
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "docs/architecture/",
+    "docs/deployment/",
+    "workflow/active/memory-external-systems-connector/"
+  ],
+  "in_scope": [
+    "DLP/secret gate for raw quarantine",
+    "Landing-zone issue/report for skipped unsafe raw payloads",
+    "Manifest completeness for audit/replay",
+    "Durable tombstone registry and stale upsert protection",
+    "Canonical content_hash verification",
+    "Retention cleanup command with dry-run",
+    "Queue status details for failed/dead-letter jobs"
+  ],
+  "out_of_scope": [
+    "Raw quarantine encryption",
+    "Source-specific API adapter",
+    "Webhook/reconciliation",
+    "Production queue backend",
+    "UI/admin monitoring"
+  ],
+  "acceptance": [
+    "Unsafe raw responses are not written to quarantine.",
+    "Expired runtime artifacts can be reported and cleaned by command.",
+    "Manifest includes connector version, timestamps, counts, errors, cursor state, retention class and issues path.",
+    "Delete envelopes append tombstones and stale upserts are rejected or skipped.",
+    "content_hash is recalculated and verified.",
+    "Queue status can show detailed failed/dead-letter jobs.",
+    "Tests cover all remediation behavior."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.memory.tests.MemoryExternalConnectorTests",
+    "python manage.py test apps.memory.tests apps.core.tests"
+  ]
+}

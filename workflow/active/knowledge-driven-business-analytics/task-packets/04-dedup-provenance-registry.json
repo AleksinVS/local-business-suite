@@ -1,0 +1,28 @@
+{
+  "task_id": "04-dedup-provenance-registry",
+  "title": "Implement cross-source deduplication and provenance registry",
+  "status": "mvp_implemented",
+  "read_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "contracts/analytics/",
+    "tests"
+  ],
+  "requirements": [
+    "Track source identities, raw hashes, normalized text hashes, attachment hashes, near-duplicate fingerprints, semantic claim hashes and business keys.",
+    "Exact duplicates should merge evidence automatically when scope and sensitivity permit it.",
+    "Near-duplicates should create duplicate candidates or version clusters.",
+    "Semantic duplicate facts should merge at claim level with multiple evidence refs.",
+    "Preserve provenance for all evidence; never silently delete duplicate evidence."
+  ],
+  "acceptance_checks": [
+    "python manage.py test apps.analytics.tests apps.memory.tests",
+    "python manage.py analytics_dedup_source --source-code <code> --dry-run"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "task_id": "02-imap-email-ingestion",
+  "title": "Implement IMAP email ingestion baseline",
+  "status": "mvp_fixture_baseline_implemented",
+  "read_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "contracts/analytics/",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "contracts/analytics/",
+    "docs/deployment/",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Implement mailbox/folder sync with UIDVALIDITY/UID watermarks.",
+    "Support scheduled polling and design an optional IMAP IDLE path.",
+    "Extract headers, body text, safe HTML text, attachments metadata and hashes.",
+    "Analyze body content only when source policy permits it.",
+    "Do not store mailbox credentials in repository contracts.",
+    "Write runtime artifacts under data/analytics/raw/email/ or data/analytics/normalized/email/ according to retention policy."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py analytics_sync_source --source-code <code> --dry-run"
+  ]
+}

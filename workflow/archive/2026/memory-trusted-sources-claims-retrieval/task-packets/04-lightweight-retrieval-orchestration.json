@@ -1,0 +1,32 @@
+{
+  "task_id": "04-lightweight-retrieval-orchestration",
+  "title": "Add lightweight retrieval orchestration",
+  "status": "completed",
+  "objective": "Implement deterministic rank fusion, context packing and budget enforcement without requiring local LLM calls in hot path.",
+  "write_scope": [
+    "apps/memory/retrieval.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/graph_backends.py",
+    "apps/memory/tests.py",
+    "contracts/ai/memory_retrieval_budget.json",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Fuse full-text/vector/graph candidates deterministically.",
+    "Apply authority, freshness, accepted-belief and scope boosts.",
+    "Apply candidate/contested/expired/low-confidence penalties.",
+    "Limit final context size and per-source diversity.",
+    "Keep optional LLM rerank disabled by default and guarded by budget/route flags."
+  ],
+  "acceptance_checks": [
+    "Retrieval returns stable ordering for deterministic fixtures.",
+    "Accepted belief outranks raw chunk with weaker authority.",
+    "Expired or contested items are penalized or excluded according to policy.",
+    "Context packing respects item and token budgets.",
+    "No LLM call is needed for default search tests."
+  ],
+  "verification_commands": [
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

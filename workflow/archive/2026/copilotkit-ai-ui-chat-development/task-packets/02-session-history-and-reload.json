@@ -1,0 +1,38 @@
+{
+  "task_id": "02-session-history-and-reload",
+  "title": "Harden sessions, history and reload behavior",
+  "status": "planned",
+  "read_scope": [
+    "apps/ai/models.py",
+    "apps/ai/ui_runtime/",
+    "apps/ai/views.py",
+    "static/src/copilotkit/",
+    "apps/ai/tests/"
+  ],
+  "write_scope": [
+    "apps/ai/ui_runtime/",
+    "apps/ai/views.py",
+    "apps/ai/tests/",
+    "static/src/copilotkit/",
+    "scripts/e2e/tests/"
+  ],
+  "goals": [
+    "Keep Django as the owner of chat history.",
+    "Make new chat behavior deterministic.",
+    "Handle actor token expiry and page reload predictably."
+  ],
+  "non_goals": [
+    "Do not move persistence to CopilotKit hosted services.",
+    "Do not change unrelated chat data models without separate ADR or task packet."
+  ],
+  "acceptance": [
+    "A new CopilotKit chat maps to a clean Django session or explicit session selection.",
+    "Page reload does not silently merge unrelated conversations.",
+    "Expired actor token produces a recoverable UI error or refresh path.",
+    "Unit tests cover session/config behavior."
+  ],
+  "verification": [
+    "python manage.py test apps.ai.tests",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\""
+  ]
+}

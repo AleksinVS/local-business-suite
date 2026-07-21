@@ -1,0 +1,151 @@
+{
+  "block_id": "kanban-ui-refactor-2026-04-07",
+  "methodology": "vertical-slices",
+  "slices": [
+    {
+      "slice_id": "slice-kanban-drawer-fixes",
+      "risk_class": "R1",
+      "tasks": [
+        {
+          "task_id": "fix-drawer-logic-base",
+          "goal": "Fix foundational drawer logic within the base template for consistency across the application.",
+          "read_files": [
+            "templates/base.html",
+            "templates/workorders/board.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/base.html"
+          ],
+          "deliverables": [
+            "Refactored drawer logic in base.html"
+          ],
+          "escalate_if": [
+            "Unexpected conflicts with other global components",
+            "Broken layout on other pages"
+          ]
+        },
+        {
+          "task_id": "fix-drawer-logic-board",
+          "goal": "Align the kanban board's drawer implementation with the updated base logic.",
+          "read_files": [
+            "templates/workorders/board.html",
+            "apps/workorders/views.py"
+          ],
+          "write_files": [
+            "templates/workorders/board.html"
+          ],
+          "deliverables": [
+            "Updated board.html with compatible drawer logic"
+          ],
+          "escalate_if": [
+            "Workorder view data is missing required drawer context",
+            "Board-specific drawer behavior cannot be reconciled with base"
+          ]
+        }
+      ],
+      "forbidden_moves": [
+        "Modifying core workorder business logic in models",
+        "Changing global CSS without verification"
+      ],
+      "required_checks": [
+        "Verify drawer opens/closes correctly on mobile",
+        "Check for Z-index issues with kanban cards"
+      ],
+      "acceptance_criteria": [
+        "Drawer works consistently on the board page and other pages",
+        "No JS errors in console when interacting with the drawer"
+      ]
+    },
+    {
+      "slice_id": "slice-kanban-layout-polish",
+      "risk_class": "R0",
+      "tasks": [
+        {
+          "task_id": "polish-kanban-css",
+          "goal": "Improve the visual appearance and layout of the kanban board components.",
+          "read_files": [
+            "static/src/css/app.css",
+            "templates/workorders/board.html"
+          ],
+          "write_files": [
+            "static/src/css/app.css"
+          ],
+          "deliverables": [
+            "Updated app.css with kanban polish styles"
+          ],
+          "escalate_if": [
+            "CSS changes cause regressions in other parts of the app",
+            "Browser-specific rendering issues"
+          ]
+        }
+      ],
+      "forbidden_moves": [
+        "Adding new CSS frameworks",
+        "Using inline styles"
+      ],
+      "required_checks": [
+        "Verify layout on multiple screen sizes",
+        "Check hover and active states on kanban cards"
+      ],
+      "acceptance_criteria": [
+        "Kanban board matches design specs",
+        "No regressions in existing layout"
+      ]
+    },
+    {
+      "slice_id": "slice-navigation-sidebar",
+      "risk_class": "R1",
+      "tasks": [
+        {
+          "task_id": "implement-sidebar-base",
+          "goal": "Structure the navigation sidebar in the base template.",
+          "read_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/base.html"
+          ],
+          "deliverables": [
+            "New sidebar HTML structure in base.html"
+          ],
+          "escalate_if": [
+            "Main content area becomes too cramped",
+            "Conflict with existing header navigation"
+          ]
+        },
+        {
+          "task_id": "implement-sidebar-css",
+          "goal": "Style the navigation sidebar and ensure responsive behavior.",
+          "read_files": [
+            "static/src/css/app.css",
+            "templates/base.html"
+          ],
+          "write_files": [
+            "static/src/css/app.css"
+          ],
+          "deliverables": [
+            "Updated app.css with sidebar styles"
+          ],
+          "escalate_if": [
+            "Mobile sidebar toggle is unreliable",
+            "CSS overlaps with other fixed position elements"
+          ]
+        }
+      ],
+      "forbidden_moves": [
+        "Hardcoding navigation links without using url tags",
+        "Bypassing role-based visibility"
+      ],
+      "required_checks": [
+        "Test sidebar collapse/expand functionality",
+        "Verify navigation links point to correct URLs"
+      ],
+      "acceptance_criteria": [
+        "Sidebar is present and functional on all pages extending base.html",
+        "Sidebar responds correctly to screen size changes"
+      ]
+    }
+  ]
+}

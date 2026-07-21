@@ -1,0 +1,35 @@
+{
+  "task_id": "05-contextual-help-minichat",
+  "title": "Contextual help and AI mini-chat",
+  "goal": "Add reusable tooltips, help topics and floating AI mini-chat tied to setting_id context.",
+  "read_scope": [
+    "apps/ai/",
+    "apps/settings_center/",
+    "contracts/ai/tools.json",
+    "contracts/ai/task_types.json",
+    "templates/",
+    "docs/architecture/SETTINGS_CENTER_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/settings_center/",
+    "apps/ai/",
+    "templates/settings_center/",
+    "static/",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "docs/guides/"
+  ],
+  "acceptance": [
+    "Every significant descriptor can expose tooltip text and help_topic_id.",
+    "Help icon opens a floating HTMX mini-chat with the current setting_id.",
+    "Mini-chat initial response displays help for the selected setting without user restating context.",
+    "Questions include structured descriptor context with secret and sensitive values masked.",
+    "Write suggestions from chat are proposals only and cannot bypass normal confirmation/service-layer apply.",
+    "Tests prove raw secret values and disallowed sensitive fields are not sent to help context."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.settings_center.tests apps.ai.tests"
+  ]
+}

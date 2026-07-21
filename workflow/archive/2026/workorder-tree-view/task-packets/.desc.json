@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для дерева заявок",
+  "00-design-and-planning-docs.json": "Документационный срез: ADR, активный план и workflow",
+  "01-access-scope-and-form-filtering.json": "Branch-aware доступ заказчика и ограничение форм",
+  "02-tree-projection-and-view-mode.json": "Серверная проекция дерева и режим view=tree",
+  "03-tree-ui-and-right-drawer.json": "UI дерева, стили доски и правый сайдбар",
+  "04-tests-docs-and-acceptance.json": "Unit, view, e2e проверки, документация и приемка"
+}

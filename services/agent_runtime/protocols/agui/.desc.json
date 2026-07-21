@@ -1,0 +1,6 @@
+{
+  ".": "AG-UI-compatible protocol adapter",
+  "__init__.py": "Инициализация AG-UI protocol пакета",
+  "events.py": "Базовые AG-UI события, SSE-сериализация и protocol metadata",
+  "v1.py": "AG-UI v1 mapper для сообщений, tool trace, UI-команд и history"
+}

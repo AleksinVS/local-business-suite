@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "defaults": {
+    "recent_message_limit": 20,
+    "summary_enabled": true,
+    "summary_trigger_messages": 24,
+    "max_prompt_chars": 10000,
+    "context_tool_enabled": true
+  },
+  "surfaces": {
+    "full_page": {
+      "recent_message_limit": 20,
+      "summary_enabled": false
+    },
+    "sidebar": {
+      "recent_message_limit": 8,
+      "summary_enabled": true,
+      "session_mode": "dedicated",
+      "session_switcher": false
+    }
+  }
+}

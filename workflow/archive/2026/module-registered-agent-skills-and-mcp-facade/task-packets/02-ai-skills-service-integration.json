@@ -1,0 +1,37 @@
+{
+  "task_id": "02-ai-skills-service-integration",
+  "status": "implemented",
+  "title": "AI skills service integration",
+  "goal": "Make apps.ai.skills_service aggregate module-registered skills and trusted SKILL.md files.",
+  "read_scope": [
+    "apps/ai/skills_service.py",
+    "apps/ai/views.py",
+    "apps/ai/tests.py",
+    "contracts/ai/",
+    "data/contracts/ai/",
+    "apps/core/ai_skills.py"
+  ],
+  "write_scope": [
+    "apps/ai/skills_service.py",
+    "apps/ai/tests.py"
+  ],
+  "requirements": [
+    "Discover skills from apps.core.ai_skills registry.",
+    "Keep support for contracts/ai/skills and data/contracts/ai/skills.",
+    "Use strict skill id validation for both provider and file skills.",
+    "Return extended catalog metadata: id, name, description, source_code, object_types, required_tools and trigger_examples.",
+    "Load provider-backed skill body through provider.load_body().",
+    "Load file-backed skill body from SKILL.md only after id validation.",
+    "If a user context is available, filter provider-backed skills through is_available_for_user()."
+  ],
+  "acceptance": [
+    "Skill catalog endpoint returns module skills.",
+    "Skill load endpoint returns provider body.",
+    "File-backed skills still work.",
+    "Invalid ids and missing skills return safe not-found behavior."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python manage.py check"
+  ]
+}

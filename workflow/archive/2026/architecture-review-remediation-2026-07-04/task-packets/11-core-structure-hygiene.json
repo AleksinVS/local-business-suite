@@ -1,0 +1,37 @@
+{
+  "task_id": "11-core-structure-hygiene",
+  "title": "Разнос доменных валидаторов из core и разбиение монолитных tests.py",
+  "risk": "low",
+  "goal": "apps/core/json_utils.py содержит только универсальные утилиты; доменные валидаторы контрактов живут в своих приложениях; крупнейшие tests.py разбиты на пакеты tests/ по темам.",
+  "findings": [
+    "apps/core/json_utils.py — 2131 строка, 48 функций: ядро знает валидацию контрактов memory, analytics, ai, workorders (конфликт правил 3 и 5 AGENTS.md)",
+    "монолитные тесты: apps/memory/tests.py (2738 строк), apps/ai/tests.py (2655), apps/workorders/tests.py (958), apps/core/tests.py (891)"
+  ],
+  "write_scope": [
+    "apps/core/json_utils.py (остаются load_json_file, atomic_write_json, pretty_json и общие примитивы)",
+    "apps/ai/contracts.py, apps/memory/contracts.py, apps/analytics/contracts.py, apps/workorders/contracts.py (новые модули валидаторов; имена уточнить по факту)",
+    "config/settings.py, apps/core/management/commands/validate_architecture_contracts.py, apps/settings_center/contract_services.py (импорты)",
+    "apps/memory/tests/ и apps/ai/tests/ (разбиение; остальные — по времени)",
+    ".desc.json затронутых приложений, PROJECT_STRUCTURE.yaml (make gen-struct)"
+  ],
+  "non_goals": [
+    "Не менять логику валидаторов — только перенос",
+    "Не переименовывать публичные функции валидаторов без необходимости (сохранить re-export из старого места на переходный период, если правка всех импортов раздувает диф)",
+    "Разбиение workorders/core tests допустимо перенести в backlog, если пакет растёт"
+  ],
+  "implementation_notes": [
+    "Перенос по доменам: validate_memory_* -> apps.memory, validate_analytics_* и dataset registry -> apps.analytics, validate_ai_* -> apps.ai, role/workflow/status colors -> apps.workorders (или apps.core, если это связка с policy-контуром — решить и зафиксировать в отчёте).",
+    "Согласовать с пакетом 07: если валидация переехала в system checks, регистрация checks делается в AppConfig соответствующего приложения — тогда settings перестаёт импортировать валидаторы вовсе.",
+    "Тесты разбивать механически по классам с сохранением имён тестов; pytest.ini уже поддерживает test_*.py; проверить, что manage.py test обнаруживает новые пакеты (нужен __init__.py)."
+  ],
+  "tests": [
+    "regression: количество собранных тестов до и после разбиения совпадает (pytest --collect-only -q | wc -l зафиксировать в отчёте)",
+    "полный тестовый набор зелёный"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "wc -l apps/core/json_utils.py — существенно меньше исходных 2131 строк (ориентир: только универсальные примитивы)"
+  ],
+  "independent_verification": false
+}

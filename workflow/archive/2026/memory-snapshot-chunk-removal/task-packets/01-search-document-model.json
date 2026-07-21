@@ -1,0 +1,34 @@
+{
+  "task_id": "01-search-document-model",
+  "title": "Добавить прямую индексную запись MemorySearchDocument",
+  "status": "completed",
+  "objective": "Создать модель, которая заменит MemorySnapshot/MemoryChunk как обязательный промежуточный слой между знанием, исходным объектом и поисковым индексом.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/admin.py",
+    "apps/memory/tests.py",
+    "docs/planning/active/memory-snapshot-chunk-removal.md"
+  ],
+  "requirements": [
+    "Добавить модель MemorySearchDocument в apps.memory.",
+    "Модель должна поддерживать corpus_type: knowledge и source_data.",
+    "Модель должна хранить document_id, object_kind, source_code, source_kind, source_refs, scope_tokens, sensitivity, index_status, body_hash и metadata.",
+    "Для knowledge должна быть ссылка на MemoryKnowledgeItem или стабильный knowledge_id.",
+    "Для source_data должна быть ссылка на MemorySourceObject или стабильный source_object_id.",
+    "Модель не должна хранить полный исходный текст.",
+    "Добавить индексы по document_id, corpus_type, object_kind, source_code, source_kind, index_status и sensitivity.",
+    "Admin должен показывать безопасные поля и не раскрывать исходный текст или временные пути."
+  ],
+  "acceptance_checks": [
+    "makemigrations создает ожидаемую миграцию.",
+    "manage.py check проходит.",
+    "Тест модели проверяет уникальность document_id.",
+    "Тест модели проверяет, что corpus_type и object_kind фильтруются."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.memory.tests"
+  ]
+}

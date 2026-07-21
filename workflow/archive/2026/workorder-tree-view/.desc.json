@@ -1,0 +1,10 @@
+{
+  ".": "Workflow: дерево заявок и режимы просмотра доски",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ, доступа и приемки дерева заявок",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для дерева заявок",
+  "EXECUTOR_REPORT.documentation.md": "Отчет о подготовке проектной и исполнительной документации",
+  "EXECUTOR_REPORT.implementation.md": "Отчет о реализации дерева заявок",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка документационного среза дерева заявок",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка реализации дерева заявок",
+  "task-packets": "Task packets для доступа, tree projection, UI, сайдбара и проверок"
+}

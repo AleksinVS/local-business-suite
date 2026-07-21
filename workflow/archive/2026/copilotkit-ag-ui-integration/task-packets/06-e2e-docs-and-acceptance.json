@@ -1,0 +1,43 @@
+{
+  "task_id": "06-e2e-docs-and-acceptance",
+  "title": "End-to-end verification, docs refresh and acceptance",
+  "status": "planned",
+  "goal": "Verify the full CopilotKit flow and update project documentation before owner acceptance.",
+  "read_scope": [
+    "README.md",
+    "AGENTS.md",
+    "PROJECT_STRUCTURE.yaml",
+    "docs/guides/",
+    "docs/deployment/",
+    "workflow/active/copilotkit-ag-ui-integration/"
+  ],
+  "write_scope": [
+    "README.md",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "workflow/active/copilotkit-ag-ui-integration/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/copilotkit-ag-ui-integration/TASK_ACCEPTANCE.implementation.md",
+    "workflow/active/copilotkit-ag-ui-integration/RETROSPECTIVE.md",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not archive the workflow until owner acceptance.",
+    "Do not remove fallback sidebar before explicit decision."
+  ],
+  "acceptance": [
+    "Primary e2e scenario passes.",
+    "Docs describe current implemented behavior, not aspirational behavior.",
+    "PROJECT_STRUCTURE.yaml is regenerated.",
+    "Executor report lists commands and results.",
+    "Acceptance report lists residual risks.",
+    "Backlog is updated to reflect status."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "npm run test:e2e -- --project=chromium --grep \"copilotkit|ag-ui|sidebar\"",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

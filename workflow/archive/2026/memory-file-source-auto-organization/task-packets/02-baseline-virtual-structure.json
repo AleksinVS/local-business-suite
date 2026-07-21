@@ -1,0 +1,47 @@
+{
+  "task_id": "02-baseline-virtual-structure",
+  "title": "Generated baseline virtual structure",
+  "status": "completed",
+  "objective": "Create the automatic baseline virtual structure after primary source analysis, with confidence, evidence and conflicts.",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/source_text_extraction.py",
+    "apps/memory/review_services.py",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "contracts/ai/memory_file_organization_profiles.json"
+  ],
+  "write_scope": [
+    "apps/memory/file_organization.py",
+    "apps/memory/file_organization_baseline.py",
+    "apps/memory/management/commands/memory_file_organization_baseline.py",
+    "apps/memory/review_selectors.py",
+    "apps/memory/review_services.py",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md"
+  ],
+  "non_goals": [
+    "Do not physically move files.",
+    "Do not delete source files.",
+    "Do not use cloud LLM/OCR for baseline in MVP.",
+    "Do not publish baseline as accepted organization structure without review."
+  ],
+  "requirements": [
+    "Baseline generation must run in dry-run mode.",
+    "Each placement must include virtual_path, confidence, evidence, conflicts and review_required.",
+    "Low confidence, ACL conflict, sensitivity conflict and duplicate ambiguity must create review visibility.",
+    "Baseline must not change physical files or source metadata except explicit organization planning records."
+  ],
+  "acceptance_checks": [
+    "Synthetic corpus produces a baseline virtual view with explainable placements.",
+    "Low-confidence files are routed to review.",
+    "Files with conflicting ACL/sensitivity are not grouped into unsafe folders.",
+    "Baseline command prints safe metrics and does not leak raw content."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py memory_file_organization_baseline --source-code <code> --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

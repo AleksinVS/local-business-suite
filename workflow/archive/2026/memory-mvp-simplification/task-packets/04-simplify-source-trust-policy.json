@@ -1,0 +1,34 @@
+{
+  "task_id": "04-simplify-source-trust-policy",
+  "title": "Упростить политику надежных источников для MVP",
+  "status": "completed",
+  "objective": "Свести решения о надежности источников к простой MVP-схеме и сохранить совместимость с текущими значениями контрактов.",
+  "write_scope": [
+    "contracts/ai/memory_trust_policy.json",
+    "contracts/ai/memory_sources.json",
+    "contracts/schemas/memory_trust_policy.schema.json",
+    "contracts/schemas/memory_sources.schema.json",
+    "apps/core/json_utils.py",
+    "apps/memory/policies.py",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "Показать или задокументировать MVP-статусы trusted, review_required, blocked.",
+    "Отображать текущее значение candidate_only в review_required.",
+    "Отображать текущее значение quarantined в review_required или blocked по политике источника.",
+    "Оставить обычный memory.search только по надежным источникам по умолчанию.",
+    "Не ослаблять проверку надежности источников."
+  ],
+  "acceptance_checks": [
+    "Надежные источники могут попадать в обычный контекст после проверки прав и чувствительности.",
+    "Источники, требующие проверки, не попадают в обычный контекст бота.",
+    "Заблокированные источники не попадают в обычный контекст бота.",
+    "Проверка контрактов проходит."
+  ],
+  "verification_commands": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests apps.memory.tests"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "task_id": "02-lancedb-local-embeddings",
+  "goal": "Add a LanceDB vector backend and local-only embedding providers.",
+  "write_scope": [
+    "apps/memory/embeddings.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/retrieval.py",
+    "contracts/ai/memory_profiles.json",
+    "apps/memory/tests.py"
+  ],
+  "acceptance": [
+    "LanceDB rows carry document metadata payload.",
+    "Default test provider is local and deterministic.",
+    "SentenceTransformer provider is optional and local-only.",
+    "Semantic search mode uses vector candidates when enabled."
+  ]
+}

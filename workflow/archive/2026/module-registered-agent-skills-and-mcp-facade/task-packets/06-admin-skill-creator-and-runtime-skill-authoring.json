@@ -1,0 +1,56 @@
+{
+  "task_id": "06-admin-skill-creator-and-runtime-skill-authoring",
+  "status": "implemented",
+  "title": "Admin skill creator and runtime skill authoring",
+  "goal": "Add a trusted meta-skill and controlled write path so administrators can create instruction-only runtime skills from a description.",
+  "read_scope": [
+    "apps/ai/skills_service.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/tests.py",
+    "apps/core/ai_skills.py",
+    "contracts/ai/tools.json",
+    "data/contracts/ai/",
+    "services/agent_runtime/prompting.py",
+    "docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md"
+  ],
+  "write_scope": [
+    "apps/ai/ai_skills.py",
+    "apps/ai/apps.py",
+    "apps/ai/skill_authoring.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/tests.py",
+    "apps/ai/management/commands/ai_skill_list.py",
+    "apps/ai/management/commands/ai_skill_validate.py",
+    "apps/ai/management/commands/ai_skill_reload.py",
+    "contracts/ai/tools.json",
+    "data/contracts/ai/skills/",
+    "docs/guides/"
+  ],
+  "requirements": [
+    "Add trusted skill ai.skill_creator with guidance for creating narrow instruction-only skills.",
+    "The meta-skill must explain name, description, source_code, object_types, required_tools, trigger_examples and body structure.",
+    "The meta-skill must refuse broad, unsafe or unclear skills until the administrator narrows the scope.",
+    "Add service-layer validation for runtime SKILL.md frontmatter and body.",
+    "Add ai.skills.create_or_update or equivalent audited write-tool gated by ai.manage_skills.",
+    "Write runtime skills atomically to data/contracts/ai/skills/<skill_id>/SKILL.md using a temporary file and os.replace.",
+    "Allow only SKILL.md in MVP; reject scripts, assets and arbitrary extra files.",
+    "Validate required_tools against the tool registry.",
+    "Reset skill catalog cache after successful write if caching is implemented.",
+    "Add management commands ai_skill_list, ai_skill_validate and ai_skill_reload for operator use."
+  ],
+  "acceptance": [
+    "An administrator with ai.manage_skills can create or update an instruction-only runtime skill from a description.",
+    "A user without ai.manage_skills is denied by the write-tool.",
+    "Invalid required_tools, invalid skill_id and missing description are rejected.",
+    "Runtime skill files are written only under data/contracts/ai/skills.",
+    "Skill creation writes an audit trace without storing secrets or unsafe raw content.",
+    "The new runtime skill appears in discover_skills() without process restart."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests apps.core.tests",
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py ai_skill_validate --all"
+  ]
+}

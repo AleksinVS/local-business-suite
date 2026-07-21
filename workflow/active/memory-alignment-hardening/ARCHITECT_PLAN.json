@@ -1,0 +1,45 @@
+{
+  "block_id": "memory-alignment-hardening",
+  "status": "ready",
+  "created_at": "2026-07-06",
+  "architecture_sources": [
+    "docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md",
+    "workflow/archive/2026/memory-hybrid-knowledge-v05-alignment/RETROSPECTIVE.md",
+    "docs/planning/active/memory-alignment-hardening.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "goal": "Закрыть пробелы, найденные ревью целевой архитектуры после исполнения блока ADR-0030: LF-нормализация канона, защита reconciler от петли и конкурентных запусков, эмиссия relations семантическим проходом с протоколом противоречия, потребитель сигнала contradicts (issue knowledge_contradiction) и авто-снятие reconciler-issues, команда memory_impact (сверка на записи, концепт §7.4), golden set memory_eval, матрица восстановления, чистка dead-config и фильтра review-UI.",
+  "execution_order": [
+    "01-canon-line-endings-and-reconciler-guards",
+    "02-eval-golden-set-and-recovery-matrix",
+    "03-edge-emission-and-retro-leftovers"
+  ],
+  "parallelizable": [
+    ["02-eval-golden-set-and-recovery-matrix", "03-edge-emission-and-retro-leftovers"]
+  ],
+  "global_constraints": [
+    "Архитектуру ADR-0030 не менять: только доводка реализации по перечню из плана.",
+    "Массовая перезапись существующих файлов знаний запрещена; LF-нормализация применяется при следующей записи каждой страницы.",
+    "Не реализовывать data store (5а/5б), graph runtime search, профили ранжирования, фрагментный поиск.",
+    "Не ослаблять trust-гейты, sensitivity/scope_tokens фильтрацию, secret handles.",
+    "Каждый пакет: unit-тесты по затронутому scope; проверки прогоняются на SQLite и PostgreSQL.",
+    "Runtime-данные в data/, временные артефакты в .local/.",
+    "Пакет 01 - рискованный (путь записи канона): независимая проверка субагентом по AGENTS.md."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_reconcile --dry-run",
+    "python manage.py memory_verify_knowledge_files",
+    "python manage.py memory_eval --dry-run",
+    "python manage.py memory_alignment_acceptance_e2e"
+  ],
+  "notes": [
+    "Блок ADR-0030 исполнен и заархивирован; ссылки на его пакеты - только как на историю, править архив запрещено.",
+    "Точные имена, найденные при подготовке: словарь рёбер - contracts/ai/memory_graph_schema.json; профили - contracts/ai/memory_profiles.json (ranking_profiles: precise, balanced, semantic_heavy, source_content, source_semantic, graph_future); семантический проход - apps/memory/management/commands/knowledge_reflection_worker.py; фильтр очереди - apps/memory/review_selectors.py (строки ~498, ~547); модель кейсов - MemoryEvalCase (apps/memory/models.py, поля code, title, suite, status, question, expected_source_codes, expected_document_ids, forbidden_source_codes, forbidden_scope_tokens, metadata).",
+    "После приемки блока обновить записи Later в backlog: профили и graph runtime search получают выполненное предусловие golden set.",
+    "Сверка на записи (дополнение ADR-0030 от 2026-07-07): гибридный поиск - memory_search в apps/memory/retrieval.py (первый позиционный аргумент - актор; trust/scope-фильтрацию не обходить); словарь рёбер уже содержит contradicts со status accepted; горячий путь memory.remember (apps/memory/chat_memory.py, remember_knowledge) сверкой не нагружать - запрет зафиксирован в пакете 03.",
+    "Второй проход кросс-ревью (дополнение ADR-0030 от 2026-07-13): пересчет очереди при --force - строго per-file (git log <базис>..HEAD -- <путь>), глобальный скан запрещен; repo-идентити knowledge_repo - 'Local Business Memory Writer' (_ensure_git_identity в apps/memory/knowledge_files.py), поэтому отличить человека от системы по автору нельзя - системным считается только выделенный автор memory-reconciler, на которого переводятся и коммиты регенерации index.md/log.md; детектор contradiction живет в пакете 01 (memory_reconcile, после materialize_knowledge_edges), производитель рёбер - в пакете 03; FTS-экранирование запроса уже корректно (_fts_query оборачивает токены в кавычки) - не трогать."
+  ]
+}

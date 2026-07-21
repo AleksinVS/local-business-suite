@@ -1,0 +1,6 @@
+{
+  ".": "Task packets for memory file content search",
+  "01-text-extraction-and-fts.json": "Implement text extraction and SQLite FTS5",
+  "02-lancedb-local-embeddings.json": "Implement LanceDB and local embedding providers",
+  "03-reindex-e2e-docs.json": "Implement reindex, e2e and documentation updates"
+}

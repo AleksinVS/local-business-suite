@@ -1,0 +1,32 @@
+{
+  "task_id": "01-contracts-and-source-trust-policy",
+  "title": "Add memory trust policy contracts",
+  "status": "completed",
+  "objective": "Define and validate trusted source policy, default trust by source kind, claim policy and retrieval budget contracts.",
+  "write_scope": [
+    "contracts/ai/memory_sources.json",
+    "contracts/ai/memory_trust_policy.json",
+    "contracts/ai/memory_claims_policy.json",
+    "contracts/ai/memory_retrieval_budget.json",
+    "contracts/schemas/",
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md"
+  ],
+  "requirements": [
+    "Add trust_status, authority_class, trusted_for_context and review ownership fields.",
+    "Default external/email/API sources to candidate_only unless explicitly trusted.",
+    "Validate allowed trust statuses, authority classes and budget values.",
+    "Keep existing memory source contracts backward-compatible through safe defaults."
+  ],
+  "acceptance_checks": [
+    "Default contracts pass validate_architecture_contracts.",
+    "Invalid trust_status is rejected.",
+    "Missing trust fields resolve to conservative candidate_only for external sources.",
+    "Trusted source policy is documented."
+  ],
+  "verification_commands": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests apps.memory.tests"
+  ]
+}

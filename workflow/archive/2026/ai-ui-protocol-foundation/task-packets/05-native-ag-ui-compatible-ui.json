@@ -1,0 +1,32 @@
+{
+  "task_id": "05-native-ag-ui-compatible-ui",
+  "title": "Native AG-UI-compatible AI UI driver",
+  "status": "completed_first_slice",
+  "objective": "Add a self-hosted native UI driver that consumes the AG-UI-compatible endpoint and local_business protocol extensions without requiring Copilot Runtime.",
+  "write_scope": [
+    "static/src/ai_ui/",
+    "templates/base.html",
+    "apps/ai/context_processors.py",
+    "apps/ai/views.py",
+    "scripts/e2e/tests/",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "non_goals": [
+    "Do not build a full chat product outside the existing Django shell.",
+    "Do not implement backend domain writes in the browser.",
+    "Do not bypass Django permissions or confirmation flow."
+  ],
+  "acceptance_checks": [
+    "Native driver loads with LOCAL_BUSINESS_AI_UI_DRIVER=native.",
+    "Native UI sends AG-UI-compatible run input.",
+    "Native UI renders text, tool trace and run errors.",
+    "Native UI handles local_business.protocol and open_right_panel.v1.",
+    "Native UI ignores unknown extensions safely."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "npm run test:e2e -- --project=chromium --grep \"native AI UI\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

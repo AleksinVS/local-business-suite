@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-local_business_suite}
+      POSTGRES_USER: ${POSTGRES_USER:-local_business_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-business-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-local_business_app} -d ${POSTGRES_DB:-local_business_suite}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      LOCAL_BUSINESS_DB_BACKEND: postgresql
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-local_business_suite}
+      POSTGRES_USER: ${POSTGRES_USER:-local_business_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-business-change-me}
+      LOCAL_BUSINESS_AGENT_RUNTIME_URL: http://agent-runtime:8090
+      LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL: /copilotkit
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: services/agent_runtime/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DJANGO_AI_GATEWAY_URL: http://web:8000/ai/gateway
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      - web
+    ports:
+      - "8090:8090"
+  copilot-runtime:
+    build:
+      context: .
+      dockerfile: services/copilot_runtime/Dockerfile
+    env_file:
+      - .env
+    environment:
+      LOCAL_BUSINESS_AGENT_RUNTIME_AG_UI_URL: http://agent-runtime:8090/ag-ui
+      COPILOTKIT_BASE_PATH: /copilotkit
+      COPILOTKIT_RUNTIME_PORT: 3100
+      COPILOTKIT_TELEMETRY_DISABLED: "true"
+    depends_on:
+      - agent-runtime
+    ports:
+      - "3100:3100"
+
+volumes:
+  postgres_data:

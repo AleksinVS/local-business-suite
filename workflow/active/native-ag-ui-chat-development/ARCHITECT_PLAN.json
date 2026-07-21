@@ -1,0 +1,61 @@
+{
+  "block_id": "native-ag-ui-chat-development",
+  "status": "active",
+  "created_at": "2026-06-10",
+  "goal": "Implement the native AG-UI-compatible AI chat as the primary UI client while reusing the shared backend protocol foundation.",
+  "architecture_sources": [
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md",
+    "docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md",
+    "docs/planning/active/native-ag-ui-chat-development.md"
+  ],
+  "execution_order": [
+    "01-documentation-and-version-check",
+    "02-native-mount-and-session-lifecycle",
+    "03-ag-ui-client-reducer",
+    "04-ui-command-page-context-and-e2e",
+    "05-sidebar-history-model-and-clear-parity",
+    "06-native-full-page-session-management",
+    "07-native-rich-input-markdown-commands-attachments",
+    "08-native-ux-parity-e2e-acceptance"
+  ],
+  "global_constraints": [
+    "Do not update AG-UI or CopilotKit versions without owner approval.",
+    "Native UI must remain AG-UI-compatible and must ignore unknown events safely.",
+    "Django remains the owner of sessions, auth, history and audit.",
+    "Browser UI commands must only perform safe UI actions and never domain writes.",
+    "Do not expose gateway tokens, cookies, raw PII, UNC paths or full DOM in browser state.",
+    "Keep CopilotKit and legacy drivers available.",
+    "Native parity work must reuse existing Django session, message, attachment, command and audit models instead of creating parallel storage."
+  ],
+  "acceptance": [
+    "Native sidebar mounts from /ai/ui/config/ and not CopilotKit config.",
+    "New chat updates thread_id and signed forwarded_props.",
+    "TEXT_MESSAGE events stream into a single assistant message.",
+    "TOOL_CALL events render a compact tool trace.",
+    "STATE_DELTA and local_business.ui_command execute allow-listed UI commands once.",
+    "RUN_ERROR and transport errors unlock the form and show a user-safe message.",
+    "E2E covers the main native AG-UI scenario.",
+    "Native sidebar restores recent history on page load.",
+    "Native sidebar supports model selection, clear with confirmation, timestamps and full chat entrypoint.",
+    "Native full-page experience supports session list, title edit, delete, Markdown rendering, slash commands and attachments or records any deferred gap explicitly.",
+    "Native UX parity has dedicated unit and Playwright e2e coverage."
+  ],
+  "verification_commands": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native AG-UI-compatible\"",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native chat UX parity\"",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "agui_version_check": {
+    "checked_at": "2026-06-15",
+    "current": "0.0.55",
+    "latest": "0.0.57",
+    "decision": "warning_only_no_update_without_owner_approval"
+  }
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "code": "workorders_operational_dashboard",
+    "layer": "oltp",
+    "path": "apps.analytics.views.AnalyticsDashboardView",
+    "owner": "analytics",
+    "refresh_mode": "live",
+    "grain": "one_row_per_workorder_query_result",
+    "schema_version": 1,
+    "description": "Operational dashboard dataset read from the Django OLTP database."
+  }
+]

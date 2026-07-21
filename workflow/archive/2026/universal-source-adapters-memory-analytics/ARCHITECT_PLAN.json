@@ -1,0 +1,45 @@
+{
+  "block_id": "universal-source-adapters-memory-analytics",
+  "status": "implemented_acceptance_pending",
+  "created_at": "2026-05-28",
+  "architecture_sources": [
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md",
+    "docs/planning/active/universal-source-adapters-memory-analytics.md",
+    "docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md",
+    "docs/adr/ADR-0015-file-content-fts-vector-search.md",
+    "docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md",
+    "docs/adr/ADR-0008-knowledge-driven-business-analytics.md",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "goal": "Introduce a universal source adapter and envelope contract so internal modules, files and external APIs can feed memory and analytics without direct coupling to domain models.",
+  "execution_order": [
+    "01-adr-contracts-and-privacy-policy",
+    "02-core-adapter-envelope-registry",
+    "03-memory-projection-and-access-check",
+    "04-analytics-projection-and-facts",
+    "05-workorders-source-adapter",
+    "06-waiting-list-source-adapter",
+    "07-reconcile-e2e-docs-and-handoff"
+  ],
+  "global_constraints": [
+    "Use ADR-0018 as the implementation baseline after owner approval.",
+    "Do not introduce a mandatory universal event bus or transactional outbox in MVP.",
+    "Do not merge MemorySource and AnalyticsSource in this block.",
+    "Keep source of truth in the source domain; memory and analytics store projections.",
+    "Use SourceObjectEnvelope as the common input for memory and analytics projections.",
+    "PII controls are disabled by default; external sources default to guarded PII controls.",
+    "When PII controls are disabled, PII detection, redaction, blocking and PII audit are all disabled.",
+    "Secret scanning remains always enabled and cannot be disabled by PII policy.",
+    "Do not store full source object payloads or extracted raw text in MemorySearchDocument.metadata.",
+    "Sources with adapter_check access policy must fail closed when the adapter is unavailable.",
+    "Keep temporary e2e files and logs under .local/."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests apps.memory.tests apps.analytics.tests apps.workorders.tests apps.waiting_list.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py analytics_recalculate_metrics --dry-run"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  ".": "Иконки PWA и статические пиктограммы портала",
+  "pwa-icon.svg": "Масштабируемая иконка PWA для manifest.webmanifest",
+  "pwa-icon-192.png": "PNG-иконка PWA 192x192 для Chromium/Edge",
+  "pwa-icon-512.png": "PNG-иконка PWA 512x512 для Chromium/Edge"
+}

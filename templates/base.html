@@ -1,0 +1,378 @@
+{% load static django_htmx %}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ app_display_name }}{% endblock %}</title>
+    {% htmx_script %}
+    <meta name="theme-color" content="#135d66">
+    <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
+    <link rel="stylesheet" href="{% static 'src/css/app.css' %}">
+    {% if copilotkit_enabled %}
+      <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}?v={{ copilotkit_css_version }}">
+    {% elif native_ai_ui_enabled %}
+      <link rel="stylesheet" href="{% static 'src/ai_ui/native_ai.css' %}?v={{ native_ai_css_version }}">
+    {% endif %}
+  </head>
+  <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+    <div class="app-layout">
+      <aside class="sidebar-nav" id="sidebar">
+        <div class="sidebar-header">
+          <div class="all-functions-menu">
+            <button
+              type="button"
+              class="all-functions-button"
+              id="all-functions-button"
+              aria-expanded="false"
+              aria-controls="all-functions-dropdown"
+            >
+              <span>Все функции</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            <div class="all-functions-dropdown" id="all-functions-dropdown" hidden>
+              <nav class="all-functions-list" aria-label="Все функции">
+                <a href="{% url 'workorders:board' %}">
+                  <span class="nav-icon">📋</span>
+                  <span class="nav-text">Доска</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button>
+                </a>
+                <a href="{% url 'inventory:list' %}">
+                  <span class="nav-icon">📦</span>
+                  <span class="nav-text">Медизделия</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button>
+                </a>
+                {% if show_department_nav %}
+                  <a href="{% url 'core:department_list' %}">
+                    <span class="nav-icon">🏢</span>
+                    <span class="nav-text">Подразделения</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
+                  </a>
+                  <a href="{% url 'core:role_rules' %}">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">Роли</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли', '👥', '{% url 'core:role_rules' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_ai_nav %}
+                  <a href="{% url 'ai:chat_index' %}">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-text">ИИ-чат</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'ИИ-чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_ai_admin_nav %}
+                  <a href="{% url 'ai:hub' %}">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">ИИ-центр</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'ИИ-центр', '⚙️', '{% url 'ai:hub' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_settings_center_nav %}
+                  <a href="{% url 'settings_center:dashboard' %}">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">Настройки</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_memory_review_nav %}
+                  <a href="{% url 'memory:review_dashboard' %}">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-text">Ревью памяти</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', '🧠', '{% url 'memory:review_dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_admin_nav %}
+                  <a href="{% url 'admin:index' %}">
+                    <span class="nav-icon">🛠️</span>
+                    <span class="nav-text">Администрирование Django</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Администрирование Django', '🛠️', '{% url 'admin:index' %}')">☆</button>
+                  </a>
+                {% endif %}
+                <a href="{% url 'analytics:dashboard' %}">
+                  <span class="nav-icon">📊</span>
+                  <span class="nav-text">Аналитика</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
+                </a>
+                <a href="{% url 'waiting_list:dashboard' %}">
+                  <span class="nav-icon">⏳</span>
+                  <span class="nav-text">Лист ожидания</span>
+                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
+                </a>
+                {% if user.is_authenticated %}
+                  <form action="{% url 'logout' %}" method="post" class="logout-form">
+                    {% csrf_token %}
+                    <button type="submit">
+                      <span class="nav-icon">🚪</span>
+                      <span class="nav-text">Выйти</span>
+                    </button>
+                  </form>
+                {% endif %}
+              </nav>
+            </div>
+          </div>
+        </div>
+        <section class="sidebar-ai-panel" aria-label="{% block sidebar_panel_label %}Встроенный ИИ-чат{% endblock %}">
+          {% block sidebar_panel %}
+            {% if copilotkit_enabled %}
+              <div
+                id="copilotkit-sidebar-root"
+                class="copilotkit-sidebar-root"
+                data-config-url="{% url 'ai:copilotkit_config' %}"
+                data-new-session-url="{% url 'ai:ui_session_new' %}"
+                data-runtime-url="{{ copilotkit_runtime_url }}"
+                data-agent-id="{{ copilotkit_agent_id }}"
+              >
+                <div class="sidebar-chat-loading">Загрузка чата...</div>
+              </div>
+            {% elif native_ai_ui_enabled %}
+              <div
+                id="native-ai-sidebar-root"
+                class="native-ai-sidebar-root"
+                data-config-url="{% url 'ai:ui_config' %}"
+                data-new-session-url="{% url 'ai:ui_session_new' %}"
+              >
+                <div class="sidebar-chat-loading">Загрузка чата...</div>
+              </div>
+            {% else %}
+              <div class="sidebar-chat-loading">Войдите, чтобы открыть ИИ-чат.</div>
+            {% endif %}
+          {% endblock %}
+        </section>
+      </aside>
+
+      <div class="app-main">
+        <header class="site-header">
+          <div class="site-header-main">
+            <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+            <a href="{% url 'core:dashboard' %}" class="brand">
+              <h1>{{ app_display_name }}</h1>
+            </a>
+            {% block header_context %}{% endblock %}
+            <div id="header-favorites" class="header-favorites"></div>
+            {% if user.is_authenticated %}
+              {% include "notifications/partials/center.html" %}
+              <div class="header-user">
+                <button
+                  type="button"
+                  class="header-user-button"
+                  id="header-user-button"
+                  aria-expanded="false"
+                  aria-controls="header-user-dropdown"
+                  aria-label="Текущий пользователь: {{ user.get_full_name|default:user.username }}"
+                  title="{{ user.get_full_name|default:user.username }}"
+                >
+                  <span class="header-user-name">{{ user.get_full_name|default:user.username }}</span>
+                  <span class="header-user-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="header-user-dropdown" id="header-user-dropdown" hidden>
+                  <form action="{% url 'logout' %}" method="post" class="header-user-logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="header-user-logout">Выйти</button>
+                  </form>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        </header>
+
+        {% if messages %}
+          <section class="flash-stack">
+            {% for message in messages %}
+              <div class="flash {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+        {% endif %}
+
+        <main class="page-shell" data-ai-context="{{ base_ai_context_json }}">
+          <div class="page-container{% block page_container_extra_class %}{% endblock %}">
+            {% block content %}{% endblock %}
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div class="drawer-overlay global-right-panel-overlay" id="globalRightPanelOverlay" onclick="closeGlobalRightPanel()"></div>
+    <aside class="drawer global-right-panel" id="global-right-panel" aria-label="Правая панель" aria-hidden="true">
+      <div id="global-right-panel-content" class="global-right-panel-content">
+        <div class="drawer-content">
+          <div class="text-muted">Панель не открыта.</div>
+        </div>
+      </div>
+    </aside>
+
+    <script>
+      function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('collapsed');
+        localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+      }
+
+      // Initialize sidebar state
+      if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.getElementById('sidebar').classList.add('collapsed');
+      }
+
+      function toggleFavorite(event, id, label, icon, url) {
+        event.preventDefault();
+        event.stopPropagation();
+        let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        const index = favorites.findIndex(f => f.id === id);
+        if (index > -1) {
+          favorites.splice(index, 1);
+        } else {
+          favorites.push({ id, label, icon, url });
+        }
+        localStorage.setItem('favorites', JSON.stringify(favorites));
+        renderFavorites();
+        updateStars();
+      }
+
+      function renderFavorites() {
+        const container = document.getElementById('header-favorites');
+        if (!container) return;
+        const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        container.replaceChildren();
+        favorites.forEach(f => {
+          if (!f || typeof f.url !== 'string' || !f.url.startsWith('/')) return;
+          const link = document.createElement('a');
+          link.href = f.url;
+          link.className = 'favorite-chip';
+          link.title = String(f.label || '');
+
+          const icon = document.createElement('span');
+          icon.className = 'chip-icon';
+          icon.textContent = String(f.icon || '');
+
+          const label = document.createElement('span');
+          label.className = 'chip-label';
+          label.textContent = String(f.label || '');
+
+          link.append(icon, label);
+          container.appendChild(link);
+        });
+      }
+
+      function updateStars() {
+        const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        const favoriteIds = favorites.map(f => f.id);
+        document.querySelectorAll('.favorite-toggle').forEach(btn => {
+          const onclickAttr = btn.getAttribute('onclick');
+          const match = onclickAttr.match(/toggleFavorite\(event, '([^']+)'/);
+          if (match && favoriteIds.includes(match[1])) {
+            btn.innerText = '★';
+            btn.classList.add('active');
+          } else {
+            btn.innerText = '☆';
+            btn.classList.remove('active');
+          }
+        });
+      }
+
+      function closeAllFunctionsMenu() {
+        const button = document.getElementById('all-functions-button');
+        const dropdown = document.getElementById('all-functions-dropdown');
+        if (!button || !dropdown) return;
+        dropdown.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      }
+
+      function toggleAllFunctionsMenu() {
+        const button = document.getElementById('all-functions-button');
+        const dropdown = document.getElementById('all-functions-dropdown');
+        if (!button || !dropdown) return;
+        const nextOpen = dropdown.hidden;
+        closeHeaderUserMenu();
+        dropdown.hidden = !nextOpen;
+        button.setAttribute('aria-expanded', String(nextOpen));
+      }
+
+      function closeHeaderUserMenu() {
+        const button = document.getElementById('header-user-button');
+        const dropdown = document.getElementById('header-user-dropdown');
+        if (!button || !dropdown) return;
+        dropdown.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      }
+
+      function toggleHeaderUserMenu() {
+        const button = document.getElementById('header-user-button');
+        const dropdown = document.getElementById('header-user-dropdown');
+        if (!button || !dropdown) return;
+        const nextOpen = dropdown.hidden;
+        closeAllFunctionsMenu();
+        dropdown.hidden = !nextOpen;
+        button.setAttribute('aria-expanded', String(nextOpen));
+      }
+
+      // Initialize favorites on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        renderFavorites();
+        updateStars();
+        const allFunctionsButton = document.getElementById('all-functions-button');
+        const allFunctionsDropdown = document.getElementById('all-functions-dropdown');
+        if (allFunctionsButton && allFunctionsDropdown) {
+          allFunctionsButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleAllFunctionsMenu();
+          });
+          document.addEventListener('click', (event) => {
+            if (!allFunctionsDropdown.hidden && !event.target.closest('.all-functions-menu')) {
+              closeAllFunctionsMenu();
+            }
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeAllFunctionsMenu();
+          });
+        }
+        const headerUserButton = document.getElementById('header-user-button');
+        const headerUserDropdown = document.getElementById('header-user-dropdown');
+        if (headerUserButton && headerUserDropdown) {
+          headerUserButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleHeaderUserMenu();
+          });
+          document.addEventListener('click', (event) => {
+            if (!headerUserDropdown.hidden && !event.target.closest('.header-user')) {
+              closeHeaderUserMenu();
+            }
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeHeaderUserMenu();
+          });
+        }
+      });
+    </script>
+    <script>
+      window.__pageContextConfig = {
+        updateUrl: "{% url 'ai:page_context_update' %}",
+        csrfToken: "{{ csrf_token }}",
+        authenticated: {% if user.is_authenticated %}true{% else %}false{% endif %}
+      };
+      window.__notificationsConfig = {
+        authenticated: {% if user.is_authenticated %}true{% else %}false{% endif %},
+        userId: {% if user.is_authenticated %}{{ user.id }}{% else %}null{% endif %},
+        csrfToken: "{{ csrf_token }}",
+        serviceWorkerUrl: "{% url 'service_worker' %}",
+        feedUrl: "{% url 'notifications:api_feed' %}",
+        markSeenUrl: "{% url 'notifications:api_mark_seen' %}",
+        markReadUrl: "{% url 'notifications:api_mark_read' %}",
+        dismissUrl: "{% url 'notifications:api_dismiss' %}",
+        browserClientUrl: "{% url 'notifications:api_browser_client' %}",
+        preferencesUrl: "{% url 'notifications:api_preferences' %}",
+        pollIntervalMs: 30000
+      };
+    </script>
+    <script src="{% static 'src/js/pwa.js' %}"></script>
+    <script src="{% static 'src/js/notifications.js' %}"></script>
+    <script src="{% static 'src/js/page_context.js' %}"></script>
+    <script src="{% static 'src/js/right_panel.js' %}"></script>
+    <script src="{% static 'src/js/inventory_groups.js' %}"></script>
+    {% if copilotkit_enabled %}
+      <script type="module" src="{% static 'dist/copilotkit/copilotkit-island.js' %}?v={{ copilotkit_asset_version }}"></script>
+    {% elif native_ai_ui_enabled %}
+      <script src="{% static 'src/ai_ui/native_ai.js' %}?v={{ native_ai_asset_version }}"></script>
+    {% endif %}
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

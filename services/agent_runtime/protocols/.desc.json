@@ -1,0 +1,6 @@
+{
+  ".": "Версионируемые AI UI protocol adapters agent runtime",
+  "__init__.py": "Инициализация пакета protocol adapters",
+  "common/": "Общие protocol primitives, capabilities и UI-команды",
+  "agui/": "AG-UI-compatible protocol adapter"
+}

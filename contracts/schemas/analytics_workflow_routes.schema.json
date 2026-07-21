@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Workflow Routes",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "target", "requires_confirmation", "allowed_autonomous_actions"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "target": { "enum": ["analytics_case", "workorder", "external_task", "notification"] },
+      "requires_confirmation": { "type": "boolean" },
+      "allowed_autonomous_actions": { "type": "array", "items": { "type": "string" } }
+    }
+  }
+}

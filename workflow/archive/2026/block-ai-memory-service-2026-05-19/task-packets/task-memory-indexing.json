@@ -1,0 +1,64 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-indexing",
+  "task_id": "task-memory-indexing",
+  "goal": "Implement indexing interfaces and selected graph/vector backend implementations.",
+  "risk_class": "R2",
+  "read_files": [
+    "apps/memory/models.py",
+    "apps/memory/services.py",
+    "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+  ],
+  "write_files": [
+    "apps/memory/graph_backends.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/ingestion.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "requirements.txt",
+    "requirements.lock"
+  ],
+  "forbidden_moves": [
+    "Do not index raw PII snapshots.",
+    "Do not make graph/vector backend imports mandatory at Django startup if optional dependencies are unavailable.",
+    "Do not bypass MemorySnapshot and MemoryChunk provenance."
+  ],
+  "required_docs": [
+    "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py test apps.memory.tests",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ],
+  "mandatory_tests": [
+    "Idempotent chunk/fact upsert tests",
+    "Deactivate old active chunks/facts without deleting raw snapshots",
+    "Scope metadata filtering tests"
+  ],
+  "deliverables": [
+    "Graph backend interface and implementation",
+    "Vector/full-text backend interface and implementation",
+    "Indexing tests",
+    "EXECUTOR_REPORT.task-memory-indexing.md"
+  ],
+  "escalation_path": [
+    "Selected backend requires PostgreSQL or external services contrary to ADR-0003",
+    "Index filtering cannot enforce scope metadata",
+    "Generated indexes would need to be committed"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Keep generated indexes under data/memory/indexes/.",
+    "Keep manifests under data/memory/manifests/.",
+    "Maintain backend adapter boundaries."
+  ]
+}

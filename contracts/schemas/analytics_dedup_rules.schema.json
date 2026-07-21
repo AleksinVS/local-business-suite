@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Dedup Rules",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "owner", "exact_hash_fields", "near_duplicate_fields", "semantic_fields", "authority_priority", "auto_merge_exact", "review_near_duplicates"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "exact_hash_fields": { "type": "array", "items": { "type": "string" } },
+      "near_duplicate_fields": { "type": "array", "items": { "type": "string" } },
+      "semantic_fields": { "type": "array", "items": { "type": "string" } },
+      "authority_priority": { "type": "array", "items": { "type": "string" } },
+      "auto_merge_exact": { "type": "boolean" },
+      "review_near_duplicates": { "type": "boolean" }
+    }
+  }
+}

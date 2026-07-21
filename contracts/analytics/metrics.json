@@ -1,0 +1,38 @@
+[
+  {
+    "code": "department_reports_received",
+    "title": "Полученные отчеты подразделений",
+    "owner": "operations",
+    "fact_type": "department_report_received",
+    "aggregation": "count",
+    "measure": "reports",
+    "window": "24h",
+    "refresh_mode": "scheduled",
+    "scope_tokens": ["org:default"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "department_issues_reported",
+    "title": "Зафиксированные проблемы подразделений",
+    "owner": "operations",
+    "fact_type": "department_issue_reported",
+    "aggregation": "count",
+    "measure": "issues",
+    "window": "24h",
+    "refresh_mode": "scheduled",
+    "scope_tokens": ["org:default"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "regulator_requests_open",
+    "title": "Полученные запросы регулятора",
+    "owner": "compliance",
+    "fact_type": "regulator_request_received",
+    "aggregation": "count",
+    "measure": "requests",
+    "window": "24h",
+    "refresh_mode": "scheduled",
+    "scope_tokens": ["org:default", "role:management"],
+    "sensitivity": "confidential"
+  }
+]

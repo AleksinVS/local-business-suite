@@ -1,0 +1,58 @@
+{
+  "task_id": "05-optional-tauri-client-design",
+  "title": "Optional Tauri tray client design",
+  "status": "implemented_primary_client",
+  "objective": "Implement the second-stage optional Tauri tray client without making it mandatory for all users.",
+  "read_scope": [
+    "docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md",
+    "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
+    "apps/notifications/models.py",
+    "apps/notifications/services.py",
+    "docs/deployment/DEPLOYMENT.md"
+  ],
+  "write_scope": [
+    "apps/notifications/models.py",
+    "apps/notifications/services.py",
+    "apps/notifications/views.py",
+    "apps/notifications/urls.py",
+    "apps/notifications/tests.py",
+    "clients/desktop-notifier/",
+    "docs/guides/DESKTOP_NOTIFIER_USER_GUIDE.md",
+    "docs/deployment/DESKTOP_NOTIFIER_DEPLOYMENT.md",
+    "docs/planning/active/desktop-notifications-pwa-tauri.md",
+    "workflow/active/desktop-notifications-pwa-tauri/",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not implement Tauri before stage 1 server queue is stable.",
+    "Do not store user passwords in the client.",
+    "Do not store full workorder data locally.",
+    "Do not require administrator privileges for normal client operation.",
+    "Do not support macOS unless separately requested."
+  ],
+  "requirements": [
+    "Device registration must use a one-time code or equivalent explicit linking flow.",
+    "Device token must be scoped and revocable.",
+    "The client must show tray icon, status and open-portal action.",
+    "Notifications must open target URLs in the system browser.",
+    "Local logs must avoid tokens and sensitive notification bodies.",
+    "Windows and Linux packaging requirements must be documented."
+  ],
+  "acceptance_checks": [
+    "A user can link a device and see it in the portal.",
+    "Revoking the device stops notification feed access.",
+    "The client can receive a notification while the browser is closed.",
+    "Clicking a notification opens the portal URL.",
+    "Build documentation covers Windows and Linux."
+  ],
+  "verification_commands": [
+    "python manage.py test apps.notifications.tests",
+    "npm run desktop-notifier:rust:fmt",
+    "npm run desktop-notifier:rust:check",
+    "npm run desktop-notifier:rust:test",
+    "npm run desktop-notifier:build",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

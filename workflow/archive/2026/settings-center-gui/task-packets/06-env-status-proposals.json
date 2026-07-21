@@ -1,0 +1,33 @@
+{
+  "task_id": "06-env-status-proposals",
+  "title": ".env status and proposal workflow",
+  "goal": "Expose effective environment settings safely and generate operator-reviewed .env proposals.",
+  "read_scope": [
+    "config/settings.py",
+    ".env.example",
+    "docs/deployment/",
+    "docs/architecture/SETTINGS_CENTER_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/settings_center/",
+    "apps/core/settings_descriptors.py",
+    "templates/settings_center/",
+    ".env.example",
+    "docs/deployment/",
+    "docs/guides/"
+  ],
+  "acceptance": [
+    "Env descriptors mark each value as read-only, proposal-only or local-file editable.",
+    "Production default apply mode is proposal, not direct .env mutation.",
+    "Effective values are masked according to sensitivity policy.",
+    "Generated proposals are stored under runtime data, not repository root.",
+    "UI marks restart-required settings and provides an operator checklist.",
+    ".env.example is updated only for implemented, documented keys.",
+    "Tests cover masking, proposal generation and production write restrictions."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py test apps.settings_center.tests",
+    "python manage.py validate_architecture_contracts"
+  ]
+}

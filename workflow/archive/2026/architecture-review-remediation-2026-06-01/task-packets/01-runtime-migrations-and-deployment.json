@@ -1,0 +1,27 @@
+{
+  "task_id": "01-runtime-migrations-and-deployment",
+  "title": "Миграции всех runtime-баз и deployment-документация",
+  "goal": "Сделать единый надежный путь применения миграций для default, chat, knowledge_meta и analytics_control.",
+  "write_scope": [
+    "docker/entrypoint.prod.sh",
+    "scripts/windows/run_windows.ps1",
+    "docs/deployment/",
+    "README.md",
+    "tests if a management command is added"
+  ],
+  "non_goals": [
+    "Не менять схему баз без необходимости",
+    "Не внедрять новый backend базы данных"
+  ],
+  "implementation_notes": [
+    "Предпочтительно создать management command или shell helper, чтобы не дублировать список баз в каждом runtime script.",
+    "Документация Docker, Windows/IIS и quick start должна показывать тот же путь, что реально использует production."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py migrate --database=default --noinput --plan",
+    ".venv/bin/python manage.py migrate --database=chat --noinput --plan",
+    ".venv/bin/python manage.py migrate --database=knowledge_meta --noinput --plan",
+    ".venv/bin/python manage.py migrate --database=analytics_control --noinput --plan"
+  ]
+}

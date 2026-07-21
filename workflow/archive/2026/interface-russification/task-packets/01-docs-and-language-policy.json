@@ -1,0 +1,16 @@
+{
+  "task_id": "01-docs-and-language-policy",
+  "status": "completed",
+  "goal": "Document Russian-first UI policy and defer full localization architecture to a separate stage.",
+  "write_scope": [
+    "docs/adr/ADR-0022-interface-russification-and-localization-roadmap.md",
+    "docs/planning/active/interface-russification-and-localization.md",
+    "docs/guides/INTERFACE_RUSSIFICATION.md",
+    "workflow/active/interface-russification/"
+  ],
+  "acceptance": [
+    "ADR explains current Russian UI decision and localization roadmap.",
+    "Active plan describes scope, non-goals, stages and checks.",
+    "Guide defines what to translate and what to keep as technical identifiers."
+  ]
+}

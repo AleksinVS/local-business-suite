@@ -1,0 +1,63 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-memory-app-scaffold",
+  "task_id": "task-memory-app-scaffold",
+  "goal": "Create the apps.memory scaffold and metadata model layer.",
+  "risk_class": "R2",
+  "read_files": [
+    "config/settings.py",
+    "apps/ai/models.py",
+    "apps/workorders/policies.py",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_files": [
+    "apps/memory/**",
+    "config/settings.py",
+    "apps/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "forbidden_moves": [
+    "Do not implement index backends in this task.",
+    "Do not alter existing business models unless a separate ADR/task packet approves it.",
+    "Do not modify agent runtime in this task."
+  ],
+  "required_docs": [
+    "docs/planning/active/ai-memory-service.md",
+    "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.memory.tests",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ],
+  "mandatory_tests": [
+    "Model invariant tests for MemorySource, MemorySnapshot, MemoryChunk, MemoryGraphFact, MemoryIndexJob, MemoryAccessAudit, MemoryEvalCase"
+  ],
+  "deliverables": [
+    "apps.memory scaffold",
+    "Initial migrations",
+    "Admin registration",
+    "Model/service/policy tests",
+    "EXECUTOR_REPORT.task-memory-app-scaffold.md"
+  ],
+  "escalation_path": [
+    "Metadata model requires PostgreSQL-specific fields",
+    "Existing app policies need broad changes",
+    "Migration conflicts with current database conventions"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Keep business logic out of model methods.",
+    "Use service/policy/selector separation.",
+    "Run make gen-struct after adding app files."
+  ]
+}

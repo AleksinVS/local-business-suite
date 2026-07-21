@@ -1,0 +1,64 @@
+{
+  "task_id": "04-sidebar-chat-surface",
+  "status": "implemented",
+  "title": "Reusable sidebar chat surface",
+  "goal": "Embed a compact AI chat in the left sidebar while preserving the full chat page.",
+  "read_scope": [
+    "templates/ai/chat_detail.html",
+    "static/src/js/ai_chat.js",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "apps/ai/forms.py",
+    "apps/ai/settings_descriptors.py",
+    "contracts/ai/"
+  ],
+  "write_scope": [
+    "templates/ai/",
+    "templates/base.html",
+    "static/src/js/ai_chat.js",
+    "static/src/css/app.css",
+    "apps/ai/views.py",
+    "apps/ai/tests.py",
+    "apps/ai/settings_descriptors.py",
+    "contracts/ai/"
+  ],
+  "requirements": [
+    "Extract reusable chat markup/behavior where practical.",
+    "Support full_page and sidebar modes.",
+    "Use a dedicated sidebar ChatSession separated from ordinary full-page chat sessions.",
+    "Submit window_id, context_version and context_hint with messages and stream requests.",
+    "Show a compact current-context indicator.",
+    "Keep a link to the full chat page.",
+    "Support pinned/collapsed left sidebar modes.",
+    "Compact sidebar history by keeping the configured last N messages and summarizing older messages.",
+    "Use the shared ai.chat_settings runtime contract for both full_page and sidebar surfaces.",
+    "Resolve sidebar N from surfaces.sidebar.recent_message_limit with default 8.",
+    "Expose ai.contract.chat_settings through Settings Center.",
+    "Add get_chat_settings(surface) or equivalent helper instead of a separate sidebar_recent_message_limit setting.",
+    "Treat sidebar_summary as sensitive runtime state: no automatic memory ingestion and no raw audit/log payloads.",
+    "Store summary provenance with summarized message range/source message ids.",
+    "Keep window_id/context_snapshot_id/context_hint per sidebar message so multiple tabs do not erase context meaning.",
+    "Apply safety/masking pass before persisting sidebar_summary.",
+    "Do not add a sidebar session switcher in the MVP.",
+    "Do not add UI for viewing or regenerating sidebar_summary in the MVP.",
+    "Avoid duplicating large JS blocks."
+  ],
+  "acceptance": [
+    "A message sent from sidebar appears in the dedicated sidebar session history.",
+    "The full chat page can open the sidebar session from the sidebar link.",
+    "The full chat page remains functional.",
+    "Streaming response works in sidebar mode.",
+    "Model selection is preserved or clearly scoped.",
+    "Sidebar panel pinned/collapsed state persists locally.",
+    "Compaction stores summary metadata and keeps the configured recent message tail.",
+    "Full-page and sidebar chat both read effective settings from the shared ai.chat_settings contract.",
+    "Summary metadata includes source message ids or from/to message range.",
+    "Summary is access-controlled like ChatSession and is not sent to memory automatically.",
+    "Default recent message tail is 8 messages.",
+    "Other chat sessions remain accessible from the full chat page, not through a sidebar switcher."
+  ],
+  "verification": [
+    "python manage.py test apps.ai.tests",
+    "npm run test:e2e"
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "title": "Memory Routing",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "sensitivity_levels",
+    "default_route",
+    "routes",
+    "cloud_gate"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "sensitivity_levels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "public",
+          "internal",
+          "confidential",
+          "pii_redacted",
+          "pii_original",
+          "secret"
+        ]
+      },
+      "minItems": 6,
+      "uniqueItems": true
+    },
+    "default_route": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "pii_redacted",
+        "pii_original",
+        "secret"
+      ]
+    },
+    "routes": {
+      "type": "object",
+      "required": [
+        "public",
+        "internal",
+        "confidential",
+        "pii_redacted",
+        "pii_original",
+        "secret"
+      ],
+      "properties": {
+        "public": { "$ref": "#/$defs/route" },
+        "internal": { "$ref": "#/$defs/route" },
+        "confidential": { "$ref": "#/$defs/route" },
+        "pii_redacted": { "$ref": "#/$defs/route" },
+        "pii_original": { "$ref": "#/$defs/route" },
+        "secret": { "$ref": "#/$defs/route" }
+      },
+      "additionalProperties": false
+    },
+    "cloud_gate": {
+      "type": "object",
+      "required": [
+        "mode",
+        "max_sensitivity",
+        "requires_redaction",
+        "forbidden_sensitivities"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["explicit_allow"]
+        },
+        "max_sensitivity": {
+          "type": "string",
+          "enum": ["public", "internal"]
+        },
+        "requires_redaction": { "type": "boolean" },
+        "forbidden_sensitivities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "confidential",
+              "pii_redacted",
+              "pii_original",
+              "secret"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "required": [
+        "default_llm",
+        "cloud_allowed",
+        "requires_redaction",
+        "allow_original_pii",
+        "allowed_context_kinds",
+        "denial_reason"
+      ],
+      "properties": {
+        "default_llm": {
+          "type": "string",
+          "enum": ["local", "cloud", "deny"]
+        },
+        "cloud_allowed": { "type": "boolean" },
+        "requires_redaction": { "type": "boolean" },
+        "allow_original_pii": { "type": "boolean" },
+        "allowed_context_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "question",
+              "retrieved_chunk",
+              "citation",
+              "metadata",
+              "graph_fact"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "denial_reason": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

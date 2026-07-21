@@ -1,0 +1,11 @@
+{
+  ".": "Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы",
+  "PROJECT_HANDOFF.md": "Handoff-документ: история проекта и текущее состояние",
+  "SECURE_SECRETS.md": "Гайд по безопасному хранению секретов (устарел → .env)",
+  "AGENT_RUNTIME_SETUP.md": "Настройка agent runtime (устарело)",
+  "BUGFIX_400_BAD_REQUEST.md": "Отчёт об исправлении 400 ошибок",
+  "BUGFIX_IIS_AUTHENTICATION.md": "Отчёт об исправлении IIS аутентификации",
+  "IIS_PATH_INFO_FIX.md": "Исправление PATH_INFO для IIS FastCGI",
+  "AI_FIRST_CODE_FIRST_REVIEW.md": "Ревью AI-first подхода",
+  "AI_FIRST_CODE_FIRST_REMEDIATION_PLAN.md": "План remediation AI-first"
+}

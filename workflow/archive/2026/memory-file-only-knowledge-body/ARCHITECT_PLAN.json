@@ -1,0 +1,111 @@
+{
+  "block_id": "memory-file-only-knowledge-body",
+  "status": "ready",
+  "created_at": "2026-05-22",
+  "architecture_sources": [
+    "docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md",
+    "docs/adr/ADR-0013-file-only-knowledge-body.md",
+    "docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md",
+    "docs/architecture/MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md",
+    "docs/planning/active/memory-file-only-knowledge-body.md"
+  ],
+  "goal": "Сделать файл знания единственным источником текста знания: удалить MemoryKnowledgeItem.text, запретить выдачу текста из индекса и убрать дублирование поисковых metadata.",
+  "global_constraints": [
+    "Внедрения и тестовой эксплуатации не было, поэтому совместимая миграция данных не нужна.",
+    "Текст знания хранится только в data/knowledge_repo/**/*.md.",
+    "MemoryKnowledgeItem хранит metadata, путь, хэши, права и состояние, но не полный текст.",
+    "MemorySearchDocument хранит только технические данные поиска и ссылки на KnowledgeItem/SourceObject.",
+    "Индекс является перестраиваемой производной структурой и не возвращает полный текст знания.",
+    "Reader service всегда читает текст из файла знания.",
+    "Summary строятся только из файлов знаний.",
+    "Старые chunk-поля можно переименовывать без совместимости со старыми данными.",
+    "MemoryClaim не должен участвовать в обычном MVP-пути и не должен хранить полный текст знания.",
+    "Графовый поиск не входит в этот блок."
+  ],
+  "execution_order": [
+    "01-remove-knowledge-text-field",
+    "02-file-only-reader-writer-indexing",
+    "03-simplify-search-document-and-index",
+    "04-rename-chunk-fields",
+    "05-claim-boundary-docs-tests"
+  ],
+  "target_runtime_flow": [
+    "memory.remember queues request",
+    "knowledge_writer_worker sanitizes text in process memory",
+    "writer writes markdown knowledge file atomically and commits it",
+    "writer creates MemoryKnowledgeItem metadata without text",
+    "knowledge_index_worker reads the file and updates MemorySearchDocument",
+    "search backend returns document_id only",
+    "memory.search loads MemorySearchDocument and MemoryKnowledgeItem",
+    "reader service reads text from file and returns it after policy checks"
+  ],
+  "target_models": [
+    {
+      "name": "MemoryKnowledgeItem",
+      "purpose": "Metadata card of accepted knowledge.",
+      "must_not_have_fields": [
+        "text"
+      ],
+      "required_fields": [
+        "memory_id",
+        "scope",
+        "owner_user",
+        "kind",
+        "text_hash",
+        "sensitivity",
+        "scope_tokens",
+        "status",
+        "source_refs",
+        "source_code",
+        "source_kind",
+        "knowledge_file_path",
+        "knowledge_file_hash",
+        "knowledge_file_commit",
+        "index_status",
+        "provenance",
+        "metadata"
+      ]
+    },
+    {
+      "name": "MemorySearchDocument",
+      "purpose": "Technical search record for knowledge and source_data.",
+      "knowledge_fields": [
+        "document_id",
+        "corpus_type",
+        "object_kind",
+        "knowledge_item",
+        "index_status",
+        "body_hash",
+        "indexed_at",
+        "metadata"
+      ],
+      "must_not_duplicate_as_source_of_truth": [
+        "knowledge text",
+        "source refs for knowledge",
+        "source code/kind for knowledge",
+        "sensitivity for knowledge",
+        "scope tokens for knowledge"
+      ]
+    }
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests apps.analytics.tests",
+    "./.venv/bin/python manage.py memory_verify_knowledge_files --strict",
+    "./.venv/bin/python manage.py memory_file_backed_e2e",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "npm run test:e2e",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "acceptance_summary": [
+    "MemoryKnowledgeItem.text удален.",
+    "Текст знания для выдачи читается только из файла.",
+    "Индекс не является источником выдаваемого текста.",
+    "MemorySearchDocument не дублирует смысловые поля знания.",
+    "Summary строятся из файлов знаний.",
+    "Audit/eval используют document ids вместо chunk ids.",
+    "MemoryClaim не хранит полный текст знания и не участвует в обычном MVP-пути."
+  ]
+}

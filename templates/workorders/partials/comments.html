@@ -1,0 +1,26 @@
+<div class="chat-container">
+  <div class="chat-messages" id="comment-list">
+    {% for comment in workorder.comments.all %}
+      <div class="chat-message {% if comment.author == user %}mine{% endif %}">
+        <div class="message-meta">
+          <span class="message-author">{{ comment.author.get_full_name|default:comment.author.username }}</span>
+          <span class="message-time">{{ comment.created_at|date:"H:i" }}</span>
+        </div>
+        <div class="message-bubble">{{ comment.body }}</div>
+      </div>
+    {% empty %}
+      <div class="chat-empty">Нет сообщений. Начните обсуждение!</div>
+    {% endfor %}
+  </div>
+
+  <div class="chat-input-area">
+    <form hx-post="{% url 'workorders:comment' workorder.pk %}"
+          hx-target="#drawer-chat"
+          hx-swap="innerHTML"
+          class="chat-form">
+      {% csrf_token %}
+      <textarea name="body" placeholder="Написать сообщение..." required></textarea>
+      <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+    </form>
+  </div>
+</div>

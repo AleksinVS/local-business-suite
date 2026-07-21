@@ -1,0 +1,20 @@
+{
+  "task_id": "03-django-labels-and-contract-descriptions",
+  "status": "completed",
+  "goal": "Translate Django labels and user-facing descriptor text used by the portal.",
+  "write_scope": [
+    "apps/*/models.py",
+    "apps/*/forms.py",
+    "apps/*/views.py",
+    "apps/core/settings_descriptors.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json"
+  ],
+  "acceptance": [
+    "TextChoices labels visible in UI are Russian.",
+    "Form labels, help text and validation messages are Russian.",
+    "Settings descriptors shown in Settings Center are Russian.",
+    "Tool titles and descriptions shown in AI Hub are Russian.",
+    "Machine ids and stored status values are unchanged."
+  ]
+}

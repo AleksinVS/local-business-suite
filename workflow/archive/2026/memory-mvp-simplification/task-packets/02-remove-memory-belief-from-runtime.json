@@ -1,0 +1,37 @@
+{
+  "task_id": "02-remove-memory-belief-from-runtime",
+  "title": "Убрать MemoryBelief из обычного пути MVP",
+  "status": "completed",
+  "objective": "Удалить или отключить создание и поиск MemoryBelief в MVP, сохранив безопасный путь миграции.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/admin.py",
+    "apps/memory/services.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/management/commands/memory_reflect_chats.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "Не создавать MemoryBelief при явном сохранении памяти из чата.",
+    "Не искать MemoryBelief через memory.search.",
+    "Удалить ссылки на MemoryBelief из admin и обычного пути выполнения, если модель удаляется.",
+    "Если таблица уже есть в развернутой базе, предусмотреть безопасную миграцию или режим совместимости.",
+    "Оставить MemoryClaim только если он нужен принятому MVP-пути; иначе убрать его из обычного пути тоже."
+  ],
+  "acceptance_checks": [
+    "memory.remember не создает MemoryBelief в обычном пути.",
+    "memory.search не возвращает элементы вида memory_belief.",
+    "Проверочный запуск обработки памяти не зависит от счетчиков MemoryBelief.",
+    "Тесты не требуют MemoryBelief как поведения MVP."
+  ],
+  "verification_commands": [
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

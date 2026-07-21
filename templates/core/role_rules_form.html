@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load core_tags %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Настройки доступа</p>
+      <h1>Права ролей</h1>
+    </div>
+    <div class="header-actions">
+        <a href="{% url 'core:department_list' %}" class="button-link">К подразделениям</a>
+    </div>
+  </div>
+  
+  <p class="description">Управление глобальными правами для ролей. Изменения сохраняются в рабочем контракте ролей.</p>
+
+  <form method="post" class="role-rules-form">
+    {% csrf_token %}
+    <input type="hidden" name="base_hash" value="{{ role_rules_base_hash }}">
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Роль</th>
+            <th>Область видимости</th>
+            {% for flag, label in available_flags %}
+              <th>{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for role_name, rules in role_rules.items %}
+            <tr>
+              <td>
+                <strong>{{ rules|attribute_lookup:"display_name"|default:role_name }}</strong>
+                <br><small class="muted">{{ role_name }}</small>
+              </td>
+              <td>
+                <select name="role_{{ role_name }}_view_scope">
+                  {% for scope_value, scope_label in view_scopes %}
+                    <option value="{{ scope_value }}" {% if rules.view_scope == scope_value %}selected{% endif %}>
+                      {{ scope_label }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </td>
+              {% for flag, label in available_flags %}
+                <td class="text-center">
+                  <input type="checkbox" name="role_{{ role_name }}_{{ flag }}" 
+                         {% if rules|attribute_lookup:flag %}checked{% endif %}>
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-actions">
+      <button type="submit" class="button">Сохранить изменения</button>
+    </div>
+  </form>
+</section>
+
+<style>
+  .role-rules-form {
+    margin-top: 20px;
+  }
+  .table-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+  .data-table th, .data-table td {
+    padding: 12px;
+    border: 1px solid #eee;
+    text-align: left;
+  }
+  .data-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+  }
+  .text-center {
+    text-align: center !important;
+  }
+  .description {
+    color: #666;
+    margin-bottom: 20px;
+  }
+  .table-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+</style>
+{% endblock %}

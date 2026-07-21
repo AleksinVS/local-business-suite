@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: автоупорядочивание файловых источников",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки автоупорядочивания файловых источников",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets для автоупорядочивания файловых источников",
+  "task-packets": "Task packets для stable identity, baseline virtual structure, incoming folder, статистики, managed transfer и e2e",
+  "EXECUTOR_REPORT.implementation.md": "Отчет реализации MVP автоупорядочивания файловых источников",
+  "TASK_ACCEPTANCE.implementation.md": "Техническая приемка MVP автоупорядочивания файловых источников"
+}

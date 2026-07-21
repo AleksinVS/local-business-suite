@@ -1,0 +1,48 @@
+{
+  "block_id": "kanban-ui-polish-2026-04-07",
+  "slice_id": "slice-kanban-polish",
+  "task_id": "task-kanban-grid-fix",
+  "goal": "Optimize the `.board-grid` CSS calculation for 5-column display.",
+  "risk_class": "R0",
+  "read_files": [
+    "static/src/css/app.css"
+  ],
+  "write_files": [
+    "static/src/css/app.css"
+  ],
+  "forbidden_moves": [
+    "Do not change the board column rendering logic in Django views.",
+    "Do not remove the `minmax` safety in CSS."
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "./.venv/bin/python manage.py check"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Updated static/src/css/app.css with optimized grid formula",
+    "EXECUTOR_REPORT.md"
+  ],
+  "escalation_path": [
+    "Reducing min-width makes Kanban cards unreadably narrow",
+    "The overflow persists even with reduced min-width"
+  ],
+  "source_plan": "workflow/kanban-ui-polish-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high"
+  },
+  "development_method": null,
+  "method_phase": null,
+  "method_step_id": null,
+  "review_scope": null,
+  "iteration": null,
+  "contract_scope": null,
+  "rework_of": null,
+  "artifact_expectations": []
+}

@@ -1,0 +1,42 @@
+{
+  "task_id": "03-protected-media-serving",
+  "title": "Защищённая раздача media в production и dev",
+  "risk": "high",
+  "goal": "Файлы из data/media/ отдаются в любом окружении через авторизованный view с проверкой прав на связанный объект; анонимный или посторонний пользователь получает отказ.",
+  "findings": [
+    "config/urls.py:35 — единственный маршрут media через django.conf.urls.static.static(), который отключается при DEBUG=0: в Docker/Caddy production вложения заявок отдают 404",
+    "в dev media раздаётся без проверки прав: файлы по заявкам доступны любому, кто знает URL"
+  ],
+  "write_scope": [
+    "config/urls.py",
+    "apps/workorders/views.py",
+    "apps/workorders/urls.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/tests.py",
+    "apps/core/ (если выдача оформляется общим helper-ом)",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/deployment/IIS_SSO.md (правило: IIS не должен раздавать /media/ напрямую)"
+  ],
+  "non_goals": [
+    "Не внедрять объектное хранилище (S3) — вне scope",
+    "Не менять модель вложений WorkOrder"
+  ],
+  "implementation_notes": [
+    "Выдача через view: login_required + проверка права видеть заявку (view_scope из role_rules через contract store пакета 01) + FileResponse; путь файла строить строго от MEDIA_ROOT с защитой от traversal (resolve().is_relative_to(MEDIA_ROOT)).",
+    "Маршрут вида /media/workorders/<...> направить на view; убрать static(settings.MEDIA_URL, ...) из config/urls.py, чтобы dev и production шли одним кодом.",
+    "Если появятся другие типы media, кроме workorders — единый dispatcher по префиксу с политикой per-domain; сейчас достаточно workorders.",
+    "Крупные файлы: FileResponse со стримингом достаточно для текущего масштаба; X-Accel/X-Sendfile отложить, зафиксировать как возможную оптимизацию в backlog."
+  ],
+  "tests": [
+    "unit: анонимный запрос к файлу вложения -> redirect на login или 403",
+    "unit: пользователь без доступа к заявке -> 403/404",
+    "unit: пользователь с доступом получает файл (200, корректный Content-Type)",
+    "unit: попытка path traversal (../../) -> 404",
+    "e2e: HTTP-сценарий загрузки вложения и его получения обоими типами пользователей при DEBUG=0-эквивалентной конфигурации"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    "grep -n \"static(settings.MEDIA_URL\" config/urls.py — вхождений нет"
+  ],
+  "independent_verification": true
+}

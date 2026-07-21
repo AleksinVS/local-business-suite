@@ -1,0 +1,5 @@
+{
+  ".": "Самописный AG-UI-compatible AI sidebar без Copilot Runtime",
+  "native_ai.js": "Native AI UI driver: config, AG-UI SSE parsing и безопасные UI-команды",
+  "native_ai.css": "Стили самописного AI sidebar"
+}

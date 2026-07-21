@@ -1,0 +1,29 @@
+{
+  "task_id": "01-primary-knowledge-item-path",
+  "title": "Сделать MemoryKnowledgeItem главным объектом памяти",
+  "status": "completed",
+  "objective": "Сделать так, чтобы явное запоминание, исправление и удаление работали через MemoryKnowledgeItem как главный объект сохраненного знания MVP.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "memory.remember должен возвращать идентификатор MemoryKnowledgeItem как главный результат.",
+    "Исправление и удаление личной памяти должны продолжать работать через MemoryKnowledgeItem.",
+    "Кандидаты в общую память должны продолжать ссылаться на MemoryKnowledgeItem.",
+    "Не менять физическое хранение сообщений чата в этой задаче."
+  ],
+  "acceptance_checks": [
+    "Явное запоминание создает или обновляет MemoryKnowledgeItem.",
+    "Результат инструмента явно содержит memory_id.",
+    "Проверки исправления и удаления личной памяти проходят.",
+    "Документация описывает MemoryKnowledgeItem как главный объект памяти MVP."
+  ],
+  "verification_commands": [
+    "python manage.py test apps.memory.tests apps.ai.tests"
+  ]
+}

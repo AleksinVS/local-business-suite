@@ -1,0 +1,32 @@
+{
+  "task_id": "04-migration-export-import-validate",
+  "title": "Export/import/validate runtime-данных",
+  "goal": "Создать воспроизводимый перенос данных из текущих SQLite-файлов в одну PostgreSQL database.",
+  "write_scope": [
+    "apps/core/management/commands/",
+    "apps/ai/management/commands/",
+    "apps/memory/management/commands/",
+    "apps/analytics/management/commands/",
+    "tests for migration commands",
+    "docs/deployment/POSTGRESQL_MIGRATION.md"
+  ],
+  "non_goals": [
+    "Не выполнять production cutover в этой задаче",
+    "Не писать export packages в корень проекта",
+    "Не удалять SQLite runtime-файлы"
+  ],
+  "implementation_notes": [
+    "Добавить команды postgres_migration_export, postgres_migration_import, postgres_migration_validate.",
+    "Export package писать в .local/ или явно переданный путь вне репозитория.",
+    "Manifest должен содержать source db paths, row counts, checksums, app/model ordering, export time, commit hash.",
+    "Import должен сохранять primary keys, если это нужно для FK и audit continuity.",
+    "Validate должен проверять counts, orphan rows, обязательные FK, users/chat/memory/audit consistency и search readiness."
+  ],
+  "acceptance_checks": [
+    "python manage.py postgres_migration_export --dry-run",
+    "python manage.py postgres_migration_import --dry-run",
+    "python manage.py postgres_migration_validate --strict",
+    "python manage.py test apps.core.tests apps.ai.tests apps.memory.tests apps.analytics.tests",
+    "git diff --check"
+  ]
+}

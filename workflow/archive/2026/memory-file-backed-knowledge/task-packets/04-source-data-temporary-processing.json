@@ -1,0 +1,32 @@
+{
+  "task_id": "04-source-data-temporary-processing",
+  "title": "Временная обработка source data",
+  "status": "implemented",
+  "goal": "Исключить постоянное хранение raw/safe копий исходных данных в памяти и заменить его временной processing-зоной.",
+  "write_scope": [
+    "apps/memory/",
+    "apps/analytics/",
+    "contracts/ai/",
+    "contracts/analytics/",
+    "docs/"
+  ],
+  "steps": [
+    "Ввести data/processing/raw_quarantine, safe_work, extraction_packets и cleanup_manifests.",
+    "Добавить retention profiles для временных объектов.",
+    "Перевести document/API/email processing на удаление raw/safe рабочих файлов после успешного сохранения знания и индексации.",
+    "Оставить постоянными только source refs, hashes, versions, watermarks и issue records.",
+    "Добавить cleanup command и dry-run режим.",
+    "Проверить, что safe corpus больше не используется как постоянный источник ответа агента."
+  ],
+  "acceptance_checks": [
+    "После успешной обработки временные raw/safe файлы удаляются по регламенту.",
+    "При ошибке файл остается в quarantine с issue record.",
+    "Ответ агента не читает temporary processing files.",
+    "Source refs остаются проверяемыми."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.analytics.tests",
+    "python manage.py memory_ingest_source --source-code test --dry-run"
+  ]
+}

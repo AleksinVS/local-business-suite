@@ -1,0 +1,81 @@
+<button type="button" class="close-btn close-btn-global" onclick="closeWaitingListDrawer()">&times;</button>
+
+<div class="drawer-header">
+  <div class="header-main-info">
+    <div class="header-meta">
+      <span class="eyebrow">Лист ожидания</span>
+    </div>
+    <h2>{% if entry %}Редактирование{% else %}Новая запись{% endif %}</h2>
+  </div>
+</div>
+<div class="drawer-content">
+  <form id="waiting-list-form"
+    hx-post="{% if entry %}{% url 'waiting_list:update' entry.pk %}{% else %}{% url 'waiting_list:create' %}{% endif %}"
+    hx-target="#entry-detail-panel-content"
+    hx-swap="innerHTML"
+  >
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="input-group full-width">
+        <label for="{{ form.patient_name.id_for_label }}">{{ form.patient_name.label }}</label>
+        {{ form.patient_name }}
+        {{ form.patient_name.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.patient_dob.id_for_label }}">{{ form.patient_dob.label }}</label>
+        {{ form.patient_dob }}
+        {{ form.patient_dob.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.patient_phone.id_for_label }}">{{ form.patient_phone.label }}</label>
+        {{ form.patient_phone }}
+        {{ form.patient_phone.errors }}
+      </div>
+      <div class="input-group full-width">
+        <label for="{{ form.service_id.id_for_label }}">{{ form.service_id.label }}</label>
+        {{ form.service_id }}
+        {{ form.service_id.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.date_tag.id_for_label }}">{{ form.date_tag.label }}</label>
+        {{ form.date_tag }}
+        {{ form.date_tag.errors }}
+      </div>
+      <div class="input-group">
+        <label for="{{ form.date_end.id_for_label }}">{{ form.date_end.label }}</label>
+        {{ form.date_end }}
+        {{ form.date_end.errors }}
+      </div>
+      <div class="input-group full-width checkbox-group">
+        {{ form.priority_cito }}
+        <label for="{{ form.priority_cito.id_for_label }}">{{ form.priority_cito.label }}</label>
+        {{ form.priority_cito.errors }}
+      </div>
+      <div class="input-group full-width">
+        <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+        {{ form.comment }}
+        {{ form.comment.errors }}
+      </div>
+    </div>
+  </form>
+</div>
+<div class="drawer-footer">
+  {% if entry %}
+    <button type="button" class="btn btn-ghost" 
+            hx-get="{% url 'waiting_list:detail' entry.pk %}" 
+            hx-target="#entry-detail-panel-content">Отмена</button>
+  {% else %}
+    <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Отмена</button>
+  {% endif %}
+  <button type="submit" form="waiting-list-form" class="btn btn-primary">{% if entry %}Сохранить{% else %}Добавить{% endif %}</button>
+</div>
+
+<script>
+  // Re-apply masks to new form
+  (function() {
+    const phoneInputs = document.querySelectorAll('input[name="patient_phone"]');
+    const dobInputs = document.querySelectorAll('input[name="patient_dob"]');
+    phoneInputs.forEach(input => input.addEventListener('input', e => applyPhoneMask(e.target)));
+    dobInputs.forEach(input => input.addEventListener('input', e => applyDobMask(e.target)));
+  })();
+</script>

@@ -1,0 +1,7 @@
+{
+  ".": "Task packets для исправлений по архитектурному ревью",
+  "01-runtime-migrations-and-deployment.json": "Task packet: миграции всех runtime-баз и deployment-документация",
+  "02-contract-write-paths-and-role-settings.json": "Task packet: единый путь записи runtime contracts и роли",
+  "03-ai-gateway-mcp-identity-and-prompt-logging.json": "Task packet: AI gateway/MCP identity checks и безопасное логирование prompt",
+  "04-docs-root-hygiene-and-structure.json": "Task packet: debug log hygiene, устаревшие ссылки и структура проекта"
+}

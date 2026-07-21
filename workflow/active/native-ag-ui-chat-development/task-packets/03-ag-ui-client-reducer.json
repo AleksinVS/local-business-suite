@@ -1,0 +1,26 @@
+{
+  "task_id": "03-ag-ui-client-reducer",
+  "title": "AG-UI event parser and reducers for native chat",
+  "type": "implementation",
+  "write_scope": [
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "scripts/e2e/tests/native_ai_ui.spec.ts"
+  ],
+  "instructions": [
+    "Implement SSE parsing that supports multi-line data blocks.",
+    "Handle lifecycle, text, tool, state, custom and error events.",
+    "Render compact tool trace and user-safe errors.",
+    "Ignore unknown events without throwing."
+  ],
+  "acceptance": [
+    "Assistant response is built from TEXT_MESSAGE_*.",
+    "TOOL_CALL_* events update a tool trace node.",
+    "RUN_ERROR unlocks the form and displays a safe error.",
+    "Empty stream is handled as an error."
+  ],
+  "verification": [
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native AG-UI-compatible\""
+  ]
+}

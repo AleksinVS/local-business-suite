@@ -1,0 +1,56 @@
+{
+  "task_id": "06-ui-e2e-operations-and-handoff",
+  "title": "UI, e2e, operations and handoff",
+  "status": "completed",
+  "objective": "Complete operator/user UI, e2e checks and documentation for file source auto organization.",
+  "read_scope": [
+    "apps/memory/views.py",
+    "apps/memory/urls.py",
+    "apps/memory/templates/",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/TESTING_POLICY.md"
+  ],
+  "write_scope": [
+    "apps/memory/views.py",
+    "apps/memory/urls.py",
+    "apps/memory/templates/",
+    "apps/memory/management/commands/memory_file_auto_organization_e2e.py",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md",
+    "workflow/active/memory-file-source-auto-organization/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/memory-file-source-auto-organization/TASK_ACCEPTANCE.implementation.md",
+    ".desc.json files and PROJECT_STRUCTURE.yaml if structure changes"
+  ],
+  "non_goals": [
+    "Do not add marketing-style UI.",
+    "Do not expose sensitive evidence, raw paths or raw content in UI.",
+    "Do not skip e2e for physical transfer safety.",
+    "Do not archive the workflow before owner acceptance."
+  ],
+  "requirements": [
+    "UI must show baseline preview, incoming review, organization proposals, move plan diff and job status.",
+    "UI write actions must go through server-side services with permissions and audit.",
+    "E2E must cover baseline, incoming, proposal approval, move safety and access control.",
+    "Operations docs must describe retention, backup checkpoint and failure handling."
+  ],
+  "acceptance_checks": [
+    "Operator can review baseline without physical file changes.",
+    "Operator can approve or reject organization proposal.",
+    "Move plan diff shows affected files, source, target, confidence and rollback/quarantine status.",
+    "E2E proves a user virtual view does not grant access to restricted files.",
+    "Documentation and backlog are updated."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_file_auto_organization_e2e"
+  ]
+}

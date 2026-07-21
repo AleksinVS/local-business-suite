@@ -1,0 +1,425 @@
+# IIS SSO And LDAP Auth
+
+## Назначение
+
+Проект поддерживает четыре режима авторизации через `DJANGO_AUTH_MODE`:
+
+- `local` - только локальные пользователи Django.
+- `ldap` - вход через форму Django, пароль проверяется в Active Directory через LDAP.
+- `remote_user` - SSO через внешний веб-сервер, например IIS Windows Authentication.
+- `hybrid` - основной режим: SSO через `REMOTE_USER`, если он есть, плюс fallback на форму Django с LDAP-проверкой пароля.
+
+Текущий быстрый режим для доверенной сети:
+
+```env
+DJANGO_AUTH_MODE=hybrid
+AD_LDAP_TRANSPORT=plain
+AD_LDAP_ALLOW_INSECURE=true
+AD_LDAP_VERIFY_CERT=false
+```
+
+Этот режим не требует сертификатов, но доменные пароли при LDAP bind не защищены TLS. Используйте его только как временный первый этап в доверенной сети.
+
+## IIS FastCGI URL Routing Issue
+
+### Проблема
+
+При развертывании Django на IIS с FastCGI (wfastcgi) может возникнуть проблема с маршрутизацией URL: все внутренние страницы (`/workorders/`, `/inventory/`, и т.д.) перенаправляют на главную страницу.
+
+### Причина
+
+IIS FastCGI неправильно передает переменную окружения `PATH_INFO` в Django. Вместо правильного пути (`/workorders/`), Django получает только `/`:
+
+```
+REQUEST_URI: /workorders/  (правильно)
+PATH_INFO: /              (неправильно!)
+```
+
+Django использует `PATH_INFO` для маршрутизации, поэтому думает, что вы на главной странице.
+
+### Решение
+
+В проекте есть middleware `PathInfoDebugMiddleware` (`apps/core/middleware.py`), который автоматически исправляет эту проблему:
+
+- Обнаруживает несоответствие между `PATH_INFO` и `REQUEST_URI`
+- Исправляет `PATH_INFO` на основе `REQUEST_URI`
+- Безопасен для других веб-серверов (Apache, Nginx, Gunicorn) — эвристика проверяет
+  конкретное несоответствие, а не переписывает PATH_INFO вслепую
+
+### Флаг `LOCAL_BUSINESS_IIS_COMPAT_ENABLED` (обязателен на IIS)
+
+Этот middleware и диагностический staff-only view `/debug-request/`
+(`apps/core/debug_views.py`) — специфичный для IIS отладочный контур. По
+умолчанию (`LOCAL_BUSINESS_IIS_COMPAT_ENABLED=false`) он **выключен**:
+
+- `PathInfoDebugMiddleware` не добавляется в `MIDDLEWARE` (см.
+  `config/settings.py:build_middleware`) — на Linux/Docker без IIS он не нужен
+  и раньше применял эвристику переписывания PATH_INFO безусловно, вне IIS;
+- `/debug-request/` не регистрируется вовсе (404), даже при `DJANGO_DEBUG=1`.
+
+**На IIS-развёртывании явно включите флаг** в `web.config`/переменных окружения:
+
+```env
+LOCAL_BUSINESS_IIS_COMPAT_ENABLED=true
+```
+
+Тогда PATH_INFO-фикс включается в `MIDDLEWARE`, а `/debug-request/` регистрируется
+дополнительно при `DJANGO_DEBUG=1` (staff-only, для точечной диагностики, не для
+постоянной эксплуатации — включайте DEBUG только временно, отдельно от компат-флага).
+
+Дополнительно в проекте есть настройка для IIS совместимости (не зависит от флага
+выше, не менялась):
+
+```python
+FORCE_SCRIPT_NAME = ""
+```
+
+### Отладка
+
+Middleware пишет диагностику через штатный `logging` (логгер
+`apps.core.iis_path_debug`, см. `LOGGING` в `config/settings.py`) в файл
+`data/logs/iis_path_debug.log` — не через `open()` на жёстко зашитый путь, как
+было раньше. По умолчанию уровень этого логгера `WARNING`, поэтому даже при
+включённом `LOCAL_BUSINESS_IIS_COMPAT_ENABLED` строки на каждый запрос не
+пишутся и файл не создаётся (обработчик с `delay=True`). Для временной
+диагностики на IIS-стенде поднимите уровень:
+
+```env
+LOCAL_BUSINESS_IIS_PATH_DEBUG_LOG_LEVEL=INFO
+```
+
+После этого в `data/logs/iis_path_debug.log` появятся строки вида:
+
+```
+[2026-07-07 14:22:04,673] INFO apps.core.iis_path_debug Path: /workorders/ | Path Info: /workorders/ | SCRIPT_NAME:  | PATH_INFO: /workorders/ | REQUEST_URI: /workorders/
+```
+
+Если middleware работает правильно, вы увидите исправленные значения в логах.
+Верните уровень обратно на `WARNING` (или уберите переменную) после диагностики,
+чтобы не копить лог на проде.
+
+## Как работает hybrid
+
+1. Если IIS передал `REMOTE_USER`, Django создает или находит локального пользователя.
+2. Имя нормализуется из `MSCHER\ivanov` или `ivanov@mscher.local` в `ivanov`.
+3. Django пытается синхронизировать профиль из AD: `mail`, `displayName`, `givenName`, `sn`, `memberOf`.
+4. Если `REMOTE_USER` нет, пользователь может войти через `/accounts/login/`.
+5. Форма логина проверяет пароль через LDAP и также синхронизирует профиль.
+
+На Linux SSO без ввода логина и пароля тоже возможно, но только если перед Django стоит сервер, который выполняет Kerberos/Negotiate и передает `REMOTE_USER`, например Apache с `mod_auth_gssapi`. Один только Django на Linux не делает Kerberos SSO автоматически.
+
+## Быстрая настройка без сертификатов
+
+```env
+DJANGO_DEBUG=0
+DJANGO_SECRET_KEY=replace-me
+DJANGO_ALLOWED_HOSTS=suite.mscher.local
+
+DJANGO_AUTH_MODE=hybrid
+
+AD_LDAP_TRANSPORT=plain
+AD_LDAP_ALLOW_INSECURE=true
+AD_LDAP_VERIFY_CERT=false
+AD_LDAP_HOST=dc01.mscher.local
+AD_LDAP_PORT=389
+AD_LDAP_DOMAIN=MSCHER
+AD_SEARCH_DN=DC=mscher,DC=local
+AD_SERVICE_ACCOUNT=MSCHER\svc_local_business
+AD_SERVICE_PASSWORD=replace-me
+AD_LDAP_USER_FILTER=(sAMAccountName={username})
+AD_GROUP_ROLE_MAP={"Domain Admins":"manager","IT Support":"technician","Employees":"customer"}
+```
+
+`AD_SERVICE_ACCOUNT` нужен для поиска пользователя и чтения атрибутов. Для входа через форму пользовательский пароль проверяется отдельным bind от DN найденного пользователя.
+
+## IIS: публикация на верхнем уровне
+
+Создайте отдельный IIS Site, а не application внутри другого сайта.
+
+Пример:
+
+- Site name: `Корпоративный портал ВОБ №3`
+- Physical path: `C:\inetpub\local-business-suite`
+- Binding: `https`, host name `suite.mscher.local`, port `443`
+- Application Pool: отдельный pool, например `LocalBusinessSuite`
+
+URL приложения будет:
+
+```text
+https://suite.mscher.local/
+```
+
+а не:
+
+```text
+https://suite.mscher.local/local-business-suite/
+```
+
+Если на этом IIS уже есть 1С-сервис с SSO, например `http://stc-web/WL/`, самый безопасный вариант - оставить его как есть и дать Корпоративный портал ВОБ №3 отдельное имя хоста на том же сервере:
+
+```text
+http://stc-lbs/
+```
+
+или:
+
+```text
+http://local-business-suite/
+```
+
+Так 1С остается на `http://stc-web/WL/`, а Python FastCGI handler, `web.config` и правила auth нового приложения не наследуются 1С-сервисом.
+
+Для отдельного имени нужна DNS-настройка:
+
+- `A` record на IP IIS-сервера; или
+- `CNAME` на существующее имя `stc-web`.
+
+Для временной проверки можно прописать имя в `hosts` на одной машине, но для доменного SSO лучше использовать нормальную DNS-запись. Браузер должен открывать приложение по тому же имени, для которого настроены IIS binding и Kerberos/SPN.
+
+Если принципиально нужно разместить Корпоративный портал ВОБ №3 в корне `http://stc-web/`, оставьте `/WL/` отдельным IIS application с собственным application pool и проверьте, что корневой `web.config` Django не перехватывает `/WL/`. В этом варианте особенно важно изолировать handler mappings и authentication rules для `/WL/`.
+
+При отдельном host header для Kerberos SSO может понадобиться SPN для нового имени, например `HTTP/stc-lbs`, на учетной записи application pool или компьютера IIS. Если используется прежнее имя `stc-web`, существующий SPN, скорее всего, уже настроен для 1С.
+
+## IIS: Windows Authentication
+
+Для SSO включите на сайте:
+
+- `Windows Authentication`: `Enabled`
+- `Anonymous Authentication`: см. ниже
+
+В `Windows Authentication -> Providers` поставьте:
+
+1. `Negotiate`
+2. `NTLM`
+
+`Negotiate` нужен для Kerberos. `NTLM` остается fallback.
+
+### Строгий SSO
+
+Если нужен только SSO:
+
+- на всем сайте `Anonymous Authentication = Disabled`;
+- `Windows Authentication = Enabled`;
+- `DJANGO_AUTH_MODE=remote_user` или `hybrid`.
+
+В этом варианте пользователь без доменной Windows-аутентификации до Django login-формы не дойдет.
+
+### SSO плюс fallback-форма
+
+Если нужен SSO и запасной вход по логину/паролю:
+
+- на сайте `Windows Authentication = Enabled`;
+- для `/accounts/login/` разрешите `Anonymous Authentication`;
+- оставьте `DJANGO_AUTH_MODE=hybrid`.
+
+В IIS это обычно делают отдельным location/application rule для пути `accounts/login`, чтобы форма была доступна без Windows auth. Остальные рабочие страницы могут оставаться под Windows auth.
+
+## Пример web.config
+
+Файл кладется в корень проекта рядом с `manage.py`.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="Python FastCGI"
+           path="*"
+           verb="*"
+           modules="FastCgiModule"
+           scriptProcessor="C:\inetpub\local-business-suite\.venv\Scripts\python.exe|C:\inetpub\local-business-suite\.venv\Lib\site-packages\wfastcgi.py"
+           resourceType="Unspecified"
+           requireAccess="Script" />
+    </handlers>
+
+    <security>
+      <authentication>
+        <anonymousAuthentication enabled="false" />
+        <windowsAuthentication enabled="true" />
+      </authentication>
+    </security>
+  </system.webServer>
+
+  <appSettings>
+    <add key="DJANGO_SETTINGS_MODULE" value="config.settings" />
+    <add key="WSGI_HANDLER" value="config.wsgi.application" />
+    <add key="PYTHONPATH" value="C:\inetpub\local-business-suite" />
+
+    <add key="DJANGO_DEBUG" value="0" />
+    <add key="DJANGO_SECRET_KEY" value="replace-me" />
+    <add key="DJANGO_ALLOWED_HOSTS" value="suite.mscher.local" />
+    <add key="DJANGO_AUTH_MODE" value="hybrid" />
+
+    <!-- IIS PATH_INFO-фикс + staff-only /debug-request/; выключен по умолчанию
+         (см. раздел «Флаг LOCAL_BUSINESS_IIS_COMPAT_ENABLED» выше) -->
+    <add key="LOCAL_BUSINESS_IIS_COMPAT_ENABLED" value="true" />
+
+    <add key="AD_LDAP_TRANSPORT" value="plain" />
+    <add key="AD_LDAP_ALLOW_INSECURE" value="true" />
+    <add key="AD_LDAP_VERIFY_CERT" value="false" />
+    <add key="AD_LDAP_HOST" value="dc01.mscher.local" />
+    <add key="AD_LDAP_PORT" value="389" />
+    <add key="AD_LDAP_DOMAIN" value="MSCHER" />
+    <add key="AD_SEARCH_DN" value="DC=mscher,DC=local" />
+    <add key="AD_SERVICE_ACCOUNT" value="MSCHER\svc_local_business" />
+    <add key="AD_SERVICE_PASSWORD" value="replace-me" />
+    <add key="AD_LDAP_USER_FILTER" value="(sAMAccountName={username})" />
+    <add key="AD_GROUP_ROLE_MAP" value="{&quot;Domain Admins&quot;:&quot;manager&quot;,&quot;IT Support&quot;:&quot;technician&quot;,&quot;Employees&quot;:&quot;customer&quot;}" />
+  </appSettings>
+</configuration>
+```
+
+Для fallback-формы через `/accounts/login/` настройте IIS так, чтобы этот путь мог открываться anonymous. Иначе IIS перехватит запрос раньше Django.
+
+### `/media/` обслуживает только Django, не IIS
+
+Вложения заявок лежат в `data/media/workorders/...`, но раздаёт их авторизованный
+Django-view (`/media/workorders/<path>` → `serve_workorder_attachment`, `login_required`
++ `can_view`), а не IIS как статический контент. Это правило важно на IIS:
+
+- **Не создавайте** для `/media/` отдельный static-обработчик, virtual directory или
+  правило, которое отдаёт файлы напрямую с диска в обход FastCGI-handler'а. Такой
+  обход раздал бы файлы заявок без проверки прав и мимо доменной авторизации.
+- Handler mapping в примере `web.config` уже ловит `path="*"` и направляет все запросы
+  (включая `/media/...`) в Python FastCGI handler — этого достаточно, отдельная
+  настройка `/media/` не нужна.
+- То же относится к любому reverse proxy перед IIS/Django: `/media/` не проксируется
+  на файловую систему напрямую, только на приложение.
+
+## Безопасное хранение секретов
+
+Хранить пароли в `web.config` небезопасно. Рекомендуется использовать Environment Variables.
+
+### Environment Variables (Рекомендуемый вариант)
+
+Установите секреты как системные переменные окружения:
+
+```powershell
+# Установить учетную запись сервиса AD
+[Environment]::SetEnvironmentVariable('AD_SERVICE_ACCOUNT', 'svc_portal_read@mscher.local', 'Machine')
+
+# Установить пароль (выполните вручную с реальным паролем)
+[Environment]::SetEnvironmentVariable('AD_SERVICE_PASSWORD', 'ВАШ_РЕАЛЬНЫЙ_ПАРОЛЬ', 'Machine')
+
+# Проверить установку
+[Environment]::GetEnvironmentVariable('AD_SERVICE_ACCOUNT', 'Machine')
+[Environment]::GetEnvironmentVariable('AD_SERVICE_PASSWORD', 'Machine')
+```
+
+После этого очистите `web.config` от паролей:
+
+```xml
+<add key="AD_SERVICE_ACCOUNT" value="" />
+<add key="AD_SERVICE_PASSWORD" value="" />
+<!-- Пустые значения будут браться из environment variables -->
+```
+
+Перезапустите IIS:
+
+```powershell
+iisreset
+```
+
+### Альтернативы
+
+**Windows Registry:**
+- Дополнительный уровень защиты
+- Контроль доступа через ACL
+
+**Windows Credential Manager:**
+- Шифрование DPAPI
+- Максимальная безопасность
+
+Подробнее: см. `../../archive/SECURE_SECRETS.md`
+
+### Безопасные практики
+
+✅ Никогда не коммитьте секреты в git (web.config уже в .gitignore)
+✅ Используйте разные пароли для разных окружений
+✅ Регулярно меняйте пароли сервисных учетных записей
+✅ Ограничивайте доступ к файлам с секретами
+✅ Используйте минимальные права для сервисных учетных записей
+
+## Установка на Windows Server
+
+```powershell
+cd C:\inetpub\local-business-suite
+
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -U pip
+.\.venv\Scripts\pip.exe install -r requirements.txt
+.\.venv\Scripts\pip.exe install wfastcgi
+.\.venv\Scripts\python.exe -m wfastcgi enable
+
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py collectstatic --noinput
+.\.venv\Scripts\python.exe manage.py seed_roles
+.\.venv\Scripts\python.exe manage.py check
+```
+
+## Agent Runtime на Windows Server
+
+IIS/FastCGI запускает Django. Agent Runtime должен запускаться отдельно через одну задачу Task Scheduler:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup_agent_runtime_autostart.ps1 -Force
+```
+
+Проверить состояние автозапуска:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\check_agent_runtime_autostart.ps1
+```
+
+Ожидаемый результат: `OK: 1 root process (uvicorn master) + 1 worker subprocess(es) (uvicorn multiprocessing)`. Два python-процесса с разными `ExecutablePath` (`.venv\Scripts\python.exe` и `C:\Program Files\Python311\python.exe`) — это master + worker, не дубль: uvicorn multiprocessing, плюс venv на этой машине построен поверх системного Python 3.11 (см. `pyvenv.cfg:executable`). Подробности в `WINDOWS_RUN.md` → «Анатомия процессов Agent Runtime».
+
+Чек-скрипт выдаёт `WARNING` только в случае реальных проблем: больше одной scheduled task, больше одного root-процесса, root-процесс с неожиданным исполнителем, или worker без master'а. В этих случаях нужно оставить только задачу `Portal Agent Runtime` в `\Portal\`, созданную текущим скриптом автозапуска, и перезапустить `setup_agent_runtime_autostart.ps1 -Force`.
+
+## Переход на нормальный LDAPS
+
+Когда сертификаты будут готовы, меняйте только транспортные env-переменные:
+
+```env
+AD_LDAP_TRANSPORT=ldaps
+AD_LDAP_ALLOW_INSECURE=false
+AD_LDAP_VERIFY_CERT=true
+AD_LDAP_HOST=dc01.mscher.local
+AD_LDAP_PORT=636
+AD_LDAP_CA_FILE=C:\certs\mscher-root-ca.pem
+```
+
+Альтернатива через StartTLS на 389:
+
+```env
+AD_LDAP_TRANSPORT=starttls
+AD_LDAP_ALLOW_INSECURE=false
+AD_LDAP_VERIFY_CERT=true
+AD_LDAP_HOST=dc01.mscher.local
+AD_LDAP_PORT=389
+AD_LDAP_CA_FILE=C:\certs\mscher-root-ca.pem
+```
+
+При `ldaps` и `starttls` имя в сертификате должно совпадать с `AD_LDAP_HOST`.
+
+## Проверка
+
+Проверить базовый старт:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py check
+```
+
+Проверить SSO:
+
+1. Откройте `https://suite.mscher.local/` с доменной машины.
+2. Убедитесь, что IIS не спрашивает пароль, если Kerberos работает.
+3. В Django admin проверьте, что пользователь создан с нормализованным username.
+4. Проверьте email/ФИО и группы.
+
+Проверить fallback:
+
+1. Откройте `/accounts/login/`.
+2. Введите доменный логин `ivanov` и пароль.
+3. Пользователь должен войти через LDAP bind.
+
+Если SSO не работает, сначала проверьте IIS logs и Windows Authentication providers. Если fallback не работает, проверьте доступность `AD_LDAP_HOST:389`, service account и `AD_SEARCH_DN`.

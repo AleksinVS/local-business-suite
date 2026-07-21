@@ -1,0 +1,15 @@
+{
+  "title": "Change Plan",
+  "type": "object",
+  "required": [
+    "brief_id",
+    "title",
+    "status",
+    "summary",
+    "assumptions",
+    "affected_files",
+    "steps",
+    "verification",
+    "risks"
+  ]
+}

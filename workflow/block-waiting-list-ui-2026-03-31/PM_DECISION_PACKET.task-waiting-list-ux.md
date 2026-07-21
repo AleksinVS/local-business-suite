@@ -1,0 +1,28 @@
+# PM Decision Packet: task-waiting-list-ux
+
+- **goal**: Build the waiting list dashboard and drawer UX, wire navigation, add progressive enhancement scripts, and update handoff documentation.
+- **status**: ACCEPTED
+- **files changed**:
+  - `templates/base.html`
+  - `static/src/css/app.css`
+  - `apps/waiting_list/forms.py`
+  - `apps/waiting_list/views.py`
+  - `apps/waiting_list/services.py`
+  - `apps/waiting_list/tests.py`
+  - `apps/waiting_list/urls.py`
+  - `templates/waiting_list/dashboard.html`
+  - `templates/waiting_list/entry_form.html`
+  - `templates/waiting_list/entry_detail.html`
+  - `templates/waiting_list/partials/entry_table.html`
+  - `templates/waiting_list/partials/entry_detail_panel.html`
+  - `PROJECT_HANDOFF.md`
+- **checks**:
+  - `make check`: PASSED
+  - `make test apps.waiting_list.tests`: PASSED (18 tests)
+  - `make contracts`: PASSED
+  - Visual verification: Drawer interactions, keyboard shortcuts (Alt+N, Esc), and input masks (Phone, DOB) implemented according to `drafts/waiting_list.html` reference.
+- **deviations**: None.
+- **risks**: High reliance on HTMX for core dashboard functionality (filtering, sorting, status changes); ensure robust HTMX availability in the base template.
+- **docs updated**: yes
+- **slice tasks cleared**: yes
+- **decision needed**: None.

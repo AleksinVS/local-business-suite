@@ -1,0 +1,79 @@
+{
+  "block_id": "context-aware-sidebar-ai-chat",
+  "status": "implemented_pending_owner_acceptance",
+  "created_at": "2026-05-28",
+  "architecture_sources": [
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/planning/active/context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/adr/ADR-0007-settings-center-and-contextual-help.md",
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md"
+  ],
+  "goal": "Move global navigation into a top-left 'Все функции' dropdown, reuse the left sidebar for a dedicated sidebar AI chat session, and expose safe current window context through ui.get_current_context.",
+  "execution_order": [
+    "01-page-context-contract-and-server-resolver",
+    "02-browser-context-bridge",
+    "03-all-functions-menu",
+    "04-sidebar-chat-surface",
+    "05-agent-runtime-context-prompts",
+    "06-e2e-docs-and-handoff"
+  ],
+  "global_constraints": [
+    "Do not introduce a universal event bus/event store in the MVP.",
+    "Use PageContextEnvelope as a server-side current-window snapshot, not as a full prompt payload on every message.",
+    "Bind an immutable context_snapshot_id to each sidebar chat message/request at submit time.",
+    "ui.get_current_context must read the bound snapshot, not the latest window snapshot.",
+    "Expose current UI context through a read-only ui.get_current_context tool.",
+    "Sidebar chat uses a dedicated sidebar session, separate from ordinary full-page chat sessions.",
+    "Sidebar history must be compacted by keeping the last N messages and summarizing older messages.",
+    "AI chat settings must use one shared ai.chat_settings runtime contract for full_page and sidebar surfaces.",
+    "Resolve effective settings through defaults plus surfaces.<surface> overrides.",
+    "Sidebar N is configurable through surfaces.sidebar.recent_message_limit and defaults to 8.",
+    "The sidebar shows only the current sidebar session; compact session switching remains a full chat page concern.",
+    "No UI for viewing or regenerating sidebar_summary is required in the MVP.",
+    "Favorites remain in the header.",
+    "The left sidebar must support pinned and collapsed modes.",
+    "Never trust client-provided object data; resolve selected objects server-side through domain selectors/source adapters.",
+    "Never trust client-provided capabilities; recompute capabilities server-side.",
+    "Do not send raw HTML, secrets or PII from the page to the AI runtime.",
+    "Treat sidebar_summary as sensitive runtime state; do not send it to memory or raw audit logs automatically.",
+    "Keep write tools behind the existing confirmation flow.",
+    "Keep the full chat page available.",
+    "Avoid duplicating chat logic; extract reusable chat surface behavior where practical.",
+    "Preserve existing navigation visibility rules.",
+    "Temporary artifacts belong in .local/.",
+    "Update docs and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "The sidebar chat works as a dedicated sidebar session without breaking the full-page chat.",
+    "Sidebar compaction keeps the configured number of recent messages and stores a safe summary for older messages.",
+    "The selected workorder in the right drawer is visible to the chat as safe context.",
+    "The context used by a chat response remains the snapshot bound to that message even if the user changes cards immediately after submitting.",
+    "The AI uses ui.get_current_context for context-dependent turns.",
+    "Server-side permissions are enforced for resolved page context.",
+    "Expired window context snapshots are cleaned up.",
+    "The menu remains keyboard-accessible.",
+    "The implementation is covered by unit tests and an e2e scenario."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.ai.tests apps.workorders.tests",
+    "npm run test:e2e",
+    "make gen-struct"
+  ],
+  "implementation_notes": [
+    "Create contracts/ai/chat_settings.json and data/contracts/ai/chat_settings.json support with defaults and surfaces.full_page/sidebar overrides.",
+    "Create the Settings Center descriptor ai.contract.chat_settings for the shared AI chat settings contract.",
+    "Add get_chat_settings(surface) helper and use it from both full-page and sidebar chat paths.",
+    "Create AIWindowContextSnapshot model or equivalent versioned storage with cleanup.",
+    "Default surfaces.sidebar.recent_message_limit is 8.",
+    "Pinned/collapsed sidebar state remains browser localStorage, not a server contract setting.",
+    "No sidebar session switcher and no sidebar_summary regeneration UI in the MVP.",
+    "Browser context updates must debounce and send only changed context hashes."
+  ],
+  "deferred_decisions": [
+    "Whether later event platform should store UI events, domain events, or both."
+  ]
+}

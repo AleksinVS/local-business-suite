@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка сервера{% endblock %}
+{% block content %}
+<div class="page-shell" style="padding: 4rem; text-align: center;">
+    <h1>Ошибка сервера</h1>
+    <p>Произошла внутренняя ошибка. Попробуйте позже.</p>
+    <a href="{% url 'core:dashboard' %}">На главную</a>
+</div>
+{% endblock %}

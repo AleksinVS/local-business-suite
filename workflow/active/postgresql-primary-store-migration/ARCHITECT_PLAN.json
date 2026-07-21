@@ -1,0 +1,81 @@
+{
+  "block_id": "postgresql-primary-store-migration",
+  "title": "Миграция основного хранилища на PostgreSQL",
+  "status": "implementation-slice-complete",
+  "adr": "docs/adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md",
+  "architecture_doc": "docs/architecture/POSTGRESQL_PRIMARY_STORE_PLAN.md",
+  "planning_doc": "docs/planning/active/postgresql-primary-store-migration.md",
+  "deployment_runbook": "docs/deployment/POSTGRESQL_MIGRATION.md",
+  "tasks": [
+    {
+      "task_id": "01-sqlite-fork-and-baseline",
+      "packet": "task-packets/01-sqlite-fork-and-baseline.json",
+      "risk": "medium",
+      "summary": "Завершить вынос текущего SQLite-варианта в отдельный fork/ветку и зафиксировать политику сопровождения."
+    },
+    {
+      "task_id": "02-postgresql-settings-and-deployment",
+      "packet": "task-packets/02-postgresql-settings-and-deployment.json",
+      "risk": "high",
+      "summary": "Добавить PostgreSQL-зависимости, настройки, compose/deployment профиль и запрет SQLite в production main."
+    },
+    {
+      "task_id": "03-single-database-schema",
+      "packet": "task-packets/03-single-database-schema.json",
+      "risk": "high",
+      "summary": "Перевести приложения на одну PostgreSQL database, убрать постоянный multi-db router и восстановить внутренние FK."
+    },
+    {
+      "task_id": "04-migration-export-import-validate",
+      "packet": "task-packets/04-migration-export-import-validate.json",
+      "risk": "high",
+      "summary": "Создать management commands для export/import/validate runtime-данных из SQLite в PostgreSQL."
+    },
+    {
+      "task_id": "05-search-queues-and-workers",
+      "packet": "task-packets/05-search-queues-and-workers.json",
+      "risk": "high",
+      "summary": "Перевести production search и очереди с SQLite-файлов на PostgreSQL FTS и PostgreSQL job/outbox tables."
+    },
+    {
+      "task_id": "06-cutover-verification-and-cleanup",
+      "packet": "task-packets/06-cutover-verification-and-cleanup.json",
+      "risk": "high",
+      "summary": "Провести dry-run, production cutover, e2e, cleanup legacy и обновить документацию."
+    }
+  ],
+  "implementation_summary": {
+    "completed": [
+      "PostgreSQL settings and Docker profile",
+      "single default database runtime path",
+      "physical FK restoration migrations for ai, memory and analytics",
+      "SQLite export, PostgreSQL import and validation commands",
+      "PostgreSQL full-text backend through MemoryFullTextIndex",
+      "database queue backend through MemoryExternalConnectorJob"
+    ],
+    "remaining_external_actions": [
+      "create remote SQLite fork from sqlite-legacy-2026-06-15",
+      "run migration dry-run on a copy of real runtime data",
+      "perform production cutover and rollback-window acceptance"
+    ]
+  },
+  "required_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py migrate --plan",
+    "python manage.py test apps.core.tests apps.accounts.tests apps.inventory.tests apps.workorders.tests apps.notifications.tests apps.ai.tests apps.memory.tests apps.analytics.tests apps.settings_center.tests",
+    "python manage.py memory_file_backed_e2e",
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py memory_eval --dry-run",
+    "git diff --check"
+  ],
+  "migration_checks": [
+    "python manage.py postgres_migration_export --dry-run",
+    "python manage.py postgres_migration_import --dry-run",
+    "python manage.py postgres_migration_validate --strict",
+    "python manage.py memory_reindex --corpus all --backend fulltext"
+  ],
+  "adr_required": true,
+  "adr_note": "ADR-0029 принят для PostgreSQL primary store и выноса SQLite-варианта. Дополнительные ADR нужны для RabbitMQ/Celery, Qdrant/OpenSearch или изменения модели хранения файлов знаний."
+}

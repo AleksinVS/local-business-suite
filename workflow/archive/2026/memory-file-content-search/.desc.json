@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: FTS and vector search over memory file contents",
+  "BLOCK_BRIEF.md": "Execution brief for file content search in memory",
+  "ARCHITECT_PLAN.json": "Execution plan for FTS, LanceDB and local embeddings",
+  "EXECUTOR_REPORT.memory-file-content-search.md": "Executor report for implemented file content search",
+  "TASK_ACCEPTANCE.memory-file-content-search.md": "Acceptance report for implemented file content search",
+  "RETROSPECTIVE.md": "Retrospective for next fragment-search stage",
+  "task-packets": "Implementation task packets for file content search"
+}

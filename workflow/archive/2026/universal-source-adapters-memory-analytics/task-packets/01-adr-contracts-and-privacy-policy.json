@@ -1,0 +1,37 @@
+{
+  "task_id": "01-adr-contracts-and-privacy-policy",
+  "title": "Accept ADR and define source policy contracts",
+  "status": "completed",
+  "read_scope": [
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md",
+    "docs/planning/active/universal-source-adapters-memory-analytics.md",
+    "contracts/ai/memory_sources.json",
+    "contracts/analytics/sources.json",
+    "apps/core/json_utils.py",
+    "apps/memory/settings_descriptors.py",
+    "apps/analytics/services.py"
+  ],
+  "write_scope": [
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md",
+    "docs/planning/active/universal-source-adapters-memory-analytics.md",
+    "contracts/ai/memory_sources.json",
+    "contracts/analytics/sources.json",
+    "apps/core/json_utils.py",
+    "apps/core/tests.py",
+    "docs/guides/"
+  ],
+  "requirements": [
+    "Use ADR-0018 after owner approval or update it before implementation.",
+    "Define privacy profiles pii_off, pii_guarded and pii_strict.",
+    "Set global PII default to pii_off.",
+    "Set external source defaults to pii_guarded.",
+    "Ensure pii_off disables PII detection, redaction, blocking and PII audit.",
+    "Keep secret scanning independent and always enabled.",
+    "Add source policy fields without forcing MemorySource and AnalyticsSource into one table."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests"
+  ]
+}

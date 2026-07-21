@@ -1,0 +1,37 @@
+{
+  "task_id": "10-sqlite-legacy-cleanup",
+  "title": "Удаление остатков SQLite-разделения после ADR-0029",
+  "risk": "low",
+  "goal": "Кодовая база не содержит мёртвых артефактов эпохи раздельных SQLite-баз; SQLite-вариант живёт только в ветке sqlite-legacy-2026-06-15.",
+  "findings": [
+    "apps/core/db_routers.py — no-op LocalBusinessDatabaseRouter, не подключён (DATABASE_ROUTERS = [])",
+    "config/settings.py:303-312 — LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES (пути chat/knowledge_meta/analytics_control)",
+    "config/settings.py:492 — константа LOCAL_BUSINESS_DB_SPLIT_ENABLED = False"
+  ],
+  "write_scope": [
+    "apps/core/db_routers.py (удаление)",
+    "config/settings.py",
+    "apps/core/postgresql_migration.py (проверить, использует ли LEGACY_SQLITE_DATABASES; если да — оставить константы локально в модуле миграции)",
+    "apps/core/tests.py",
+    "docs/deployment/POSTGRESQL_MIGRATION.md (если ссылается на удаляемые настройки)"
+  ],
+  "non_goals": [
+    "Не удалять команды export/import/validate миграции с SQLite, пока не пройден production cutover (ADR-0029): инструментам миграции пути к legacy-файлам нужны",
+    "Не трогать dev-режим LOCAL_BUSINESS_DB_BACKEND=sqlite — он остаётся по ADR-0029"
+  ],
+  "implementation_notes": [
+    "Проект в dev-стадии, production-данных нет — миграция данных не требуется, чистка безопасна.",
+    "Если postgresql_migration.py использует LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES — перенести словарь путей внутрь модуля миграции (или его конфиг), убрав из глобальных настроек; если не использует — удалить полностью.",
+    "grep -rn по DB_SPLIT_ENABLED, LEGACY_SQLITE, db_routers — все вхождения обработать; проверить env-переменные LOCAL_BUSINESS_LEGACY_SQLITE_* в .env.example и deployment-доках."
+  ],
+  "tests": [
+    "regression: полный тестовый набор зелёный",
+    "manage.py migrate на чистой базе (sqlite dev и postgresql) проходит"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test",
+    ".venv/bin/python manage.py check",
+    "grep -rn \"DB_SPLIT_ENABLED\\|db_routers\" apps/ config/ --include=*.py — вхождений нет"
+  ],
+  "independent_verification": false
+}

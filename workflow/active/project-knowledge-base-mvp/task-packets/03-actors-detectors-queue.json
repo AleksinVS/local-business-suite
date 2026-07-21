@@ -1,0 +1,38 @@
+{
+  "task_id": "03-actors-detectors-queue",
+  "title": "Акторная модель, детекторы ядра и очередь (T3)",
+  "status": "ready",
+  "objective": "Реализовать батч-запросы к git, акторную атрибуцию изменений, детекторы ядра (human-edited, source-drift, prose-changed, invalid-frontmatter c авто-снятием, contradiction), команду kb queue и правила W6-W9.",
+  "plan_sections": ["§6.2", "§6.4 (кроме детекторов пакета 05)", "§7 (W6-W9)", "§8.5", "§9 T3", "§10 U15-U21, U34-U35, S1"],
+  "write_scope": [
+    "scripts/dev/kb.py",
+    "scripts/dev/tests/test_kb.py",
+    "scripts/dev/tests/fixtures/"
+  ],
+  "requirements": [
+    "Шаг 1. §6.2 данные от git - ровно 3 вызова за sync, как задано в плане; все сравнения времени только в epoch-секундах (git %ct против fromisoformat(ts.replace('Z','+00:00')).timestamp()); сравнение строк дат запрещено.",
+    "Шаг 2. §6.4 атрибуция: атрибуция по коммитам (трейлер KB-Actor) и атрибуция незакоммиченных правок считаются НЕЗАВИСИМО и сливаются по приоритету human > maintenance > agent.",
+    "Шаг 3. §6.4 детекторы ядра, дословно по таблице плана: human-edited (detail - хэши коммитов либо 'uncommitted'; пересчитывается при --full), source-drift (пути covers, суффикс '@коммит' отрезается; detail - путь с максимальным last_touch), prose-changed (тело менялось, relations нет; актор maintenance не взводит), invalid-frontmatter (взведение при битой странице и АВТО-СНЯТИЕ: DELETE FROM reconcile_queue WHERE page_id=? AND reason='invalid-frontmatter' при успешной обработке страницы), contradiction (новое ребро contradicts, отсутствовавшее в запомненном прежнем множестве (type, dst) из пакета 02; detail = dst; при --full не взводится).",
+    "Шаг 4. §8.5 kb queue: вывод открытых позиций (human-edited первыми, далее по enqueued_at) + счётчики (открытые позиции; changed_since_maintenance из meta, обновляется в §6.5); --done - DELETE (без --reason - все причины страницы); --defer - attempts += 1, при attempts >= 3 status='dead'; --dead - список. --done сознательно НЕ валидирует правило замыкания класса A - блокирующую проверку не добавлять (§8.5 п. 3).",
+    "Шаг 5. Правила W6-W9 (§7) в kb lint.",
+    "Шаг 6. Тесты U15-U21, U34-U35 и сценарный S1 (§10): init git-репо во временной папке -> бандл -> коммит с трейлером -> sync (пусто в очереди) -> правка человеком без коммита -> sync --session-start --actor agent -> human-edited в очереди -> коммит без трейлера -> sync -> причина сохраняется -> queue --done -> пусто.",
+    "ЗАПРЕЩЕНО: детекторы dup-candidate, rename-candidate, desc-mismatch (пакет 05); git-хуки; глобальные сканы git-истории вне батча §6.2."
+  ],
+  "acceptance_checks": [
+    "U15-U21 зелёные (в т.ч. U16: правка агента без --session-start не считается человеческой; U18: актор maintenance не взводит prose-changed; U20: две причины одной страницы сосуществуют; U21: --defer x3 -> dead).",
+    "U34: новое ребро contradicts даёт (src, 'contradiction', detail=dst) в очереди; повторный sync без изменений второй раз не взводит.",
+    "U35: после починки битой страницы sync автоматически снимает её invalid-frontmatter.",
+    "S1 зелёный целиком.",
+    "Временные git-репозитории тестов создаются во временных папках pytest, не в рабочем дереве проекта."
+  ],
+  "verification_commands": [
+    "python -m pytest scripts/dev/tests -q",
+    "python scripts/dev/kb.py sync --actor agent --session-start",
+    "python scripts/dev/kb.py queue"
+  ],
+  "notes": [
+    "Рискованный по логике пакет: независимая проверка тестов субагентом по AGENTS.md (субагент только запускает проверки и фиксирует результат).",
+    "Правило замыкания класса A (§7.5 проектного документа) - протокольное: причины human-edited/desc-mismatch/source-drift гасятся только содержательной сверкой с обновлением timestamp страницы; код это не форсирует.",
+    "detail в очереди - обычная колонка reconcile_queue (DDL §4, создана пакетом 02)."
+  ]
+}

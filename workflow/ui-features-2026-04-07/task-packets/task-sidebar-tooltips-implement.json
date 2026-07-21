@@ -1,0 +1,37 @@
+{
+  "block_id": "ui-features-2026-04-07",
+  "slice_id": "slice-sidebar-tooltips",
+  "task_id": "task-sidebar-tooltips-implement",
+  "goal": "Implement CSS-driven tooltips for sidebar links, visible when the sidebar is collapsed.",
+  "risk_class": "R1",
+  "read_files": [
+    "templates/base.html",
+    "static/src/css/app.css"
+  ],
+  "write_files": [
+    "templates/base.html",
+    "static/src/css/app.css"
+  ],
+  "forbidden_moves": [],
+  "required_docs": [],
+  "required_checks": [
+    "Verify CSS specificity doesn't break existing sidebar styles"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Updated templates/base.html with data-tooltip attributes",
+    "Updated static/src/css/app.css with tooltip styles"
+  ],
+  "escalation_path": "CSS-only tooltips cannot be implemented without additional JS.",
+  "source_plan": "workflow/ui-features-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+  "runtime_binding": null,
+  "development_method": null,
+  "method_phase": null,
+  "method_step_id": null,
+  "review_scope": null,
+  "iteration": null,
+  "contract_scope": null,
+  "rework_of": null,
+  "artifact_expectations": []
+}

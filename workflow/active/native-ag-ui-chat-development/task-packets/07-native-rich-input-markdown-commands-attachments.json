@@ -1,0 +1,53 @@
+{
+  "task_id": "07-native-rich-input-markdown-commands-attachments",
+  "title": "Native rich input parity: Markdown, slash commands and attachments",
+  "type": "implementation",
+  "objective": "Довести поле ввода и отображение сообщений native-чата до возможностей старой полной страницы.",
+  "read_scope": [
+    "templates/ai/chat_detail.html",
+    "static/src/js/ai_chat.js",
+    "apps/ai/commands.py",
+    "apps/ai/models.py",
+    "apps/ai/views.py",
+    "apps/ai/ui_runtime/config.py",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css"
+  ],
+  "write_scope": [
+    "apps/ai/ui_runtime/config.py",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/tests.py",
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md"
+  ],
+  "instructions": [
+    "Добавить безопасное Markdown-отображение assistant messages. Если используется новая JS-библиотека, зависимость и security trade-off должны быть согласованы; предпочтительно сначала использовать server-side sanitized HTML или ограниченный local renderer.",
+    "Передать в native config predefined_commands и custom_commands в том же безопасном виде, что старая страница.",
+    "Добавить меню команд и автодополнение /команд без раскрытия лишних пользовательских данных.",
+    "Поддержать подстановку slash-команд в prompt и совместимость с существующим resolve_command/resolve_custom_command на backend.",
+    "Поддержать вложения через существующую модель ChatAttachment и текущие ограничения upload. Если AG-UI JSON stream не подходит для multipart, добавить отдельный same-origin upload endpoint с привязкой к ChatMessage/ChatSession и последующим run.",
+    "Показывать preview вложений до отправки и отображать вложения в истории после сохранения.",
+    "Сохранить redaction и не передавать raw file content в browser state сверх уже разрешенного URL/metadata."
+  ],
+  "acceptance": [
+    "Markdown assistant response отображается безопасно и не исполняет script/event handlers.",
+    "Команды доступны через меню и autocomplete; выбранная команда формирует корректный prompt.",
+    "Custom commands пользователя не видны другим пользователям.",
+    "Пользователь может прикрепить файл в native full-page чате; ChatAttachment создается и отображается в истории.",
+    "Файлы проходят существующие ограничения размера/типа и не обходят Django auth."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native rich chat input\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "non_goals": [
+    "Не добавлять cloud OCR/LLM обработку вложений.",
+    "Не хранить raw tool payload в браузере.",
+    "Не внедрять полноценный frontend пакетный менеджер для native-чата без отдельного решения."
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для Settings Center",
+  "01-settings-center-foundation.json": "Базовый app, registry, dashboard, audit skeleton",
+  "02-runtime-contract-settings.json": "Runtime contract descriptors, validation, diff и apply",
+  "03-user-management-ad-link.json": "Локальное управление пользователями и AD identity link",
+  "04-memory-acl-inheritance.json": "Наследование ACL файлового источника для памяти",
+  "05-contextual-help-minichat.json": "Tooltip/help topics и floating AI mini-chat",
+  "06-env-status-proposals.json": ".env status, validation и proposal workflow"
+}

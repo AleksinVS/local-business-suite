@@ -1,0 +1,36 @@
+{
+  "task_id": "04-runtime-prompt-and-shortcut-removal",
+  "status": "implemented",
+  "title": "Runtime prompt cleanup and hard-coded shortcut removal",
+  "goal": "Make the agent rely on module skills for module workflows and remove the temporary workorder-specific direct-open shortcut.",
+  "read_scope": [
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/graph.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/tests/test_normalization.py",
+    "apps/ai/skills_service.py"
+  ],
+  "write_scope": [
+    "services/agent_runtime/prompting.py",
+    "services/agent_runtime/graph.py",
+    "services/agent_runtime/tests/test_normalization.py"
+  ],
+  "requirements": [
+    "Keep general UI context and ui.open_right_panel guidance in the system prompt.",
+    "Move workorder-specific examples out of the general prompt and into the workorders skill.",
+    "Remove direct workorder opening helper logic from services.agent_runtime.graph.",
+    "Ensure run_agent and stream_agent both support activate_skill.",
+    "Add tests that the prompt encourages using skills for module workflows.",
+    "Add regression tests proving the temporary workorder shortcut functions are gone or unused."
+  ],
+  "acceptance": [
+    "Runtime graph no longer contains workorder-specific direct-open shortcut logic.",
+    "System prompt remains domain-neutral for object opening.",
+    "Skill activation tests pass for stream and non-stream paths.",
+    "The agent still has access to ui.get_current_context and ui.open_right_panel."
+  ],
+  "verification": [
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    ".venv/bin/python manage.py test apps.ai.tests"
+  ]
+}

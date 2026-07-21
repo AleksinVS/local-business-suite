@@ -1,0 +1,56 @@
+{
+  "block_id": "memory-hybrid-knowledge-v05-alignment",
+  "status": "ready",
+  "created_at": "2026-07-03",
+  "architecture_sources": [
+    "docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md",
+    "docs/architecture/hybrid-knowledge-architecture-v0.5.md",
+    "docs/planning/active/memory-hybrid-knowledge-v05-alignment.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "goal": "Привести ядро памяти к архитектуре hybrid-knowledge v0.5: файл знания как канон, прямая запись + pull-reconciler, ревью через git, рёбра из frontmatter вместо LLM-extraction, вынос файлового контура, один профиль ранжирования, заглушки и debt-артефакты для этапов data store 5а/5б.",
+  "execution_order": [
+    "01-file-canon-and-reconciler",
+    "02-direct-write-and-queue-collapse",
+    "03-git-review-and-candidates",
+    "04-filehub-extraction-and-freeze",
+    "05-graph-contour-removal-and-edge-vocabulary",
+    "06-single-ranking-profile",
+    "07-data-store-debt-stubs",
+    "08-docs-tests-acceptance"
+  ],
+  "parallelizable": [
+    ["04-filehub-extraction-and-freeze", "05-graph-contour-removal-and-edge-vocabulary", "06-single-ranking-profile"]
+  ],
+  "global_constraints": [
+    "Не реализовывать data store (этапы 5а/5б) в этом блоке - только заглушки в коде и debt-артефакты.",
+    "Не ослаблять secret handles, trust-гейты, sensitivity/scope_tokens фильтрацию и PII-контур.",
+    "Не менять бизнес-права портала и AG-UI контур.",
+    "Пользовательские данные не теряются: таблицы выводятся только после миграции их содержимого в файлы канона или архивные дампы в data/.",
+    "Целевая среда - и Linux, и Windows в зависимости от условий внедрения; кроссплатформенная межпроцессная блокировка записи вводится до отключения очереди записи и должна реально работать на обеих платформах.",
+    "Блок исполняется после cutover миграции на PostgreSQL (ADR-0029): изменения схемы памяти не должны пересекаться с export/import/validate-манифестами.",
+    "Единая таблица-очередь строится по паттерну database queue backend из ADR-0029 (locked_by/locked_until, attempt_count, next_attempt_at, idempotency_key, leasing skip_locked); второй параллельный механизм очереди рядом с MemoryExternalConnectorJob не создается.",
+    "Frontmatter не содержит состояния производных слоев (index_status, версии индексов, собственные хэши) - инвариант N9 концепта.",
+    "Молчаливое понижение sensitivity ручной правкой не допускается валидатором reconciler.",
+    "Runtime-данные в data/, временные агентные артефакты в .local/.",
+    "Каждая задача сопровождается unit-тестами; блок завершается e2e acceptance-сценариями из проектного плана.",
+    "Для рискованных задач (01, 02, 04) проверки выполняет независимый проверочный субагент по правилам AGENTS.md."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_verify_knowledge_files",
+    "python manage.py memory_eval --dry-run",
+    "python manage.py memory_file_backed_e2e",
+    "python manage.py memory_file_content_search_e2e"
+  ],
+  "notes": [
+    "Порядок 01 -> 02 -> 03 строгий: канон и блокировка до прямой записи, прямая запись до git-ревью.",
+    "Пакеты 04, 05, 06 независимы друг от друга и могут идти параллельно после 03.",
+    "Пакет 07 создает заглушки data store и сверяет debt-записи backlog; выполняется до финальной приемки, чтобы DEBT-маркеры попали в acceptance.",
+    "memory_reconcile --dry-run добавляется в перечень проверок AGENTS.md в пакете 08 после появления команды в пакете 01.",
+    "Экспорт данных graph-таблиц перед удалением - в data/memory/graph_export/ (runtime-данные), а не в .local/.",
+    "PostgreSQL-срез ADR-0029 уже добавил MemoryFullTextIndex (FTS-проекция) и MemoryExternalConnectorJob (database queue backend) - обе модели относятся к производному слою и сохраняются; таблица рёбер и очередь блока живут в основной БД."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Business Facts",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "description", "dimensions", "measures", "sensitivity"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "description": { "type": "string" },
+      "dimensions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "measures": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "sensitivity": { "type": "string" }
+    }
+  }
+}

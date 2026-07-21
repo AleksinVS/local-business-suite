@@ -1,0 +1,75 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-contracts-foundation",
+  "task_id": "task-memory-contracts",
+  "goal": "Implement memory contracts, schemas, settings loading, and validators.",
+  "risk_class": "R2",
+  "read_files": [
+    "config/settings.py",
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "contracts/ai/registry.json",
+    "contracts/schemas/chat_agent_registry.schema.json",
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_files": [
+    "contracts/ai/memory_sources.json",
+    "contracts/ai/memory_profiles.json",
+    "contracts/ai/memory_routing.json",
+    "contracts/ai/.desc.json",
+    "contracts/schemas/memory_sources.schema.json",
+    "contracts/schemas/memory_profiles.schema.json",
+    "contracts/schemas/memory_routing.schema.json",
+    "contracts/schemas/.desc.json",
+    "config/settings.py",
+    "apps/core/json_utils.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "apps/core/tests.py",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "forbidden_moves": [
+    "Do not implement apps.memory in this task.",
+    "Do not add vector, graph, Presidio, Kuzu, LanceDB, or Qdrant dependencies in this task.",
+    "Do not modify agent runtime or AI tool declarations in this task.",
+    "Do not commit real patient data, secrets, generated indexes, or runtime memory state."
+  ],
+  "required_docs": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/planning/active/ai-memory-service.md"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.core.tests"
+  ],
+  "mandatory_tests": [
+    "Validation tests for invalid memory source/profile/routing payloads"
+  ],
+  "deliverables": [
+    "Memory contract JSON files",
+    "Memory JSON Schemas",
+    "Settings and validator integration",
+    "Updated PROJECT_STRUCTURE.yaml",
+    "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-contracts.md"
+  ],
+  "escalation_path": [
+    "A contract field changes an accepted ADR decision",
+    "Runtime contract copy behavior needs a new storage pattern",
+    "Tests require broad unrelated changes"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Keep default contracts synthetic and safe.",
+    "Run make gen-struct after adding files.",
+    "Executor report must state exact checks run and any skipped checks."
+  ]
+}

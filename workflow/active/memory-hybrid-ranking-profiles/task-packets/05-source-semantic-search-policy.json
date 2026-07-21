@@ -1,0 +1,38 @@
+{
+  "task_id": "05-source-semantic-search-policy",
+  "title": "Implement source semantic search policy, reindex and deletion rules",
+  "status": "ready",
+  "read_scope": [
+    "docs/adr/ADR-0015-file-content-fts-vector-search.md",
+    "docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md",
+    "docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md",
+    "apps/memory/models.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/management/commands/memory_reindex.py"
+  ],
+  "write_scope": [
+    "apps/memory/",
+    "apps/ai/",
+    "services/agent_runtime/",
+    "contracts/ai/",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Enable LanceDB indexing and retrieval for source_data in explicit source modes.",
+    "Do not add a new external search API and do not use cloud embeddings.",
+    "Index all sensitivity levels unless a secret is detected.",
+    "If a secret is detected, stop indexing that document, delete any previous FTS/vector rows, create secret_blocked blocker issue for admin review, and continue with the next document.",
+    "If PII or similar sensitive data is detected without a secret, index the document and create an admin audit issue without storing raw PII in issue metadata.",
+    "Use document-level vectors temporarily and record this limitation in trace/docs.",
+    "Reindex only changed documents unless --force is passed; changes include content_hash, parser version, embedding version, ACL/scope fingerprint, sensitivity, trust status and index profile.",
+    "On file deletion or source object removal, mark MemorySearchDocument deleted and delete FTS/LanceDB rows by document_id.",
+    "On ACL or sensitivity changes, refresh vector payload through delete+upsert by document_id."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e"
+  ]
+}

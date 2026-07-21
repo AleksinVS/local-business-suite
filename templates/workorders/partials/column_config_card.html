@@ -1,0 +1,26 @@
+<div class="column-config-card" id="column-config-{{ column_config.pk }}">
+  <div class="column-head">
+    <div class="column-head-title">
+      <h2>{{ column_config.title }}</h2>
+      <div class="column-stats">
+        <span class="count">{{ column_count }}</span>
+        {% if column_config.wip_limit %}
+          <span class="wip-limit">/ {{ column_config.wip_limit }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="column-head-actions">
+      <button
+        type="button"
+        class="icon-button"
+        title="Переименовать"
+        aria-label="Переименовать"
+        hx-get="{% url 'workorders:column_edit' column_config.pk %}"
+        hx-target="#column-config-{{ column_config.pk }}"
+        hx-swap="outerHTML"
+      >
+        &#9998;
+      </button>
+    </div>
+  </div>
+</div>

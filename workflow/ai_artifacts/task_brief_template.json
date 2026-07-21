@@ -1,0 +1,11 @@
+{
+  "id": "TASK-0001",
+  "title": "Describe the planned change",
+  "status": "draft",
+  "requested_by": "System",
+  "target_modules": [],
+  "objective": "Short explanation of what will change and why.",
+  "constraints": [],
+  "deliverables": [],
+  "acceptance_checks": []
+}

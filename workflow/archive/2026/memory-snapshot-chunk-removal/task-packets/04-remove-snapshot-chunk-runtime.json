@@ -1,0 +1,39 @@
+{
+  "task_id": "04-remove-snapshot-chunk-runtime",
+  "title": "Удалить активное использование MemorySnapshot и MemoryChunk",
+  "status": "completed",
+  "objective": "Убрать MemorySnapshot и MemoryChunk из обычного runtime-кода, админки, тестов и документации MVP.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/admin.py",
+    "apps/memory/policies.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/selectors.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "Удалить или изолировать импорты MemorySnapshot и MemoryChunk из обычного runtime-кода.",
+    "Удалить MemorySnapshotAdmin и MemoryChunkAdmin либо заменить их на admin для MemorySearchDocument.",
+    "Удалить тестовые фабрики, которые создают MemorySnapshot/MemoryChunk для обычного пути памяти.",
+    "Если таблицы удаляются миграцией, добавить проверку или инструкцию миграции данных.",
+    "Если старые таблицы временно остаются только для миграции, обычный код не должен от них зависеть.",
+    "MemoryGraphFact нужно отвязать от MemoryChunk/MemorySnapshot или исключить из активного пути до отдельной стратегии графа."
+  ],
+  "acceptance_checks": [
+    "rg по runtime-коду не показывает активных импортов MemorySnapshot/MemoryChunk вне миграций или команды переноса.",
+    "Admin не показывает MemorySnapshot/MemoryChunk как рабочие разделы MVP.",
+    "makemigrations --check --dry-run проходит после миграций.",
+    "manage.py check проходит."
+  ],
+  "verification_commands": [
+    "rg -n \"MemorySnapshot|MemoryChunk\" apps docs workflow -g '!apps/memory/migrations/*'",
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.memory.tests"
+  ]
+}

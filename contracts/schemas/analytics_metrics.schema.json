@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Metrics",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "fact_type", "aggregation", "measure", "window", "refresh_mode", "scope_tokens", "sensitivity"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "fact_type": { "type": "string", "minLength": 1 },
+      "aggregation": { "enum": ["count", "sum", "avg", "min", "max"] },
+      "measure": { "type": "string", "minLength": 1 },
+      "window": { "type": "string", "minLength": 1 },
+      "refresh_mode": { "enum": ["scheduled", "event", "manual"] },
+      "scope_tokens": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "sensitivity": { "type": "string" }
+    }
+  }
+}

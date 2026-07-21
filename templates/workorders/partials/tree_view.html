@@ -1,0 +1,39 @@
+<section
+  class="workorder-tree-shell"
+  id="workorders-tree"
+  aria-label="Дерево заявок"
+  data-tree-key="workorders-tree-{{ current_board.slug|default:'default' }}"
+>
+  <div class="workorder-tree-summary">
+    <div>
+      <strong>{{ workorder_tree.total_count }}</strong>
+      <span>заявок в выбранном срезе</span>
+    </div>
+    <div>
+      <strong>{{ workorder_tree.active_count }}</strong>
+      <span>активных</span>
+    </div>
+  </div>
+
+  {% if workorder_tree.is_empty %}
+    <div class="workorder-tree-empty">
+      <h3>Нет заявок по выбранным условиям</h3>
+      <p>Измените фильтры или создайте новую заявку.</p>
+    </div>
+  {% else %}
+    <div class="workorder-tree-grid" role="treegrid" aria-label="Заявки по структуре организации">
+      <div class="workorder-tree-head" role="row">
+        <div role="columnheader">Структура</div>
+        <div role="columnheader">Статусы</div>
+        <div role="columnheader">Исполнитель</div>
+        <div role="columnheader">Обновлено</div>
+        <div role="columnheader">Действия</div>
+      </div>
+      <div class="workorder-tree-body">
+        {% for row in workorder_tree.rows %}
+          {% include "workorders/partials/tree_row.html" with row=row %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</section>

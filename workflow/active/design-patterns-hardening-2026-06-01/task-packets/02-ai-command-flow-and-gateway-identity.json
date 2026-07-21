@@ -1,0 +1,32 @@
+{
+  "task_id": "02-ai-command-flow-and-gateway-identity",
+  "title": "AI-команды, подтверждение, audit и service identity",
+  "goal": "Сделать AI write tools строгими командами с проверкой пользователя, сессии, подтверждения и audit trail.",
+  "write_scope": [
+    "apps/ai/tooling.py",
+    "apps/ai/views.py",
+    "apps/ai/runtime_client.py",
+    "apps/ai/services.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/gateway_client.py",
+    "services/agent_runtime/mcp_server.py",
+    "apps/ai/tests.py",
+    "services/agent_runtime/tests/"
+  ],
+  "non_goals": [
+    "Не публиковать MCP наружу",
+    "Не менять LLM provider configuration",
+    "Не добавлять новый внешний auth provider"
+  ],
+  "implementation_notes": [
+    "Каждый write tool должен иметь command-like audit payload: tool_code, actor, session, payload summary, request_id, conversation_id, confirmation state.",
+    "Gateway не должен считать user_id из тела запроса достаточным основанием для прав.",
+    "Session ownership должна проверяться обязательно для tool execution, если действие связано с chat session.",
+    "Runtime logs должны писать request_id, conversation_id, model_id, prompt hash/length и error class, но не raw prompt и не полный actor context."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    ".venv/bin/python manage.py validate_architecture_contracts"
+  ]
+}

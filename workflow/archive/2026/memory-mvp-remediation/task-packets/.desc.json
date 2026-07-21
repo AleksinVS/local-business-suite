@@ -1,0 +1,7 @@
+{
+  ".": "Task packets для исправления разрывов MVP-памяти",
+  "01-remember-queues-request.json": "Вернуть memory.remember к постановке задачи в очередь",
+  "02-processed-memory-is-searchable.json": "Сделать обработанную память доступной через memory.search",
+  "03-remove-memory-belief-from-mvp.json": "Вывести MemoryBelief из MVP",
+  "04-contracts-docs-tests-acceptance.json": "Обновить контракты, документацию, тесты и приемку"
+}

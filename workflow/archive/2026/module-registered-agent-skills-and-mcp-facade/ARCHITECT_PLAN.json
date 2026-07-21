@@ -1,0 +1,76 @@
+{
+  "block_id": "module-registered-agent-skills-and-mcp-facade",
+    "status": "implemented_mvp",
+  "created_at": "2026-05-28",
+  "architecture_sources": [
+    "docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md",
+    "docs/planning/active/module-registered-agent-skills-and-mcp-facade.md",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md"
+  ],
+  "goal": "Move module-specific AI workflows from the shared agent runtime into module-registered skills and prepare the existing MCP server to expose tools, resources and skills from shared registries.",
+  "execution_order": [
+    "01-core-agent-skill-registry",
+    "02-ai-skills-service-integration",
+    "03-module-skills-workorders-waiting-list",
+    "04-runtime-prompt-and-shortcut-removal",
+    "05-registry-driven-mcp-facade",
+    "06-admin-skill-creator-and-runtime-skill-authoring",
+    "07-e2e-docs-and-acceptance"
+  ],
+  "global_constraints": [
+    "Do not make MCP the internal transport for sidebar chat in this MVP.",
+    "Do not introduce multi-agent handoffs for module object opening.",
+    "Do not allow arbitrary end-user skill upload or selection.",
+    "Keep business actions behind Django AI gateway, policies, confirmation and audit.",
+    "Keep module-specific object resolution out of services.agent_runtime.graph.py.",
+    "Skills describe workflow; tools execute actions.",
+    "Module skills must be registered by module code or trusted contract files.",
+    "Runtime contract skills must be instruction-only in the MVP.",
+    "Runtime contract skill writes require ai.manage_skills, atomic file writes and audit.",
+    "The ai.skill_creator skill may draft and validate skills, but file writes must go through an audited tool or management command.",
+    "MCP resources must be read-only and safe to expose to authenticated clients.",
+    "Unknown skill, tool, provider or capability must fail closed.",
+    "Temporary artifacts belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "The skill catalog includes workorders and waiting-list module skills.",
+    "The agent can activate a module skill and open a visible workorder in the right drawer.",
+    "The agent can activate a module skill and open a visible waiting-list entry in the right drawer.",
+    "The temporary direct workorder open shortcut is removed from the runtime graph.",
+    "An administrator with ai.manage_skills can create or update an instruction-only runtime skill from a description.",
+    "A user without ai.manage_skills cannot create or update runtime skills.",
+    "The existing MCP endpoint remains healthy.",
+    "MCP resources expose safe skills, tools and module capability descriptions.",
+    "Existing tool policy, confirmation and audit behavior is preserved.",
+    "E2E tests cover the sidebar chat object opening flow."
+  ],
+  "verification_commands": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.core.tests apps.ai.tests apps.workorders.tests apps.waiting_list.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run test:e2e -- --project=chromium --grep \"sidebar\"",
+    "make gen-struct"
+  ],
+  "implementation_notes": [
+    "Follow the provider registry pattern already used by source adapters and right panel providers.",
+    "Prefer module-owned ai_skills.py files and AppConfig.ready() registration.",
+    "Keep SKILL.md bodies concise and workflow-oriented: when to use, when not to use, tool sequence, ambiguity rules and expected response.",
+    "Do not duplicate full tool schemas inside skill bodies.",
+    "MCP refactor should be incremental: keep existing tools working while adding registry-backed resources.",
+    "If typed MCP tool signatures cannot be generated safely in this slice, keep tool wrappers and add registry-backed resources first.",
+    "Implement ai.skill_creator as a trusted instruction-only skill that guides administrators and calls ai.skills.create_or_update only when permissions allow."
+  ],
+  "deferred_decisions": [
+    "Whether to add ui.resolve_open_target as a dedicated tool and resolver registry.",
+    "Whether MCP prompts are needed for external clients.",
+    "How to authenticate and deploy external MCP access outside the local trusted runtime.",
+    "Whether to version-pin runtime contract skills in data/contracts/ai.",
+    "Whether to allow scripts/assets in runtime contract skills after a separate security review.",
+    "Whether Settings Center should manage skill enable/disable history in a later UI slice.",
+    "Whether specialist agents are justified by future evals."
+  ]
+}

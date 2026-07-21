@@ -1,0 +1,10 @@
+{
+  ".": "Workflow: версионируемая основа AI UI протоколов",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки общей основы AI UI протоколов",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для общей основы AI UI протоколов",
+  "EXECUTOR_REPORT.documentation.md": "Отчет исполнения документационного среза общей основы AI UI протоколов",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка документационного среза общей основы AI UI протоколов",
+  "EXECUTOR_REPORT.implementation.md": "Отчет исполнения первого реализационного среза общей основы AI UI протоколов",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка первого реализационного среза общей основы AI UI протоколов",
+  "task-packets": "Task packets для ADR, общего Django runtime, protocol layer, CopilotKit refactor, native UI и e2e"
+}

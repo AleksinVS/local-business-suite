@@ -1,0 +1,35 @@
+{
+  "task_id": "03-remove-memory-belief-from-mvp",
+  "title": "Вывести MemoryBelief из MVP",
+  "status": "completed",
+  "objective": "Убрать MemoryBelief из MVP-схемы и обычного пути или явно оформить его как legacy/future объект с безопасной миграцией.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/0004_memorybelief_memoryclaim_and_more.py",
+    "apps/memory/admin.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "contracts/ai/memory_claims_policy.json",
+    "contracts/schemas/memory_claims_policy.schema.json",
+    "docs/architecture/MEMORY_MVP_REMEDIATION_PLAN.md",
+    "docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md"
+  ],
+  "requirements": [
+    "Если миграция 0004 еще не опубликована, убрать MemoryBelief из модели и миграции.",
+    "Убрать admin-регистрацию MemoryBelief из MVP.",
+    "Убрать create_belief_from_claim и compile_belief_digest из обычных сервисов MVP.",
+    "Тесты MVP не должны создавать MemoryBelief.",
+    "Если удаление модели невозможно из-за уже примененной миграции в средах, создать отдельный документированный план безопасной миграции и гарантировать, что MemoryBelief не импортируется обычным путем."
+  ],
+  "acceptance_checks": [
+    "makemigrations --check --dry-run не предлагает изменения.",
+    "Обычный remember path не создает MemoryClaim и MemoryBelief.",
+    "memory.search не импортирует и не возвращает MemoryBelief.",
+    "Документация говорит, что MemoryBelief не входит в MVP."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.memory.tests"
+  ]
+}

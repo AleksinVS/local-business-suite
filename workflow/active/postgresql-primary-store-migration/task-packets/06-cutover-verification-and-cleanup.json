@@ -1,0 +1,35 @@
+{
+  "task_id": "06-cutover-verification-and-cleanup",
+  "title": "Cutover, проверки и cleanup",
+  "goal": "Провести dry-run и production cutover на PostgreSQL, затем убрать legacy multi-db runtime из main.",
+  "write_scope": [
+    "docs/deployment/POSTGRESQL_MIGRATION.md",
+    "README.md",
+    "docs/planning/backlog.md",
+    "workflow/active/postgresql-primary-store-migration/",
+    "PROJECT_STRUCTURE.yaml",
+    ".desc.json files",
+    "legacy code cleanup after acceptance"
+  ],
+  "non_goals": [
+    "Не удалять backup packages",
+    "Не архивировать SQLite-fork",
+    "Не делать rollback после открытия traffic без delta-reconciliation"
+  ],
+  "implementation_notes": [
+    "Dry-run выполнить на копии runtime-данных.",
+    "Production cutover проводить с freeze window.",
+    "После cutover сохранить manifest, validation report и список команд в workflow report.",
+    "Обновить README и deployment docs: PostgreSQL является production target.",
+    "После приемки перенести workflow в archive и убрать задачу из active backlog."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.core.tests apps.accounts.tests apps.inventory.tests apps.workorders.tests apps.notifications.tests apps.ai.tests apps.memory.tests apps.analytics.tests apps.settings_center.tests",
+    "python manage.py memory_file_backed_e2e",
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py memory_eval --dry-run",
+    "git diff --check"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "block_id": "workorder-tree-view",
+  "status": "implemented_mvp",
+  "created_at": "2026-05-30",
+  "architecture_sources": [
+    "docs/adr/ADR-0023-workorder-tree-view-and-customer-branch-access.md",
+    "docs/planning/active/workorder-tree-view.md"
+  ],
+  "goal": "Add a tree view mode for workorders on the existing board page while preserving board styles, right drawer workflows and server-side access control.",
+  "execution_order": [
+    "00-design-and-planning-docs",
+    "01-access-scope-and-form-filtering",
+    "02-tree-projection-and-view-mode",
+    "03-tree-ui-and-right-drawer",
+    "04-tests-docs-and-acceptance"
+  ],
+  "global_constraints": [
+    "Do not build a separate workorder data access path for the tree.",
+    "Tree mode must use the same visible_workorders_queryset foundation as board mode.",
+    "Customer branch visibility must be enforced server-side, not only hidden in templates.",
+    "Creation and editing must continue to use the right drawer partials.",
+    "Preserve current board visual language: toolbar, work-card, badge, chip and drawer styles.",
+    "Do not introduce an Organization model in this slice.",
+    "Temporary scripts, logs and screenshots belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "ux_principles": [
+    "Use a segmented view switcher instead of separate navigation.",
+    "Use a treegrid-like layout because each row needs hierarchy plus metadata.",
+    "Keep detail work in the right drawer; do not nest full details under each row.",
+    "Auto-expand ancestors when search returns matching workorders.",
+    "Use visible actions for create/open; do not rely only on hover actions.",
+    "Make keyboard focus and selected workorder visually distinct."
+  ],
+  "cross_cutting_acceptance": [
+    "Board mode behavior remains unchanged.",
+    "Tree mode shows organization, departments, devices and workorders.",
+    "Workorders without device are shown under a stable fallback node.",
+    "Customer cannot see, open, edit or create outside their department branch.",
+    "Filters and search work in both modes.",
+    "Right drawer detail/create/edit flows work from tree mode.",
+    "Accessibility smoke test covers expand/collapse and row opening from keyboard."
+  ],
+  "verification_commands": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    "E2E_BASE_URL=http://127.0.0.1:8000 E2E_USERNAME=chief_manager E2E_PASSWORD=... npm run test:e2e -- --project=chromium --grep \"workorder tree\"",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "implementation_results": [
+    "Added department_branch access scope for workorders.",
+    "Changed customer default and runtime role rules to department_branch.",
+    "Restricted workorder department and device form fields to the user's visible branch.",
+    "Added server-side workorder tree projection in apps/workorders/tree.py.",
+    "Added board/tree view switching on the existing workorders page.",
+    "Preserved right drawer detail/create/edit flows from tree mode.",
+    "Added tree CSS and keyboard expand/collapse JavaScript.",
+    "Added unit/view tests and a skipped-when-unconfigured Playwright e2e spec."
+  ],
+  "deferred_decisions": [
+    "Whether to add a first-class Organization model.",
+    "Whether to add Department.kind for explicit labels such as organization, subdivision and ward.",
+    "Whether tree nodes should support drag-and-drop or batch operations.",
+    "Whether very large trees need server-side lazy loading or client-side virtualization."
+  ]
+}

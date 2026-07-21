@@ -1,0 +1,32 @@
+{
+  "task_id": "03-claim-belief-model",
+  "title": "Add claim/belief governance model",
+  "status": "completed",
+  "objective": "Introduce atomic claims, governed beliefs, evidence provenance and review statuses above chunks and graph facts.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/admin.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/memory/migrations/",
+    "docs/architecture/MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md"
+  ],
+  "requirements": [
+    "Add MemoryClaim with type, payload/text, evidence refs, confidence, validity, scope, sensitivity and lifecycle status.",
+    "Add MemoryBelief with support claims, contradicting claims, status and trusted context eligibility.",
+    "Support candidate, accepted, rejected, contested, superseded and expired states.",
+    "Rejected claims must remain as negative examples.",
+    "Organization accepted beliefs require review metadata."
+  ],
+  "acceptance_checks": [
+    "Claims can be created from accepted personal/org memory items.",
+    "Candidate claims do not become trusted context.",
+    "Accepted belief can reference supporting claims.",
+    "Contested belief can reference contradicting claims.",
+    "Admin exposes claims and beliefs without secret values."
+  ],
+  "verification_commands": [
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

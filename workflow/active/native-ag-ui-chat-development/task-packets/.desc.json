@@ -1,0 +1,11 @@
+{
+  ".": "Task packets для разработки native AG-UI чата и доведения UX до старого чата",
+  "01-documentation-and-version-check.json": "Документация и проверка версии AG-UI для первого native-среза",
+  "02-native-mount-and-session-lifecycle.json": "Mount, asset freshness и lifecycle нового native-чата",
+  "03-ag-ui-client-reducer.json": "AG-UI parser/reducer для native-чата",
+  "04-ui-command-page-context-and-e2e.json": "UI-команды, page context bridge и e2e первого native-среза",
+  "05-sidebar-history-model-and-clear-parity.json": "Parity старого sidebar: история, модель, очистка, полный чат и состояния",
+  "06-native-full-page-session-management.json": "Parity старой полной страницы: список сессий, названия, удаление и маршруты",
+  "07-native-rich-input-markdown-commands-attachments.json": "Rich input parity: Markdown, команды и вложения",
+  "08-native-ux-parity-e2e-acceptance.json": "E2E, регрессия и приемка UX parity native-чата"
+}

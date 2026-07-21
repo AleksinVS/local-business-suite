@@ -1,0 +1,112 @@
+<div
+  class="workorder-tree-row tree-row-{{ row.node_type }} {% if row.node_type == 'workorder' %}tree-workorder-row{% endif %}"
+  role="row"
+  tabindex="{% if forloop.first %}0{% else %}-1{% endif %}"
+  style="--tree-level: {{ row.level }};"
+  data-node-id="{{ row.id }}"
+  data-parent-id="{{ row.parent_id }}"
+  data-has-children="{% if row.has_children %}true{% else %}false{% endif %}"
+  data-node-type="{{ row.node_type }}"
+  {% if row.node_type == "workorder" %}data-status="{{ row.workorder.status }}"{% endif %}
+  {% if row.has_children %}aria-expanded="true"{% endif %}
+  aria-level="{{ row.aria_level }}"
+  {% if row.node_type == "workorder" %}
+    data-workorder-id="{{ row.workorder.pk }}"
+    hx-get="{% url 'workorders:detail' row.workorder.pk %}"
+    hx-target="#detail-panel-content"
+    hx-swap="innerHTML"
+    hx-trigger="click consume"
+    onclick="openWorkorderDrawer()"
+  {% endif %}
+>
+  <div class="tree-cell tree-main-cell" role="gridcell">
+    <div class="tree-indent">
+      {% if row.has_children %}
+        <button
+          type="button"
+          class="tree-toggle"
+          aria-label="Свернуть или развернуть"
+          onclick="event.stopPropagation(); window.WorkorderTree.toggle(this.closest('.workorder-tree-row'));"
+        >
+          <span aria-hidden="true">▾</span>
+        </button>
+      {% else %}
+        <span class="tree-toggle-placeholder" aria-hidden="true"></span>
+      {% endif %}
+    </div>
+    <div class="tree-node-copy">
+      <div class="tree-node-title">
+        <span class="tree-node-icon" aria-hidden="true">
+          {% if row.node_type == "organization" %}▦{% elif row.node_type == "department" %}▣{% elif row.node_type == "device" %}◉{% else %}•{% endif %}
+        </span>
+        <span class="tree-node-title-text">{{ row.label }}</span>
+      </div>
+      {% if row.subtitle %}
+        <div class="tree-node-subtitle">{{ row.subtitle|truncatechars:130 }}</div>
+      {% endif %}
+      {% if row.node_type != "workorder" %}
+        <div class="tree-node-counts">{{ row.count }} заявок · {{ row.active_count }} активных</div>
+      {% endif %}
+      {% if row.node_type == "workorder" %}
+        <div class="tree-workorder-meta">
+          <span class="chip chip-priority-{{ row.workorder.priority|lower }}">{{ row.workorder.get_priority_display }}</span>
+          {% if row.workorder.comment_count %}
+            <span class="indicator" title="Комментарии">💬 {{ row.workorder.comment_count }}</span>
+          {% endif %}
+          {% if row.workorder.attachment_count %}
+            <span class="indicator" title="Вложения">📎 {{ row.workorder.attachment_count }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="tree-cell tree-status-cell" role="gridcell">
+    {% if row.node_type == "workorder" %}
+      <span class="badge" data-status="{{ row.workorder.status }}">{{ row.workorder.get_status_display }}</span>
+    {% else %}
+      <div class="tree-status-stack">
+        {% for chip in row.status_chips %}
+          <span class="badge tree-status-badge" data-status="{{ chip.status }}">{{ chip.label }} · {{ chip.count }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="tree-cell tree-assignee-cell" role="gridcell">
+    {% if row.node_type == "workorder" %}
+      {% if row.workorder.assignee %}
+        {{ row.workorder.assignee.get_full_name|default:row.workorder.assignee.username }}
+      {% else %}
+        <span class="text-muted">Не назначен</span>
+      {% endif %}
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </div>
+  <div class="tree-cell tree-date-cell" role="gridcell">
+    {% if row.node_type == "workorder" %}
+      {{ row.workorder.updated_at|date:"d.m.Y H:i" }}
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </div>
+  <div class="tree-cell tree-action-cell" role="gridcell" onclick="event.stopPropagation()">
+    {% if row.can_create_here and current_board %}
+      <button
+        type="button"
+        class="mini-button"
+        hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}&department={{ row.department_id }}{% if row.device_id %}&device={{ row.device_id }}{% endif %}&return_view=tree"
+        hx-target="#detail-panel-content"
+        hx-swap="innerHTML"
+        onclick="openWorkorderDrawer()"
+      >
+        Создать
+      </button>
+    {% elif row.node_type == "workorder" %}
+      <button type="button" class="mini-button" onclick="this.closest('.workorder-tree-row').click()">
+        Открыть
+      </button>
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </div>
+</div>

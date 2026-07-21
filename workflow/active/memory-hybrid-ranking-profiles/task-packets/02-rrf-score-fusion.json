@@ -1,0 +1,26 @@
+{
+  "task_id": "02-rrf-score-fusion",
+  "title": "Replace raw score addition with RRF-based fusion",
+  "status": "ready",
+  "read_scope": [
+    "apps/memory/retrieval.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/tests.py"
+  ],
+  "write_scope": [
+    "apps/memory/retrieval.py",
+    "apps/memory/tests.py"
+  ],
+  "requirements": [
+    "Keep raw backend score as diagnostic metadata.",
+    "Store per-channel rank and RRF score during candidate merge.",
+    "Compute final score from profile weights, RRF scores, overlap boost, authority boost and penalties.",
+    "Support source_data vector candidates only for explicit source retrieval paths.",
+    "Expose ranking_profile, normalization, weights and per-channel score details in trace.",
+    "Preserve current trust, scope and sensitivity gates."
+  ],
+  "acceptance_checks": [
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_file_content_search_e2e"
+  ]
+}

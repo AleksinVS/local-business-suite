@@ -1,0 +1,48 @@
+{
+  "task_id": "01-page-context-contract-and-server-resolver",
+  "status": "implemented",
+  "title": "Page context contract and server resolver",
+  "goal": "Add a safe PageContextEnvelope contract, server-side current-window snapshot storage, and selected-object resolver.",
+  "read_scope": [
+    "apps/ai/views.py",
+    "apps/ai/services.py",
+    "apps/ai/models.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/policies.py",
+    "apps/core/source_adapters.py",
+    "contracts/ai/tools.json"
+  ],
+  "write_scope": [
+    "apps/ai/",
+    "apps/ai/tests.py",
+    "apps/ai/migrations/"
+  ],
+  "requirements": [
+    "Define schema_version, window_id, context_version, page, selection, filters, ui_state and capabilities fields.",
+    "Reject or sanitize unknown/oversized context payloads.",
+    "Persist sanitized immutable current-window snapshots per user/window_id/context_version with TTL.",
+    "Add AIWindowContextSnapshot model or equivalent versioned storage with indexes for user/window_id/context_version and expires_at.",
+    "Increment context_version on accepted context updates.",
+    "Resolve workorders selection through visible_workorders_queryset(user).",
+    "Recompute capabilities server-side and treat client-provided capabilities only as UI hints.",
+    "Bind context_snapshot_id to ChatMessage at submit time.",
+    "Store only context_snapshot_id, window_id, context_version, context_hash, safe summary/digest in ChatMessage metadata.",
+    "Add cleanup command/job for expired snapshots.",
+    "Do not trust client-provided display text as factual content."
+  ],
+  "acceptance": [
+    "Invalid context does not break chat submission.",
+    "Foreign workorder selection is not resolved.",
+    "Resolved workorder context contains safe identifiers and allowed capability flags.",
+    "Client-provided capabilities cannot grant access.",
+    "Stale context_version can be detected.",
+    "Submitting a chat message binds an immutable context_snapshot_id.",
+    "ui.get_current_context can read the bound snapshot after the browser has moved to another card.",
+    "Expired snapshots are cleaned up by command/job.",
+    "Existing chat tests still pass."
+  ],
+  "verification": [
+    "python manage.py test apps.ai.tests",
+    "python manage.py check"
+  ]
+}

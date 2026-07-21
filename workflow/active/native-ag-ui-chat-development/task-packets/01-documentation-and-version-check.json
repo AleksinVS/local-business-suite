@@ -1,0 +1,26 @@
+{
+  "task_id": "01-documentation-and-version-check",
+  "title": "Project and execution documentation for native AG-UI chat",
+  "type": "documentation",
+  "write_scope": [
+    "docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md",
+    "docs/planning/active/native-ag-ui-chat-development.md",
+    "workflow/active/native-ag-ui-chat-development/",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "instructions": [
+    "Document the native AG-UI chat implementation slice.",
+    "Record AG-UI version status as warning-only.",
+    "Do not update AG-UI or CopilotKit dependencies."
+  ],
+  "acceptance": [
+    "Plan, workflow brief and task packets exist.",
+    "AG-UI version check is recorded.",
+    "Documentation states native UI is the primary target and CopilotKit is a reference driver."
+  ],
+  "verification": [
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

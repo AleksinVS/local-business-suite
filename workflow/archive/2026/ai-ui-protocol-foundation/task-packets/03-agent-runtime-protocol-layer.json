@@ -1,0 +1,32 @@
+{
+  "task_id": "03-agent-runtime-protocol-layer",
+  "title": "Versioned protocol layer in agent runtime",
+  "status": "completed_first_slice",
+  "objective": "Create services.agent_runtime.protocols with common internal events, AG-UI v1 adapter, protocol metadata and versioned UI commands.",
+  "write_scope": [
+    "services/agent_runtime/protocols/",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/schemas.py",
+    "services/agent_runtime/ag_ui_adapter.py",
+    "services/agent_runtime/tests/",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not rewrite LangGraph orchestration.",
+    "Do not remove /chat or /chat/stream.",
+    "Do not add non-AG-UI native protocol unless a concrete gap is documented."
+  ],
+  "acceptance_checks": [
+    "AG-UI stream remains compatible with CopilotKit.",
+    "Stream includes local_business.protocol metadata.",
+    "UI commands are versioned and namespaced under /localBusiness.",
+    "Unknown extensions can be ignored by clients.",
+    "Tests cover event ordering, metadata and invalid signatures."
+  ],
+  "verification_commands": [
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "python manage.py validate_architecture_contracts",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

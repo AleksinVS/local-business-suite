@@ -1,0 +1,24 @@
+[
+  {
+    "code": "department_issues_spike",
+    "title": "Всплеск проблем подразделений",
+    "owner": "operations",
+    "metric_code": "department_issues_reported",
+    "condition": "gte",
+    "threshold": 3,
+    "severity": "high",
+    "workflow_route": "department_issue_review",
+    "enabled": true
+  },
+  {
+    "code": "regulator_requests_present",
+    "title": "Запрос регулятора получен",
+    "owner": "compliance",
+    "metric_code": "regulator_requests_open",
+    "condition": "gte",
+    "threshold": 1,
+    "severity": "high",
+    "workflow_route": "regulator_request_review",
+    "enabled": true
+  }
+]

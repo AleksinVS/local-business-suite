@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: контекстный ИИ-чат в левой боковой панели",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки контекстного sidebar AI-чата",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для контекстного sidebar AI-чата",
+  "EXECUTOR_REPORT.01-06.md": "Отчет исполнения task packets 01-06",
+  "TASK_ACCEPTANCE.01-06.md": "Приемочный отчет реализации task packets 01-06",
+  "task-packets": "Task packets для реализации PageContextEnvelope, меню Все функции, sidebar chat, runtime prompts и e2e"
+}

@@ -1,0 +1,52 @@
+{
+  "task_id": "01-adr-contracts-and-stable-identity",
+  "title": "ADR, contracts and stable file identity",
+  "status": "completed",
+  "objective": "Accept ADR-0025, add file organization contracts, and introduce stable file identity that does not depend on relative paths.",
+  "read_scope": [
+    "docs/adr/ADR-0025-file-source-auto-organization.md",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "docs/planning/active/memory-file-source-auto-organization.md",
+    "apps/memory/models.py",
+    "apps/memory/document_ingestion.py",
+    "contracts/ai/memory_sources.json",
+    "contracts/ai/memory_ingestion_profiles.json",
+    "apps/core/json_utils.py"
+  ],
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/file_organization.py",
+    "apps/core/json_utils.py",
+    "contracts/ai/memory_file_organization_profiles.json",
+    "contracts/schemas/memory_file_organization_profiles.schema.json",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "docs/planning/active/memory-file-source-auto-organization.md",
+    ".desc.json files and PROJECT_STRUCTURE.yaml if structure changes"
+  ],
+  "non_goals": [
+    "Do not implement physical file moves in this task.",
+    "Do not introduce S3 as a runtime dependency.",
+    "Do not remove current MemorySourceObject ingestion compatibility.",
+    "Do not store host-specific paths in default contracts."
+  ],
+  "requirements": [
+    "File identity must use a stable file_id, not relative_path.",
+    "File version identity must include sha256 and size.",
+    "Path history must preserve old relative paths for audit and search compatibility.",
+    "Contracts must validate source organization profile, incoming path, managed root policy, storage backend and delete policy.",
+    "Default contracts must avoid real host-specific paths and secrets."
+  ],
+  "acceptance_checks": [
+    "validate_architecture_contracts accepts the new contract shape.",
+    "Unit tests show that moving the same file to another path keeps the same stable file identity when hash/metadata match policy.",
+    "Unit tests show that identical hash duplicates can be represented without losing path history.",
+    "Documentation explains why relative_path is not an identifier."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.core.tests"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: Settings Center, GUI настроек и контекстная справка",
+  "BLOCK_BRIEF.md": "Краткое описание цели, scope и acceptance",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets",
+  "TASK_ACCEPTANCE.settings-center-gui.md": "Шаблон приемки workflow-блока",
+  "HANDOFF_REPORT.md": "Отчет реализации workflow-блока Settings Center GUI",
+  "RETROSPECTIVE.md": "Шаблон ретроспективы workflow-блока",
+  "task-packets": "Task packets для реализации Settings Center"
+}

@@ -1,0 +1,37 @@
+{
+  "task_id": "01-copilotkit-chat-ux-contract",
+  "title": "Define and implement CopilotKit chat UX contract",
+  "status": "planned",
+  "read_scope": [
+    "docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md",
+    "static/src/copilotkit/",
+    "templates/base.html",
+    "scripts/e2e/tests/copilotkit_sidebar.spec.ts"
+  ],
+  "write_scope": [
+    "static/src/copilotkit/",
+    "templates/base.html",
+    "scripts/e2e/tests/"
+  ],
+  "goals": [
+    "Make the CopilotKit chat usable as the primary left sidebar AI chat.",
+    "Cover new chat, empty state, loading state, streaming answer, error state and compact tool trace.",
+    "Keep the UI consistent with the existing Django application shell."
+  ],
+  "non_goals": [
+    "Do not redesign the full application navigation.",
+    "Do not implement native AG-UI UI.",
+    "Do not add domain write actions in the browser."
+  ],
+  "acceptance": [
+    "The user can start a new chat in CopilotKit mode.",
+    "The first answer streams or appears without requiring page reload.",
+    "Empty, loading and error states are visible and not layout-breaking.",
+    "Tool activity is shown without raw sensitive payload.",
+    "A Playwright check covers the main chat path."
+  ],
+  "verification": [
+    "npm run build:copilotkit",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\""
+  ]
+}

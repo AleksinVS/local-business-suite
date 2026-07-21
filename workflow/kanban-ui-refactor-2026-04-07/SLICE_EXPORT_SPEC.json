@@ -1,0 +1,31 @@
+{
+  "source_plan": "workflow/kanban-ui-refactor-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+  "tasks": [
+    {
+      "task_id": "fix-drawer-logic-base",
+      "slice_id": "slice-kanban-drawer-fixes",
+      "output_path": "workflow/kanban-ui-refactor-2026-04-07/task-packets/fix-drawer-logic-base.json"
+    },
+    {
+      "task_id": "fix-drawer-logic-board",
+      "slice_id": "slice-kanban-drawer-fixes",
+      "output_path": "workflow/kanban-ui-refactor-2026-04-07/task-packets/fix-drawer-logic-board.json"
+    },
+    {
+      "task_id": "polish-kanban-css",
+      "slice_id": "slice-kanban-layout-polish",
+      "output_path": "workflow/kanban-ui-refactor-2026-04-07/task-packets/polish-kanban-css.json"
+    },
+    {
+      "task_id": "implement-sidebar-base",
+      "slice_id": "slice-navigation-sidebar",
+      "output_path": "workflow/kanban-ui-refactor-2026-04-07/task-packets/implement-sidebar-base.json"
+    },
+    {
+      "task_id": "implement-sidebar-css",
+      "slice_id": "slice-navigation-sidebar",
+      "output_path": "workflow/kanban-ui-refactor-2026-04-07/task-packets/implement-sidebar-css.json"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "task_id": "02-test-runtime-acceleration",
+  "status": "implemented",
+  "title": "Reusable Django test databases and test acceleration guide",
+  "goal": "Document and expose a no-coverage-loss workflow for faster repeated Django test runs.",
+  "read_scope": [
+    "Makefile",
+    "docs/guides/TESTING_POLICY.md",
+    "README.md",
+    "workflow/active/testing-policy-and-independent-verification/"
+  ],
+  "write_scope": [
+    "Makefile",
+    "docs/guides/TESTING_POLICY.md",
+    "docs/guides/TEST_ACCELERATION.md",
+    "docs/guides/.desc.json",
+    "README.md",
+    "workflow/active/testing-policy-and-independent-verification/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Add a command that reuses existing Django test databases through the built-in test runner.",
+    "Keep full coverage available and avoid making selective test runs the only verification path.",
+    "Document safe acceleration techniques and unsafe shortcuts.",
+    "Record execution and acceptance in the existing testing workflow block."
+  ],
+  "acceptance": [
+    "Makefile exposes a keepdb-based test target.",
+    "Project docs explain test database reuse and selective test scope.",
+    "Execution docs record commands, result and residual risks.",
+    "Generated project structure includes the new guide and workflow files."
+  ],
+  "verification": [
+    "make test-fast TEST_SCOPE=apps.accounts.tests.LDAPAuthConfigTests.test_ad_group_sync_removes_only_ad_managed_missing_roles",
+    "make check",
+    "make contracts",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

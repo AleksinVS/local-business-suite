@@ -1,0 +1,10 @@
+{
+  ".": "Task packets для реализации сервиса памяти СоСНА",
+  "task-memory-contracts.json": "Task packet: memory contracts, schemas and validators",
+  "task-memory-backend-spikes.json": "Task packet: graph/vector/backend technical spikes",
+  "task-memory-app-scaffold.json": "Task packet: apps.memory scaffold and metadata models",
+  "task-memory-privacy-pipeline.json": "Task packet: de-identification and DLP pipeline",
+  "task-memory-indexing.json": "Task packet: graph/vector/full-text indexing layer",
+  "task-memory-retrieval-tool.json": "Task packet: memory.search retrieval orchestration and AI tool",
+  "task-memory-jobs-eval-admin.json": "Task packet: jobs, evaluation and admin observability"
+}

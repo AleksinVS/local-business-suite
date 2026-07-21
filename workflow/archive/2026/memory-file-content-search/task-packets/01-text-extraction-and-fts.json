@@ -1,0 +1,16 @@
+{
+  "task_id": "01-text-extraction-and-fts",
+  "goal": "Extract safe text from MVP file formats and index it through SQLite FTS5 with fallbacks.",
+  "write_scope": [
+    "apps/memory/source_text_extraction.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/tests.py"
+  ],
+  "acceptance": [
+    "Text and table formats are parsed or produce a clear issue.",
+    "FTS5 is used when available.",
+    "Token and prefix fallback behavior is traceable.",
+    "Full extracted text is not written to MemorySearchDocument.metadata."
+  ]
+}

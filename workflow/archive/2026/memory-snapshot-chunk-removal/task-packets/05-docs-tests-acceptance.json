@@ -1,0 +1,39 @@
+{
+  "task_id": "05-docs-tests-acceptance",
+  "title": "Обновить документацию, проверки и приемку",
+  "status": "completed",
+  "objective": "Синхронизировать документацию и проверки с новой схемой: knowledge/source_data индексируются через MemorySearchDocument, а MemorySnapshot/MemoryChunk не входят в активный путь MVP.",
+  "write_scope": [
+    "docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md",
+    "docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/planning/active/memory-snapshot-chunk-removal.md",
+    "workflow/active/memory-snapshot-chunk-removal/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "ADR-0011 должен явно говорить, что совместимый слой MemorySnapshot/MemoryChunk заменяется MemorySearchDocument.",
+    "Архитектурный план должен описывать целевый поиск без chunks.",
+    "Deployment guide должен описывать новые команды проверки и больше не требовать проверки MemorySnapshotAdmin/MemoryChunkAdmin.",
+    "User/operations docs должны объяснять, что агент работает со знаниями и source links, а не со snapshots/chunks.",
+    "Добавить EXECUTOR_REPORT, TASK_ACCEPTANCE и RETROSPECTIVE после реализации.",
+    "После изменения структуры обновить .desc.json и PROJECT_STRUCTURE.yaml."
+  ],
+  "acceptance_checks": [
+    "validate_architecture_contracts проходит.",
+    "Unit-тесты затронутых приложений проходят.",
+    "memory_file_backed_e2e проходит.",
+    "npm run test:e2e проходит.",
+    "Документация не содержит утверждения, что MemorySnapshot/MemoryChunk обязательны для MVP-памяти."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests apps.analytics.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "./.venv/bin/python manage.py memory_file_backed_e2e",
+    "npm run test:e2e",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "block_id": "ai-ui-protocol-foundation",
+  "status": "active_first_slice_implemented",
+  "created_at": "2026-06-09",
+  "architecture_sources": [
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md",
+    "docs/planning/active/ai-ui-protocol-foundation.md",
+    "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
+    "docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md",
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
+    "docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md"
+  ],
+  "goal": "Create a versioned AI UI protocol foundation so CopilotKit/AG-UI and a native AG-UI-compatible UI can be developed in parallel on the same backend contracts.",
+  "execution_order": [
+    "01-adr-and-project-documentation",
+    "02-django-ui-runtime-foundation",
+    "03-agent-runtime-protocol-layer",
+    "04-copilotkit-driver-refactor",
+    "05-native-ag-ui-compatible-ui",
+    "06-e2e-security-deployment"
+  ],
+  "global_constraints": [
+    "Django remains the system of record for sessions, permissions, history, audit and confirmation.",
+    "Agent runtime must not depend on CopilotKit-specific concepts.",
+    "Native UI must support AG-UI-compatible events before adding local extensions.",
+    "Local project extensions must be versioned and carried through CUSTOM or namespaced STATE_DELTA events.",
+    "Browser clients must ignore unknown extensions safely.",
+    "Frontend UI commands must never perform domain writes directly.",
+    "Do not expose Django AI gateway tokens, cookies, raw actor context, raw PII, UNC paths or full DOM in protocol state.",
+    "Keep /chat and /chat/stream compatible until explicit owner acceptance.",
+    "Keep the legacy sidebar as fallback.",
+    "Temporary artifacts belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "ADR-0028 captures protocol versioning and driver boundaries.",
+    "A neutral Django UI runtime module owns actor signing and driver selection.",
+    "services.agent_runtime.protocols contains common internal events and AG-UI adapter modules.",
+    "AG-UI streams include local_business.protocol metadata.",
+    "open_right_panel command is versioned and normalized in one shared place.",
+    "CopilotKit works through the common foundation without user-visible regression.",
+    "Native UI can use the AG-UI-compatible endpoint without Copilot Runtime.",
+    "Legacy UI remains available as a configured fallback.",
+    "E2E covers legacy, CopilotKit and native driver smoke scenarios."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run build:copilotkit",
+    "node --check services/copilot_runtime/server.mjs",
+    "npm run test:e2e -- --project=chromium",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "implementation_notes": [
+    "Land the shared foundation in main before widening native UI work.",
+    "Prefer additive protocol changes and capability negotiation over breaking event shapes.",
+    "Keep CopilotKit package-specific code inside the CopilotKit driver only.",
+    "Make the native UI a direct AG-UI client first; add a native protocol adapter only if a concrete gap appears.",
+    "Duplicate localBusinessUiCommands temporarily only to preserve the existing CopilotKit island."
+  ]
+}

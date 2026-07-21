@@ -1,0 +1,7 @@
+{% if form.errors %}
+  <div class="flash error">{{ form.errors }}</div>
+{% elif answer %}
+  <div class="help-answer">
+    <p>{{ answer.answer }}</p>
+  </div>
+{% endif %}

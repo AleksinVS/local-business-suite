@@ -1,0 +1,663 @@
+{
+  "schema_version": "1.0",
+  "workflow_version": "v2",
+  "project_kind": "django-htmx-monorepo",
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "block_goal": "Implement the СоСНА AI memory service with contracts, raw/safe corpus, graph/vector/full-text retrieval, RBAC enforcement, PII protection, and a declared memory.search tool.",
+  "source_documents": [
+    "AGENTS.md",
+    "docs/planning/README.md",
+    "docs/planning/active/ai-memory-service.md",
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+    "services/agent_runtime/README.md",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/registry.json"
+  ],
+  "architect_instructions_for_orchestrator": [
+    "Use docs/planning/active/ai-memory-service.md as the active human-readable plan and this ARCHITECT_PLAN.json as the executable workflow plan.",
+    "Do not dispatch implementation tasks that introduce new architectural decisions unless ADR-0003 is updated or a new ADR is created first.",
+    "Keep each executor inside the declared write scope and do not let backend spike tasks modify production code.",
+    "Do not add generated indexes, evaluation outputs, model caches, or temporary experiment files outside data/ or .local/.",
+    "Do not start a dependent slice until prerequisite task acceptance is written."
+  ],
+  "slice_task_path_template": "workflow/active/{block_id}/task-packets/{task_id}.json",
+  "global_rules": [
+    "Django remains the system of record for business data, identity, policies, and audit.",
+    "Agent runtime accesses memory only through declared tools; it must not import memory internals or write directly to indexes.",
+    "Default contracts live in contracts/ and runtime copies live in data/contracts/.",
+    "Mutable memory state, raw snapshots, safe corpus, indexes, manifests, and eval outputs live under data/memory/.",
+    "Patient data may be indexed only after de-identification or stable pseudonym/ID replacement.",
+    "Cloud LLM routing for sensitive context is denied unless an explicit route policy later permits a safe redacted path.",
+    "Raw snapshots are immutable audit artifacts; hard update may deactivate active chunks/facts but must not delete raw history."
+  ],
+  "global_acceptance": [
+    "The block passes make check, make test, and make contracts at completion.",
+    "Memory contracts are validated by validate_architecture_contracts.",
+    "The memory app records source, snapshot, chunk, graph fact, job, access audit, and eval metadata.",
+    "memory.search returns cited context and refuses forbidden scopes.",
+    "PII and secret leakage test suites pass with zero known leaks.",
+    "Generated runtime data does not appear in the repository root."
+  ],
+  "global_invariants": [
+    "No direct SQL writes by agent runtime.",
+    "No patient PII in LLM prompts or tool traces.",
+    "No secrets in prompts, logs, tool traces, contracts, or committed files.",
+    "No new files directly under workflow/ root for this block; use workflow/active/block-ai-memory-service-2026-05-19/.",
+    "No production dependency on PostgreSQL in the first implementation block unless ADR-0003 is updated."
+  ],
+  "risk_policy": {
+    "R0": "documentation or mechanical local change",
+    "R1": "bounded implementation with tests",
+    "R2": "security/privacy/contracts/storage/runtime risk requiring architect review"
+  },
+  "escalation_matrix": {
+    "new_architecture_decision": "architect",
+    "security_or_privacy_gap": "architect",
+    "scope_growth": "architect",
+    "contract_schema_conflict": "architect",
+    "runtime_tool_policy_conflict": "architect",
+    "acceptance_gap": "pm"
+  },
+  "slices": [
+    {
+      "slice_id": "slice-contracts-foundation",
+      "title": "Memory Contracts Foundation",
+      "goal": "Add memory contracts, schemas, settings loading, validators, and architecture contract checks without implementing indexes or runtime retrieval.",
+      "risk_class": "R2",
+      "depends_on": [],
+      "read_files": [
+        "AGENTS.md",
+        "config/settings.py",
+        "apps/core/json_utils.py",
+        "apps/core/management/commands/validate_architecture_contracts.py",
+        "contracts/ai/registry.json",
+        "contracts/schemas/*.json",
+        "docs/adr/ADR-0003-ai-memory-service.md",
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+      ],
+      "allowed_files": [
+        "contracts/ai/memory_sources.json",
+        "contracts/ai/memory_profiles.json",
+        "contracts/ai/memory_routing.json",
+        "contracts/ai/.desc.json",
+        "contracts/schemas/memory_sources.schema.json",
+        "contracts/schemas/memory_profiles.schema.json",
+        "contracts/schemas/memory_routing.schema.json",
+        "contracts/schemas/.desc.json",
+        "config/settings.py",
+        "apps/core/json_utils.py",
+        "apps/core/management/commands/validate_architecture_contracts.py",
+        "apps/core/tests.py",
+        "PROJECT_STRUCTURE.yaml"
+      ],
+      "forbidden_moves": [
+        "Do not implement apps.memory in this slice.",
+        "Do not add vector, graph, Presidio, Kuzu, LanceDB, or Qdrant dependencies in this slice.",
+        "Do not modify agent runtime or AI tool declarations in this slice."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py validate_architecture_contracts",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py test apps.core.tests"
+      ],
+      "acceptance_criteria": [
+        "Memory contracts exist in contracts/ai and are copied to data/contracts/ai by existing contract path semantics.",
+        "Invalid memory source/profile/routing payloads fail validation.",
+        "validate_architecture_contracts validates the memory contract family.",
+        "PROJECT_STRUCTURE.yaml includes the new contract and schema files."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-contracts",
+          "executor_level": "senior",
+          "goal": "Implement memory contracts, schemas, settings loading, and validators.",
+          "read_files": [
+            "config/settings.py",
+            "apps/core/json_utils.py",
+            "apps/core/management/commands/validate_architecture_contracts.py",
+            "contracts/ai/registry.json",
+            "contracts/schemas/chat_agent_registry.schema.json",
+            "docs/adr/ADR-0003-ai-memory-service.md",
+            "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+          ],
+          "write_files": [
+            "contracts/ai/memory_sources.json",
+            "contracts/ai/memory_profiles.json",
+            "contracts/ai/memory_routing.json",
+            "contracts/ai/.desc.json",
+            "contracts/schemas/memory_sources.schema.json",
+            "contracts/schemas/memory_profiles.schema.json",
+            "contracts/schemas/memory_routing.schema.json",
+            "contracts/schemas/.desc.json",
+            "config/settings.py",
+            "apps/core/json_utils.py",
+            "apps/core/management/commands/validate_architecture_contracts.py",
+            "apps/core/tests.py",
+            "PROJECT_STRUCTURE.yaml"
+          ],
+          "implementation_notes": [
+            "Follow the existing get_contract_path pattern in config/settings.py.",
+            "Keep default contracts small and safe; no real patient data, secrets, or host-specific values.",
+            "Validators should be strict enough to catch missing required keys and invalid enum values before runtime.",
+            "Run make gen-struct after adding contract/schema files."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py validate_architecture_contracts",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py test apps.core.tests"
+          ],
+          "deliverables": [
+            "Memory contract JSON files",
+            "Memory JSON Schemas",
+            "Settings and validator integration",
+            "Updated structure map",
+            "EXECUTOR_REPORT.task-memory-contracts.md"
+          ],
+          "escalate_if": [
+            "A contract field changes an accepted ADR decision",
+            "Runtime contract copy behavior needs a new storage pattern",
+            "Tests require broad unrelated changes"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-backend-spikes",
+      "title": "Backend Technical Spikes",
+      "goal": "Evaluate graph/vector/backend choices without committing production code paths.",
+      "risk_class": "R1",
+      "depends_on": [
+        "slice-contracts-foundation"
+      ],
+      "read_files": [
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+        "docs/adr/ADR-0003-ai-memory-service.md",
+        "requirements.txt",
+        "services/agent_runtime/README.md"
+      ],
+      "allowed_files": [
+        ".local/**",
+        "data/memory/eval/**",
+        "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+      ],
+      "forbidden_moves": [
+        "Do not modify production code in this spike task.",
+        "Do not commit model caches, generated indexes, or raw experiment data.",
+        "Do not add dependencies to requirements.txt from spike results without a follow-up accepted task."
+      ],
+      "required_checks": [
+        "Document spike commands and outcomes in the executor report"
+      ],
+      "acceptance_criteria": [
+        "Spike report compares LanceDB and Qdrant against filtering, hybrid/full-text, local deployment, and operational complexity.",
+        "Spike report validates Kuzu graph schema feasibility.",
+        "Spike report states whether Graphiti should be used as an adapter or deferred.",
+        "Spike report recommends one vector backend for the first production implementation task."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-backend-spikes",
+          "executor_level": "senior",
+          "goal": "Run bounded backend spikes and write a recommendation report.",
+          "read_files": [
+            "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+            "docs/adr/ADR-0003-ai-memory-service.md",
+            "requirements.txt"
+          ],
+          "write_files": [
+            ".local/**",
+            "data/memory/eval/**",
+            "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+          ],
+          "implementation_notes": [
+            "Prefer disposable scripts/reports under .local/ for experiments.",
+            "If data/memory/eval is used, keep only operator-relevant evaluation artifacts and no patient data.",
+            "Record version assumptions and exact commands in the executor report."
+          ],
+          "tests_to_run": [
+            "Spike-specific commands documented in EXECUTOR_REPORT.task-memory-backend-spikes.md"
+          ],
+          "deliverables": [
+            "Backend spike report",
+            "Recommended graph/vector backend path",
+            "Risks and follow-up decisions"
+          ],
+          "escalate_if": [
+            "A production dependency must be added before the spike can proceed",
+            "Graphiti requires a graph backend that conflicts with ADR-0003",
+            "The spike finds that embedded storage is not viable"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-memory-app-scaffold",
+      "title": "Django Memory App Scaffold",
+      "goal": "Create apps.memory with metadata models, policies, selectors, services, admin, migrations, and basic tests.",
+      "risk_class": "R2",
+      "depends_on": [
+        "slice-contracts-foundation"
+      ],
+      "read_files": [
+        "apps/ai/models.py",
+        "apps/core/json_utils.py",
+        "apps/workorders/selectors.py",
+        "apps/workorders/policies.py",
+        "config/settings.py",
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+      ],
+      "allowed_files": [
+        "apps/memory/**",
+        "config/settings.py",
+        "PROJECT_STRUCTURE.yaml",
+        "apps/.desc.json"
+      ],
+      "forbidden_moves": [
+        "Do not implement index backends in this slice.",
+        "Do not alter existing business models unless a separate ADR/task packet approves it.",
+        "Do not modify agent runtime in this slice."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py makemigrations --check --dry-run",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py test apps.memory.tests",
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ],
+      "acceptance_criteria": [
+        "apps.memory is registered and has metadata models with migrations.",
+        "Admin exposes memory sources, snapshots, chunks, graph facts, index jobs, access audit, and eval cases.",
+        "No indexing or LLM calls are performed by model methods.",
+        "Tests cover model invariants and basic policy/selectors behavior."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-app-scaffold",
+          "executor_level": "senior",
+          "goal": "Create the apps.memory scaffold and metadata model layer.",
+          "read_files": [
+            "config/settings.py",
+            "apps/ai/models.py",
+            "apps/workorders/policies.py",
+            "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+          ],
+          "write_files": [
+            "apps/memory/**",
+            "config/settings.py",
+            "apps/.desc.json",
+            "PROJECT_STRUCTURE.yaml"
+          ],
+          "implementation_notes": [
+            "Use BigAutoField defaults and separate external IDs only when needed.",
+            "Keep business logic in services.py, access checks in policies.py, and reads in selectors.py.",
+            "Use JSONField for backend-neutral metadata but keep query-critical fields as concrete model fields."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py makemigrations --check --dry-run",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py test apps.memory.tests",
+            "./.venv/bin/python manage.py validate_architecture_contracts"
+          ],
+          "deliverables": [
+            "apps.memory scaffold",
+            "Initial memory migrations",
+            "Admin registration",
+            "Model/service/policy tests",
+            "EXECUTOR_REPORT.task-memory-app-scaffold.md"
+          ],
+          "escalate_if": [
+            "Metadata model requires PostgreSQL-specific fields",
+            "Existing app policies need broad changes",
+            "Migration conflicts with current database conventions"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-privacy-pipeline",
+      "title": "De-identification and DLP Pipeline",
+      "goal": "Implement de-identification, deterministic pseudonymization, DLP scanning, blocked snapshot handling, and leakage regression tests.",
+      "risk_class": "R2",
+      "depends_on": [
+        "slice-memory-app-scaffold"
+      ],
+      "read_files": [
+        "apps/memory/models.py",
+        "apps/memory/services.py",
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+        "docs/adr/ADR-0003-ai-memory-service.md"
+      ],
+      "allowed_files": [
+        "apps/memory/deidentification.py",
+        "apps/memory/security.py",
+        "apps/memory/services.py",
+        "apps/memory/tests.py",
+        "requirements.txt",
+        "requirements.lock"
+      ],
+      "forbidden_moves": [
+        "Do not send PII to any LLM in tests or implementation.",
+        "Do not commit real patient examples.",
+        "Do not store pseudonymization secrets in contracts or code."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py test apps.memory.tests",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ],
+      "acceptance_criteria": [
+        "Safe corpus generation removes or pseudonymizes patient identifiers.",
+        "Secret-like content blocks indexing.",
+        "Regression tests cover Russian PII examples using synthetic data.",
+        "Blocked snapshot reason is stored for operator review."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-privacy-pipeline",
+          "executor_level": "senior",
+          "goal": "Implement the safe-text and DLP layer for memory ingestion.",
+          "read_files": [
+            "apps/memory/models.py",
+            "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+          ],
+          "write_files": [
+            "apps/memory/deidentification.py",
+            "apps/memory/security.py",
+            "apps/memory/services.py",
+            "apps/memory/tests.py",
+            "requirements.txt",
+            "requirements.lock"
+          ],
+          "implementation_notes": [
+            "Use synthetic Russian examples in tests.",
+            "Keep secret material behind env/deployment settings or future secret handles.",
+            "If adding Presidio dependencies, keep the dependency change isolated and documented."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py test apps.memory.tests",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py validate_architecture_contracts"
+          ],
+          "deliverables": [
+            "De-identification module",
+            "Credential/DLP scanner",
+            "Leakage regression tests",
+            "EXECUTOR_REPORT.task-memory-privacy-pipeline.md"
+          ],
+          "escalate_if": [
+            "Presidio model support for Russian is insufficient for acceptance criteria",
+            "A secret manager decision is needed before safe pseudonymization can proceed",
+            "Any test fixture would contain real PII"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-indexing",
+      "title": "Graph Vector Full-text Indexing",
+      "goal": "Implement graph and vector/full-text backend interfaces and the selected first backend implementations.",
+      "risk_class": "R2",
+      "depends_on": [
+        "slice-backend-spikes",
+        "slice-memory-app-scaffold",
+        "slice-privacy-pipeline"
+      ],
+      "read_files": [
+        "apps/memory/models.py",
+        "apps/memory/deidentification.py",
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md",
+        "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+      ],
+      "allowed_files": [
+        "apps/memory/graph_backends.py",
+        "apps/memory/vector_backends.py",
+        "apps/memory/ingestion.py",
+        "apps/memory/services.py",
+        "apps/memory/tests.py",
+        "requirements.txt",
+        "requirements.lock"
+      ],
+      "forbidden_moves": [
+        "Do not index raw PII snapshots.",
+        "Do not make graph/vector backend imports mandatory at Django startup if optional dependencies are unavailable.",
+        "Do not bypass MemorySnapshot and MemoryChunk provenance."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py test apps.memory.tests",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ],
+      "acceptance_criteria": [
+        "Graph facts and vector chunks are linked to safe chunks and source snapshots.",
+        "Index writes are idempotent by chunk/fact identity.",
+        "Old active chunks/facts can be deactivated without deleting raw snapshots.",
+        "Scope and sensitivity metadata are available to retrieval filters."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-indexing",
+          "executor_level": "senior",
+          "goal": "Implement indexing interfaces and selected graph/vector backend implementations.",
+          "read_files": [
+            "apps/memory/models.py",
+            "apps/memory/services.py",
+            "workflow/active/block-ai-memory-service-2026-05-19/EXECUTOR_REPORT.task-memory-backend-spikes.md"
+          ],
+          "write_files": [
+            "apps/memory/graph_backends.py",
+            "apps/memory/vector_backends.py",
+            "apps/memory/ingestion.py",
+            "apps/memory/services.py",
+            "apps/memory/tests.py",
+            "requirements.txt",
+            "requirements.lock"
+          ],
+          "implementation_notes": [
+            "Use backend interfaces so Kuzu/LanceDB/Qdrant choices remain replaceable.",
+            "Persist generated indexes under data/memory/indexes/ only.",
+            "Store index manifests under data/memory/manifests/."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py test apps.memory.tests",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py validate_architecture_contracts"
+          ],
+          "deliverables": [
+            "Graph backend interface and implementation",
+            "Vector/full-text backend interface and implementation",
+            "Ingestion/indexing tests",
+            "EXECUTOR_REPORT.task-memory-indexing.md"
+          ],
+          "escalate_if": [
+            "Selected backend requires PostgreSQL or external services contrary to ADR-0003",
+            "Index filtering cannot enforce scope metadata",
+            "Generated indexes would need to be committed"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-retrieval-tool",
+      "title": "Memory Search Tool and Retrieval Orchestration",
+      "goal": "Implement memory.search as the sole agent runtime access path to memory, including scope translation, query planning, rank fusion, citations, and audit.",
+      "risk_class": "R2",
+      "depends_on": [
+        "slice-indexing"
+      ],
+      "read_files": [
+        "apps/ai/tool_definitions.py",
+        "apps/ai/tooling.py",
+        "services/agent_runtime/tools.py",
+        "services/agent_runtime/graph.py",
+        "contracts/ai/tools.json",
+        "contracts/ai/task_types.json",
+        "apps/memory/**"
+      ],
+      "allowed_files": [
+        "apps/memory/retrieval.py",
+        "apps/memory/routing.py",
+        "apps/memory/policies.py",
+        "apps/memory/selectors.py",
+        "apps/memory/services.py",
+        "apps/memory/tests.py",
+        "apps/ai/tool_definitions.py",
+        "apps/ai/tooling.py",
+        "services/agent_runtime/tools.py",
+        "services/agent_runtime/task_types.py",
+        "contracts/ai/tools.json",
+        "contracts/ai/task_types.json"
+      ],
+      "forbidden_moves": [
+        "Do not let agent runtime write directly to memory indexes.",
+        "Do not expose raw snapshots through memory.search.",
+        "Do not return uncited memory context unless the tool explicitly reports no sources found."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ],
+      "acceptance_criteria": [
+        "memory.search is declared in tool definitions and JSON contracts without drift.",
+        "Retrieval applies backend filtering and Django post-filtering.",
+        "Tool responses include citations, policy decision, and retrieval trace.",
+        "Forbidden-scope test cases return no leaked chunks/facts."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-retrieval-tool",
+          "executor_level": "senior",
+          "goal": "Implement the memory.search retrieval tool and orchestration layer.",
+          "read_files": [
+            "apps/ai/tool_definitions.py",
+            "apps/ai/tooling.py",
+            "services/agent_runtime/tools.py",
+            "services/agent_runtime/task_types.py",
+            "apps/memory/**"
+          ],
+          "write_files": [
+            "apps/memory/retrieval.py",
+            "apps/memory/routing.py",
+            "apps/memory/policies.py",
+            "apps/memory/selectors.py",
+            "apps/memory/services.py",
+            "apps/memory/tests.py",
+            "apps/ai/tool_definitions.py",
+            "apps/ai/tooling.py",
+            "services/agent_runtime/tools.py",
+            "services/agent_runtime/task_types.py",
+            "contracts/ai/tools.json",
+            "contracts/ai/task_types.json"
+          ],
+          "implementation_notes": [
+            "Follow existing tool registry drift validation patterns.",
+            "Keep route decisions in server-side policy code, not in prompts.",
+            "Return compact cited context rather than full source documents."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py validate_architecture_contracts"
+          ],
+          "deliverables": [
+            "memory.search declared tool",
+            "Retrieval orchestration services",
+            "AI gateway integration",
+            "Forbidden-scope tests",
+            "EXECUTOR_REPORT.task-memory-retrieval-tool.md"
+          ],
+          "escalate_if": [
+            "Tool contract requires changing the AI identity model",
+            "Cloud route behavior needs a new ADR",
+            "Existing AI task type validation cannot represent memory.search"
+          ]
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-jobs-eval-admin",
+      "title": "Jobs Evaluation and Admin Observability",
+      "goal": "Add management commands, evaluation suites, admin actions, and operator visibility for memory sync and retrieval safety.",
+      "risk_class": "R1",
+      "depends_on": [
+        "slice-retrieval-tool"
+      ],
+      "read_files": [
+        "apps/memory/**",
+        "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+      ],
+      "allowed_files": [
+        "apps/memory/management/commands/**",
+        "apps/memory/admin.py",
+        "apps/memory/services.py",
+        "apps/memory/tests.py",
+        "templates/memory/**",
+        "apps/memory/urls.py",
+        "apps/memory/views.py"
+      ],
+      "forbidden_moves": [
+        "Do not introduce Celery until a separate production scheduling task accepts that dependency.",
+        "Do not expose raw PII snapshots through admin or UI.",
+        "Do not store temporary eval reports in the repository root."
+      ],
+      "required_checks": [
+        "./.venv/bin/python manage.py memory_sync_source --help",
+        "./.venv/bin/python manage.py memory_reindex --help",
+        "./.venv/bin/python manage.py memory_eval --help",
+        "./.venv/bin/python manage.py test apps.memory.tests",
+        "./.venv/bin/python manage.py check",
+        "./.venv/bin/python manage.py validate_architecture_contracts"
+      ],
+      "acceptance_criteria": [
+        "Management commands expose dry-run/help modes.",
+        "memory_eval includes smoke, PII, secret, and forbidden-scope checks.",
+        "Admin shows sources, jobs, blocked snapshots, and retrieval audit.",
+        "Operator cannot view raw PII without explicit future permission model."
+      ],
+      "tasks": [
+        {
+          "task_id": "task-memory-jobs-eval-admin",
+          "executor_level": "senior",
+          "goal": "Add memory management commands, evaluation checks, and admin observability.",
+          "read_files": [
+            "apps/memory/**",
+            "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+          ],
+          "write_files": [
+            "apps/memory/management/commands/**",
+            "apps/memory/admin.py",
+            "apps/memory/services.py",
+            "apps/memory/tests.py",
+            "templates/memory/**",
+            "apps/memory/urls.py",
+            "apps/memory/views.py"
+          ],
+          "implementation_notes": [
+            "Start with management commands and Django admin; defer Celery and rich UI.",
+            "Use dry-run support for sync/reindex commands.",
+            "Keep generated eval outputs in data/memory/eval/ or .local/."
+          ],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py memory_sync_source --help",
+            "./.venv/bin/python manage.py memory_reindex --help",
+            "./.venv/bin/python manage.py memory_eval --help",
+            "./.venv/bin/python manage.py test apps.memory.tests",
+            "./.venv/bin/python manage.py check",
+            "./.venv/bin/python manage.py validate_architecture_contracts"
+          ],
+          "deliverables": [
+            "Memory management commands",
+            "Evaluation smoke/security suites",
+            "Admin observability",
+            "EXECUTOR_REPORT.task-memory-jobs-eval-admin.md"
+          ],
+          "escalate_if": [
+            "Scheduling requires Celery or another production worker decision",
+            "Admin visibility requires a new permission model",
+            "Evaluation requires real patient data"
+          ]
+        }
+      ]
+    }
+  ]
+}

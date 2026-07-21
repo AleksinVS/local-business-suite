@@ -1,0 +1,51 @@
+{
+  "block_id": "memory-mvp-remediation",
+  "status": "implemented",
+  "created_at": "2026-05-21",
+  "architecture_sources": [
+    "docs/adr/ADR-0010-memory-mvp-simplification.md",
+    "docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md",
+    "docs/architecture/MEMORY_MVP_REMEDIATION_PLAN.md",
+    "docs/planning/active/memory-mvp-remediation.md"
+  ],
+  "goal": "Исправить разрывы MVP-памяти: вернуть memory.remember к постановке задачи в очередь, обеспечить поиск обработанного знания и вывести MemoryBelief из MVP.",
+  "execution_order": [
+    "01-remember-queues-request",
+    "02-processed-memory-is-searchable",
+    "03-remove-memory-belief-from-mvp",
+    "04-contracts-docs-tests-acceptance"
+  ],
+  "global_constraints": [
+    "Не менять физическое хранение сообщений чата.",
+    "Не проектировать стратегию графового поиска в этом блоке.",
+    "Не ослаблять проверки прав доступа, чувствительности и надежности источника.",
+    "Не индексировать значения секретов.",
+    "Не удалять пользовательские данные без безопасной миграции.",
+    "Сохранить совместимость команды memory_reflect_chats для расписаний.",
+    "Использовать ./.venv/bin/python в проверках."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "npm run test:e2e",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "notes": [
+    "Основной пользовательский вызов memory.remember должен возвращать queued, а не accepted.",
+    "memory_id появляется после обработки очереди, а не как результат первичного вызова инструмента.",
+    "Если миграция MemoryBelief уже была применена в реальной среде, удаление должно быть отдельной безопасной миграцией; для текущей ветки предпочтительно не вводить MemoryBelief в MVP."
+  ],
+  "implementation_result": {
+    "completed_at": "2026-05-21",
+    "executor_reports": [
+      "EXECUTOR_REPORT.01-04.md"
+    ],
+    "acceptance_reports": [
+      "TASK_ACCEPTANCE.01-04.md"
+    ],
+    "retrospective": "RETROSPECTIVE.md"
+  }
+}

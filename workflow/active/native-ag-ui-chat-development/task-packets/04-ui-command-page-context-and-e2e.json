@@ -1,0 +1,28 @@
+{
+  "task_id": "04-ui-command-page-context-and-e2e",
+  "title": "UI commands, page context bridge and acceptance checks",
+  "type": "implementation",
+  "write_scope": [
+    "static/src/ai_ui/native_ai.js",
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md",
+    "workflow/active/native-ag-ui-chat-development/"
+  ],
+  "instructions": [
+    "Apply /localBusiness/uiCommands from STATE_DELTA.",
+    "Keep temporary /localBusinessUiCommands compatibility.",
+    "Listen for ai-context:update and include fresh page_context in forwardedProps.",
+    "Expand e2e to cover UI command execution and new chat."
+  ],
+  "acceptance": [
+    "Right panel command executes once.",
+    "Page context from the latest browser event is forwarded.",
+    "Workflow reports contain actual verification commands and results."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native AG-UI-compatible\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

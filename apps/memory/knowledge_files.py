@@ -1,0 +1,684 @@
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import os
+import re
+import subprocess
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+from django.conf import settings
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.utils import timezone
+
+from .models import MemoryKnowledgeItem
+from .policies import can_access_knowledge_item
+
+
+FRONT_MATTER_SEPARATOR = "---"
+INDEX_FILE_NAME = "index.md"
+LOG_FILE_NAME = "log.md"
+
+
+@dataclass(frozen=True)
+class KnowledgeFile:
+    metadata: dict[str, Any]
+    body: str
+
+
+@dataclass(frozen=True)
+class KnowledgeFileWriteResult:
+    relative_path: str
+    absolute_path: Path
+    text_hash: str
+    file_hash: str
+    commit_hash: str
+
+
+def knowledge_repo_root() -> Path:
+    override = os.environ.get("LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR", "").strip()
+    if override:
+        return Path(override)
+    return Path(settings.DATA_DIR) / "knowledge_repo"
+
+
+def ensure_knowledge_repo() -> Path:
+    root = knowledge_repo_root()
+    root.mkdir(parents=True, exist_ok=True)
+    _write_schema_file(root)
+    if not (root / ".git").exists():
+        _run_git(root, "init")
+    _ensure_git_identity(root)
+    return root
+
+
+def build_knowledge_file_relative_path(item: MemoryKnowledgeItem) -> str:
+    if item.knowledge_file_path:
+        return item.knowledge_file_path
+    year = (item.created_at or timezone.now()).year
+    source_code = _safe_path_part(item.source_code or "chat")
+    file_name = f"{_safe_file_stem(item.memory_id)}.md"
+    if item.scope == MemoryKnowledgeItem.Scope.ORGANIZATION:
+        return f"org/sources/{source_code}/{year}/{file_name}"
+    if not item.owner_user_id:
+        raise ValidationError("Personal knowledge item must have owner_user_id for file path.")
+    return f"users/{item.owner_user_id}/sources/{source_code}/{year}/{file_name}"
+
+
+def write_knowledge_item_file(
+    item: MemoryKnowledgeItem,
+    *,
+    body: str,
+    commit_message: str = "",
+) -> KnowledgeFileWriteResult:
+    body = (body or "").strip()
+    if not body:
+        raise ValidationError("Knowledge file body must not be empty.")
+    root = ensure_knowledge_repo()
+    relative_path = build_knowledge_file_relative_path(item)
+    target = _safe_repo_path(root, relative_path)
+    payload = KnowledgeFile(metadata=_knowledge_file_metadata(item, body=body), body=body)
+    content = render_knowledge_file(payload)
+    text_hash = sha256_text(body)
+    file_hash = sha256_text(content)
+
+    with knowledge_repo_lock(root):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = target.with_name(target.name + ".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        if sha256_text(tmp_path.read_text(encoding="utf-8")) != file_hash:
+            tmp_path.unlink(missing_ok=True)
+            raise ValidationError("Knowledge file hash check failed before replace.")
+        os.replace(tmp_path, target)
+        _run_git(root, "add", relative_path)
+        if (root / "schemas" / "knowledge_file.schema.json").exists():
+            _run_git(root, "add", "schemas/knowledge_file.schema.json")
+        _commit_if_needed(root, commit_message or f"Update knowledge {item.memory_id}")
+        commit_hash = _git_head(root)
+
+    item.knowledge_file_path = relative_path
+    item.knowledge_file_hash = file_hash
+    item.knowledge_file_commit = commit_hash
+    item.text_hash = text_hash
+    item.save(
+        update_fields=[
+            "knowledge_file_path",
+            "knowledge_file_hash",
+            "knowledge_file_commit",
+            "text_hash",
+            "updated_at",
+        ]
+    )
+    return KnowledgeFileWriteResult(
+        relative_path=relative_path,
+        absolute_path=target,
+        text_hash=text_hash,
+        file_hash=file_hash,
+        commit_hash=commit_hash,
+    )
+
+
+def read_knowledge_item_file(item: MemoryKnowledgeItem) -> KnowledgeFile:
+    if not item.knowledge_file_path:
+        raise ValidationError(f"Knowledge item {item.memory_id} has no knowledge file path.")
+    root = knowledge_repo_root()
+    path = _safe_repo_path(root, item.knowledge_file_path)
+    if not path.exists():
+        raise ValidationError(f"Knowledge file for {item.memory_id} is missing.")
+    content = path.read_text(encoding="utf-8")
+    parsed = parse_knowledge_file(content)
+    if file_canon_authoritative():
+        # ADR-0030 decision 1: the file is the canon. A mismatch between the
+        # file and the projection means the projection is stale (e.g. a manual
+        # edit) and is a reconcile signal, not a read error. Return the file's
+        # content; memory_reconcile marks the page needs-reconcile and rebuilds
+        # the projection.
+        return parsed
+    # Migration/rollback window (flag off): the projection is authoritative and
+    # hashes are validated so the authority can be switched only after a clean
+    # verification and rolled back by turning the flag off again.
+    if item.knowledge_file_hash and sha256_text(content) != item.knowledge_file_hash:
+        raise ValidationError(f"Knowledge file hash mismatch for {item.memory_id}.")
+    if sha256_text(parsed.body) != item.text_hash:
+        raise ValidationError(f"Knowledge body hash mismatch for {item.memory_id}.")
+    return parsed
+
+
+def file_canon_authoritative() -> bool:
+    return bool(getattr(settings, "LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE", False))
+
+
+def knowledge_file_body_hash(item: MemoryKnowledgeItem) -> str | None:
+    """Return the sha256 of the current file body, or None if unreadable.
+
+    Used by the reconciler as the content-hash gate: reindex only when the
+    file body hash differs from the projection's stored text_hash.
+    """
+    if not item.knowledge_file_path:
+        return None
+    path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+    if not path.exists():
+        return None
+    parsed = parse_knowledge_file(path.read_text(encoding="utf-8"))
+    return sha256_text(parsed.body)
+
+
+def read_knowledge_for_actor(*, item: MemoryKnowledgeItem, actor, request_id: str = "") -> dict[str, Any]:
+    if not can_access_knowledge_item(actor, item):
+        raise PermissionDenied("Knowledge item is not available for this user.")
+    parsed = read_knowledge_item_file(item)
+    return {
+        "result_type": "knowledge",
+        "knowledge_id": item.memory_id,
+        "text": parsed.body,
+        "source_refs": parsed.metadata.get("source_refs") or item.source_refs,
+        "source_kind": parsed.metadata.get("source_kind") or item.source_kind,
+        "source_code": parsed.metadata.get("source_code") or item.source_code,
+        "scope": parsed.metadata.get("scope") or item.scope,
+        "index_status": item.index_status,
+        "knowledge_file_path": item.knowledge_file_path,
+        "request_id": request_id,
+    }
+
+
+def verify_knowledge_item_file(item: MemoryKnowledgeItem) -> dict[str, Any]:
+    parsed = None
+    text_hash = ""
+    file_hash = ""
+    file_exists = False
+    error = ""
+    if item.knowledge_file_path:
+        path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+        file_exists = path.exists()
+        if file_exists:
+            content = path.read_text(encoding="utf-8")
+            file_hash = sha256_text(content)
+            try:
+                parsed = parse_knowledge_file(content)
+                text_hash = sha256_text(parsed.body)
+            except Exception as exc:
+                error = str(exc)
+    return {
+        "memory_id": item.memory_id,
+        "file_exists": file_exists,
+        "text_hash": text_hash,
+        "metadata_text_hash": item.text_hash,
+        "file_hash": file_hash,
+        "metadata_file_hash": item.knowledge_file_hash,
+        "error": error,
+        "ok": bool(item.knowledge_file_path)
+        and file_exists
+        and text_hash == item.text_hash
+        and (not item.knowledge_file_hash or file_hash == item.knowledge_file_hash),
+    }
+
+
+def rebuild_knowledge_index(*, scope: str, owner_user_id: int | None = None) -> str:
+    """Regenerate the OKF ``index.md`` for a scope by walking knowledge files on disk.
+
+    ADR-0030 decision 4: the index is a derived-layer artifact built from the
+    knowledge files themselves (the canon), not from the ``MemoryKnowledgeItem``
+    queryset. ``_summary.md`` is no longer produced.
+    """
+    root = ensure_knowledge_repo()
+    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
+        if owner_user_id is None:
+            raise ValidationError("owner_user_id is required for personal index.")
+        base_dir = root / "users" / str(owner_user_id)
+        index_relative = f"users/{owner_user_id}/{INDEX_FILE_NAME}"
+    else:
+        base_dir = root / "org"
+        index_relative = f"org/{INDEX_FILE_NAME}"
+
+    entries = _walk_knowledge_files(root=root, base_dir=base_dir)
+    content = _index_markdown(scope=scope, owner_user_id=owner_user_id, entries=entries)
+
+    with knowledge_repo_lock(root):
+        index_path = _safe_repo_path(root, index_relative)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = index_path.with_name(index_path.name + ".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        os.replace(tmp_path, index_path)
+        _run_git(root, "add", index_relative)
+        _commit_if_needed(root, f"Update {scope} knowledge index")
+    return index_relative
+
+
+def rebuild_all_knowledge_indexes() -> list[str]:
+    """Regenerate every scope's ``index.md`` by walking the knowledge repo on disk.
+
+    Intended to be called from ``memory_reconcile`` (and any place that wants a
+    fresh index after a batch of file-canon changes) rather than from every
+    single write, since it is a full-repo walk.
+    """
+    root = ensure_knowledge_repo()
+    written = [rebuild_knowledge_index(scope=MemoryKnowledgeItem.Scope.ORGANIZATION)]
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            try:
+                owner_user_id = int(user_dir.name)
+            except ValueError:
+                continue
+            written.append(rebuild_knowledge_index(scope=MemoryKnowledgeItem.Scope.PERSONAL, owner_user_id=owner_user_id))
+    return written
+
+
+def rebuild_knowledge_log(*, scope: str, owner_user_id: int | None = None) -> str:
+    """Regenerate ``log.md`` for a scope from ``git log`` (ADR-0030 decision 4).
+
+    The revision journal is git itself; ``log.md`` is a deterministic,
+    generated-only rendering of ``git log`` for the scope directory (commit
+    hash, ISO author date, author, subject) and is never hand-edited. The
+    file excludes its own path from the ``git log`` query so regenerating it
+    is stable: a commit that only touches ``log.md`` does not appear in the
+    next generation, so re-running with no new knowledge-file commits
+    produces byte-identical content (and therefore no new commit).
+    """
+    root = ensure_knowledge_repo()
+    if scope == MemoryKnowledgeItem.Scope.PERSONAL:
+        if owner_user_id is None:
+            raise ValidationError("owner_user_id is required for personal log.")
+        rel_dir = f"users/{owner_user_id}"
+        title = "Personal knowledge log"
+    else:
+        rel_dir = "org"
+        title = "Organization knowledge log"
+    log_relative = f"{rel_dir}/{LOG_FILE_NAME}"
+
+    entries = _git_log_entries(root, rel_dir=rel_dir, exclude_relative_paths=(log_relative,))
+    content = _log_markdown(title=title, entries=entries)
+
+    with knowledge_repo_lock(root):
+        log_path = _safe_repo_path(root, log_relative)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = log_path.with_name(log_path.name + ".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        os.replace(tmp_path, log_path)
+        _run_git(root, "add", log_relative)
+        _commit_if_needed(root, f"Update {scope} knowledge log")
+    return log_relative
+
+
+def rebuild_all_knowledge_logs() -> list[str]:
+    """Regenerate every scope's ``log.md``, mirroring ``rebuild_all_knowledge_indexes``."""
+    root = ensure_knowledge_repo()
+    written = [rebuild_knowledge_log(scope=MemoryKnowledgeItem.Scope.ORGANIZATION)]
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            try:
+                owner_user_id = int(user_dir.name)
+            except ValueError:
+                continue
+            written.append(rebuild_knowledge_log(scope=MemoryKnowledgeItem.Scope.PERSONAL, owner_user_id=owner_user_id))
+    return written
+
+
+def recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
+    """Return the most recent commits across the whole knowledge repo.
+
+    Used by the review UI's combined audit feed (ADR-0030 decision 4): unlike
+    ``rebuild_knowledge_log`` (a per-scope generated artifact committed to the
+    repo), this is a read-only query with no scope restriction and nothing is
+    written to disk.
+    """
+    root = knowledge_repo_root()
+    if not (root / ".git").exists():
+        return []
+    return _git_log_entries(root, rel_dir=None, exclude_relative_paths=(), limit=limit)
+
+
+def _git_log_entries(
+    root: Path,
+    *,
+    rel_dir: str | None,
+    exclude_relative_paths: tuple[str, ...] = (),
+    limit: int | None = None,
+) -> list[dict[str, str]]:
+    args = ["log", "--no-merges", "--date=iso-strict", "--pretty=format:%h\x1f%ad\x1f%an\x1f%s"]
+    if limit:
+        args += [f"-n{int(limit)}"]
+    pathspecs: list[str] = []
+    if rel_dir is not None:
+        pathspecs.append(rel_dir)
+        for excluded in exclude_relative_paths:
+            pathspecs.append(f":(exclude){excluded}")
+    if pathspecs:
+        args.append("--")
+        args.extend(pathspecs)
+    result = _run_git_optional(root, *args)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    entries = []
+    for line in result.stdout.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 4:
+            continue
+        commit_hash, date, author, subject = parts
+        entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject})
+    return entries
+
+
+def _log_markdown(*, title: str, entries: list[dict[str, str]]) -> str:
+    lines = [f"# {title}", ""]
+    for entry in entries:
+        lines.append(f"- `{entry['hash']}` {entry['date']} {entry['author']}: {entry['subject']}")
+    if not entries:
+        lines.append("_No commits yet._")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _walk_knowledge_files(*, root: Path, base_dir: Path) -> list[tuple[str, dict, str]]:
+    entries: list[tuple[str, dict, str]] = []
+    if not base_dir.exists():
+        return entries
+    for path in sorted(base_dir.rglob("*.md")):
+        if path.name in (INDEX_FILE_NAME, LOG_FILE_NAME):
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+            parsed = parse_knowledge_file(content)
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        meta = parsed.metadata or {}
+        if str(meta.get("status", MemoryKnowledgeItem.Status.ACTIVE)) != MemoryKnowledgeItem.Status.ACTIVE:
+            continue
+        entries.append((path.relative_to(root).as_posix(), meta, parsed.body))
+    entries.sort(key=lambda entry: (str(entry[1].get("source_code") or ""), entry[0]))
+    return entries
+
+
+def walk_all_knowledge_files(*, root: Path | None = None) -> list[tuple[str, dict, str]]:
+    """Return every active knowledge file across all scopes (``org/`` + every ``users/<id>/``).
+
+    Shared corpus-wide walk used by the per-scope index/log rebuilds' sibling
+    need — the ``relations:`` edge materializer
+    (``apps.memory.knowledge_edges.materialize_knowledge_edges``) — which
+    needs a single pass over the whole repo to resolve edge targets and
+    rebuild ``MemoryKnowledgeEdge`` deterministically from the file canon.
+    Ordering is stable (org first, then users sorted by id) so a rebuild with
+    no file changes is a no-op.
+    """
+    root = root or ensure_knowledge_repo()
+    entries = list(_walk_knowledge_files(root=root, base_dir=root / "org"))
+    users_dir = root / "users"
+    if users_dir.exists():
+        for user_dir in sorted(users_dir.iterdir()):
+            if not user_dir.is_dir():
+                continue
+            entries.extend(_walk_knowledge_files(root=root, base_dir=user_dir))
+    return entries
+
+
+def render_knowledge_file(payload: KnowledgeFile) -> str:
+    metadata = yaml.safe_dump(_plain_value(payload.metadata), allow_unicode=True, sort_keys=False).strip()
+    body = (payload.body or "").strip()
+    return f"{FRONT_MATTER_SEPARATOR}\n{metadata}\n{FRONT_MATTER_SEPARATOR}\n\n{body}\n"
+
+
+def parse_knowledge_file(content: str) -> KnowledgeFile:
+    if not content.startswith(FRONT_MATTER_SEPARATOR + "\n"):
+        return KnowledgeFile(metadata={}, body=content.strip())
+    _, rest = content.split(FRONT_MATTER_SEPARATOR + "\n", 1)
+    metadata_text, body = rest.split("\n" + FRONT_MATTER_SEPARATOR, 1)
+    metadata = yaml.safe_load(metadata_text) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return KnowledgeFile(metadata=metadata, body=body.strip())
+
+
+@contextlib.contextmanager
+def knowledge_repo_lock(root: Path):
+    """Exclusive inter-process lock for knowledge repository writes.
+
+    Single-writer discipline (ADR-0030 decision 2) must hold on both Linux and
+    Windows. The previous implementation used ``fcntl`` only and silently
+    degraded to a no-op wherever ``fcntl`` was unavailable (i.e. Windows),
+    which let a second process write concurrently. This uses ``fcntl`` on
+    POSIX and ``msvcrt`` on Windows behind one interface so a second process is
+    really excluded on both platforms; if neither locking primitive is
+    available we raise instead of silently proceeding.
+    """
+    lock_path = root / ".knowledge-write.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    # Append mode so concurrent openers do not truncate each other's lock file.
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        _acquire_exclusive_lock(lock_file)
+        try:
+            yield
+        finally:
+            _release_exclusive_lock(lock_file)
+
+
+def _acquire_exclusive_lock(lock_file) -> None:
+    fcntl = _import_fcntl()
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return
+    msvcrt = _import_msvcrt()
+    if msvcrt is not None:
+        lock_file.seek(0)
+        while True:
+            try:
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:
+                time.sleep(0.1)
+    raise RuntimeError(
+        "No cross-platform file lock available (need fcntl on POSIX or msvcrt on Windows)."
+    )
+
+
+def _release_exclusive_lock(lock_file) -> None:
+    fcntl = _import_fcntl()
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        return
+    msvcrt = _import_msvcrt()
+    if msvcrt is not None:
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+
+
+def _import_fcntl():
+    try:
+        import fcntl
+
+        return fcntl
+    except ImportError:
+        return None
+
+
+def _import_msvcrt():
+    try:
+        import msvcrt
+
+        return msvcrt
+    except ImportError:
+        return None
+
+
+def sha256_text(value: str) -> str:
+    return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
+
+
+def _knowledge_file_metadata(item: MemoryKnowledgeItem, *, body: str | None = None) -> dict[str, Any]:
+    now = timezone.now()
+    source_refs = list(item.source_refs or _legacy_source_refs(item))
+    # ADR-0030 invariant #9: the frontmatter (canon) carries only intrinsic
+    # knowledge metadata and workflow flags (lifecycle). Derived-layer state
+    # (index_status, index versions, the file's own hashes) lives in the
+    # projection, not in the canon, so re-indexing never rewrites the file.
+    return {
+        "knowledge_id": item.memory_id,
+        "legacy_memory_id": item.memory_id,
+        "scope": str(item.scope),
+        "owner_user_id": item.owner_user_id,
+        "kind": str(item.kind),
+        "source_code": item.source_code or "chat",
+        "source_kind": item.source_kind or "chat",
+        "source_refs": source_refs,
+        "sensitivity": str(item.sensitivity),
+        "scope_tokens": list(item.scope_tokens or []),
+        "status": str(item.status),
+        "lifecycle": _knowledge_lifecycle(item),
+        "created_at": (item.created_at or now).isoformat(),
+        "updated_at": (item.updated_at or now).isoformat(),
+        "metadata": _plain_value(dict(item.metadata or {})),
+    }
+
+
+def _knowledge_lifecycle(item: MemoryKnowledgeItem) -> str:
+    """Workflow lifecycle flag stored in the canon frontmatter.
+
+    Distinct from ``status`` (active/deleted/superseded): lifecycle tracks the
+    review workflow (current/pending/needs-reconcile). New writes are current;
+    reconciler may move a page to needs-reconcile/pending.
+    """
+    lifecycle = (dict(item.metadata or {}).get("lifecycle") or "").strip()
+    return lifecycle or "current"
+
+
+def _plain_value(value):
+    if isinstance(value, dict):
+        return {str(key): _plain_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_value(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return str(value) if type(value).__name__ != type(str(value)).__name__ and isinstance(value, str) else value
+    return str(value)
+
+
+def _legacy_source_refs(item: MemoryKnowledgeItem) -> list[dict[str, str]]:
+    refs = []
+    if item.source_session_id:
+        for message_id in item.source_message_ids or []:
+            refs.append(
+                {
+                    "kind": "chat_message",
+                    "value": f"chat_session:{item.source_session_id}/message:{message_id}",
+                }
+            )
+    return refs
+
+
+def _index_markdown(*, scope: str, owner_user_id: int | None, entries: list[tuple[str, dict, str]]) -> str:
+    title = "Organization knowledge index" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "Personal knowledge index"
+    lines = [f"# {title}", ""]
+    if owner_user_id is not None:
+        lines.append(f"Owner user id: {owner_user_id}")
+        lines.append("")
+    for relative_path, meta, body in entries:
+        knowledge_id = meta.get("knowledge_id") or meta.get("legacy_memory_id") or relative_path
+        source_code = meta.get("source_code") or "chat"
+        source_refs = meta.get("source_refs") or []
+        source_text = f" source={source_refs[0]['value']}" if source_refs else ""
+        lines.append(f"- `{knowledge_id}` [{source_code}] ({relative_path}) {body}{source_text}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _write_schema_file(root: Path) -> None:
+    schema_path = root / "schemas" / "knowledge_file.schema.json"
+    if schema_path.exists():
+        return
+    schema_path.parent.mkdir(parents=True, exist_ok=True)
+    schema_path.write_text(
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["knowledge_id", "scope", "source_refs", "status"],\n'
+        '  "properties": {\n'
+        '    "knowledge_id": {"type": "string"},\n'
+        '    "scope": {"enum": ["personal", "organization"]},\n'
+        '    "source_refs": {"type": "array"},\n'
+        '    "status": {"type": "string"},\n'
+        '    "lifecycle": {"type": "string"}\n'
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+
+def _safe_repo_path(root: Path, relative_path: str) -> Path:
+    path = (root / relative_path).resolve()
+    root_resolved = root.resolve()
+    try:
+        path.relative_to(root_resolved)
+    except ValueError as exc:
+        raise ValidationError("Knowledge file path escapes repository root.") from exc
+    return path
+
+
+def _safe_path_part(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
+    return cleaned.strip("._-") or "unknown"
+
+
+def _safe_file_stem(value: str) -> str:
+    cleaned = _safe_path_part(value)
+    if len(cleaned) <= 120:
+        return cleaned
+    return f"{cleaned[:80]}_{sha256_text(value)[:24]}"
+
+
+def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def _ensure_git_identity(root: Path) -> None:
+    name = _run_git_optional(root, "config", "user.name").stdout.strip()
+    email = _run_git_optional(root, "config", "user.email").stdout.strip()
+    if not name:
+        _run_git(root, "config", "user.name", "Local Business Memory Writer")
+    if not email:
+        _run_git(root, "config", "user.email", "memory-writer@local")
+
+
+def _commit_if_needed(root: Path, message: str) -> None:
+    # Check the STAGED diff specifically (``git diff --cached``), not
+    # ``git status --porcelain``: the working tree can legitimately show
+    # unrelated noise at this point (the always-present, never-committed
+    # ``.knowledge-write.lock`` file; another knowledge file edited directly
+    # on disk but not yet reconciled/staged) while the file(s) we just
+    # ``git add``-ed have no real diff from HEAD (e.g. a no-op index.md
+    # regeneration). Committing on any such noise fails with "nothing added
+    # to commit" / "no changes added to commit".
+    result = _run_git_optional(root, "diff", "--cached", "--quiet")
+    if result.returncode == 0:
+        return
+    _run_git(root, "commit", "-m", message)
+
+
+def _git_head(root: Path) -> str:
+    result = _run_git_optional(root, "rev-parse", "HEAD")
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _run_git_optional(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )

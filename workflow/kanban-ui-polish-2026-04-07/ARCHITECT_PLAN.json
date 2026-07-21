@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0",
+  "workflow_version": "v2",
+  "project_kind": "django-htmx-monorepo",
+  "block_id": "kanban-ui-polish-2026-04-07",
+  "block_goal": "Improve Kanban board and shared layout by moving branding to header, aligning header borders, and optimizing board grid for 5-column display.",
+  "architect_instructions_for_orchestrator": [
+    "Run PM plan review before execution and do not dispatch any task until Architect confirms the reviewed plan.",
+    "Preserve unrelated uncommitted files in the worktree and keep each worker strictly inside the declared write scope.",
+    "Materialize task packets mechanically from the export spec without paraphrasing task content.",
+    "Do not start a dependent slice until its prerequisites are accepted."
+  ],
+  "slice_task_path_template": "workflow/{block_id}/task-packets/{task_id}.json",
+  "role_runtime_bindings": [
+    {
+      "role": "architect",
+      "launcher": "codex-subagent",
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "tier": "high",
+      "reasoning_effort": "high"
+    },
+    {
+      "role": "orchestrator",
+      "launcher": "gemini-cli",
+      "provider": "google",
+      "model": "gemini-3-flash-preview",
+      "tier": "medium",
+      "reasoning_effort": "medium"
+    },
+    {
+      "role": "pm",
+      "launcher": "gemini-cli",
+      "provider": "google",
+      "model": "gemini-3-flash-preview",
+      "tier": "high",
+      "reasoning_effort": "high"
+    },
+    {
+      "role": "executor",
+      "launcher": "droid",
+      "provider": "minimax",
+      "model": "MiniMax-M2.7",
+      "tier": "medium",
+      "reasoning_effort": "high"
+    }
+  ],
+  "global_rules": [
+    "Keep the UI stack server-rendered with Django Templates, HTMX, and shared CSS; do not introduce a new frontend framework or build pipeline.",
+    "Ensure that branding move does not break the sidebar toggle button or breadcrumb visibility.",
+    "CSS changes should maintain alignment between the sidebar header and the site header for a cohesive top-of-page visual line."
+  ],
+  "global_acceptance": [
+    "The branding link is successfully moved to the site header, to the right of the sidebar toggle.",
+    "Breadcrumbs (header_context) appear on the same horizontal line as the branding in the site header.",
+    "The bottom border of the sidebar header and the site header align vertically on the same Y-axis.",
+    "The Kanban board grid displays 5 columns without horizontal overflow on standard desktop resolutions (e.g., 1440px width)."
+  ],
+  "global_invariants": [
+    "The project remains a Django-HTMX monorepo with no external JS dependencies added in this block.",
+    "The sidebar toggle functionality (JavaScript `toggleSidebar()`) must remain operational.",
+    "No changes to business logic or model schemas are permitted."
+  ],
+  "risk_policy": {
+    "R0": "mechanical local change",
+    "R1": "bounded delivery change",
+    "R2": "architecturally risky change"
+  },
+  "escalation_matrix": {
+    "scope_growth": "architect",
+    "visual_regression": "architect",
+    "layout_conflict": "architect"
+  },
+  "slices": [
+    {
+      "slice_id": "slice-header-polish",
+      "title": "Header and Branding Polish",
+      "goal": "Move branding to the site header and align the top visual borders between sidebar and main header.",
+      "risk_class": "R1",
+      "depends_on": [],
+      "read_files": [
+        "templates/base.html",
+        "static/src/css/app.css"
+      ],
+      "allowed_files": [
+        "templates/base.html",
+        "static/src/css/app.css"
+      ],
+      "forbidden_moves": [
+        "Do not remove the sidebar toggle button.",
+        "Do not change the underlying HTMX CSRF headers or block structure in base.html."
+      ],
+      "required_docs": [],
+      "required_checks": [
+        "./.venv/bin/python manage.py check"
+      ],
+      "control_points": [
+        "Branding is to the right of the toggle button.",
+        "Breadcrumbs are inline with the brand.",
+        "Header borders align vertically."
+      ],
+      "mandatory_tests": [],
+      "acceptance_criteria": [
+        "Branding is visible in the site header.",
+        "Sidebar header is empty or reduced but its border aligns with site header.",
+        "Site header breadcrumbs are correctly positioned."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-header-rebranding",
+          "executor_level": "senior",
+          "goal": "Move branding from sidebar to site header and ensure breadcrumb alignment.",
+          "inputs": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "read_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "templates/base.html",
+            "static/src/css/app.css"
+          ],
+          "implementation_notes": [
+            "Move the `<a href=\"...\" class=\"brand\">` block from `.sidebar-header` to `.site-header-main` in `templates/base.html`.",
+            "Adjust `.site-header-main` CSS to use flexbox for horizontal alignment of toggle, brand, and breadcrumbs.",
+            "Ensure `.sidebar-header` and `.site-header` have matching heights or border offsets in `app.css` to achieve vertical alignment of their bottom borders."
+          ],
+          "tests_to_write": [],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py check"
+          ],
+          "deliverables": [
+            "Updated templates/base.html with new header layout",
+            "Updated static/src/css/app.css with header alignment fixes",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "Header changes break the sidebar toggle animation",
+            "Breadcrumb content overflows the header on narrow screens"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high"
+          },
+          "runtime_override": null
+        }
+      ]
+    },
+    {
+      "slice_id": "slice-kanban-polish",
+      "title": "Kanban Grid Optimization",
+      "goal": "Adjust the Kanban board grid to allow 5 columns without horizontal scrolling.",
+      "risk_class": "R0",
+      "depends_on": [
+        "slice-header-polish"
+      ],
+      "read_files": [
+        "static/src/css/app.css",
+        "templates/workorders/partials/board_columns.html",
+        "apps/workorders/views.py"
+      ],
+      "allowed_files": [
+        "static/src/css/app.css"
+      ],
+      "forbidden_moves": [
+        "Do not change the board column rendering logic in Django views.",
+        "Do not remove the `minmax` safety in CSS."
+      ],
+      "required_docs": [],
+      "required_checks": [
+        "./.venv/bin/python manage.py check"
+      ],
+      "control_points": [
+        "Board grid accommodates 5 columns within the viewport."
+      ],
+      "mandatory_tests": [],
+      "acceptance_criteria": [
+        "5 columns are visible simultaneously on a 1440px wide screen without a horizontal scrollbar on the board container."
+      ],
+      "executor_mode": "senior",
+      "tasks": [
+        {
+          "task_id": "task-kanban-grid-fix",
+          "executor_level": "senior",
+          "goal": "Optimize the `.board-grid` CSS calculation for 5-column display.",
+          "inputs": [
+            "static/src/css/app.css",
+            "Board grid calc formula"
+          ],
+          "read_files": [
+            "static/src/css/app.css"
+          ],
+          "write_files": [
+            "static/src/css/app.css"
+          ],
+          "implementation_notes": [
+            "In `static/src/css/app.css`, locate `.board-grid` and its `grid-template-columns` property.",
+            "Reduce the `min-width` (currently 235px) in the `minmax()` function to allow 5 columns to fit. Suggested value: 200px or 210px.",
+            "Verify the `calc()` portion of the formula correctly accounts for the sidebar width and gaps when 5 slots are visible."
+          ],
+          "tests_to_write": [],
+          "tests_to_run": [
+            "./.venv/bin/python manage.py check"
+          ],
+          "deliverables": [
+            "Updated static/src/css/app.css with optimized grid formula",
+            "EXECUTOR_REPORT.md"
+          ],
+          "escalate_if": [
+            "Reducing min-width makes Kanban cards unreadably narrow",
+            "The overflow persists even with reduced min-width"
+          ],
+          "runtime_binding": {
+            "launcher": "droid",
+            "provider": "minimax",
+            "model": "MiniMax-M2.7",
+            "tier": "medium",
+            "reasoning_effort": "high"
+          },
+          "runtime_override": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  ".": "Task packets для модульных AI skills и registry-driven MCP-фасада",
+  "01-core-agent-skill-registry.json": "Core registry для AgentSkill providers",
+  "02-ai-skills-service-integration.json": "Интеграция module skills в apps.ai.skills_service",
+  "03-module-skills-workorders-waiting-list.json": "Модульные skills для заявок и листа ожидания",
+  "04-runtime-prompt-and-shortcut-removal.json": "Очистка runtime prompt и удаление hard-coded shortcut по заявкам",
+  "05-registry-driven-mcp-facade.json": "Registry-driven MCP facade и безопасные resources",
+  "06-admin-skill-creator-and-runtime-skill-authoring.json": "Admin skill creator и управляемое создание runtime skills",
+  "07-e2e-docs-and-acceptance.json": "E2E, документация и приемка реализации"
+}

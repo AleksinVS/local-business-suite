@@ -1,0 +1,54 @@
+{
+  "title": "Memory Ingestion Profiles",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "adapter_profiles",
+    "parser_profiles",
+    "ocr_profiles",
+    "limit_profiles",
+    "profiles"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "adapter_profiles": { "type": "object" },
+    "parser_profiles": { "type": "object" },
+    "ocr_profiles": { "type": "object" },
+    "limit_profiles": { "type": "object" },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "acl_mode": {
+            "type": "string",
+            "enum": [
+              "scope_rule",
+              "inherit_source_acl",
+              "inherit_source_acl_with_fallback",
+              "inherit_source_acl_future"
+            ]
+          },
+          "acl_policy": {
+            "type": "object",
+            "properties": {
+              "unresolved_policy": {
+                "type": "string",
+                "enum": ["block", "admin_only", "fallback_scope_rule"]
+              },
+              "fail_closed": { "type": "boolean" },
+              "group_nesting_depth": { "type": "integer", "minimum": 0 },
+              "cache_ttl_seconds": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

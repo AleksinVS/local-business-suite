@@ -1,0 +1,32 @@
+{
+  "task_id": "04-ranking-profile-e2e",
+  "title": "Add e2e coverage for ranking profiles",
+  "status": "ready",
+  "read_scope": [
+    "apps/memory/management/commands/memory_file_content_search_e2e.py",
+    "apps/memory/retrieval.py",
+    "services/agent_runtime/tools.py"
+  ],
+  "write_scope": [
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "services/agent_runtime/tests/test_normalization.py"
+  ],
+  "requirements": [
+    "Create controlled fixtures where one document wins exact FTS, one wins semantic vector and one appears in both channels.",
+    "Verify precise ranks exact FTS match first.",
+    "Verify semantic_heavy ranks semantic vector match first.",
+    "Verify balanced boosts documents matched by both channels.",
+    "Verify source_content returns source_data with warning and FTS trace.",
+    "Verify source_semantic returns source_data with warning and LanceDB vector trace.",
+    "Verify a document with a detected secret is removed from FTS/vector indexes and creates blocker issue.",
+    "Verify a document with PII is indexed and creates audit issue.",
+    "Verify trace contains ranking_profile, weights, RRF details and final score."
+  ],
+  "acceptance_checks": [
+    "python manage.py memory_file_content_search_e2e",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization"
+  ]
+}

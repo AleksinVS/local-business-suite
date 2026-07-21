@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для упрощения MVP-архитектуры памяти",
+  "01-primary-knowledge-item-path.json": "Сделать MemoryKnowledgeItem главным объектом памяти MVP",
+  "02-remove-memory-belief-from-runtime.json": "Убрать MemoryBelief из обычного runtime-пути MVP",
+  "03-queue-processor-vs-reflection.json": "Разделить обработчик очереди памяти и будущую рефлексию",
+  "04-simplify-source-trust-policy.json": "Упростить политику надежных источников для MVP",
+  "05-docs-tests-and-acceptance.json": "Обновить документацию, тесты и приемочные материалы"
+}

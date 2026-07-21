@@ -1,0 +1,29 @@
+{
+  "task_id": "03-policies-selectors-and-read-models",
+  "title": "Политики доступа, выборки и read models",
+  "goal": "Уменьшить дублирование read-логики и сделать права едиными для UI, AI, памяти, аналитики и будущих workers.",
+  "write_scope": [
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/inventory/",
+    "apps/memory/",
+    "apps/analytics/",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не вводить универсальный rules engine без необходимости",
+    "Не разделять command/read path для простых справочников",
+    "Не менять текущую модель ролей без отдельного плана"
+  ],
+  "implementation_notes": [
+    "Сохранять policy functions как главный формат: can_view, can_transition, can_access_source_object.",
+    "Повторяющиеся видимые выборки переносить в selectors.py или custom QuerySet/Manager, если это делает ORM API понятнее.",
+    "Memory и analytics должны использовать read models/projections, а не становиться владельцами бизнес-истины.",
+    "Тесты должны проверять, что новая страница или tool не обходят общий selector/policy."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.workorders.tests apps.memory.tests apps.analytics.tests",
+    ".venv/bin/python manage.py check",
+    "git diff --check"
+  ]
+}

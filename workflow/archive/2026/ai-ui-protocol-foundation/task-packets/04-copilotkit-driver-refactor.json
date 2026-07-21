@@ -1,0 +1,32 @@
+{
+  "task_id": "04-copilotkit-driver-refactor",
+  "title": "Refactor CopilotKit driver onto shared foundation",
+  "status": "completed_first_slice",
+  "objective": "Move the existing CopilotKit pilot to the shared UI runtime and protocol foundation without changing the user-visible pilot behavior.",
+  "write_scope": [
+    "static/src/copilotkit/",
+    "services/copilot_runtime/",
+    "vite.copilotkit.config.mjs",
+    "package.json",
+    "scripts/e2e/tests/copilotkit_sidebar.spec.ts",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md"
+  ],
+  "non_goals": [
+    "Do not enable CopilotKit by default.",
+    "Do not introduce Copilot Cloud persistence.",
+    "Do not expand frontend tools beyond safe UI commands."
+  ],
+  "acceptance_checks": [
+    "CopilotKit works with LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit.",
+    "Copilot Runtime health and info routes still pass.",
+    "CopilotKit e2e still covers config, runtime bridge and AG-UI request.",
+    "Operations docs mention the new driver setting."
+  ],
+  "verification_commands": [
+    "npm run build:copilotkit",
+    "node --check services/copilot_runtime/server.mjs",
+    "E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium --grep \"CopilotKit\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

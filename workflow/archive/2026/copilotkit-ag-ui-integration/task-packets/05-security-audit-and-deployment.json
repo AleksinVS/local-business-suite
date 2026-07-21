@@ -1,0 +1,40 @@
+{
+  "task_id": "05-security-audit-and-deployment",
+  "title": "Security, audit and deployment hardening",
+  "status": "planned",
+  "goal": "Ensure the CopilotKit pilot preserves existing authorization, confirmation, audit and deployment guarantees.",
+  "read_scope": [
+    "apps/ai/views.py",
+    "apps/ai/tooling.py",
+    "apps/ai/page_context.py",
+    "apps/workorders/policies.py",
+    "apps/memory/policies.py",
+    "docs/deployment/",
+    "docs/guides/TESTING_POLICY.md"
+  ],
+  "write_scope": [
+    "apps/ai/tests.py",
+    "services/agent_runtime/tests/",
+    "scripts/e2e/tests/",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md"
+  ],
+  "non_goals": [
+    "Do not introduce new public external endpoints without auth review.",
+    "Do not relax confirmation requirements.",
+    "Do not log raw prompts or full actor context."
+  ],
+  "acceptance": [
+    "User without object permission cannot open hidden object.",
+    "User without write permission cannot mutate object through CopilotKit.",
+    "Write actions require confirmation as before.",
+    "AgentActionLog contains request_id/conversation_id.",
+    "AG-UI events do not contain secrets, session cookies or raw PII.",
+    "Rollback path is documented."
+  ],
+  "verification": [
+    "python manage.py test apps.ai.tests",
+    "python manage.py validate_architecture_contracts",
+    "npm run test:e2e -- --project=chromium --grep \"copilotkit|ag-ui|permissions\""
+  ]
+}

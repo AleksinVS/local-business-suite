@@ -1,0 +1,31 @@
+{
+  "task_id": "06-docs-tests-and-acceptance",
+  "title": "Документация, тесты и приемка",
+  "goal": "Обновить архитектурные, эксплуатационные и planning-документы вместе с тестами и отчетами приемки.",
+  "write_scope": [
+    "docs/architecture/",
+    "docs/guides/",
+    "docs/planning/",
+    "workflow/active/design-patterns-hardening-2026-06-01/",
+    "PROJECT_STRUCTURE.yaml",
+    ".desc.json",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не архивировать workflow-блок без приемки владельцем",
+    "Не чистить корневой BACKLOG.md",
+    "Не оставлять завершенные задачи в docs/planning/backlog.md"
+  ],
+  "implementation_notes": [
+    "После изменения структуры обновить .desc.json и запустить make gen-struct.",
+    "Каждый task packet должен получить EXECUTOR_REPORT и TASK_ACCEPTANCE после выполнения.",
+    "Финальный отчет должен явно указать обновленные документы, выполненные проверки и остаточные риски.",
+    "Для крупных изменений нужна e2e-проверка главного пользовательского или интеграционного сценария."
+  ],
+  "acceptance_checks": [
+    "make gen-struct",
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ]
+}

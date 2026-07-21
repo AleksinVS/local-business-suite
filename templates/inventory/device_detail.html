@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <h1>{{ device.name }}</h1>
+      <p class="subtitle">{% if device.serial_number %}{{ device.serial_number }}{% else %}—{% endif %}{% if device.inventory_number %} · инв. № {{ device.inventory_number }}{% endif %}</p>
+    </div>
+    <div class="table-actions">
+      <a href="{% url 'inventory:list' %}" class="btn btn-outline">К списку</a>
+      {% if can_manage_inventory and not device.is_archived %}
+        <a href="{% url 'inventory:edit' device.pk %}" class="btn btn-primary">Редактировать</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if device.is_archived %}
+    <div class="flash warning">Изделие в архиве.</div>
+  {% endif %}
+
+  <fieldset class="form-section">
+    <legend>Основное</legend>
+    <div class="detail-grid">
+      <div class="info-item"><span class="info-label">Наименование</span><span class="info-value">{{ device.name }}</span></div>
+      <div class="info-item"><span class="info-label">Тип медицинского изделия</span><span class="info-value">{{ device.device_type|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Производитель</span><span class="info-value">{{ device.manufacturer|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Страна производства</span><span class="info-value">{{ device.production_country|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Модель</span><span class="info-value">{{ device.model|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Серийный номер</span><span class="info-value">{% if device.serial_number %}{{ device.serial_number }}{% else %}—{% endif %}</span></div>
+      <div class="info-item"><span class="info-label">Инвентарный номер</span><span class="info-value">{{ device.inventory_number|default:"—" }}</span></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="form-section">
+    <legend>Регистрационные данные</legend>
+    <div class="detail-grid">
+      <div class="info-item"><span class="info-label">Дата регистрации</span><span class="info-value">{{ device.registration_date|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Номер регистрационного удостоверения</span><span class="info-value">{{ device.registration_certificate_number|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Дата выпуска</span><span class="info-value">{{ device.production_date|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Срок службы / годности, лет</span><span class="info-value">{{ device.service_life_years|default:"—" }}</span></div>
+    </div>
+  </fieldset>
+
+  <fieldset class="form-section">
+    <legend>Размещение</legend>
+    <div class="detail-grid">
+      <div class="info-item"><span class="info-label">Структурное подразделение</span><span class="info-value">{{ device.department }}</span></div>
+      <div class="info-item" style="grid-column: 1 / -1;"><span class="info-label">Адрес</span><span class="info-value">{{ device.address|default:"—"|linebreaksbr }}</span></div>
+      {% if device.location %}
+        <div class="info-item" style="grid-column: 1 / -1;">
+          <span class="info-label">Местоположение (legacy)</span>
+          <span class="info-value">{{ device.location }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </fieldset>
+
+  <fieldset class="form-section">
+    <legend>Эксплуатация</legend>
+    <div class="detail-grid">
+      <div class="info-item">
+        <span class="info-label">Статус эксплуатации</span>
+        <span class="info-value">{{ device.get_operational_status_display }}</span>
+      </div>
+      <div class="info-item"><span class="info-label">Дата ввода в эксплуатацию</span><span class="info-value">{{ device.commissioned_at|default:"—" }}</span></div>
+      <div class="info-item"><span class="info-label">Дата вывода из эксплуатации</span><span class="info-value">{{ device.decommissioned_at|default:"—" }}</span></div>
+      {% if device.decommission_reason %}
+        <div class="info-item" style="grid-column: 1 / -1;">
+          <span class="info-label">Причина вывода из эксплуатации</span>
+          <span class="info-value">{{ device.decommission_reason }}</span>
+        </div>
+      {% endif %}
+      {% if device.notes %}
+        <div class="info-item" style="grid-column: 1 / -1;">
+          <span class="info-label">Примечания</span>
+          <span class="info-value">{{ device.notes }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </fieldset>
+
+  {% if can_manage_inventory and not device.is_archived %}
+    <form action="{% url 'inventory:archive' device.pk %}" method="post" class="form-actions">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline">Архивировать</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,51 @@
+{
+  "task_id": "04-tests-docs-and-acceptance",
+  "status": "completed",
+  "title": "Tests, docs and acceptance",
+  "goal": "Complete verification, update project structure metadata and record acceptance for the workorder tree implementation.",
+  "read_scope": [
+    "apps/workorders/tests.py",
+    "scripts/e2e/tests/",
+    "docs/planning/active/workorder-tree-view.md",
+    "workflow/active/workorder-tree-view/",
+    "README.md",
+    "PROJECT_STRUCTURE.yaml",
+    ".desc.json"
+  ],
+  "write_scope": [
+    "apps/workorders/tests.py",
+    "scripts/e2e/tests/workorder_tree.spec.ts",
+    "docs/planning/active/workorder-tree-view.md",
+    "workflow/active/workorder-tree-view/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/workorder-tree-view/TASK_ACCEPTANCE.implementation.md",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml",
+    "README.md",
+    "docs/guides/",
+    "docs/architecture/"
+  ],
+  "requirements": [
+    "Add targeted unit and view tests for branch access, tree projection, mode switching and forms.",
+    "Add e2e test for manager tree navigation, drawer open and edit.",
+    "Add e2e or view test for customer branch isolation.",
+    "Update docs only where behavior changes user or operator workflow.",
+    "Run make gen-struct after .desc.json updates.",
+    "Record actual verification commands and results in executor report.",
+    "Record acceptance and residual risks."
+  ],
+  "acceptance": [
+    "All agreed checks pass or documented residual risk is accepted.",
+    "Documentation reflects actual implemented behavior.",
+    "Backlog status is updated.",
+    "Workflow block has implementation report and acceptance file.",
+    "No temporary files are left outside .local/."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    "E2E_BASE_URL=http://127.0.0.1:8000 E2E_USERNAME=chief_manager E2E_PASSWORD=... npm run test:e2e -- --project=chromium --grep \"workorder tree\"",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

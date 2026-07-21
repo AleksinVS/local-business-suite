@@ -1,0 +1,12 @@
+{
+  ".": "Гайды по деплою (Docker, IIS)",
+  "AI_UI_PROTOCOL_DEPLOYMENT.md": "Deployment note по выбору AI UI драйвера copilotkit/native",
+  "DESKTOP_NOTIFIER_DEPLOYMENT.md": "Инструкция сборки и распространения Tauri-клиента уведомлений",
+  "DEPLOYMENT.md": "Основной гайд по деплою (Docker + VPS)",
+  "IIS_SSO.md": "Настройка IIS с Windows Authentication SSO",
+  "MEMORY_DEPLOYMENT.md": "Развертывание, runtime contracts и smoke-проверки системы памяти",
+  "SETTINGS_CENTER_DEPLOYMENT.md": "Deployment note для Settings Center, env proposals, migrations и restart semantics",
+  "WINDOWS_RUN.md": "Запуск на Windows (разработка)",
+  "COPILOTKIT_AG_UI_DEPLOYMENT.md": "Deployment note для CopilotKit Runtime, AG-UI endpoint и React island",
+  "POSTGRESQL_MIGRATION.md": "Runbook миграции основного репозитория с SQLite на одну PostgreSQL database"
+}

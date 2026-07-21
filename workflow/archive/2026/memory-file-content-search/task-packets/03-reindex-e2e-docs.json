@@ -1,0 +1,18 @@
+{
+  "task_id": "03-reindex-e2e-docs",
+  "goal": "Extend reindex, add e2e command and update docs/planning.",
+  "write_scope": [
+    "apps/memory/management/commands/memory_reindex.py",
+    "apps/memory/management/commands/memory_file_content_search_e2e.py",
+    "docs/architecture/",
+    "docs/guides/",
+    "docs/planning/",
+    "workflow/active/memory-file-content-search/"
+  ],
+  "acceptance": [
+    "Reindex supports corpus/backend/source/dry-run/force.",
+    "E2E covers file content hits and source warning.",
+    "Docs reflect implemented runtime state.",
+    "Workflow contains execution and acceptance reports."
+  ]
+}

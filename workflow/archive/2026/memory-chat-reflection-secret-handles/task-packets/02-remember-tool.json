@@ -1,0 +1,32 @@
+{
+  "task_id": "02-remember-tool",
+  "title": "Add queued memory.remember tool",
+  "status": "ready",
+  "objective": "Let the AI bot enqueue explicit remember requests by referenced chat messages.",
+  "write_scope": [
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "contracts/ai/tools.json",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Tool accepts session_id, message_ids, target_scope and optional user_note.",
+    "Default target_scope is personal.",
+    "Organization target requires explicit user intent and configured permission.",
+    "Tool only creates MemoryWriteRequest and returns queue status.",
+    "No direct index writes from agent runtime."
+  ],
+  "acceptance_checks": [
+    "Explicit remember creates queued request.",
+    "Default request is personal.",
+    "Organization request is denied without permission.",
+    "Action is audited."
+  ],
+  "verification_commands": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests apps.memory.tests"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "task_id": "01-access-scope-and-form-filtering",
+  "status": "completed",
+  "title": "Customer branch access and form filtering",
+  "goal": "Restrict customer visibility and workorder forms to the user's department branch.",
+  "read_scope": [
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/forms.py",
+    "apps/workorders/views.py",
+    "apps/accounts/models.py",
+    "apps/core/models.py",
+    "apps/inventory/models.py",
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/workorders/tests.py"
+  ],
+  "write_scope": [
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/forms.py",
+    "apps/workorders/views.py",
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/workorders/tests.py"
+  ],
+  "requirements": [
+    "Add a branch-aware view scope such as department_branch.",
+    "Change default customer view_scope from all to department_branch.",
+    "Make can_edit and other object actions unable to bypass can_view.",
+    "Restrict department and device querysets in WorkOrderForm and WorkOrderUpdateForm by user branch.",
+    "If customer has no User.department, return an empty visible queryset and safe form options.",
+    "Avoid repeated full Department tree queries per workorder where practical."
+  ],
+  "acceptance": [
+    "Customer sees workorders in own department and descendants.",
+    "Customer does not see sibling or parent-foreign branch workorders.",
+    "Customer cannot open foreign detail URL.",
+    "Customer cannot edit authored foreign-branch workorder through direct URL unless policy explicitly keeps that exception.",
+    "Customer cannot POST create/update with foreign department or foreign device.",
+    "Manager behavior remains all-scope.",
+    "Technician behavior remains assigned/unassigned/authored per existing rules."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.workorders.tests",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py check"
+  ]
+}

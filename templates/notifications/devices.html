@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Устройства уведомлений - {{ app_display_name }}{% endblock %}
+
+{% block content %}
+  <section class="panel notifications-page">
+    <div class="panel-header-row">
+      <div>
+        <h2>Устройства уведомлений</h2>
+        <p class="text-muted">Подключенные настольные клиенты получают уведомления через ограниченный device token.</p>
+      </div>
+      <a class="button-link button-link-muted" href="{% url 'notifications:center' %}">К уведомлениям</a>
+    </div>
+
+    <form method="post" action="{% url 'notifications:device_link_code' %}" class="notification-device-connect">
+      {% csrf_token %}
+      <div>
+        <h3>Подключить приложение в трее</h3>
+        <p class="text-muted">Сформируйте одноразовый код и введите его в Tauri-клиенте. Код действует 10 минут и показывается только один раз.</p>
+      </div>
+      <button type="submit" class="button-link">Сформировать код</button>
+    </form>
+
+    {% if new_link_code %}
+      <div class="notification-device-code">
+        <span>Код подключения</span>
+        <strong>{{ new_link_code }}</strong>
+        <small>Действует до {{ new_link_code_expires_at|date:"d.m.Y H:i" }}</small>
+      </div>
+    {% endif %}
+
+    <div class="notification-device-list">
+      {% for device in devices %}
+        <article class="notification-device-item{% if device.revoked_at %} notification-device-item-revoked{% endif %}">
+          <div>
+            <strong>{{ device.device_name }}</strong>
+            <span>{{ device.platform }}</span>
+            <small>
+              {% if device.revoked_at %}
+                Отозвано {{ device.revoked_at|date:"d.m.Y H:i" }}
+              {% elif device.last_seen_at %}
+                Последняя активность {{ device.last_seen_at|date:"d.m.Y H:i" }}
+              {% else %}
+                Активность еще не зафиксирована
+              {% endif %}
+            </small>
+          </div>
+          {% if not device.revoked_at %}
+            <form method="post" action="{% url 'notifications:device_revoke' device.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="notification-small-button notification-small-button-muted">Отозвать</button>
+            </form>
+          {% endif %}
+        </article>
+      {% empty %}
+        <div class="notification-empty">Подключенных устройств нет.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

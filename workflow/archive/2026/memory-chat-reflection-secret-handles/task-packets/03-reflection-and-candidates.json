@@ -1,0 +1,30 @@
+{
+  "task_id": "03-reflection-and-candidates",
+  "title": "Add sleep-time reflection and organization candidates",
+  "status": "ready",
+  "objective": "Consolidate chat knowledge during low-load windows and propose organization-level candidates.",
+  "write_scope": [
+    "apps/memory/management/commands/memory_reflect_chats.py",
+    "apps/memory/chat_reflection.py",
+    "apps/memory/tests.py",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Add dry-run and real mode.",
+    "Use processing window, watermarks and locks.",
+    "Deduplicate and merge personal memories.",
+    "Create organization candidates for cross-user/org-relevant knowledge.",
+    "Never publish reflection-derived organization memory without review."
+  ],
+  "acceptance_checks": [
+    "Dry-run reports planned changes without writes.",
+    "Repeated real run is idempotent.",
+    "Candidate review status is visible.",
+    "Reflection errors do not corrupt current projections."
+  ],
+  "verification_commands": [
+    "python manage.py memory_reflect_chats --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

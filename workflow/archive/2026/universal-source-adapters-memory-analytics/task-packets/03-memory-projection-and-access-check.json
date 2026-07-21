@@ -1,0 +1,39 @@
+{
+  "task_id": "03-memory-projection-and-access-check",
+  "title": "Build memory projection from source envelopes",
+  "status": "completed",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/policies.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/security.py",
+    "apps/memory/deidentification.py",
+    "apps/core/source_adapters.py"
+  ],
+  "write_scope": [
+    "apps/memory/services.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/policies.py",
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "requirements": [
+    "Add service to upsert MemorySourceObject and MemorySearchDocument from SourceObjectEnvelope.",
+    "Index envelope text into FTS5 and vector backend according to existing index profiles.",
+    "Handle operation=delete through tombstone/deactivation of search documents and index rows.",
+    "Apply secret scan before indexing regardless of privacy profile.",
+    "Apply PII controls only when privacy profile enables them.",
+    "Do not create PII audit when privacy profile is pii_off.",
+    "Before returning source_data, enforce adapter_check through the registered source adapter when configured.",
+    "If adapter_check adapter is missing, deny result and record safe audit trace."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_reindex --corpus source_data --backend fulltext --dry-run",
+    "python manage.py memory_file_content_search_e2e"
+  ]
+}

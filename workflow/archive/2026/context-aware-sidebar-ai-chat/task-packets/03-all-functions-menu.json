@@ -1,0 +1,32 @@
+{
+  "task_id": "03-all-functions-menu",
+  "status": "implemented",
+  "title": "Top-left 'Все функции' menu",
+  "goal": "Move the current left navigation into a top-left dropdown menu.",
+  "read_scope": [
+    "templates/base.html",
+    "static/src/css/app.css",
+    "apps/core/context_processors.py"
+  ],
+  "write_scope": [
+    "templates/base.html",
+    "static/src/css/app.css",
+    "templates/.desc.json"
+  ],
+  "requirements": [
+    "Preserve existing navigation visibility checks.",
+    "Keep logout available.",
+    "Support keyboard access, Esc close and click-outside close.",
+    "Keep favorites in the header.",
+    "Use the label 'Все функции'."
+  ],
+  "acceptance": [
+    "Every currently visible sidebar navigation item is reachable from the dropdown.",
+    "The dropdown does not hide page controls on desktop or mobile.",
+    "The old left-nav area is available for chat."
+  ],
+  "verification": [
+    "python manage.py test apps.core.tests",
+    "npm run test:e2e"
+  ]
+}

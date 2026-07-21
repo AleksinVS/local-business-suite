@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Уведомления портала</title>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h1>Уведомления портала</h1>
+            <p id="status-text">Подключите приложение к порталу.</p>
+          </div>
+          <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+        </div>
+
+        <form id="connect-form" class="connect-form">
+          <label>
+            Адрес портала
+            <input id="portal-url" type="url" placeholder="https://portal.example.local" autocomplete="url" required>
+          </label>
+          <label>
+            Код подключения
+            <input id="link-code" type="text" placeholder="ABCD-EFGH-IJKL" autocomplete="one-time-code" required>
+          </label>
+          <button type="submit">Подключить</button>
+        </form>
+
+        <div class="connected-actions" id="connected-actions" hidden>
+          <button type="button" id="open-portal">Открыть портал</button>
+          <button type="button" id="toggle-autostart">Автозапуск</button>
+          <button type="button" id="disconnect" class="button-muted">Отключить</button>
+        </div>
+
+        <div class="feed">
+          <h2>Последние уведомления</h2>
+          <div id="notification-list" class="notification-list">
+            <div class="empty">Уведомлений пока нет.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

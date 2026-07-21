@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: удаление MemorySnapshot/MemoryChunk из активного пути памяти",
+  "ARCHITECT_PLAN.json": "Архитектурный план исполнения удаления MemorySnapshot/MemoryChunk",
+  "BLOCK_BRIEF.md": "Краткое описание workflow-блока удаления MemorySnapshot/MemoryChunk",
+  "EXECUTOR_REPORT.01-05.md": "Отчет исполнения блока удаления MemorySnapshot/MemoryChunk",
+  "TASK_ACCEPTANCE.01-05.md": "Приемка блока удаления MemorySnapshot/MemoryChunk",
+  "RETROSPECTIVE.md": "Ретроспектива блока удаления MemorySnapshot/MemoryChunk",
+  "task-packets": "Task packets для замены MemorySnapshot/MemoryChunk на MemorySearchDocument"
+}

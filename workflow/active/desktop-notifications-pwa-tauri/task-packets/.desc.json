@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для PWA-first уведомлений и опционального Tauri-клиента",
+  "01-notification-domain-and-api.json": "Task packet: серверный домен уведомлений и API",
+  "02-pwa-browser-notification-client.json": "Task packet: PWA, service worker и браузерные уведомления",
+  "03-workorder-event-producers-and-preferences.json": "Task packet: события заявок и пользовательские настройки",
+  "04-verification-operations-and-user-docs.json": "Task packet: проверки, операционная и пользовательская документация",
+  "05-optional-tauri-client-design.json": "Task packet: опциональный Tauri-клиент"
+}

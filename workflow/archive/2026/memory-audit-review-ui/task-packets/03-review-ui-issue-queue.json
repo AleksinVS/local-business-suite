@@ -1,0 +1,35 @@
+{
+  "task_id": "03-review-ui-issue-queue",
+  "title": "Implement dashboard, issue queue and issue detail UI",
+  "status": "completed",
+  "read_scope": [
+    "apps/memory/selectors.py",
+    "apps/memory/services.py",
+    "apps/memory/policies.py",
+    "apps/settings_center/views.py",
+    "templates/base.html",
+    "templates/settings_center/",
+    "static/src/css/app.css",
+    "apps/memory/tests.py"
+  ],
+  "write_scope": [
+    "apps/memory/views.py",
+    "apps/memory/urls.py",
+    "templates/memory/review/",
+    "static/src/css/app.css",
+    "apps/memory/tests.py",
+    "docs/guides/"
+  ],
+  "requirements": [
+    "Add memory review dashboard with issue and index counters.",
+    "Add issue queue with filters for status, severity, issue kind, source/domain, assignment and privacy/blocker flags.",
+    "Add issue detail page with safe metadata, linked source object, linked search document, review history and action forms.",
+    "Use existing portal layout and restrained operator UI.",
+    "Do not show full extracted text, raw secrets, raw PII or raw query.",
+    "Use POST with CSRF for all state-changing actions."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ]
+}

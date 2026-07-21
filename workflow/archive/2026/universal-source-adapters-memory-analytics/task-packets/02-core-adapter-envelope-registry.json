@@ -1,0 +1,32 @@
+{
+  "task_id": "02-core-adapter-envelope-registry",
+  "title": "Implement SourceAdapter protocol, envelope and registry",
+  "status": "completed",
+  "read_scope": [
+    "apps/core",
+    "apps/memory/external_connectors.py",
+    "apps/memory/document_ingestion.py",
+    "apps/analytics/services.py",
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md"
+  ],
+  "write_scope": [
+    "apps/core/source_adapters.py",
+    "apps/core/tests.py",
+    "apps/core/json_utils.py",
+    "docs/architecture/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Create SourceObjectEnvelope as a validated dataclass or equivalent structured object.",
+    "Create SourceAdapter protocol with iter_changed_objects, get_object, render_envelope, can_access and extract_analytics_facts hooks.",
+    "Create adapter registry with explicit registration by source_code.",
+    "Support operation upsert and delete.",
+    "Reserve source_sequence and previous_content_hash for future event mode.",
+    "Do not require event bus or outbox in this task.",
+    "Keep adapter errors observable and fail closed for adapter_check sources."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.core.tests"
+  ]
+}

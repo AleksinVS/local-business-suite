@@ -1,0 +1,15 @@
+{
+  "task_id": "02-templates-and-js-copy",
+  "status": "completed",
+  "goal": "Translate visible strings in templates and browser JavaScript without changing behavior.",
+  "write_scope": [
+    "templates/",
+    "static/src/js/"
+  ],
+  "acceptance": [
+    "Navigation and major page headings are Russian.",
+    "Memory review, settings, AI chat, board, waiting list, inventory and analytics UI copy is Russian.",
+    "JavaScript alerts, placeholders and dynamic messages are Russian.",
+    "Technical identifiers and CSS/JS contracts are unchanged."
+  ]
+}

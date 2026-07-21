@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "name": "memory_claims_policy",
+  "description": "Future-stage policy for optional claim and belief lifecycle above file-backed MemoryKnowledgeItem, search documents and graph facts. MVP schema does not include MemoryClaim/MemoryBelief and remember/search does not create or return these objects automatically.",
+  "claim_types": [
+    "fact",
+    "preference",
+    "procedure",
+    "policy",
+    "decision",
+    "metric_observation",
+    "incident",
+    "action_outcome"
+  ],
+  "claim_statuses": [
+    "candidate",
+    "accepted",
+    "rejected",
+    "contested",
+    "superseded",
+    "expired"
+  ],
+  "belief_statuses": [
+    "candidate",
+    "accepted",
+    "rejected",
+    "contested",
+    "superseded",
+    "expired"
+  ],
+  "review_rules": {
+    "automatic_claim_creation_on_remember": false,
+    "automatic_belief_creation_on_remember": false,
+    "personal_memory_direct_claim_status": "accepted",
+    "organization_direct_claim_status": "accepted",
+    "organization_candidate_claim_status": "candidate",
+    "organization_belief_requires_reviewer": true,
+    "rejected_claims_are_retained": true
+  },
+  "freshness_windows": {
+    "default_days": 365,
+    "metric_observation_days": 30,
+    "incident_days": 90
+  },
+  "contradiction_policy": {
+    "automatic_detection_in_hot_path": false,
+    "contested_blocks_direct_context": true,
+    "contradiction_summary_mode": "background_only"
+  }
+}

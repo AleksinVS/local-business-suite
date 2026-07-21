@@ -1,0 +1,23 @@
+{
+  ".": "Модуль заявок с workflow (наряды-заказы)",
+  "models.py": "Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority",
+  "contracts.py": "Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)",
+  "views.py": "Представления: Kanban-доска, детали наряда, комментарии",
+  "forms.py": "Формы нарядов",
+  "tree.py": "Серверная проекция дерева заявок по подразделениям, медизделиям и заявкам",
+  "settings_descriptors.py": "Дескрипторы настроек заявок для центра настроек",
+  "services.py": "Сервисы: создание, переходы статусов, подтверждение закрытия, оценка",
+  "policies.py": "Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory",
+  "selectors.py": "Запросы для получения видимых нарядов",
+  "notification_events.py": "Производители безопасных уведомлений по событиям заявок",
+  "source_adapter.py": "SourceAdapter заявок для memory source_data search и analytics projection",
+  "right_panel.py": "RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре",
+  "ai_skills.py": "Модульные AI skills заявок для открытия карточек и workflow-инструкций",
+  "urls.py": "URL-маршруты нарядов",
+  "admin.py": "Регистрация моделей в Django Admin",
+  "apps.py": "Конфигурация приложения",
+  "signals.py": "Сигналы Django",
+  "tests.py": "Тесты приложения",
+  "management/": "Django management-команды приложения (например, сидинг канбан-доски)",
+  "media_policies.py": "Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки"
+}

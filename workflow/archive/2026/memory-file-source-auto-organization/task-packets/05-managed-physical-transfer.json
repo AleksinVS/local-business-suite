@@ -1,0 +1,50 @@
+{
+  "task_id": "05-managed-physical-transfer",
+  "title": "Managed physical transfer with quarantine and retention",
+  "status": "completed",
+  "objective": "Implement approved physical transfer into managed_fs with copy, verify, metadata commit, source quarantine and controlled purge.",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/review_services.py",
+    "docs/guides/WORKER_AND_QUEUE_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "write_scope": [
+    "apps/memory/storage_backends.py",
+    "apps/memory/file_organization_move.py",
+    "apps/memory/management/commands/memory_file_move_worker.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/tests.py",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
+  ],
+  "non_goals": [
+    "Do not purge source files immediately after copy.",
+    "Do not move files that have unresolved ACL, secret or sensitivity conflicts.",
+    "Do not implement S3 backend in MVP unless separately approved.",
+    "Do not store move manifests in repository root."
+  ],
+  "requirements": [
+    "Move jobs must be idempotent.",
+    "Managed copy must be verified by sha256 and size.",
+    "Metadata and index updates must happen after verification.",
+    "Source deletion must go through quarantine and retention.",
+    "Purge must require backup checkpoint or explicit policy override.",
+    "Failure must stop before deletion and surface in review."
+  ],
+  "acceptance_checks": [
+    "Approved move copies the file, verifies hash and updates current physical placement.",
+    "Hash mismatch leaves the source intact and creates a blocker issue.",
+    "Source file is not purged before retention and backup checkpoint.",
+    "Re-running the same move job does not create duplicate placements."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py memory_file_move_worker --source-code <code> --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

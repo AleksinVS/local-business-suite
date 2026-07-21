@@ -1,0 +1,10 @@
+{
+  ".": "Workflow: разработка ИИ-чата в режиме CopilotKit UI",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ, scope и приемки workflow-блока",
+  "ARCHITECT_PLAN.json": "Машиночитаемый план исполнения для разработки CopilotKit AI UI chat",
+  "task-packets": "Задания исполнителей по отдельным срезам разработки",
+  "EXECUTOR_REPORT.documentation.md": "Отчет исполнения документационного среза",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка документационного среза",
+  "EXECUTOR_REPORT.implementation.md": "Отчет исполнения первого runtime hardening среза",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка первого runtime hardening среза"
+}

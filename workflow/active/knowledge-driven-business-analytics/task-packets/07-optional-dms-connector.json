@@ -1,0 +1,29 @@
+{
+  "task_id": "07-optional-dms-connector",
+  "title": "Design and implement optional DMS connector interface",
+  "status": "planned",
+  "read_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md",
+    "docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "contracts/analytics/",
+    "docs/deployment/",
+    "docs/guides/KNOWLEDGE_ANALYTICS_OPERATIONS.md"
+  ],
+  "requirements": [
+    "Define DMS connector interface without requiring a specific DMS product.",
+    "Prefer CMIS, then vendor REST API, then SharePoint/Microsoft Graph delta, then approved read-only SQL bridge, then export folder fallback.",
+    "Treat DMS as source of truth for registered document identity, versions, workflow statuses and legal retention.",
+    "Support DMS-to-email/file dedup through content and semantic fingerprints.",
+    "Do not bypass document ingestion DLP/parser policies."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  ".": "Task packets для русификации интерфейса",
+  "01-docs-and-language-policy.json": "Документация и правила языка интерфейса",
+  "02-templates-and-js-copy.json": "Русификация шаблонов и JavaScript-сообщений",
+  "03-django-labels-and-contract-descriptions.json": "Русификация Django labels, форм, настроек и описаний tools",
+  "04-verification-and-acceptance.json": "Проверки, отчет исполнения и приемка"
+}

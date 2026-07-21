@@ -1,0 +1,43 @@
+{
+  "task_id": "05-agent-runtime-context-prompts",
+  "status": "implemented",
+  "title": "Agent runtime context and prompts",
+  "goal": "Teach the AI runtime/tool routing to use current page context safely.",
+  "read_scope": [
+    "apps/ai/runtime_client.py",
+    "apps/ai/tooling.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "contracts/ai/task_types.json",
+    "docs/planning/active/memory-hybrid-ranking-profiles-and-agent-prompts.md"
+  ],
+  "write_scope": [
+    "apps/ai/",
+    "contracts/ai/",
+    "apps/ai/tests.py",
+    "docs/guides/"
+  ],
+  "requirements": [
+    "Add read-only tool ui.get_current_context.",
+    "Pass context_snapshot_id, window_id, context_version and context_hint to AgentRuntimeClient.chat and chat_stream.",
+    "Make ui.get_current_context read the bound context_snapshot_id for the current message/request.",
+    "Respect context_tool_enabled from the effective ai.chat_settings surface settings.",
+    "Keep backward compatibility if runtime ignores the new field.",
+    "Update prompts so context-dependent questions call ui.get_current_context.",
+    "Update prompts so 'эта заявка' maps to current workorder selection after context resolution.",
+    "Require confirmation for write actions.",
+    "Trace module, object_type, context_version, context_tool_called and hashed object id."
+  ],
+  "acceptance": [
+    "Current workorder context leads to ui.get_current_context and then workorders.get/search for read questions.",
+    "If the user changes cards after submit, the current request still uses the originally bound snapshot.",
+    "Current workorder context pre-fills write tools but does not bypass confirmation.",
+    "Context-independent questions do not need to call ui.get_current_context.",
+    "When context_tool_enabled is false for the current surface, the runtime degrades without calling ui.get_current_context.",
+    "No context path behaves like existing chat."
+  ],
+  "verification": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests"
+  ]
+}

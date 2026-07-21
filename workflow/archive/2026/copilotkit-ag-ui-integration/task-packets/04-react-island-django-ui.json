@@ -1,0 +1,41 @@
+{
+  "task_id": "04-react-island-django-ui",
+  "title": "React island embedded in Django AI UI",
+  "status": "planned",
+  "goal": "Embed CopilotKit as a feature-flagged React island in the existing Django UI while preserving the current AI sidebar fallback.",
+  "read_scope": [
+    "templates/ai/",
+    "templates/core/",
+    "static/src/js/ai_chat.js",
+    "static/src/js/sidebar_chat.js",
+    "static/src/js/page_context.js",
+    "static/src/js/right_panel.js",
+    "apps/ai/chat_settings.py",
+    "apps/ai/context_processors.py"
+  ],
+  "write_scope": [
+    "templates/ai/",
+    "static/src/",
+    "package.json",
+    "scripts/e2e/tests/",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not convert the portal to a single page app.",
+    "Do not remove current sidebar markup.",
+    "Do not read full DOM into CopilotKit state.",
+    "Do not execute domain writes from frontend tools."
+  ],
+  "acceptance": [
+    "CopilotKit island is hidden when feature flag is disabled.",
+    "Current AI sidebar remains usable.",
+    "Island receives only safe context envelope.",
+    "ui.open_right_panel works through existing right panel bridge.",
+    "Layout is checked on desktop and mobile widths."
+  ],
+  "verification": [
+    "python manage.py check",
+    "npm run test:e2e -- --project=chromium --grep \"copilotkit|sidebar\""
+  ]
+}

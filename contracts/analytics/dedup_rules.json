@@ -1,0 +1,12 @@
+[
+  {
+    "code": "default_content_dedup",
+    "owner": "analytics",
+    "exact_hash_fields": ["raw_sha256", "attachment_sha256", "normalized_text_sha256"],
+    "near_duplicate_fields": ["near_duplicate_key", "business_key"],
+    "semantic_fields": ["subject", "predicate", "object", "period", "qualifiers"],
+    "authority_priority": ["dms_registered", "dms_approved", "official_mail_attachment", "official_mail_body", "controlled_file_share", "chat_paste"],
+    "auto_merge_exact": true,
+    "review_near_duplicates": true
+  }
+]

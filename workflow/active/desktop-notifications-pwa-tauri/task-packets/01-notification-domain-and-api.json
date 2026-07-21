@@ -1,0 +1,50 @@
+{
+  "task_id": "01-notification-domain-and-api",
+  "title": "Notification domain and user API",
+  "status": "pending",
+  "objective": "Create apps.notifications with server-side notification event storage, per-user recipient state and API for the current user's notification feed.",
+  "read_scope": [
+    "docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md",
+    "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
+    "config/settings.py",
+    "config/urls.py",
+    "templates/base.html",
+    "apps/accounts/models.py",
+    "apps/workorders/policies.py"
+  ],
+  "write_scope": [
+    "apps/notifications/",
+    "config/settings.py",
+    "config/urls.py",
+    "templates/base.html",
+    "apps/notifications/tests.py",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not implement Push API or Web Push subscriptions.",
+    "Do not add Tauri device tokens in this first task.",
+    "Do not let notifications grant access to source objects.",
+    "Do not include sensitive source payloads in notification body."
+  ],
+  "requirements": [
+    "Notification events must be immutable enough for audit and replay.",
+    "Recipient rows must track new, seen, read and dismissed states.",
+    "Feed API must return only notifications for request.user.",
+    "Cursor-based polling must be idempotent.",
+    "Mark-read and dismiss operations must be safe to retry.",
+    "Notification payload must include a safe target_url, not raw routing decisions."
+  ],
+  "acceptance_checks": [
+    "Authenticated user can fetch their own notifications.",
+    "Unauthenticated user cannot fetch notifications.",
+    "User A cannot fetch or mark User B notifications.",
+    "Duplicate client polling does not duplicate events.",
+    "Notification body length and allowed metadata are validated."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.notifications.tests",
+    "git diff --check"
+  ]
+}

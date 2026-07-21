@@ -1,0 +1,8 @@
+{
+  ".": "Опциональный Tauri-клиент уведомлений в трее для Windows и Linux",
+  "package.json": "npm-скрипты клиента, зависимости Tauri/Vite и команды сборки",
+  "package-lock.json": "Lock-файл npm-зависимостей Tauri-клиента",
+  "index.html": "HTML-точка входа Tauri webview",
+  "src/": "Frontend-код окна подключения, polling и системных уведомлений",
+  "src-tauri/": "Rust-конфигурация и runtime Tauri 2"
+}

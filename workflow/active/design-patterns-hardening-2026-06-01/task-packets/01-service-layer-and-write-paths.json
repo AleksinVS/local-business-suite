@@ -1,0 +1,30 @@
+{
+  "task_id": "01-service-layer-and-write-paths",
+  "title": "Единый слой сценариев записи и write-path",
+  "goal": "Свести значимые изменения состояния к доменным service functions, чтобы UI, AI tools и management commands не дублировали бизнес-логику.",
+  "write_scope": [
+    "apps/workorders/services.py",
+    "apps/workorders/views.py",
+    "apps/ai/services.py",
+    "apps/ai/tooling.py",
+    "apps/inventory/",
+    "apps/settings_center/contract_services.py",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не вводить generic repository поверх каждой Django-модели",
+    "Не переписывать простые read-only views",
+    "Не менять формат контрактов без отдельного ADR или явно принятого плана"
+  ],
+  "implementation_notes": [
+    "Начать с write-сценариев с риском для прав и audit: role_rules, workorders transitions, inventory writes.",
+    "Доменный сервис должен быть единственным местом, где меняется бизнес-состояние и создаются связанные записи audit/log.",
+    "Для операций из нескольких записей использовать transaction.atomic и при необходимости select_for_update.",
+    "AI wrapper должен только валидировать payload на уровне tool contract, проверять confirmation и вызывать доменный сервис."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.workorders.tests apps.ai.tests apps.settings_center.tests",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ]
+}

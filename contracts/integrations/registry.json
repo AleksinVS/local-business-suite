@@ -1,0 +1,36 @@
+[
+  {
+    "code": "legacy_cmms_export",
+    "name": "Legacy CMMS Export",
+    "owner": "operations",
+    "transport": "file",
+    "mode": "batch",
+    "direction": "inbound",
+    "status": "planned",
+    "source_of_truth": "external",
+    "payloads": [
+      {
+        "name": "workorder_snapshot_csv",
+        "format": "csv",
+        "schedule": "daily"
+      }
+    ]
+  },
+  {
+    "code": "active_directory",
+    "name": "Active Directory",
+    "owner": "infrastructure",
+    "transport": "ldap",
+    "mode": "online",
+    "direction": "inbound",
+    "status": "planned",
+    "source_of_truth": "external",
+    "payloads": [
+      {
+        "name": "user_identity",
+        "format": "ldap",
+        "schedule": "on_login"
+      }
+    ]
+  }
+]

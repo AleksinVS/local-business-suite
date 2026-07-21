@@ -1,0 +1,104 @@
+{
+  "block_id": "architecture-review-remediation-2026-07-04",
+  "title": "Исправления по архитектурному ревью 2026-07-04",
+  "status": "planned",
+  "source_review": "docs/guides/ARCHITECTURE_REVIEW_2026-07-04.md",
+  "planning_doc": "docs/planning/active/architecture-review-remediation-2026-07-04.md",
+  "supersedes_block": "workflow/active/architecture-review-remediation-2026-06-01",
+  "owner_decisions": [
+    "DEPLOY_PRIVATE.md переносится в deployments/ и описывается в PROJECT_STRUCTURE.yaml",
+    "learning/ и drafts/ в корне остаются как есть",
+    "legacy-драйвер AI UI выводится (ADR-0032)",
+    "CopilotKit-драйвер не трогать, решение по нему отложено"
+  ],
+  "phases": [
+    {"phase": 1, "title": "Авторизация и целостность контрактов", "tasks": ["01", "02"]},
+    {"phase": 2, "title": "Production-контур", "tasks": ["03"]},
+    {"phase": 3, "title": "Изоляция dev/deploy-артефактов", "tasks": ["04", "05", "06"]},
+    {"phase": 4, "title": "Структурные улучшения и легаси", "tasks": ["07", "08", "09", "10", "11", "12"]}
+  ],
+  "tasks": [
+    {
+      "task_id": "01-contract-read-write-consistency",
+      "packet": "task-packets/01-contract-read-write-consistency.json",
+      "risk": "high",
+      "summary": "Contract store с кэшем по ключу метаданных файла, неизменяемым payload, снимком на запрос, оптимистической проверкой записи и единственным аудируемым путём записи (ADR-0031 п.1-2, уточнения 2026-07-05). Поглощает задачу 02 блока 2026-06-01."
+    },
+    {
+      "task_id": "02-agent-runtime-contract-delivery",
+      "packet": "task-packets/02-agent-runtime-contract-delivery.json",
+      "risk": "high",
+      "summary": "Доставка рабочих контрактов в agent-runtime: read-only mount data/ в обоих compose, обязательное перечитывание по ключу метаданных, лог фактического источника (ADR-0031 п.3 шаг 1)."
+    },
+    {
+      "task_id": "03-protected-media-serving",
+      "packet": "task-packets/03-protected-media-serving.json",
+      "risk": "high",
+      "summary": "Раздача media через авторизованный view с проверкой прав; убрать static()-маршрут, работающий только при DEBUG."
+    },
+    {
+      "task_id": "04-iis-debug-contour-isolation",
+      "packet": "task-packets/04-iis-debug-contour-isolation.json",
+      "risk": "medium",
+      "summary": "PathInfoDebugMiddleware и debug_request за env-флагом IIS-контура, лог в data/logs, удалить C:\\inetpub-файл из корня."
+    },
+    {
+      "task_id": "05-ai-gateway-mcp-identity-reverification",
+      "packet": "task-packets/05-ai-gateway-mcp-identity-reverification.json",
+      "risk": "medium",
+      "summary": "Перепроверить и закрыть задачу 03 блока 2026-06-01: identity-привязка gateway/MCP, отсутствие raw prompt в технических логах."
+    },
+    {
+      "task_id": "06-build-reproducibility-and-prod-compose",
+      "packet": "task-packets/06-build-reproducibility-and-prod-compose.json",
+      "risk": "medium",
+      "summary": "Сборка из requirements.lock; параметризация env_file и удаление мёртвых томов в docker-compose.prod.yml."
+    },
+    {
+      "task_id": "07-settings-bootstrap-extraction",
+      "packet": "task-packets/07-settings-bootstrap-extraction.json",
+      "risk": "medium",
+      "summary": "Вынести mkdir/копирование контрактов из импорта settings в явный bootstrap; валидация контрактов через system checks; унификация env_bool."
+    },
+    {
+      "task_id": "08-contract-defaults-drift-strategy",
+      "packet": "task-packets/08-contract-defaults-drift-strategy.json",
+      "risk": "medium",
+      "summary": "Отчёт о дрейфе default-contracts против data/contracts для всех контрактов в validate_architecture_contracts (ADR-0031 п.4)."
+    },
+    {
+      "task_id": "09-legacy-ai-ui-driver-removal",
+      "packet": "task-packets/09-legacy-ai-ui-driver-removal.json",
+      "risk": "medium",
+      "summary": "Вывод legacy-драйвера AI UI по ADR-0032; матрица драйверов copilotkit/native; CopilotKit не трогать."
+    },
+    {
+      "task_id": "10-sqlite-legacy-cleanup",
+      "packet": "task-packets/10-sqlite-legacy-cleanup.json",
+      "risk": "low",
+      "summary": "Удалить no-op router, LOCAL_BUSINESS_LEGACY_SQLITE_DATABASES и LOCAL_BUSINESS_DB_SPLIT_ENABLED после ADR-0029."
+    },
+    {
+      "task_id": "11-core-structure-hygiene",
+      "packet": "task-packets/11-core-structure-hygiene.json",
+      "risk": "low",
+      "summary": "Разнести доменные валидаторы из apps/core/json_utils.py по приложениям; разбить монолитные tests.py на пакеты."
+    },
+    {
+      "task_id": "12-planning-docs-hygiene",
+      "packet": "task-packets/12-planning-docs-hygiene.json",
+      "risk": "low",
+      "summary": "Архивация завершённых/superseded блоков, синхронизация backlog, битая ссылка ARCHITECTURE.md, перенос DEPLOY_PRIVATE.md в deployments/, gen-struct."
+    }
+  ],
+  "required_checks": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py makemigrations --check --dry-run",
+    ".venv/bin/python manage.py test",
+    "git diff --check"
+  ],
+  "independent_verification_required_for": ["01", "02", "03"],
+  "adr_required": true,
+  "adr_note": "ADR-0031 (contract store и доставка контрактов) — Accepted 2026-07-05 с уточнениями реализации, реализуется пакетами 01/02/08. ADR-0032 (вывод legacy-драйвера) — Accepted, реализуется пакетом 09."
+}

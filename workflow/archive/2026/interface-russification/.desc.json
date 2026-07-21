@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: русификация интерфейса портала и подготовка к локализации",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки русификации UI",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для русификации UI",
+  "EXECUTOR_REPORT.implementation.md": "Отчет реализации русификации интерфейса",
+  "TASK_ACCEPTANCE.implementation.md": "Приемка реализации русификации интерфейса",
+  "task-packets": "Task packets для документации, шаблонов, Django labels и проверок"
+}

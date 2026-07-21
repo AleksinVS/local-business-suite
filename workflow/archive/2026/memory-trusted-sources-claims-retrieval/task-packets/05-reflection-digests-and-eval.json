@@ -1,0 +1,33 @@
+{
+  "task_id": "05-reflection-digests-and-eval",
+  "title": "Add belief digests, reflection scoring and security eval",
+  "status": "completed",
+  "objective": "Compile low-token accepted-belief digests during off-peak reflection and add tests for poisoning, trust gates and local-model budget safety.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/management/commands/memory_reflect_chats.py",
+    "apps/memory/management/commands/memory_eval.py",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "Compile bounded personal/org belief digests from accepted beliefs only.",
+    "Score reflection candidates by frequency, freshness, authority, cross-user relevance and contradiction risk.",
+    "Cache extraction/digest results by content hash and extractor version.",
+    "Add prompt-injection and memory-poisoning fixtures.",
+    "Report retrieval/reflection budget metrics."
+  ],
+  "acceptance_checks": [
+    "Digest excludes candidate_only and contested content.",
+    "Repeated digest build is idempotent.",
+    "Poisoned untrusted source cannot enter digest or normal context.",
+    "memory_eval reports trust-gate and prompt-injection cases.",
+    "Reflection can run in deterministic-only mode."
+  ],
+  "verification_commands": [
+    "python manage.py memory_reflect_chats --dry-run",
+    "python manage.py memory_eval --dry-run",
+    "python manage.py test apps.memory.tests"
+  ]
+}

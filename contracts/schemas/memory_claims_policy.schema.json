@@ -1,0 +1,42 @@
+{
+  "title": "Memory Claims Policy",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "claim_types",
+    "claim_statuses",
+    "belief_statuses",
+    "review_rules",
+    "freshness_windows",
+    "contradiction_policy"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "claim_types": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "claim_statuses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "belief_statuses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "review_rules": { "type": "object" },
+    "freshness_windows": { "type": "object" },
+    "contradiction_policy": { "type": "object" }
+  },
+  "additionalProperties": false
+}

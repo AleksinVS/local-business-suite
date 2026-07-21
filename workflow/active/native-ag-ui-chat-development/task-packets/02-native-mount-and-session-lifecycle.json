@@ -1,0 +1,28 @@
+{
+  "task_id": "02-native-mount-and-session-lifecycle",
+  "title": "Native mount, asset freshness and new chat lifecycle",
+  "type": "implementation",
+  "write_scope": [
+    "templates/base.html",
+    "apps/ai/context_processors.py",
+    "apps/ai/ui_runtime/config.py",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/tests.py"
+  ],
+  "instructions": [
+    "Ensure native UI mounts from /ai/ui/config/.",
+    "Add versioned native assets.",
+    "Add a new chat control that calls /ai/ui/session/new/.",
+    "Update thread_id and forwarded_props without page reload."
+  ],
+  "acceptance": [
+    "Native branch does not use CopilotKit config endpoint.",
+    "New chat clears local UI messages and receives a new thread_id.",
+    "Existing CopilotKit and legacy branches are unchanged."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    "node --check static/src/ai_ui/native_ai.js"
+  ]
+}

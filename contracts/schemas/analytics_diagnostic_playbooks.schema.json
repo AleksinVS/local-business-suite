@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Diagnostic Playbooks",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "signal_kinds", "allowed_evidence", "autonomous_actions", "requires_human_review"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "signal_kinds": { "type": "array", "items": { "type": "string" } },
+      "allowed_evidence": { "type": "array", "items": { "type": "string" } },
+      "autonomous_actions": { "type": "array", "items": { "type": "string" } },
+      "requires_human_review": { "type": "boolean" }
+    }
+  }
+}

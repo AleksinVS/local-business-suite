@@ -1,0 +1,28 @@
+{
+  "task_id": "04-docs-root-hygiene-and-structure",
+  "title": "Debug log hygiene, устаревшие ссылки и структура проекта",
+  "goal": "Убрать debug log из корня проекта и обновить устаревшие архитектурные ссылки.",
+  "write_scope": [
+    "apps/core/middleware.py",
+    "docs/architecture/ARCHITECTURE.md",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/architecture/INTEGRATIONS.md",
+    "docs/guides/",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Не менять корневой BACKLOG.md, так как это личные заметки владельца",
+    "Не архивировать активные workflow-блоки без приемки владельцем"
+  ],
+  "implementation_notes": [
+    "PATH_INFO debug logging should write only under data/logs or .local/logs and be disabled by default outside debug mode.",
+    "Architecture docs should point to contracts/, services/agent_runtime/README.md and current ADRs.",
+    "After structure changes update .desc.json and run make gen-struct."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py check",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

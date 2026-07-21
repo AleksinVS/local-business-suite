@@ -1,0 +1,31 @@
+{
+  "task_id": "02-reader-service-and-metadata-db",
+  "title": "Reader service и metadata database знаний",
+  "status": "implemented",
+  "goal": "Сделать чтение знаний контролируемым и вынести управляющие метаданные знаний в отдельную базу.",
+  "write_scope": [
+    "apps/memory/",
+    "config/settings.py",
+    "docs/",
+    "contracts/ai/"
+  ],
+  "steps": [
+    "Добавить database alias knowledge_meta и router для моделей метаданных памяти.",
+    "Сделать MemoryKnowledgeItem совместимой metadata-записью с указателем на knowledge file.",
+    "Добавить reader service, который читает файл только после проверки actor, scope_tokens, sensitivity, status и trust.",
+    "Добавить audit event для чтений, которые попали в ответ агента.",
+    "Добавить команду проверки согласованности: metadata -> file -> hash.",
+    "Подготовить миграционный экспорт существующих MemoryKnowledgeItem в файлы."
+  ],
+  "acceptance_checks": [
+    "Прямой путь чтения знания в AI-инструментах проходит через reader service.",
+    "Знание без прав доступа не возвращается.",
+    "Metadata запись содержит path, hash, status, scope, owner, source_refs.",
+    "Команда проверки находит рассинхронизацию файла и metadata."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

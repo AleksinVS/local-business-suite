@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: UI аудита и ревью проблем памяти и поискового индекса",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки UI ревью памяти",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets для UI ревью памяти",
+  "EXECUTOR_REPORT.memory-audit-review-ui.md": "Отчет реализации UI ревью памяти",
+  "TASK_ACCEPTANCE.memory-audit-review-ui.md": "Приемка реализации UI ревью памяти",
+  "RETROSPECTIVE.md": "Краткая ретроспектива по реализации UI ревью памяти",
+  "task-packets": "Task packets для реализации UI аудита и ревью памяти"
+}

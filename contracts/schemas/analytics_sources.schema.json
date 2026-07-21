@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Sources",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "source_kind", "owner", "enabled", "sync_mode", "schedule", "scope_tokens", "sensitivity", "retention_profile", "config"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "source_kind": { "enum": ["memory", "email_imap", "file_share", "dms", "external_api"] },
+      "owner": { "type": "string", "minLength": 1 },
+      "enabled": { "type": "boolean" },
+      "sync_mode": { "enum": ["scheduled", "manual", "event", "hybrid"] },
+      "schedule": { "type": ["string", "null"] },
+      "scope_tokens": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "sensitivity": { "enum": ["public", "internal", "confidential", "pii_redacted", "pii_original", "secret"] },
+      "retention_profile": { "type": "string", "minLength": 1 },
+      "config": { "type": "object" }
+    }
+  }
+}

@@ -1,0 +1,312 @@
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+from django.utils import timezone
+
+from apps.core.models import Department
+
+ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
+ATTACHMENT_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ATTACHMENT_ALLOWED_TYPES = ATTACHMENT_IMAGE_TYPES | {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+}
+
+
+class WorkOrderStatus(models.TextChoices):
+    NEW = "new", "Новая"
+    ACCEPTED = "accepted", "Принята"
+    IN_PROGRESS = "in_progress", "В работе"
+    ON_HOLD = "on_hold", "Ожидание"
+    RESOLVED = "resolved", "Выполнена"
+    CLOSED = "closed", "Закрыта"
+    CANCELLED = "cancelled", "Отменена"
+
+
+class WorkOrderPriority(models.TextChoices):
+    LOW = "low", "Низкий"
+    MEDIUM = "medium", "Средний"
+    HIGH = "high", "Высокий"
+    CRITICAL = "critical", "Критичный"
+
+
+class Board(models.Model):
+    title = models.CharField("Название", max_length=120)
+    slug = models.SlugField("Слаг", max_length=50, unique=True)
+    allowed_groups = models.ManyToManyField(
+        "auth.Group",
+        related_name="allowed_boards",
+        verbose_name="Разрешенные группы",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+        verbose_name = "Канбан-доска"
+        verbose_name_plural = "Канбан-доски"
+
+    def __str__(self):
+        return self.title
+
+    def clone(self, new_title=None, new_slug=None):
+        """
+        Creates a copy of this board and all its columns.
+        Does NOT copy work orders.
+        """
+        old_pk = self.pk
+        old_columns = list(self.columns.all())
+        old_groups = list(self.allowed_groups.all())
+
+        # Create new board instance
+        self.pk = None
+        self.id = None
+        self.title = new_title or f"{self.title} (копия)"
+        self.slug = new_slug or f"{self.slug}-copy"
+        self.save()
+
+        # Restore many-to-many groups
+        self.allowed_groups.set(old_groups)
+
+        # Clone columns
+        for col in old_columns:
+            col.pk = None
+            col.id = None
+            col.board = self
+            col.save()
+
+        return self
+
+
+class KanbanColumnConfig(models.Model):
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        related_name="columns",
+        verbose_name="Доска",
+    )
+    code = models.SlugField("Код", max_length=50)
+    title = models.CharField("Название", max_length=120)
+    position = models.PositiveIntegerField("Позиция", default=0)
+    statuses = models.JSONField("Статусы", default=list)
+    wip_limit = models.PositiveIntegerField("Лимит в работе", default=0, help_text="0 - без лимита")
+
+    class Meta:
+        ordering = ["position", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["board", "code"], name="unique_board_code"),
+        ]
+        verbose_name = "Колонка канбана"
+        verbose_name_plural = "Колонки канбана"
+
+    def __str__(self):
+        return f"[{self.board.title}] {self.title}"
+
+
+class WorkOrder(models.Model):
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        related_name="workorders",
+        verbose_name="Доска",
+    )
+    number = models.CharField("Номер", max_length=32, unique=True, editable=False)
+    title = models.CharField("Заголовок", max_length=255)
+    description = models.TextField("Описание")
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.PROTECT,
+        related_name="workorders",
+        verbose_name="Подразделение",
+    )
+    priority = models.CharField(
+        "Приоритет",
+        max_length=16,
+        choices=WorkOrderPriority.choices,
+        default=WorkOrderPriority.MEDIUM,
+    )
+    status = models.CharField(
+        "Статус",
+        max_length=24,
+        choices=WorkOrderStatus.choices,
+        default=WorkOrderStatus.NEW,
+    )
+    rating = models.PositiveSmallIntegerField(
+        "Оценка",
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    closure_confirmed = models.BooleanField("Закрытие подтверждено", default=False)
+    closure_confirmed_at = models.DateTimeField(blank=True, null=True)
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="created_workorders",
+        verbose_name="Автор",
+    )
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="assigned_workorders",
+        verbose_name="Исполнитель",
+        blank=True,
+        null=True,
+    )
+    device = models.ForeignKey(
+        "inventory.MedicalDevice",
+        on_delete=models.PROTECT,
+        related_name="workorders",
+        verbose_name="Медицинское изделие",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+    resolved_at = models.DateTimeField("Выполнено", blank=True, null=True)
+    closed_at = models.DateTimeField("Закрыто", blank=True, null=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["-updated_at", "-created_at"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["priority"]),
+            models.Index(fields=["assignee"]),
+            models.Index(fields=["resolved_at"]),
+            models.Index(fields=["closed_at"]),
+            models.Index(fields=["closure_confirmed"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rating__gte=1, rating__lte=5) | models.Q(rating__isnull=True),
+                name="workorder_rating_range",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(closure_confirmed=False, closure_confirmed_at__isnull=True)
+                | models.Q(closure_confirmed=True, closure_confirmed_at__isnull=False),
+                name="workorder_closure_confirmed_consistent",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=[WorkOrderStatus.RESOLVED, WorkOrderStatus.CLOSED], resolved_at__isnull=False)
+                | models.Q(status__in=[WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.CANCELLED]),
+                name="workorder_resolved_at_consistent",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status=WorkOrderStatus.CLOSED, closed_at__isnull=False)
+                | models.Q(status__in=[WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED, WorkOrderStatus.IN_PROGRESS, WorkOrderStatus.ON_HOLD, WorkOrderStatus.RESOLVED, WorkOrderStatus.CANCELLED]),
+                name="workorder_closed_at_consistent",
+            ),
+        ]
+        verbose_name = "Заявка"
+        verbose_name_plural = "Заявки"
+
+    @staticmethod
+    def format_number(pk):
+        return str(pk)
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        generated_fields = set()
+        now = timezone.now()
+
+        if self.status in {WorkOrderStatus.RESOLVED, WorkOrderStatus.CLOSED} and not self.resolved_at:
+            self.resolved_at = self.closed_at or now
+            generated_fields.add("resolved_at")
+        if self.status == WorkOrderStatus.CLOSED and not self.closed_at:
+            self.closed_at = self.resolved_at or now
+            generated_fields.add("closed_at")
+        if self.status != WorkOrderStatus.CLOSED and self.closed_at:
+            self.closed_at = None
+            generated_fields.add("closed_at")
+
+        if update_fields is not None and generated_fields:
+            update_field_names = list(update_fields)
+            for field_name in ("resolved_at", "closed_at"):
+                if field_name in generated_fields and field_name not in update_field_names:
+                    update_field_names.append(field_name)
+            kwargs["update_fields"] = update_field_names
+
+        creating = self.pk is None
+        super().save(*args, **kwargs)
+        if creating and not self.number:
+            self.number = self.format_number(self.pk)
+            super().save(update_fields=["number"])
+
+    def __str__(self):
+        return f"{self.number}: {self.title}"
+
+
+class WorkOrderComment(models.Model):
+    workorder = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        verbose_name="Заявка",
+    )
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Автор")
+    body = models.TextField("Комментарий")
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["author"]),
+        ]
+        verbose_name = "Комментарий к заявке"
+        verbose_name_plural = "Комментарии к заявке"
+
+
+class WorkOrderAttachment(models.Model):
+    workorder = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        verbose_name="Заявка",
+    )
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Загрузил")
+    file = models.FileField("Файл", upload_to="workorders/%Y/%m/%d/")
+    content_type = models.CharField("Тип содержимого", max_length=128, blank=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["content_type"]),
+        ]
+        verbose_name = "Вложение"
+        verbose_name_plural = "Вложения"
+
+    @property
+    def is_image(self):
+        return self.content_type in ATTACHMENT_IMAGE_TYPES
+
+    @property
+    def filename(self):
+        return self.file.name.rsplit("/", 1)[-1]
+
+
+class WorkOrderTransitionLog(models.Model):
+    workorder = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="transitions",
+        verbose_name="Заявка",
+    )
+    from_status = models.CharField("Из статуса", max_length=24, choices=WorkOrderStatus.choices)
+    to_status = models.CharField("В статус", max_length=24, choices=WorkOrderStatus.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name="Пользователь")
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["from_status"]),
+            models.Index(fields=["to_status"]),
+        ]
+        verbose_name = "Переход заявки"
+        verbose_name_plural = "Переходы заявок"

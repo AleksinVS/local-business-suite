@@ -1,0 +1,37 @@
+{
+  "task_id": "01-ranking-profile-contract",
+  "title": "Add ranking_profile contract and profile catalog",
+  "status": "ready",
+  "read_scope": [
+    "apps/memory/retrieval.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "contracts/ai/tools.json",
+    "contracts/ai/task_types.json",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/task_types.py"
+  ],
+  "write_scope": [
+    "apps/memory/retrieval.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "contracts/ai/tools.json",
+    "contracts/ai/task_types.json",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/task_types.py",
+    "apps/ai/tests.py",
+    "services/agent_runtime/tests/test_normalization.py"
+  ],
+  "requirements": [
+    "Add optional ranking_profile to memory.search payload.",
+    "Derive default ranking_profile from search_mode when omitted.",
+    "Support profiles: precise, balanced, semantic_heavy, source_content, source_semantic, graph_future.",
+    "Reject unknown ranking_profile values with ValidationError.",
+    "Do not accept raw channel weights in the public tool payload."
+  ],
+  "acceptance_checks": [
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization"
+  ]
+}

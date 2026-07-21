@@ -1,0 +1,33 @@
+{
+  "task_id": "06-waiting-list-source-adapter",
+  "title": "Connect waiting list as an internal source adapter",
+  "status": "completed",
+  "read_scope": [
+    "apps/waiting_list/models.py",
+    "apps/waiting_list/policies.py",
+    "apps/waiting_list/services.py",
+    "apps/core/source_adapters.py"
+  ],
+  "write_scope": [
+    "apps/waiting_list/source_adapter.py",
+    "apps/waiting_list/tests.py",
+    "apps/memory/tests.py",
+    "apps/analytics/tests.py",
+    "contracts/ai/memory_sources.json",
+    "contracts/analytics/sources.json",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Expose waiting list as source_code waiting_list.",
+    "Use source_origin internal and default privacy profile pii_off.",
+    "When pii_off is active, do not detect, redact, block or audit PII.",
+    "Keep secret scanning active even when pii_off is active.",
+    "Use access_policy mode adapter_check with waiting_list domain policies.",
+    "Render service, status, target dates, CITO and comment into search text according to configured privacy profile.",
+    "Extract analytics facts for created, scheduled, confirmed, cancelled, CITO and waiting time metrics."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.waiting_list.tests apps.memory.tests apps.analytics.tests"
+  ]
+}

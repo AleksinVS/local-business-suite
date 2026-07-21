@@ -1,0 +1,31 @@
+{
+  "task_id": "01-data-model-and-storage",
+  "title": "Add chat-derived memory models and atomic file storage",
+  "status": "ready",
+  "objective": "Create the persistent metadata and runtime file writer for personal and organization chat knowledge.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/services.py",
+    "apps/memory/chat_memory.py",
+    "apps/memory/tests.py",
+    "docs/architecture/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Add MemoryWriteRequest, MemoryKnowledgeItem, MemoryKnowledgeCandidate, MemoryReflectionRun, SecretHandle and SecretAccessAudit or equivalent split models.",
+    "Add atomic writer for data/memory/chat_knowledge/users/<user_id>/ and data/memory/chat_knowledge/org/default/.",
+    "Use append-only events and rebuild current projections.",
+    "Store source ChatMessage provenance by ids and hashes, not unbounded copied raw chat text."
+  ],
+  "acceptance_checks": [
+    "Migrations apply.",
+    "Events are append-only.",
+    "Current projections rebuild deterministically.",
+    "Personal and organization scopes do not share files."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ]
+}

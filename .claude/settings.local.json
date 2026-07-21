@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"$env:windir\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command \"try { $null = [System.Management.Automation.PSParser]::Tokenize\\(\\(Get-Content 'C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1' -Raw\\), [ref]$null\\); Write-Host 'Syntax OK' } catch { Write-Host $_.Exception.Message }\")",
+      "PowerShell(git *)",
+      "PowerShell($ErrorActionPreference = \"Stop\"; try { & \"$env:windir\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command \"& 'C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'test.zip' -DryRun -WhatIf 2>&1\" } catch { Write-Host $_.Exception.Message })",
+      "PowerShell(& \"$env:windir\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command \"[System.Management.Automation.PSParser]::Tokenize\\(\\(Get-Content 'C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1' -Raw\\), [ref]$null\\); Write-Host 'Syntax OK'\")",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1\" -BundlePath \"C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip\" -Force -WhatIf 2>&1 | Select-Object -First 10)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"Get-Help 'C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1' -Parameter BundlePath,Force\")",
+      "PowerShell(Copy-Item *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\portal\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'test.zip' -DryRun -Force 2>&1\" | Select-Object -First 20)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'test.zip' -DryRun -Force 2>&1\" | Select-Object -First 30)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip' -DryRun -Force 2>&1\" | Select-Object -First 50)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip' -Force -SkipTask -SkipCode -SkipIIS -SkipFirewall 2>&1\" | Select-Object -First 100)",
+      "PowerShell(Get-ScheduledTask *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip' -Force -SkipCode -SkipIIS -SkipFirewall -NoStart 2>&1\")",
+      "PowerShell($zip = \"C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip\"; Add-Type -Assembly System.IO.Compression.FileSystem; $archive = [System.IO.Compression.ZipFile]::OpenRead\\($zip\\); $archive.Entries | Select-Object FullName)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -Command \"& 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\import_portal.ps1' -BundlePath 'C:\\\\inetpub\\\\temp\\\\scripts\\\\windows\\\\portal-export\\\\portal-export-20260716-145820.zip' -Force -SkipCode -SkipIIS -SkipFirewall -NoStart -ErrorAction Stop 2>&1\")",
+      "PowerShell(& \"C:\\\\inetpub\\\\portal\\\\.venv\\\\Scripts\\\\python.exe\" -m pip install wfastcgi)",
+      "PowerShell(& \"C:\\\\inetpub\\\\portal\\\\.venv\\\\Scripts\\\\wfastcgi-enable.exe\")",
+      "PowerShell(Get-Command *)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs"
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "block_id": "memory-file-source-auto-organization",
+  "status": "mvp_implemented_pending_owner_acceptance",
+  "created_at": "2026-06-02",
+  "architecture_sources": [
+    "docs/adr/ADR-0025-file-source-auto-organization.md",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "docs/planning/active/memory-file-source-auto-organization.md",
+    "docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md",
+    "docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md",
+    "docs/adr/ADR-0018-universal-source-adapters-memory-analytics.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/guides/WORKER_AND_QUEUE_OPERATIONS.md"
+  ],
+  "goal": "Introduce file source auto organization through generated virtual baseline structure, incoming folder processing, usage-driven organization proposals, safe managed_fs physical transfers and future S3-compatible storage readiness.",
+  "execution_order": [
+    "01-adr-contracts-and-stable-identity",
+    "02-baseline-virtual-structure",
+    "03-incoming-folder-processing",
+    "04-user-views-statistics-and-proposals",
+    "05-managed-physical-transfer",
+    "06-ui-e2e-operations-and-handoff"
+  ],
+  "global_constraints": [
+    "Use ADR-0025 as the implementation baseline after owner approval.",
+    "Do not treat relative_path as stable file identity in auto organization flows.",
+    "Do not physically move files before an approved organization proposal.",
+    "Do not delete source files before copy verification, metadata commit, retention and backup checkpoint.",
+    "Keep virtual views separate from access policy; user virtual paths do not grant access.",
+    "Keep personal structure statistics aggregated and safe; do not expose raw personal folder names or raw queries in shared proposals.",
+    "Fail closed on unresolved ACL, sensitivity or secret issues.",
+    "Keep S3-compatible storage as a future backend; MVP starts with managed_fs.",
+    "Host-specific paths and secrets must stay in runtime contracts or deployment silos.",
+    "Keep temporary corpora, move manifests, logs and e2e artifacts under .local/ or data/."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_file_organization_baseline --source-code <code> --dry-run",
+    "python manage.py memory_file_incoming_worker --source-code <code> --dry-run",
+    "python manage.py memory_file_structure_stats --source-code <code> --dry-run",
+    "python manage.py memory_file_move_worker --source-code <code> --dry-run",
+    "python manage.py memory_file_auto_organization_e2e"
+  ],
+  "task_packets": [
+    "workflow/active/memory-file-source-auto-organization/task-packets/01-adr-contracts-and-stable-identity.json",
+    "workflow/active/memory-file-source-auto-organization/task-packets/02-baseline-virtual-structure.json",
+    "workflow/active/memory-file-source-auto-organization/task-packets/03-incoming-folder-processing.json",
+    "workflow/active/memory-file-source-auto-organization/task-packets/04-user-views-statistics-and-proposals.json",
+    "workflow/active/memory-file-source-auto-organization/task-packets/05-managed-physical-transfer.json",
+    "workflow/active/memory-file-source-auto-organization/task-packets/06-ui-e2e-operations-and-handoff.json"
+  ]
+}

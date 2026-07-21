@@ -1,0 +1,44 @@
+{
+  "task_id": "02-direct-write-and-queue-collapse",
+  "title": "Прямая запись и схлопывание очередей",
+  "status": "ready",
+  "objective": "Перевести memory.remember на синхронную запись файла с git commit под блокировкой, заменить MemoryWriteRequest/MemoryIndexJob/MemoryKnowledgeEvent/MemoryReflectionRun одной таблицей-очередью с DLQ, заменить _summary.md на генерируемый index.md.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/services.py",
+    "apps/memory/knowledge_files.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/management/commands/",
+    "apps/memory/admin.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "docs/guides/WORKER_AND_QUEUE_OPERATIONS.md"
+  ],
+  "requirements": [
+    "memory.remember выполняет проверку прав и политики источника, затем синхронно пишет файл знания и git commit под межпроцессной блокировкой из задачи 01; результат инструмента возвращает knowledge_id и путь файла сразу, без статуса очереди.",
+    "Ввести одну таблицу-очередь фоновых задач (вид задачи, полезная нагрузка, статус, retry-счетчик, dead-letter) для ре-консолидации, ingestion и переиндексации; один worker-процесс обрабатывает очередь.",
+    "Таблица-очередь строится по паттерну database queue backend из ADR-0029: status, locked_by, locked_until, attempt_count, next_attempt_at, idempotency_key; leasing через select_for_update(skip_locked=True) на PostgreSQL. Рассмотреть объединение с MemoryExternalConnectorJob в единый механизм очереди вместо двух параллельных; решение и обоснование зафиксировать в executor report.",
+    "Вывести MemoryWriteRequest, MemoryIndexJob, MemoryKnowledgeEvent, MemoryReflectionRun и воркеры knowledge_writer_worker/knowledge_index_worker: незавершенные записи мигрируются в новую очередь, исторические данные выгружаются в архивный дамп в data/ до удаления таблиц.",
+    "Файлы _summary.md заменяются на OKF index.md, генерируемые reconciler'ом из файлов знаний, а не из queryset базы.",
+    "После записи memory.remember инициирует reconcile затронутых файлов (индексация); отказ индексации не теряется - задача уходит в очередь с retry/DLQ.",
+    "Секретные значения по-прежнему не попадают в файл, индекс, очередь и журналы (существующие тесты secret handles остаются зелеными)."
+  ],
+  "acceptance_checks": [
+    "memory.remember за один запрос создает файл, git commit и запись индекса; знание сразу находится поиском.",
+    "Старые таблицы очередей отсутствуют в схеме; их данные доступны в архивном дампе.",
+    "Ошибка индексации попадает в очередь с retry и после исчерпания попыток - в dead-letter, видимый оператору.",
+    "index.md генерируется из файлов и обновляется при reconcile; _summary.md больше не создаются.",
+    "Тесты secret handles и прав доступа проходят без ослаблений."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_reconcile --dry-run",
+    "python manage.py memory_file_backed_e2e"
+  ],
+  "notes": [
+    "Рискованная задача: независимая проверка субагентом по AGENTS.md.",
+    "Ссылки: ADR-0030 решение 2; концепт параграфы 7.1 (двухдорожечная пересборка) и 10 (очередь с DLQ)."
+  ]
+}

@@ -1,0 +1,35 @@
+<div class="status-stepper" id="status-panel">
+  <div class="stepper-track">
+    {% for status_val, status_label in status_choices %}
+      {% if status_val == workorder.status %}
+        <div class="step-item active" data-status="{{ status_val }}">
+          <span class="step-label">{{ status_label }}</span>
+        </div>
+      {% else %}
+          <form hx-post="{% url 'workorders:transition' workorder.pk %}"
+                hx-target="#status-panel"
+                hx-swap="outerHTML"
+                class="step-form">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="{{ status_val }}">
+            <button type="submit"
+                    class="step-item {% if status_val in transition_choices_vals %}available{% else %}disabled{% endif %}"
+                    data-status="{{ status_val }}"
+                    {% if status_val not in transition_choices_vals %}disabled{% endif %}>
+              <span class="step-label">{{ status_label }}</span>
+            </button>
+          </form>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if can_confirm_closure %}
+    <form hx-post="{% url 'workorders:confirm_closure' workorder.pk %}"
+          hx-target="#status-panel"
+          hx-swap="outerHTML"
+          class="confirm-closure-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-xs">Подтвердить выполнение</button>
+    </form>
+  {% endif %}
+</div>

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Analytics Scope Rules",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["code", "title", "owner", "sources", "include", "exclude", "limits", "sampling", "requires_audit"],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "owner": { "type": "string", "minLength": 1 },
+      "sources": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "include": { "type": "object" },
+      "exclude": { "type": "object" },
+      "limits": { "type": "object" },
+      "sampling": { "type": "object" },
+      "requires_audit": { "type": "boolean" }
+    }
+  }
+}

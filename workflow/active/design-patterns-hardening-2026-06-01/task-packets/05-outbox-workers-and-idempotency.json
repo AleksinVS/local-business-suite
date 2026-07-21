@@ -1,0 +1,29 @@
+{
+  "task_id": "05-outbox-workers-and-idempotency",
+  "title": "Журнал исходящих задач, workers и повторное выполнение без дублей",
+  "goal": "Спроектировать и внедрить минимальный job/outbox contract для долгих задач и внешних side effects.",
+  "write_scope": [
+    "apps/memory/",
+    "apps/analytics/",
+    "apps/core/",
+    "docs/architecture/",
+    "docs/guides/",
+    "apps/*/tests.py"
+  ],
+  "non_goals": [
+    "Не внедрять внешний broker без ADR",
+    "Не мигрировать все существующие management commands за один шаг",
+    "Не создавать новый runtime-сервис без deployment-документации"
+  ],
+  "implementation_notes": [
+    "Минимальный job contract должен содержать job_id, job_kind, schema_version, idempotency_key, status, attempt_count, next_attempt_at, error_code, error_message, source_ref и audit_ref.",
+    "Бизнес-запись и постановка job/outbox должны попадать в одну transaction.atomic, если они должны быть согласованы.",
+    "Worker должен безопасно повторять задачу по idempotency_key, content_hash или source_sequence.",
+    "Для ingestion, indexing и analytics recompute нужны retry limits и путь ручного разбора ошибок."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.memory.tests apps.analytics.tests apps.core.tests",
+    ".venv/bin/python manage.py check",
+    "git diff --check"
+  ]
+}

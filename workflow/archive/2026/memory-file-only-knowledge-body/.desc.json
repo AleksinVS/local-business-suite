@@ -1,0 +1,13 @@
+{
+  ".": "Workflow: текст знания только в файле знания",
+  "BLOCK_BRIEF.md": "Краткое описание блока file-only knowledge body",
+  "ARCHITECT_PLAN.json": "Машинный план реализации file-only knowledge body",
+  "HANDOFF_REPORT.md": "Отчет исполнения блока file-only knowledge body",
+  "TASK_ACCEPTANCE.01-05.md": "Приемка задач 01-05 блока file-only knowledge body",
+  "task-packets": "Task packets для удаления текста знания из базы и индекса",
+  "task-packets/01-remove-knowledge-text-field.json": "Пакет задачи: удалить MemoryKnowledgeItem.text",
+  "task-packets/02-file-only-reader-writer-indexing.json": "Пакет задачи: перевести writer, reader, index и summary на файлы знаний",
+  "task-packets/03-simplify-search-document-and-index.json": "Пакет задачи: упростить MemorySearchDocument и индекс",
+  "task-packets/04-rename-chunk-fields.json": "Пакет задачи: переименовать chunk-поля в document-поля",
+  "task-packets/05-claim-boundary-docs-tests.json": "Пакет задачи: зафиксировать границу MemoryClaim и закрыть документацию"
+}

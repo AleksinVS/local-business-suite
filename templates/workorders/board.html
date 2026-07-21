@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header_context %}
+<nav class="breadcrumbs header-breadcrumbs">
+  <span>/</span>
+  <a href="{% url 'workorders:board' %}">Канбан заявок</a>
+  {% if current_board %}
+    <span>/</span>
+    <span>{{ current_board.title }}</span>
+  {% endif %}
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="workorders-board-context" data-ai-context="{{ page_ai_context_json }}" style="{{ workorder_status_color_style }}">
+<div class="toolbar">
+  <form method="get" class="filters filters--adaptive">
+    <input type="hidden" name="view" value="{{ current_view }}">
+
+    <div class="input-group input-group--search">
+      <label for="boardSearch">Поиск</label>
+      <input
+        type="search"
+        id="boardSearch"
+        name="q"
+        value="{{ filters.q }}"
+        placeholder="Номер, заголовок, изделие, подразделение, сотрудник"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
+        hx-target="#workorders-view"
+        hx-swap="outerHTML"
+        hx-trigger="keyup changed delay:250ms, search"
+        hx-include="closest form"
+      >
+    </div>
+
+    <div class="input-group" data-filter-board>
+      <label for="boardSelect">Доска</label>
+      <select id="boardSelect" onchange="window.location.href=this.value">
+        {% for board in visible_boards %}
+          <option value="{% url 'workorders:board_specific' board.slug %}?view={{ current_view }}" {% if current_board.id == board.id %}selected{% endif %}>{{ board.title }}</option>
+        {% empty %}
+          <option value="">Нет доступных досок</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="input-group input-group--dropdown">
+      <label for="boardDept">Подразделение</label>
+      <details
+        id="boardDept"
+        class="multi-filter-dropdown"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
+        hx-target="#workorders-view"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <summary>
+          <span>Все</span>
+          {% if filters.department_values %}
+            <strong>{{ filters.department_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
+        {% for department in departments %}
+          <label class="multi-filter-option" for="boardDept_{{ department.id }}">
+            <input
+              type="checkbox"
+              id="boardDept_{{ department.id }}"
+              name="department"
+              value="{{ department.id }}"
+              {% if department.id|stringformat:"s" in filters.department_values %}checked{% endif %}
+            >
+            <span>{{ department.indented_name }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных подразделений</span>
+        {% endfor %}
+        </div>
+      </details>
+    </div>
+    <div class="input-group input-group--dropdown">
+      <label for="boardStatus">Статус</label>
+      <details
+        id="boardStatus"
+        class="multi-filter-dropdown"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
+        hx-target="#workorders-view"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <summary>
+          <span>Все</span>
+          {% if filters.status_values %}
+            <strong>{{ filters.status_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
+        {% for value, label in status_choices %}
+          <label class="multi-filter-option" for="boardStatus_{{ value }}">
+            <input
+              type="checkbox"
+              id="boardStatus_{{ value }}"
+              name="status"
+              value="{{ value }}"
+              {% if value in filters.status_values %}checked{% endif %}
+            >
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+        </div>
+      </details>
+    </div>
+    <div class="input-group input-group--dropdown">
+      <label for="boardAssignee">Исполнитель</label>
+      <details
+        id="boardAssignee"
+        class="multi-filter-dropdown"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
+        hx-target="#workorders-view"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <summary>
+          <span>Все</span>
+          {% if filters.assignee_values %}
+            <strong>{{ filters.assignee_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
+        {% for assignee in assignees %}
+          <label class="multi-filter-option" for="boardAssignee_{{ assignee.id }}">
+            <input
+              type="checkbox"
+              id="boardAssignee_{{ assignee.id }}"
+              name="assignee"
+              value="{{ assignee.id }}"
+              {% if assignee.id|stringformat:"s" in filters.assignee_values %}checked{% endif %}
+            >
+            <span>{{ assignee.get_full_name|default:assignee.username }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных исполнителей</span>
+        {% endfor %}
+        </div>
+      </details>
+    </div>
+    <div class="input-group input-group--dropdown">
+      <label for="boardDevice">Изделие</label>
+      <details
+        id="boardDevice"
+        class="multi-filter-dropdown"
+        hx-get="{% if current_board %}{% url 'workorders:board_specific' current_board.slug %}{% else %}{% url 'workorders:board' %}{% endif %}"
+        hx-target="#workorders-view"
+        hx-swap="outerHTML"
+        hx-trigger="change"
+        hx-include="closest form"
+      >
+        <summary>
+          <span>Все</span>
+          {% if filters.device_values %}
+            <strong>{{ filters.device_values|length }}</strong>
+          {% endif %}
+        </summary>
+        <div class="multi-filter-menu">
+        {% for device in devices %}
+          <label class="multi-filter-option" for="boardDevice_{{ device.id }}">
+            <input
+              type="checkbox"
+              id="boardDevice_{{ device.id }}"
+              name="device"
+              value="{{ device.id }}"
+              {% if device.id|stringformat:"s" in filters.device_values %}checked{% endif %}
+            >
+            <span>{{ device.name }}</span>
+          </label>
+        {% empty %}
+          <span class="multi-filter-empty">Нет доступных изделий</span>
+        {% endfor %}
+        </div>
+      </details>
+    </div>
+    {% include "workorders/partials/workorder_view_switcher.html" %}
+  </form>
+    {% if current_board %}
+    <button
+      class="btn btn-primary"
+      hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}&return_view={{ current_view }}"
+      hx-target="#detail-panel-content"
+      hx-swap="innerHTML"
+      onclick="openWorkorderDrawer()"
+    >
+      Создать заявку
+    </button>
+    {% endif %}
+</div>
+{% if no_boards %}
+<div class="empty-state" style="padding: 4rem; text-align: center;">
+  <h3>Нет доступных досок</h3>
+  <p>У вас нет прав на просмотр ни одной канбан-доски.</p>
+</div>
+{% else %}
+{% include "workorders/partials/workorders_view.html" %}
+{% endif %}
+
+{# Drawer Overlay & Panel for Kanban #}
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeWorkorderDrawer()"></div>
+<aside class="drawer drawer-large" id="detail-panel">
+  <div id="detail-panel-content" style="height: 100%; display: flex; flex-direction: column;">
+    {% include "workorders/partials/detail_panel_empty.html" %}
+  </div>
+</aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ block.super }}
+  <script>
+    function openWorkorderDrawer() {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('drawerOverlay');
+      if (panel) panel.classList.add('active');
+      if (overlay) overlay.classList.add('active');
+      if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
+    }
+
+    function closeWorkorderDrawer() {
+      const panel = document.getElementById('detail-panel');
+      const overlay = document.getElementById('drawerOverlay');
+      if (panel) panel.classList.remove('active');
+      if (overlay) overlay.classList.remove('active');
+      if (window.LocalBusinessPageContext) window.LocalBusinessPageContext.refresh();
+    }
+
+    function openKanbanDrawer() { openWorkorderDrawer(); }
+    function closeKanbanDrawer() { closeWorkorderDrawer(); }
+
+    function toggleColumn(column) {
+      column.classList.toggle('collapsed');
+      const code = column.dataset.columnCode;
+      const collapsed = column.classList.contains('collapsed');
+      const state = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '{}');
+      state[code] = collapsed;
+      localStorage.setItem('kanban_collapsed_columns', JSON.stringify(state));
+    }
+
+    function restoreColumnStates() {
+      const state = JSON.parse(localStorage.getItem('kanban_collapsed_columns') || '{}');
+      Object.entries(state).forEach(([code, collapsed]) => {
+        if (collapsed) {
+          const col = document.querySelector(`.kanban-column[data-column-code="${code}"]`);
+          if (col) col.classList.add('collapsed');
+        }
+      });
+    }
+
+    document.addEventListener('htmx:afterOnLoad', function(evt) {
+      if (evt.detail.target.id === 'board-columns' || evt.detail.target.id === 'workorders-view') {
+        restoreColumnStates();
+      }
+    });
+
+    restoreColumnStates();
+
+    document.addEventListener("click", function (event) {
+      const link = event.target.closest("[data-workorder-view-target]");
+      if (!link) return;
+      const form = link.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      params.set("view", link.dataset.workorderViewTarget);
+      window.location.href = `${window.location.pathname}?${params.toString()}`;
+    });
+
+    (function () {
+      function csrfToken() {
+        const body = document.body.getAttribute("hx-headers");
+        if (!body) return "";
+        try {
+          return JSON.parse(body)["x-csrftoken"] || "";
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function clearDropState() {
+        document.querySelectorAll(".work-card.dragging").forEach((node) => node.classList.remove("dragging"));
+        document.querySelectorAll(".kanban-column.drag-over").forEach((node) => node.classList.remove("drag-over"));
+      }
+
+      document.addEventListener("dragstart", function (event) {
+        const card = event.target.closest(".work-card[draggable='true']");
+        if (!card) return;
+        if (event.target.closest("a, select, button, form")) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", card.dataset.workorderId);
+        card.classList.add("dragging");
+      });
+
+      document.addEventListener("dragend", clearDropState);
+
+      document.addEventListener("dragover", function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        event.preventDefault();
+        column.classList.add("drag-over");
+      });
+
+      document.addEventListener("dragleave", function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        if (column.contains(event.relatedTarget)) return;
+        column.classList.remove("drag-over");
+      });
+
+      document.addEventListener("drop", async function (event) {
+        const column = event.target.closest(".kanban-column[data-column-code]");
+        if (!column) return;
+        event.preventDefault();
+        const workorderId = event.dataTransfer.getData("text/plain");
+        clearDropState();
+        if (!workorderId) return;
+
+        const response = await fetch(`/workorders/${workorderId}/board-move/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "HX-Request": "true",
+            "HX-Target": "board-columns",
+            "X-CSRFToken": csrfToken(),
+          },
+          body: new URLSearchParams({column: column.dataset.columnCode}),
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) return;
+        const markup = await response.text();
+        if (markup.trim()) {
+          // If response contains OOB elements, HTMX will handle them if we swap into a dummy or handle manually.
+          // Since we used render() for columns, we can just let HTMX process it or swap it into a temporary div.
+          const temp = document.createElement("div");
+          temp.innerHTML = markup;
+          // Process OOB swaps manually if not using htmx.process
+          temp.querySelectorAll("[hx-swap-oob='true']").forEach(el => {
+            const target = document.getElementById(el.id);
+            if (target) target.outerHTML = el.outerHTML;
+          });
+          restoreColumnStates();
+        }
+      });
+    })();
+  </script>
+  <script src="{% static 'src/js/workorder_tree.js' %}"></script>
+  <script src="{% static 'src/js/filter_overflow.js' %}"></script>
+{% endblock %}

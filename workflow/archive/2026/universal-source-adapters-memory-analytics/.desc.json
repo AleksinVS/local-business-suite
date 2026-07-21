@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: универсальные источники для памяти и аналитики",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки универсальных source adapters",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets для универсальных source adapters",
+  "EXECUTOR_REPORT.01-07.md": "Отчет исполнения task packets 01-07",
+  "TASK_ACCEPTANCE.01-07.md": "Приемочный отчет реализации task packets 01-07",
+  "task-packets": "Task packets для реализации универсального source adapter контракта, памяти, аналитики и доменных адаптеров"
+}

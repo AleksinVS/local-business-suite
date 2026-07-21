@@ -1,0 +1,18 @@
+{
+  ".": "Reusable Settings Center: descriptors, registry, UI, audit, runtime contract apply, env proposals and contextual help",
+  "apps.py": "Django AppConfig for Settings Center",
+  "descriptors.py": "Dataclass contract for setting descriptors and safe context masking",
+  "registry.py": "Registry loading domain descriptors from core/accounts/ai/memory",
+  "policies.py": "Server-side permissions for settings and user management",
+  "models.py": "Audit and env proposal models",
+  "admin.py": "Django Admin registration for Settings Center audit models",
+  "services.py": "Generic audit/hash/masked diff helpers",
+  "contract_services.py": "Runtime contract preview/apply service with validation and atomic writes",
+  "env_services.py": ".env effective status and proposal generation service",
+  "help_services.py": "Contextual help context and mini-chat response service",
+  "forms.py": "Forms for contracts, env proposals, help and user workflows",
+  "views.py": "Django template/HTMX views for Settings Center",
+  "urls.py": "URL routes for Settings Center",
+  "tests.py": "Settings Center tests",
+  "migrations/": "Settings Center database migrations"
+}

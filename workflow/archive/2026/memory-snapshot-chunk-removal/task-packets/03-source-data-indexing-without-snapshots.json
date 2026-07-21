@@ -1,0 +1,34 @@
+{
+  "task_id": "03-source-data-indexing-without-snapshots",
+  "title": "Перевести source_data fallback с snapshots на source objects",
+  "status": "completed",
+  "objective": "Сделать поиск по исходным объектам через MemorySourceObject и MemorySearchDocument без постоянного слоя MemorySnapshot/MemoryChunk.",
+  "write_scope": [
+    "apps/memory/document_ingestion.py",
+    "apps/memory/external_connectors.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/management/commands/memory_ingest_source.py",
+    "apps/memory/management/commands/memory_reindex.py",
+    "apps/memory/tests.py",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "source_data document должен ссылаться на MemorySourceObject и безопасные метаданные.",
+    "Fallback по source_data должен возвращать source_object_id, source_uri, source_kind, index_status и предупреждение, что это не принятое знание.",
+    "Не хранить полный текст исходного объекта в MemorySearchDocument.",
+    "Временные raw/safe файлы должны оставаться только в data/processing и удаляться cleanup-командой.",
+    "Для файлов indexing_pending degraded mode должен возвращать только безопасные метаданные.",
+    "Старые ingestion-команды не должны создавать MemorySnapshot/MemoryChunk в новом пути."
+  ],
+  "acceptance_checks": [
+    "Тест source_data fallback проходит без MemorySnapshot и MemoryChunk.",
+    "Тест indexing_pending возвращает только безопасные метаданные.",
+    "Тест cleanup подтверждает, что временные файлы не являются источником истины.",
+    "Документация deployment описывает новый source_data путь."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py test apps.memory.tests",
+    "./.venv/bin/python manage.py memory_processing_cleanup --dry-run",
+    "./.venv/bin/python manage.py memory_reindex --dry-run"
+  ]
+}

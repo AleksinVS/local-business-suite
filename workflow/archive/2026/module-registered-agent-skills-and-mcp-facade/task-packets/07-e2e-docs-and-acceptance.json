@@ -1,0 +1,49 @@
+{
+  "task_id": "07-e2e-docs-and-acceptance",
+  "status": "implemented",
+  "title": "E2E, documentation and acceptance",
+  "goal": "Verify the module skills and admin runtime skill authoring flows end-to-end and update user/operator documentation.",
+  "read_scope": [
+    "scripts/e2e/tests/sidebar_ai_context.spec.ts",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "services/agent_runtime/README.md",
+    "workflow/active/module-registered-agent-skills-and-mcp-facade/"
+  ],
+  "write_scope": [
+    "scripts/e2e/tests/sidebar_ai_context.spec.ts",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/guides/AI_SKILLS_OPERATIONS.md",
+    "services/agent_runtime/README.md",
+    "workflow/active/module-registered-agent-skills-and-mcp-facade/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/module-registered-agent-skills-and-mcp-facade/TASK_ACCEPTANCE.implementation.md",
+    "workflow/active/module-registered-agent-skills-and-mcp-facade/RETROSPECTIVE.md",
+    "PROJECT_STRUCTURE.yaml",
+    ".desc.json files as needed"
+  ],
+  "requirements": [
+    "Add or update e2e coverage for opening a workorder through sidebar chat.",
+    "Add or update e2e coverage for opening a waiting-list entry through sidebar chat.",
+    "Cover the follow-up phrase case: 'открой ее в правом сайдбаре'.",
+    "Cover an unavailable object with safe failure behavior.",
+    "Cover admin runtime skill creation or provide an integration test if full UI e2e is out of scope.",
+    "Cover permission denial for runtime skill creation by a non-admin user.",
+    "Update AI sidebar guide with module skills behavior.",
+    "Add operator guide for runtime skill creation, validation, reload and rollback.",
+    "Record executor report and acceptance after implementation."
+  ],
+  "acceptance": [
+    "E2E verifies the main user flow without relying on the removed hard-coded shortcut.",
+    "Documentation explains how a new module registers an AI skill.",
+    "Documentation explains how an administrator creates a runtime skill and when discovery registers it.",
+    "Workflow reports document implementation result and residual risks.",
+    "PROJECT_STRUCTURE.yaml is regenerated after structural changes."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.core.tests apps.ai.tests apps.workorders.tests apps.waiting_list.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run test:e2e -- --project=chromium --grep \"sidebar\"",
+    "make gen-struct"
+  ]
+}

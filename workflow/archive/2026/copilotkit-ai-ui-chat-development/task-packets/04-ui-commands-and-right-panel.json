@@ -1,0 +1,38 @@
+{
+  "task_id": "04-ui-commands-and-right-panel",
+  "title": "Harden UI commands and right panel integration",
+  "status": "planned",
+  "read_scope": [
+    "services/agent_runtime/protocols/common/ui_commands.py",
+    "static/src/copilotkit/",
+    "static/src/ai_ui/",
+    "apps/ai/",
+    "apps/workorders/"
+  ],
+  "write_scope": [
+    "services/agent_runtime/protocols/common/ui_commands.py",
+    "services/agent_runtime/tests/",
+    "static/src/copilotkit/",
+    "scripts/e2e/tests/"
+  ],
+  "goals": [
+    "Normalize ui.open_right_panel once on the server side.",
+    "Execute only allow-listed UI commands in the browser.",
+    "Keep domain writes behind Django permissions, confirmation and audit."
+  ],
+  "non_goals": [
+    "Do not add unrestricted frontend tool execution.",
+    "Do not bypass existing right sidebar endpoints.",
+    "Do not expose raw tool payloads to the user."
+  ],
+  "acceptance": [
+    "ui.open_right_panel opens an allowed object in the right sidebar.",
+    "Forbidden or malformed UI commands are ignored or rejected safely.",
+    "Audit contains enough ids to trace the action without sensitive payload.",
+    "E2E covers at least one right panel command in CopilotKit mode."
+  ],
+  "verification": [
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\""
+  ]
+}

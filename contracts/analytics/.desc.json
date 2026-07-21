@@ -1,0 +1,13 @@
+{
+  ".": "Default analytics dataset contracts copied to data/contracts/analytics on first run",
+  "analysis_scope_rules.json": "Rules that constrain analytics samples before AI processing",
+  "business_facts.json": "Business fact types materialized from knowledge extraction",
+  "datasets.json": "Canonical default analytics dataset registry",
+  "dedup_rules.json": "Cross-source content and semantic deduplication rules",
+  "diagnostic_playbooks.json": "AI diagnostic playbooks for analytics signals",
+  "metrics.json": "Metric definitions calculated from analytics facts",
+  "monitors.json": "Monitor thresholds that create analytics signals",
+  "retention_profiles.json": "Retention profiles for analytics runtime artifacts",
+  "sources.json": "Analytics source declarations including IMAP, memory, DMS and API sources",
+  "workflow_routes.json": "Workflow routes launched from analytics diagnostics"
+}

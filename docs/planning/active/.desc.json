@@ -1,0 +1,13 @@
+{
+  ".": "Активные планы крупных направлений",
+  "knowledge-driven-business-analytics.md": "Активный план knowledge-driven business analytics",
+  "README.md": "Правила для активных planning-файлов",
+  "data-anonymization-privacy-pipeline.md": "Черновой план системы обезличивания данных и управляемых настроек",
+  "memory-hybrid-ranking-profiles-and-agent-prompts.md": "Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота",
+  "design-patterns-hardening-2026-06-01.md": "Активный план внедрения архитектурных паттернов",
+  "desktop-notifications-pwa-tauri.md": "Активный план PWA-first уведомлений и опционального Tauri-клиента",
+  "native-ag-ui-chat-development.md": "Активный план разработки самописного AG-UI ИИ-чата",
+  "postgresql-primary-store-migration.md": "Активный план миграции основного хранилища на PostgreSQL",
+  "memory-alignment-hardening.md": "Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)",
+  "project-knowledge-system-mvp.md": "Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы"
+}

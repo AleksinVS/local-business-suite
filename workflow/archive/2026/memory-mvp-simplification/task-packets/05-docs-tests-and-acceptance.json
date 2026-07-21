@@ -1,0 +1,38 @@
+{
+  "task_id": "05-docs-tests-and-acceptance",
+  "title": "Обновить документацию, тесты и приемочные материалы",
+  "status": "completed",
+  "objective": "Привести пользовательскую, эксплуатационную и архитектурную документацию к упрощенной MVP-архитектуре памяти и зафиксировать приемку.",
+  "write_scope": [
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/architecture/",
+    "docs/planning/active/",
+    "workflow/active/memory-mvp-simplification/",
+    "PROJECT_STRUCTURE.yaml",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "scripts/e2e/"
+  ],
+  "requirements": [
+    "Документация должна прямо говорить, что MemoryKnowledgeItem является объектом памяти MVP.",
+    "Документация должна прямо говорить, что MemoryBelief перенесен на следующие этапы.",
+    "Тесты должны покрывать remember, проверку надежных источников и отсутствие MemoryBelief в обычном контексте.",
+    "Крупный блок разработки должен завершаться unit и e2e проверками.",
+    "После изменения структуры нужно обновить .desc.json и пересобрать PROJECT_STRUCTURE.yaml."
+  ],
+  "acceptance_checks": [
+    "Архитектурная, пользовательская и эксплуатационная документация согласованы.",
+    "Unit-тесты проходят.",
+    "E2E-проверка работоспособности или памяти проходит.",
+    "После реализации в workflow есть отчет исполнения и приемка."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_eval --dry-run",
+    "npm run test:e2e",
+    "make gen-struct"
+  ]
+}

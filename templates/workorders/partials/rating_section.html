@@ -1,0 +1,31 @@
+<div id="rating-panel">
+  <div class="block-header">
+    <span class="detail-label">Оценка результата</span>
+  </div>
+  <div class="rating-content">
+    {% if workorder.rating %}
+      <div class="rating-display">
+        {% for i in "12345" %}
+          <span class="star {% if forloop.counter <= workorder.rating %}filled{% endif %}">★</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    
+    {% if can_rate %}
+      <form
+        method="post"
+        action="{% url 'workorders:rate' workorder.pk %}"
+        class="compact-inline-form"
+        hx-post="{% url 'workorders:rate' workorder.pk %}"
+        hx-target="#rating-panel"
+        hx-swap="outerHTML"
+      >
+        {% csrf_token %}
+        <div class="rating-input-group">
+          {{ rating_form.rating }}
+          <button type="submit" class="btn btn-primary btn-xs">Оценить</button>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+</div>

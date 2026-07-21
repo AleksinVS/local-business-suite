@@ -1,0 +1,39 @@
+{
+  "task_id": "04-contracts-docs-tests-acceptance",
+  "title": "Обновить контракты, документацию, тесты и приемку",
+  "status": "completed",
+  "objective": "Согласовать контракты и документацию с очередью memory.remember, поиском после обработки и выводом MemoryBelief из MVP.",
+  "write_scope": [
+    "contracts/ai/tools.json",
+    "apps/ai/tool_definitions.py",
+    "docs/architecture/MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md",
+    "docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md",
+    "docs/architecture/MEMORY_MVP_REMEDIATION_PLAN.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/planning/active/memory-mvp-remediation.md",
+    "workflow/active/memory-mvp-remediation/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Контракт memory.remember должен описывать queued-ответ.",
+    "Документация должна различать первичную постановку задачи и последующую обработку очереди.",
+    "Документация должна описывать проверку: queued -> accepted -> searchable.",
+    "Workflow должен получить EXECUTOR_REPORT, TASK_ACCEPTANCE и RETROSPECTIVE после реализации.",
+    "После изменения структуры обновить .desc.json и PROJECT_STRUCTURE.yaml."
+  ],
+  "acceptance_checks": [
+    "Контракты проходят validate_architecture_contracts.",
+    "Документация не обещает memory_id как первичный результат memory.remember.",
+    "Команды проверки из ARCHITECT_PLAN.json выполнены.",
+    "E2E-проверка проходит."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "npm run test:e2e",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

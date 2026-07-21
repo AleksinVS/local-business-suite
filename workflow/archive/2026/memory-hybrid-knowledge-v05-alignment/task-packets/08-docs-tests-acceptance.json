@@ -1,0 +1,49 @@
+{
+  "task_id": "08-docs-tests-acceptance",
+  "title": "Документация, e2e acceptance и Definition of Done",
+  "status": "ready",
+  "objective": "Актуализировать документацию под новую рабочую границу памяти, собрать e2e acceptance-сценарии блока и выполнить финальную приемку по Definition of Done.",
+  "write_scope": [
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/guides/WORKER_AND_QUEUE_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "AGENTS.md",
+    "README.md",
+    "docs/planning/backlog.md",
+    "apps/memory/tests.py",
+    "apps/memory/management/commands/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "requirements": [
+    "Переписать MEMORY_MVP_CURRENT_STATE.md под новую границу: файл-канон, memory_reconcile, единая очередь, pending-ревью, словарь рёбер, замороженный filehub, заглушки data store.",
+    "MEMORY_USER_GUIDE.md: семантика мягкого удаления (текст переживает в git-истории; настоящее стирание - через администратора и runbook git filter-repo), кандидатство через pending, прямая правка файлов владельцем канона.",
+    "MEMORY_DEPLOYMENT.md: политика резервного копирования data/knowledge_repo/ (удаленный git или файловый backup), запуск reconciler при старте и по таймеру, порядок отката этапа 1.",
+    "AGENTS.md: обновить перечень проверок памяти - удалить выведенные команды (memory_graph_extract, memory_graph_schema_discover, memory_file_* переносятся в filehub), добавить memory_reconcile --dry-run.",
+    "Собрать e2e acceptance-сценарии блока из проектного плана в управляемую команду или тестовый набор: ручная правка -> reconcile -> поиск; remember -> файл+commit+индекс; понижение sensitivity -> pending; кандидат -> принятие -> org/; идемпотентность reconciler; контракт заглушки data store.",
+    "Пройти Definition of Done из AGENTS.md: .desc.json и PROJECT_STRUCTURE.yaml актуальны, backlog очищен от завершенного блока (debt-запись 5а/5б остается в Later), незакрытые риски зафиксированы в финальном отчете.",
+    "Написать RETROSPECTIVE.md блока."
+  ],
+  "acceptance_checks": [
+    "Все e2e acceptance-сценарии блока проходят одной командой/набором и зафиксированы в отчете.",
+    "MEMORY_MVP_CURRENT_STATE.md соответствует фактическому runtime (выборочная сверка команд и моделей).",
+    "AGENTS.md содержит только существующие команды памяти; make check/make test проходят.",
+    "Backlog: блок удален из Active/Next, debt-запись 5а/5б в Later на месте.",
+    "Полный набор: check, contracts, unit, e2e - зеленый."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_reconcile --dry-run",
+    "python manage.py memory_verify_knowledge_files",
+    "python manage.py memory_eval --dry-run",
+    "python manage.py memory_file_backed_e2e",
+    "python manage.py memory_file_content_search_e2e"
+  ],
+  "notes": [
+    "Финальная задача блока; выполняется после приемки 01-07.",
+    "Ссылки: ADR-0030 'Требуемые действия'; Definition of Done в AGENTS.md."
+  ]
+}

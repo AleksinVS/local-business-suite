@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Переходы статусов{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Ядро / процессы</p>
+      <h1>Переходы статусов</h1>
+      <p class="description">Глобальная матрица разрешенных переходов заявок. Права ролей применяются дополнительно.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:setting_detail' descriptor.setting_id %}">JSON</a>
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+    </div>
+  </div>
+
+  <form method="post" class="transition-matrix-form">
+    {% csrf_token %}
+    <div class="matrix-summary">
+      <span>Разрешено: {{ allowed_count }} из {{ possible_count }}</span>
+      <label class="checkbox-row"><input type="checkbox" name="confirm"> Подтверждаю применение изменения</label>
+    </div>
+
+    <div class="matrix-scroll">
+      <table class="transition-matrix">
+        <thead>
+          <tr>
+            <th>Из \ В</th>
+            {% for status in statuses %}
+              <th>{{ status }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <th>{{ row.source }}</th>
+              {% for cell in row.cells %}
+                <td class="{% if cell.is_self %}self-cell{% endif %}">
+                  {% if cell.is_self %}
+                    <span title="Переход в тот же статус не используется">-</span>
+                  {% else %}
+                    <input
+                      type="checkbox"
+                      name="{{ cell.field_name }}"
+                      title="{{ row.source }} -> {{ cell.target }}"
+                      {% if cell.enabled %}checked{% endif %}>
+                  {% endif %}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-actions">
+      <button class="button" name="action" value="apply_matrix" type="submit">Сохранить матрицу</button>
+      <button class="button-link" name="action" value="allow_all" type="submit">Разрешить все</button>
+      <button class="button-link" name="action" value="deny_all" type="submit">Запретить все</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Текущее значение</p>
+      <h2>JSON-контракт</h2>
+    </div>
+  </div>
+  <pre class="json-preview">{{ raw_payload }}</pre>
+</section>
+
+<style>
+  .transition-matrix-form { display: grid; gap: 1rem; }
+  .matrix-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .checkbox-row { display: inline-flex; gap: 0.5rem; align-items: center; }
+  .matrix-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .transition-matrix { width: 100%; border-collapse: collapse; min-width: 760px; }
+  .transition-matrix th,
+  .transition-matrix td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); padding: 0.65rem; text-align: center; }
+  .transition-matrix th:first-child { text-align: left; width: 150px; }
+  .transition-matrix thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .transition-matrix tbody th { background: var(--surface-muted, var(--surface)); }
+  .transition-matrix input[type="checkbox"] { width: 18px; height: 18px; }
+  .self-cell { color: var(--text-muted); background: var(--surface-muted, var(--surface)); }
+  .json-preview { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow: auto; }
+</style>
+{% endblock %}

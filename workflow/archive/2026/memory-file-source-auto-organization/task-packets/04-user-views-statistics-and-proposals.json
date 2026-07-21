@@ -1,0 +1,51 @@
+{
+  "task_id": "04-user-views-statistics-and-proposals",
+  "title": "User virtual views, statistics and organization proposals",
+  "status": "completed",
+  "objective": "Implement user virtual structures, safe usage statistics and organization proposals based on stable behavior.",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/policies.py",
+    "apps/memory/review_safety.py",
+    "apps/memory/views.py",
+    "docs/architecture/MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md",
+    "contracts/role_rules.json"
+  ],
+  "write_scope": [
+    "apps/memory/file_organization_views.py",
+    "apps/memory/file_organization_stats.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/views.py",
+    "apps/memory/urls.py",
+    "apps/memory/templates/",
+    "apps/memory/management/commands/memory_file_structure_stats.py",
+    "apps/memory/tests.py",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md"
+  ],
+  "non_goals": [
+    "Do not expose another user's personal virtual paths.",
+    "Do not use raw search queries as shared evidence.",
+    "Do not let user virtual views grant access to restricted files.",
+    "Do not create organization proposals from a single user's behavior alone."
+  ],
+  "requirements": [
+    "User views must be separate from organization views.",
+    "Usage events must be safe-serialized.",
+    "Organization proposals must use aggregation thresholds.",
+    "Proposal evidence must include adoption, stability, churn, admin overrides and conflicts.",
+    "Rejected proposals must be preserved as negative examples."
+  ],
+  "acceptance_checks": [
+    "A user can create a virtual placement without moving the physical file.",
+    "Access checks still block files the user cannot read.",
+    "Stats command creates no proposal below aggregation threshold.",
+    "Accepted/rejected proposal decisions are audited."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py memory_file_structure_stats --source-code <code> --dry-run",
+    "python manage.py test apps.memory.tests apps.ai.tests"
+  ]
+}

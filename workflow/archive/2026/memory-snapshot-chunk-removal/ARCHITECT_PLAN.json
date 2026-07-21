@@ -1,0 +1,77 @@
+{
+  "block_id": "memory-snapshot-chunk-removal",
+  "status": "implemented",
+  "created_at": "2026-05-22",
+  "architecture_sources": [
+    "docs/adr/ADR-0011-file-backed-knowledge-and-unified-search.md",
+    "docs/architecture/MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md",
+    "docs/planning/active/memory-file-backed-knowledge.md",
+    "docs/planning/active/memory-snapshot-chunk-removal.md",
+    "workflow/active/memory-file-backed-knowledge/HANDOFF_REPORT.md"
+  ],
+  "goal": "Убрать MemorySnapshot и MemoryChunk из активного пути памяти, заменив их прямой индексной записью MemorySearchDocument для корпусов knowledge и source_data.",
+  "execution_order": [
+    "01-search-document-model",
+    "02-knowledge-indexing-without-chunks",
+    "03-source-data-indexing-without-snapshots",
+    "04-remove-snapshot-chunk-runtime",
+    "05-docs-tests-acceptance"
+  ],
+  "global_constraints": [
+    "Файлы знаний в data/knowledge_repo/ остаются источником истины для знаний.",
+    "MemorySearchDocument не хранит полный исходный текст документов, писем, API-ответов или сообщений.",
+    "Исходные данные остаются в своих источниках; временные raw/safe слои удаляются по регламенту.",
+    "Проверки прав, scope_tokens, sensitivity и trusted source сохраняются.",
+    "Секретные значения не индексируются и не попадают в аудит.",
+    "Графовый поиск не расширять в этом блоке; финальная стратегия графа является отдельной задачей.",
+    "Так как внедрения еще не было, старые таблицы MemorySnapshot/MemoryChunk можно удалить штатной миграцией.",
+    "Использовать ./.venv/bin/python в проверках."
+  ],
+  "target_runtime_flow": [
+    "memory.remember queues request",
+    "knowledge_writer_worker writes knowledge file and MemoryKnowledgeItem",
+    "knowledge_index_worker creates or updates MemorySearchDocument",
+    "search backend indexes document_id",
+    "memory.search returns knowledge result through reader service"
+  ],
+  "target_models": [
+    {
+      "name": "MemorySearchDocument",
+      "purpose": "Техническая запись поискового индекса для knowledge и source_data.",
+      "required_fields": [
+        "document_id",
+        "corpus_type",
+        "object_kind",
+        "knowledge_item or knowledge_id",
+        "source_object or source_object_id",
+        "source_code",
+        "source_kind",
+        "source_refs",
+        "scope_tokens",
+        "sensitivity",
+        "index_status",
+        "body_hash",
+        "metadata",
+        "indexed_at"
+      ]
+    }
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py makemigrations --check --dry-run",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests apps.analytics.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run",
+    "./.venv/bin/python manage.py memory_file_backed_e2e",
+    "npm run test:e2e",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "acceptance_summary": [
+    "Обычный путь memory.remember не создает MemorySnapshot и MemoryChunk, сами модели удалены из текущей схемы.",
+    "Индексация знания создает MemorySearchDocument и индексирует document_id.",
+    "memory.search возвращает знания через knowledge_id и reader service.",
+    "source_data fallback работает через MemorySourceObject и MemorySearchDocument без постоянного хранения полного текста.",
+    "Активные импорты, admin-классы и тестовые фабрики MemorySnapshot/MemoryChunk удалены.",
+    "Документация и e2e-проверки отражают новую схему."
+  ]
+}

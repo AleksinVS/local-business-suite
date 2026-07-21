@@ -1,0 +1,38 @@
+{
+  "task_id": "01-adr-and-model-contract",
+  "title": "Define review data contract from accepted ADR",
+  "status": "completed",
+  "read_scope": [
+    "docs/adr/ADR-0017-memory-audit-review-ui.md",
+    "docs/adr/ADR-0015-file-content-fts-vector-search.md",
+    "docs/adr/ADR-0016-memory-hybrid-ranking-profiles.md",
+    "docs/planning/active/memory-audit-review-ui.md",
+    "apps/memory/models.py",
+    "apps/memory/admin.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/management/commands/memory_reindex.py",
+    "apps/memory/tests.py"
+  ],
+  "write_scope": [
+    "docs/adr/ADR-0017-memory-audit-review-ui.md",
+    "docs/planning/active/memory-audit-review-ui.md",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/tests.py"
+  ],
+  "requirements": [
+    "Use accepted ADR-0017 decisions before model changes.",
+    "Keep MemoryIngestionIssue as the primary review queue for MVP.",
+    "Define ReviewQueueItem as a selector-level read-only projection, not as a Django model.",
+    "Add immutable MemoryReviewAction model for review decisions and index actions.",
+    "Add assignment and resolution fields to MemoryIngestionIssue only if they are needed for filtering and workflow.",
+    "Add index health IssueKind values only when diagnostics create persistent issues.",
+    "Do not add a persistent MemoryReviewCase in this slice.",
+    "Do not store full extracted text, raw secrets, raw PII or raw query."
+  ],
+  "acceptance_checks": [
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ]
+}

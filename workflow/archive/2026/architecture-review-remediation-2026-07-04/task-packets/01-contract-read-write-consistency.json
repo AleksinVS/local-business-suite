@@ -1,0 +1,59 @@
+{
+  "task_id": "01-contract-read-write-consistency",
+  "title": "Contract store с mtime-кэшем и единственный путь записи контрактов",
+  "risk": "high",
+  "adr": "docs/adr/ADR-0031-runtime-contract-store-and-delivery.md",
+  "absorbs": "architecture-review-remediation-2026-06-01/task-packets/02-contract-write-paths-and-role-settings.json",
+  "goal": "Изменения контрактов применяются согласованно во всех процессах; запись возможна только через валидируемый и аудируемый service layer.",
+  "findings": [
+    "apps/settings_center/contract_services.py:121 (_refresh_inprocess_setting) обновляет settings только в текущем воркере; gunicorn в production работает с несколькими воркерами",
+    "apps/core/views.py:110-141 (RoleRulesUpdateView.post) пишет role_rules.json без validate_role_rules_payload, без SettingsChange audit, через поверхностный .copy() с мутацией вложенных словарей объекта настроек",
+    "docstring apps/ai/services.py:664 утверждает, что UI использует тот же путь записи — это неверно"
+  ],
+  "write_scope": [
+    "apps/core/contract_store.py (новый модуль)",
+    "apps/core/views.py",
+    "apps/core/tests.py",
+    "apps/workorders/policies.py",
+    "apps/ai/skill_authoring.py",
+    "apps/ai/services.py",
+    "apps/memory/policies.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/tests.py",
+    "config/settings.py (только точки чтения payload; пути не трогать)",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md"
+  ],
+  "non_goals": [
+    "Не менять формат role_rules и других контрактов",
+    "Не переводить в этом пакете чтения memory/analytics контрактов, если объём растёт — допустимо ограничиться role_rules/workflow_rules/workorder_status_colors и зафиксировать остаток в backlog",
+    "Не реализовывать доставку контрактов в agent-runtime (пакет 02)"
+  ],
+  "implementation_notes": [
+    "Contract store: get_contract(name) читает data/contracts/<...>.json; ключ инвалидации кэша — кортеж (st_mtime_ns, st_size, st_ino), не голый mtime (ADR-0031 п.1, уточнения 2026-07-05).",
+    "Store возвращает неизменяемый payload: глубокая копия или рекурсивная read-only обёртка — вариант выбрать при реализации и закрепить тестом на попытку мутации; мутация результата вызывающим кодом не должна портить кэш.",
+    "Семантика ошибок: первое чтение после старта процесса при битом/невалидном файле — fail-fast (исключение наверх); последующие ошибки — вернуть последний валидный payload, ERROR в лог и видимый сигнал деградации (флаг в /health/ и индикатор в Settings Center).",
+    "Для авторизационных решений — снимок контракта на время HTTP-запроса: читать один раз на запрос и передавать дальше, чтобы запрос не увидел две версии правил.",
+    "Оптимистическая проверка при записи: apply_contract_payload принимает хеш исходной версии контракта и отклоняет запись, если файл уже изменился (защита от потерянного обновления при конкурентной правке).",
+    "Порядок перевода чтений: role_rules и workflow_rules первыми (авторизация), затем workorder_status_colors; прямые чтения settings.LOCAL_BUSINESS_ROLE_RULES в apps/workorders/policies.py:16, apps/memory/policies.py:265, apps/ai/skill_authoring.py:30, apps/ai/services.py:687,719 заменить на store.",
+    "RoleRulesUpdateView.post перевести на apps.settings_center.contract_services.apply_contract_payload (валидация + атомарная запись + SettingsChange) либо заменить страницу ссылкой на Settings Center — выбрать меньший по коду вариант и зафиксировать в executor report.",
+    "_refresh_inprocess_setting удалить; согласованность обеспечивает store по mtime.",
+    "Запрещено добавлять новые чтения payload из settings; в code review пакета проверить grep-ом settings.LOCAL_BUSINESS_ROLE_RULES и settings.LOCAL_BUSINESS_WORKFLOW_RULES.",
+    "Поправить docstring update_role_permissions_for_actor после унификации пути записи."
+  ],
+  "tests": [
+    "unit: инвалидация кэша store по ключу (st_mtime_ns, st_size, st_ino) — записали файл, следующий get_contract видит новое значение",
+    "unit: два независимых экземпляра store (эмуляция двух воркеров) видят изменение после записи через apply_contract_payload",
+    "unit: мутация возвращённого payload не влияет на следующее чтение (неизменяемость)",
+    "unit: битый файл при первом чтении -> исключение (fail-fast); битый файл после валидного чтения -> последний валидный payload + сигнал деградации выставлен",
+    "unit: запись с устаревшим хешом исходной версии отклоняется (оптимистическая проверка)",
+    "unit: попытка сохранить невалидный role_rules через UI-форму отклоняется с ошибкой валидации и не меняет файл",
+    "unit: запись через UI-форму создаёт SettingsChange",
+    "regression: существующие тесты settings_center и core зелёные"
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.core.tests apps.ai.tests apps.settings_center.tests apps.workorders.tests apps.memory.tests",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "grep -rn \"settings.LOCAL_BUSINESS_ROLE_RULES\" apps/ --include=*.py — вне tests допустимых вхождений нет"
+  ],
+  "independent_verification": true
+}

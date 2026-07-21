@@ -1,0 +1,67 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-jobs-eval-admin",
+  "task_id": "task-memory-jobs-eval-admin",
+  "goal": "Add memory management commands, evaluation checks, and admin observability.",
+  "risk_class": "R1",
+  "read_files": [
+    "apps/memory/**",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_files": [
+    "apps/memory/management/commands/**",
+    "apps/memory/admin.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "templates/memory/**",
+    "apps/memory/urls.py",
+    "apps/memory/views.py"
+  ],
+  "forbidden_moves": [
+    "Do not introduce Celery until a separate production scheduling task accepts that dependency.",
+    "Do not expose raw PII snapshots through admin or UI.",
+    "Do not store temporary eval reports in the repository root."
+  ],
+  "required_docs": [
+    "docs/planning/active/ai-memory-service.md"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py memory_sync_source --help",
+    "./.venv/bin/python manage.py memory_reindex --help",
+    "./.venv/bin/python manage.py memory_eval --help",
+    "./.venv/bin/python manage.py test apps.memory.tests",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ],
+  "mandatory_tests": [
+    "Command help/smoke tests",
+    "PII leakage eval smoke case",
+    "Secret bait eval smoke case",
+    "Forbidden-scope eval smoke case"
+  ],
+  "deliverables": [
+    "Memory management commands",
+    "Evaluation smoke/security suites",
+    "Admin observability",
+    "EXECUTOR_REPORT.task-memory-jobs-eval-admin.md"
+  ],
+  "escalation_path": [
+    "Scheduling requires Celery or another production worker decision",
+    "Admin visibility requires a new permission model",
+    "Evaluation requires real patient data"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Start with management commands and Django admin.",
+    "Keep generated eval outputs in data/memory/eval/ or .local/.",
+    "Document any skipped checks explicitly."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "task_id": "04-memory-acl-inheritance",
+  "title": "Memory file-source ACL inheritance",
+  "goal": "Implement source ACL inheritance for file-backed memory sources with fail-closed unresolved ACL policy.",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/policies.py",
+    "apps/memory/retrieval.py",
+    "apps/accounts/ldap_backend.py",
+    "contracts/ai/memory_ingestion_profiles.json",
+    "docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md",
+    "docs/adr/ADR-0007-settings-center-and-contextual-help.md"
+  ],
+  "write_scope": [
+    "apps/memory/",
+    "apps/memory/migrations/",
+    "apps/memory/settings_descriptors.py",
+    "apps/accounts/",
+    "contracts/ai/",
+    "contracts/schemas/",
+    "apps/core/json_utils.py",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "acceptance": [
+    "Ingestion profile supports ACL modes including inherit_source_acl and conservative fallback options.",
+    "ACL resolver can collect or represent file ACL metadata for local/UNC sources through a replaceable adapter.",
+    "Known AD/user/group principals map to portal scope tokens.",
+    "Unknown or unreadable ACL creates visible memory issue and blocks normal publication by default.",
+    "Derived scope tokens are attached to source objects, snapshots, chunks and graph facts as needed.",
+    "Retrieval continues to double-filter by scope in backend and Django policy layer.",
+    "Tests cover allow, deny/unknown principal and ACL read failure paths."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.accounts.tests",
+    "python manage.py memory_eval --dry-run"
+  ]
+}

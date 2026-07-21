@@ -1,0 +1,37 @@
+{
+  "task_id": "05-workorders-source-adapter",
+  "title": "Connect workorders as an internal source adapter",
+  "status": "completed",
+  "read_scope": [
+    "apps/workorders/models.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/services.py",
+    "apps/ai/services.py",
+    "apps/core/source_adapters.py"
+  ],
+  "write_scope": [
+    "apps/workorders/source_adapter.py",
+    "apps/workorders/tests.py",
+    "apps/memory/tests.py",
+    "apps/analytics/tests.py",
+    "contracts/ai/memory_sources.json",
+    "contracts/analytics/sources.json",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Expose workorders as source_code workorders or workorders_system_of_record.",
+    "Use source_origin internal and privacy profile default pii_off unless overridden.",
+    "Render number, title, description, department, priority, status, device, comments, transitions, closure and rating into search text.",
+    "Use access_policy mode adapter_check with the existing visible_workorders_queryset policy.",
+    "Extract analytics facts for create, transition, close, rating and repeated device/problem signals where feasible.",
+    "Do not make apps.memory import WorkOrder or call workorders selectors directly outside adapter_check abstraction.",
+    "Prepare workorders.search wrapper if needed for AI agent ergonomics."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.workorders.tests apps.memory.tests apps.analytics.tests apps.ai.tests"
+  ]
+}

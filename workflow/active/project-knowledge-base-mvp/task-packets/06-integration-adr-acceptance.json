@@ -1,0 +1,41 @@
+{
+  "task_id": "06-integration-adr-acceptance",
+  "title": "e2e, ADR, раздел в AGENTS.md и приёмка (T6)",
+  "status": "ready",
+  "objective": "Закрыть MVP: e2e-тест полного цикла, ADR о базе проектных знаний (Proposed), протокол для агентов в AGENTS.md, обновление структурных файлов, финальный отчёт с чек-листом приёмки §11 и фактическими цифрами.",
+  "plan_sections": ["§9 T6", "§10 E1", "§11", "приложение А проектного документа (v0.7)"],
+  "write_scope": [
+    "scripts/dev/tests/test_kb.py",
+    "docs/adr/ADR-00XX-project-knowledge-base.md (номер - следующий свободный)",
+    "docs/adr/.desc.json",
+    "AGENTS.md (только новый раздел 'База проектных знаний')",
+    "docs/planning/backlog.md (очистка записи после приёмки)",
+    "PROJECT_STRUCTURE.yaml (через генератор)"
+  ],
+  "requirements": [
+    "Шаг 1. e2e E1 (§10): pytest-тест, вызывающий CLI через subprocess, - полный цикл на фикстуре: sync --full -> query возвращает ожидаемую страницу в топ-3 -> neighbors -> page --section -> битая страница -> fail-soft -> queue. Внутри теста замеры time.perf_counter для чек-листа §11 п. 3 (дельта-sync < 1 с, полная пересборка < 10 с, query < 200 мс).",
+    "Шаг 2. ADR docs/adr/ADR-00XX-project-knowledge-base.md: контекст (осведомлённость агентов при точечном чтении), решение (markdown-канон + пересобираемая SQLite-проекция; отступление от OKF по log.md), рассмотренные альтернативы, последствия; статус Proposed - принимает владелец. Номер - следующий свободный на момент исполнения.",
+    "Шаг 3. Раздел 'База проектных знаний' в AGENTS.md: скопировать приложение А проектного документа (v0.7), заменив внутренние ссылки вида '§7.5' ссылкой на docs/architecture/project-knowledge-system-v0.1.md (примечание в самом приложении). Другие разделы AGENTS.md не трогать.",
+    "Шаг 4. Обновить .desc.json затронутых директорий (docs/adr/, scripts/dev/tests/) и запустить node scripts/dev/generate-structure.js.",
+    "Шаг 5. Финальный отчёт исполнителя: фактический вывод полного python -m pytest scripts/dev/tests -q; чек-лист §11 (10 пунктов) с фактическими цифрами; список обновлённых документов; расхождения план/проект, если встретились.",
+    "Шаг 6. После приёмки владельцем: удалить задачу из docs/planning/backlog.md (раздел Next), зафиксировать в backlog ссылки на фазу 2 и фазу 3 как отдельных кандидатов; блок переносится в workflow/archive/2026/ с ретроспективой.",
+    "ЗАПРЕЩЕНО: менять существующие разделы AGENTS.md; принимать ADR самостоятельно (статус ставится Proposed); начинать фазу 2 (наполнение корпуса)."
+  ],
+  "acceptance_checks": [
+    "Полный python -m pytest scripts/dev/tests -q зелёный (U1-U36, S1, E1).",
+    "Чек-лист §11: все 10 пунктов подтверждены фактическими цифрами в отчёте (детерминизм sync --full, эквивалентность хэшей eol, тайминги, конкурентный пропуск, акторная модель, короткие термины, чистый lint, eval на непустом наборе, impact, contradiction до очереди).",
+    "ADR создан со статусом Proposed, ссылки на проектный документ и план на месте, docs/adr/.desc.json обновлён.",
+    "Раздел 'База проектных знаний' в AGENTS.md соответствует приложению А v0.7 с заменёнными внутренними ссылками.",
+    "PROJECT_STRUCTURE.yaml перегенерирован; runtime-артефакты (.local/knowledge/) не попали в git."
+  ],
+  "verification_commands": [
+    "python -m pytest scripts/dev/tests -q",
+    "python scripts/dev/kb.py sync --full --actor maintenance",
+    "python scripts/dev/kb.py lint",
+    "node scripts/dev/generate-structure.js"
+  ],
+  "notes": [
+    "Финальный пакет: независимая проверка тестов субагентом по AGENTS.md (субагент только запускает согласованный набор проверок и фиксирует фактические результаты).",
+    "Приёмка блока = Definition of Done AGENTS.md: документация, .desc.json, backlog, отчёты, ретроспектива."
+  ]
+}

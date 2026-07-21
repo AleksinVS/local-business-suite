@@ -1,0 +1,9 @@
+{
+  ".": "Task packets: файловые знания, раздельные базы и единый поиск",
+  "01-knowledge-file-format-and-writer.json": "Формат файлов знаний и writer service",
+  "02-reader-service-and-metadata-db.json": "Reader service и metadata database знаний",
+  "03-unified-search-index-service.json": "Единый search/index service",
+  "04-source-data-temporary-processing.json": "Временная обработка source data",
+  "05-chat-and-analytics-db-split.json": "Раздельные базы для чатов и управляющей аналитики",
+  "06-reflection-and-migration-hardening.json": "Отдельная рефлексия, миграция и усиление надежности"
+}

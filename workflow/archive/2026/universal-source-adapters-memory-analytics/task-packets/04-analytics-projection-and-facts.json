@@ -1,0 +1,35 @@
+{
+  "task_id": "04-analytics-projection-and-facts",
+  "title": "Build analytics projection from source envelopes",
+  "status": "completed",
+  "read_scope": [
+    "apps/analytics/models.py",
+    "apps/analytics/services.py",
+    "contracts/analytics/business_facts.json",
+    "contracts/analytics/sources.json",
+    "apps/core/source_adapters.py"
+  ],
+  "write_scope": [
+    "apps/analytics/services.py",
+    "apps/analytics/management/commands/",
+    "apps/analytics/tests.py",
+    "contracts/analytics/business_facts.json",
+    "contracts/analytics/sources.json",
+    "docs/architecture/ANALYTICS_MODEL.md",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md"
+  ],
+  "requirements": [
+    "Add service to upsert AnalyticsContentObject from SourceObjectEnvelope.",
+    "Create AnalyticsExtractionPacket from envelope without direct reads of domain tables.",
+    "Persist facts returned by adapter extract_analytics_facts or extracted from packet text.",
+    "Support deactivate/tombstone for deleted source objects.",
+    "Keep analytics PII behavior aligned with envelope privacy profile.",
+    "Do not duplicate full source records beyond approved normalized payload and packet fields."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.analytics.tests",
+    "python manage.py analytics_extract_source --source-code <test-source> --dry-run",
+    "python manage.py analytics_recalculate_metrics --dry-run"
+  ]
+}

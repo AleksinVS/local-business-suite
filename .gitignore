@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+db/*.sqlite3
+db/*.sqlite3-shm
+db/*.sqlite3-wal
+media/
+static/dist/
+staticfiles/
+*.log
+logs/
+data/
+server_log.txt
+caddy_data/
+web.config
+wfastcgi.ini
+*.cer
+*.crt
+*.key
+*.pem
+.local/
+.codex/
+# deployments/: сам каталог в Git (якорь + указатель на приватные репозитории),
+# вложенные каталоги хостов — приватные субмодули/клоны, в Git не попадают
+deployments/*
+!deployments/.desc.json
+!deployments/DEPLOY_PRIVATE.md
+VOB3/
+node_modules/
+clients/*/dist/
+playwright-report/
+test-results/
+.playwright-mcp/
+
+_backup_pre_update/

@@ -1,0 +1,44 @@
+FROM node:22-slim AS copilotkit-assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json vite.copilotkit.config.mjs /app/
+COPY static/src/copilotkit/ /app/static/src/copilotkit/
+RUN npm ci --legacy-peer-deps \
+    && npm run build:copilotkit
+
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV HOME=/home/app
+
+WORKDIR /app
+
+# Ставим зависимости из requirements.lock (сгенерирован pip-compile), а не из
+# requirements.txt: requirements.lock фиксирует версии всех транзитивных
+# зависимостей и делает сборку образа воспроизводимой. requirements.txt
+# остаётся человекочитаемым входом для `make lock` / pip-compile.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
+
+COPY apps/ /app/apps/
+COPY config/ /app/config/
+COPY contracts/ /app/contracts/
+COPY services/ /app/services/
+COPY docker/ /app/docker/
+COPY static/ /app/static/
+COPY --from=copilotkit-assets /app/static/dist/copilotkit /app/static/dist/copilotkit
+COPY templates/ /app/templates/
+COPY workflow/ai_artifacts/ /app/workflow/ai_artifacts/
+COPY manage.py /app/manage.py
+COPY pytest.ini /app/pytest.ini
+
+RUN chmod +x /app/docker/entrypoint.prod.sh \
+    && mkdir -p /home/app \
+    && if ! getent passwd 1000 >/dev/null; then useradd --uid 1000 --create-home --home-dir /home/app app; fi \
+    && chown -R 1000:1000 /app /home/app
+
+USER 1000
+
+CMD ["/app/docker/entrypoint.prod.sh"]

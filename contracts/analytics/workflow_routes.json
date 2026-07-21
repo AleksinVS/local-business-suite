@@ -1,0 +1,18 @@
+[
+  {
+    "code": "department_issue_review",
+    "title": "Разбор операционной проблемы подразделения",
+    "owner": "operations",
+    "target": "analytics_case",
+    "requires_confirmation": true,
+    "allowed_autonomous_actions": ["create_draft_case"]
+  },
+  {
+    "code": "regulator_request_review",
+    "title": "Разбор запроса регулятора",
+    "owner": "compliance",
+    "target": "analytics_case",
+    "requires_confirmation": true,
+    "allowed_autonomous_actions": ["create_draft_case"]
+  }
+]

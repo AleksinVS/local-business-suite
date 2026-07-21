@@ -1,0 +1,18 @@
+{
+  "task_id": "04-verification-and-acceptance",
+  "status": "completed",
+  "goal": "Verify UI russification and record implementation results.",
+  "write_scope": [
+    "workflow/active/interface-russification/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/interface-russification/TASK_ACCEPTANCE.implementation.md",
+    "docs/planning/active/interface-russification-and-localization.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance": [
+    "Django checks pass.",
+    "Architecture contracts pass.",
+    "Relevant unit tests pass.",
+    "At least one e2e UI scenario passes.",
+    "Residual visible English strings are documented as technical exceptions."
+  ]
+}

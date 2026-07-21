@@ -1,0 +1,80 @@
+{
+  "block_id": "copilotkit-ag-ui-integration",
+  "status": "active_first_slice_e2e_passed",
+  "created_at": "2026-06-09",
+  "architecture_sources": [
+    "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
+    "docs/architecture/COPILOTKIT_AG_UI_INTEGRATION_PLAN.md",
+    "docs/planning/active/copilotkit-ag-ui-integration.md",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
+    "docs/adr/ADR-0021-module-registered-agent-skills-and-mcp-facade.md"
+  ],
+  "goal": "Add a safe pilot path for embedding CopilotKit into the existing Django UI through an AG-UI adapter while preserving Django as the system of record and keeping the current AI sidebar as fallback.",
+  "execution_order": [
+    "01-documentation-and-decision",
+    "02-agent-runtime-ag-ui-adapter",
+    "03-copilot-runtime-service",
+    "04-react-island-django-ui",
+    "05-security-audit-and-deployment",
+    "06-e2e-docs-and-acceptance"
+  ],
+  "global_constraints": [
+    "Django remains the system of record for sessions, history, permissions, audit and tool execution.",
+    "Do not replace the current Django AI sidebar before pilot acceptance.",
+    "Do not expose Django AI gateway tokens to the browser.",
+    "Do not execute domain writes through frontend tools.",
+    "Use Copilot Runtime for production; direct browser HttpAgent is allowed only for local prototypes.",
+    "Disable CopilotKit telemetry by default in on-prem profiles.",
+    "Do not enable Copilot Cloud, hosted persistence or external analytics without a separate privacy/security review and ADR.",
+    "AG-UI state and events must not include raw PII, secrets, UNC paths, session cookies, full actor context or full prompts.",
+    "Preserve confirmation and audit behavior for all existing write tools.",
+    "Keep /chat and /chat/stream compatible until the owner accepts a replacement.",
+    "Temporary artifacts belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "ADR-0027 is accepted or updated with the final decision.",
+    "The AG-UI endpoint streams valid lifecycle, text, tool and state events.",
+    "Existing Django AI chat routes continue to work.",
+    "Copilot Runtime connects to the AG-UI endpoint server-side.",
+    "The React island is gated by a feature flag.",
+    "Frontend tools are limited to UI actions.",
+    "Backend write tools still require confirmation and audit.",
+    "A user without domain permissions cannot read or mutate hidden objects through CopilotKit.",
+    "Telemetry is disabled in local-first/on-prem deployment profiles.",
+    "Operations and deployment docs describe enable, smoke, rollback and troubleshooting.",
+    "E2E covers the primary CopilotKit panel flow."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run build:copilotkit",
+    "node --check services/copilot_runtime/server.mjs",
+    "curl -fsS http://127.0.0.1:3100/health",
+    "E2E_COPILOTKIT_ENABLED=true npm run test:e2e -- --project=chromium",
+    "npm run test:e2e -- --project=chromium",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "implementation_notes": [
+    "Implement the AG-UI event mapper as a small separately tested module before adding CopilotKit UI.",
+    "Keep the first UI slice behind LOCAL_BUSINESS_COPILOTKIT_ENABLED.",
+    "Prefer same-origin /copilotkit routing in production to reduce CORS and CSRF complexity.",
+    "Map ui.open_right_panel as a safe UI command; never as a domain write.",
+    "Persist chat history in Django, not in CopilotKit cloud persistence.",
+    "Pin CopilotKit and AG-UI package versions during implementation because both projects move quickly."
+  ],
+  "deferred_decisions": [
+    "Whether the first React island replaces the left sidebar in pilot mode or lives on a separate experimental route.",
+    "Whether to expose current MCP resources through CopilotKit mcpApps.",
+    "Whether generative UI cards are useful before right drawer rendering is exhausted.",
+    "Whether Settings Center should own the feature flag after the pilot.",
+    "Whether to persist AG-UI run metadata in a separate Django model.",
+    "Whether CopilotKit should be reused by the optional Tauri/PWA clients later."
+  ]
+}

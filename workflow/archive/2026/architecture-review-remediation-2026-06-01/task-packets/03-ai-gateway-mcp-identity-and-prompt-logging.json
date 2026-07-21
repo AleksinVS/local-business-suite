@@ -1,0 +1,29 @@
+{
+  "task_id": "03-ai-gateway-mcp-identity-and-prompt-logging",
+  "title": "AI gateway/MCP identity checks и безопасное логирование prompt",
+  "goal": "Убрать raw prompt из runtime logs и усилить проверку пользователя для AI gateway и MCP.",
+  "write_scope": [
+    "apps/ai/views.py",
+    "apps/ai/tooling.py",
+    "apps/ai/runtime_client.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/mcp_server.py",
+    "services/agent_runtime/gateway_client.py",
+    "apps/ai/tests.py",
+    "services/agent_runtime/tests/"
+  ],
+  "non_goals": [
+    "Не публиковать MCP наружу",
+    "Не менять LLM provider configuration"
+  ],
+  "implementation_notes": [
+    "Runtime logs should include request_id, conversation_id, prompt length/hash, model id and error class, not raw prompt.",
+    "Gateway execution should require verified session ownership or a stricter service-to-user binding.",
+    "MCP tools must not trust user_id/roles supplied by an arbitrary external caller as authorization evidence."
+  ],
+  "acceptance_checks": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    ".venv/bin/python manage.py validate_architecture_contracts"
+  ]
+}

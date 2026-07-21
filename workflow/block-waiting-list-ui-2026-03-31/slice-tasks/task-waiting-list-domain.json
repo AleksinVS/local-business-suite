@@ -1,0 +1,76 @@
+{
+  "block_id": "block-waiting-list-ui-2026-03-31",
+  "slice_id": "slice-waiting-list-domain",
+  "task_id": "task-waiting-list-domain",
+  "source_plan": "workflow/block-waiting-list-ui-2026-03-31/ARCHITECT_PLAN.json",
+  "source_plan_hash": "d34a44810d963b0269b3e7405ce9e4487b502281dde740ec04566827915cd4a0",
+  "generated_at": "2026-03-31T00:00:00+03:00",
+  "risk_class": "R1",
+  "forbidden_moves": [
+    "Do not modify existing workorders or inventory schemas in this slice.",
+    "Do not add a separate service catalog model or a new permissions framework.",
+    "Do not wire direct client-side writes; all waiting list mutations must remain in Django views/services."
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py test apps.waiting_list.tests"
+  ],
+  "mandatory_tests": [
+    "Add tests for model creation, server-side validation, audit-log generation, and route accessibility in apps.waiting_list.tests."
+  ],
+  "goal": "Create the waiting list Django app foundation, schema, services, admin wiring, and route registration.",
+  "read_files": [
+    "config/settings.py",
+    "config/urls.py",
+    "apps/workorders/models.py",
+    "apps/workorders/views.py",
+    "apps/workorders/services.py",
+    "apps/workorders/tests.py",
+    "drafts/waiting_list.html",
+    "AGENTS.md"
+  ],
+  "write_files": [
+    "config/settings.py",
+    "config/urls.py",
+    "apps/waiting_list/__init__.py",
+    "apps/waiting_list/apps.py",
+    "apps/waiting_list/models.py",
+    "apps/waiting_list/forms.py",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/services.py",
+    "apps/waiting_list/admin.py",
+    "apps/waiting_list/urls.py",
+    "apps/waiting_list/tests.py",
+    "apps/waiting_list/migrations/*",
+    "templates/waiting_list/*"
+  ],
+  "deliverables": [
+    "New waiting_list Django app with models, forms, services, views, urls, admin, and tests",
+    "Schema migration for waiting list models",
+    "EXECUTOR_REPORT.md"
+  ],
+  "runtime_binding": {
+    "launcher": "droid",
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "tier": "medium",
+    "reasoning_effort": "high",
+    "fallbacks": [
+      {
+        "launcher": "gemini-cli",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "tier": "medium",
+        "reasoning_effort": "high"
+      },
+      {
+        "launcher": "codex-subagent",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "tier": "medium",
+        "reasoning_effort": "medium"
+      }
+    ]
+  }
+}

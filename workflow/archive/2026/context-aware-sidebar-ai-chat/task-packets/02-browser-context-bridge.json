@@ -1,0 +1,41 @@
+{
+  "task_id": "02-browser-context-bridge",
+  "status": "implemented",
+  "title": "Browser page context bridge",
+  "goal": "Collect current page, drawer and selection context in the browser without scraping raw HTML.",
+  "read_scope": [
+    "templates/base.html",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/detail_panel.html",
+    "static/src/js/ai_chat.js"
+  ],
+  "write_scope": [
+    "static/src/js/page_context.js",
+    "templates/base.html",
+    "templates/workorders/",
+    "static/src/css/app.css"
+  ],
+  "requirements": [
+    "Read data-ai-context from the current page and active drawer/selection.",
+    "Expose window.LocalBusinessPageContext.getCurrent().",
+    "Generate a stable browser-tab window_id.",
+    "Emit ai-context:update after context changes.",
+    "Update context after HTMX swaps and drawer open/close.",
+    "Publish sanitized snapshots to the backend and track returned context_version.",
+    "Send updates only when sanitized context hash changes.",
+    "Debounce filter/search driven updates by 250-500 ms.",
+    "Use CSRF/session auth and stay within max payload limits.",
+    "Do not collect arbitrary visible text from the DOM."
+  ],
+  "acceptance": [
+    "Opening a workorder drawer changes selection to that workorder.",
+    "Closing the drawer clears selection or falls back to page-level context.",
+    "HTMX board refresh does not leave stale selected object context.",
+    "Sidebar chat can read current window_id/context_version before submit.",
+    "Rapid filter/search changes do not create an excessive update request stream."
+  ],
+  "verification": [
+    "python manage.py test apps.workorders.tests",
+    "npm run test:e2e"
+  ]
+}

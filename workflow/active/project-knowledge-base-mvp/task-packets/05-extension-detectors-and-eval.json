@@ -1,0 +1,36 @@
+{
+  "task_id": "05-extension-detectors-and-eval",
+  "title": "Детекторы расширения и kb eval (T5)",
+  "status": "ready",
+  "objective": "Реализовать детекторы dup-candidate, rename-candidate, desc-mismatch, команду kb eval по golden set и правило W10.",
+  "plan_sections": ["§6.4 (детекторы фазы 1.5)", "§7 (W10)", "§8.6", "§9 T5", "§10 U27-U31"],
+  "write_scope": [
+    "scripts/dev/kb.py",
+    "scripts/dev/tests/test_kb.py",
+    "scripts/dev/tests/fixtures/"
+  ],
+  "requirements": [
+    "Шаг 1. §6.4 детектор rename-candidate: эвристика перекрытия чанков по таблице плана (новая страница против удалённой в том же прогоне).",
+    "Шаг 2. §6.4 детектор dup-candidate: сравнение новой/изменённой страницы со ВСЕМ множеством pages (не только с изменёнными в прогоне); эвристика из плана - стартовая, порог менять нельзя, наблюдения о качестве фиксировать в отчёте.",
+    "Шаг 3. §6.4 детектор desc-mismatch: условие - коммит в .desc.json, соответствующий зоне covers страницы, позже её timestamp; проверяется по всем страницам каждый sync; сравнение времени в epoch-секундах.",
+    "Шаг 4. §8.6 kb eval [--k 3]: загрузить eval/golden.yaml; для каждого case прогнать §8.1 п. 1-3 (без соседей), взять топ-k id; попадание = пересечение с expect непусто; expect-id, отсутствующие в pages, пометить '[нет такой страницы]' и исключить case из знаменателя; вывод 'hit-rate: H/N = X.XX' + список промахов; код выхода всегда 0.",
+    "Шаг 5. Правило W10 (§7): пересечение зон covers двух страниц на одном уровне - предупреждение; вложенность разной глубины - НЕ предупреждение (deepest-match).",
+    "Шаг 6. Тесты U27-U31 (§10); для kb eval пополнить golden.yaml фикстуры непустым набором case в формате §3.6 (поля строго q/expect).",
+    "ЗАПРЕЩЕНО: наполнять боевой docs/knowledge/eval/golden.yaml (он пополняется в фазе 2); менять формат case."
+  ],
+  "acceptance_checks": [
+    "U27: mv + правка одной строки -> rename-candidate.",
+    "U28: dup-candidate по равному title.",
+    "U29: desc-mismatch при коммите .desc.json позже timestamp страницы.",
+    "U30: eval верно считает попадание и промах; U31: несуществующий expect-id исключает case из знаменателя.",
+    "kb eval на непустом golden set фикстуры печатает hit-rate и промахи, код 0."
+  ],
+  "verification_commands": [
+    "python -m pytest scripts/dev/tests -q",
+    "python scripts/dev/kb.py eval"
+  ],
+  "notes": [
+    "Причины dup-candidate/rename-candidate/desc-mismatch попадают в ту же очередь reconcile_queue; отдельного контура нет.",
+    "desc-mismatch - причина класса A: гасится только содержательной сверкой с обновлением timestamp (правило замыкания, §7.5 проектного документа)."
+  ]
+}

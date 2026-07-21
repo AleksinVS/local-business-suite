@@ -1,0 +1,145 @@
+{
+  "version": "1.0",
+  "name": "memory_trust_policy",
+  "description": "Policy for deciding which memory sources are eligible for direct agent context.",
+  "trust_statuses": [
+    "trusted",
+    "review_required",
+    "blocked"
+  ],
+  "legacy_trust_status_mapping": {
+    "candidate_only": "review_required",
+    "quarantined": "review_required",
+    "blocked": "blocked",
+    "trusted": "trusted"
+  },
+  "authority_classes": [
+    "system_of_record",
+    "approved_corpus",
+    "approved_user_memory",
+    "reviewed_org_knowledge",
+    "external_observation",
+    "candidate_input"
+  ],
+  "defaults_by_source_kind": {
+    "ai_chat": {
+      "trust_status": "trusted",
+      "authority_class": "approved_user_memory",
+      "trusted_for_context": true,
+      "requires_source_review": false,
+      "review_owner": "memory_owner",
+      "untrusted_handling": "review_required"
+    },
+    "django_model": {
+      "trust_status": "trusted",
+      "authority_class": "system_of_record",
+      "trusted_for_context": true,
+      "requires_source_review": false,
+      "review_owner": "domain_owner",
+      "untrusted_handling": "review_required"
+    },
+    "contract_file": {
+      "trust_status": "trusted",
+      "authority_class": "system_of_record",
+      "trusted_for_context": true,
+      "requires_source_review": false,
+      "review_owner": "engineering",
+      "untrusted_handling": "review_required"
+    },
+    "documentation": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "knowledge_owner",
+      "untrusted_handling": "review_required"
+    },
+    "integration_snapshot": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "integration_owner",
+      "untrusted_handling": "review_required"
+    },
+    "external_api_snapshot": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "knowledge_owner",
+      "untrusted_handling": "review_required"
+    },
+    "local_path": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "knowledge_owner",
+      "untrusted_handling": "review_required"
+    },
+    "unc_path": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "knowledge_owner",
+      "untrusted_handling": "review_required"
+    },
+    "email_imap": {
+      "trust_status": "review_required",
+      "authority_class": "external_observation",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "mailbox_owner",
+      "untrusted_handling": "review_required"
+    },
+    "synthetic_fixture": {
+      "trust_status": "trusted",
+      "authority_class": "approved_corpus",
+      "trusted_for_context": true,
+      "requires_source_review": false,
+      "review_owner": "engineering",
+      "untrusted_handling": "review_required"
+    },
+    "test": {
+      "trust_status": "trusted",
+      "authority_class": "approved_corpus",
+      "trusted_for_context": true,
+      "requires_source_review": false,
+      "review_owner": "engineering",
+      "untrusted_handling": "review_required"
+    },
+    "*": {
+      "trust_status": "review_required",
+      "authority_class": "candidate_input",
+      "trusted_for_context": false,
+      "requires_source_review": true,
+      "review_owner": "knowledge_owner",
+      "untrusted_handling": "review_required"
+    }
+  },
+  "direct_context_policy": {
+    "trusted_context_only_default": true,
+    "require_trusted_for_context": true,
+    "allowed_trust_statuses": [
+      "trusted"
+    ],
+    "allowed_authority_classes": [
+      "system_of_record",
+      "approved_corpus",
+      "approved_user_memory",
+      "reviewed_org_knowledge",
+      "external_observation"
+    ],
+    "allowed_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ]
+  },
+  "review_roles": {
+    "source_owner": "memory_source_review",
+    "knowledge_owner": "memory_organization_review",
+    "graph_owner": "memory_graph_review"
+  }
+}

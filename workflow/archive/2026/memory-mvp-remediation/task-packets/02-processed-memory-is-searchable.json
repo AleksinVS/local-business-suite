@@ -1,0 +1,31 @@
+{
+  "task_id": "02-processed-memory-is-searchable",
+  "title": "Сделать обработанную память доступной для поиска",
+  "status": "completed",
+  "objective": "После обработки очереди сохраненный MemoryKnowledgeItem должен находиться через обычный memory.search.",
+  "write_scope": [
+    "apps/memory/chat_memory.py",
+    "apps/memory/ingestion.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_MVP_REMEDIATION_PLAN.md"
+  ],
+  "requirements": [
+    "index_knowledge_item должен индексировать текст в полнотекстовый backend по умолчанию.",
+    "При временном DATA_DIR поиск должен использовать тот же индекс, куда записал обработчик.",
+    "Секретные значения не должны попадать в индекс.",
+    "Проверки прав доступа, чувствительности и надежности источника должны сохраняться.",
+    "Графовый backend можно использовать текущий, без новой стратегии графового поиска."
+  ],
+  "acceptance_checks": [
+    "Тест: memory.remember ставит request в очередь.",
+    "Тест: обработчик очереди переводит request в accepted.",
+    "Тест: после обработки memory.search по сохраненному тексту возвращает memory_chunk.",
+    "Тест: пользователь без нужного scope не видит чужую личную память.",
+    "Тест: secret value не найден в тексте результата и индексе."
+  ],
+  "verification_commands": [
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py memory_eval --dry-run"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "block_id": "desktop-notifications-pwa-tauri",
+  "status": "stage1_pwa_mvp_implemented_stage2_tauri_primary_client_implemented",
+  "created_at": "2026-06-03",
+  "architecture_sources": [
+    "docs/adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md",
+    "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
+    "docs/planning/active/desktop-notifications-pwa-tauri.md"
+  ],
+  "goal": "Introduce user notifications through a PWA-first browser channel without third-party Web Push, then add an optional Tauri tray client for users who need background delivery.",
+  "execution_order": [
+    "01-notification-domain-and-api",
+    "02-pwa-browser-notification-client",
+    "03-workorder-event-producers-and-preferences",
+    "04-verification-operations-and-user-docs",
+    "05-optional-tauri-client-design"
+  ],
+  "global_constraints": [
+    "Stage 1 must not use Push API, VAPID or third-party browser push endpoints.",
+    "Stage 1 must explain that system notifications require an open portal tab or PWA window.",
+    "Notification recipients must be resolved server-side.",
+    "Notification text must be privacy-safe and short.",
+    "Client-side filtering must never be treated as an access-control boundary.",
+    "Tauri is optional and must not become required for all users.",
+    "Tauri device tokens must be scoped, revocable and stored safely.",
+    "Temporary test artifacts and logs belong in .local/.",
+    "Update .desc.json and PROJECT_STRUCTURE.yaml after structural changes."
+  ],
+  "cross_cutting_acceptance": [
+    "A user can see notifications inside the portal.",
+    "A user can enable browser notifications after an explicit action.",
+    "A workorder event notifies only users who are allowed to see the workorder.",
+    "A user cannot fetch another user's notifications through API.",
+    "Browser permission denial leaves the in-portal notification center working.",
+    "Closed-browser behavior is documented as server-side backlog only for stage 1.",
+    "The stage 2 Tauri design reuses the same server notification queue."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.notifications.tests apps.workorders.tests",
+    "npm run test:e2e -- --project=chromium --grep \"notifications\"",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "task_packets": [
+    "workflow/active/desktop-notifications-pwa-tauri/task-packets/01-notification-domain-and-api.json",
+    "workflow/active/desktop-notifications-pwa-tauri/task-packets/02-pwa-browser-notification-client.json",
+    "workflow/active/desktop-notifications-pwa-tauri/task-packets/03-workorder-event-producers-and-preferences.json",
+    "workflow/active/desktop-notifications-pwa-tauri/task-packets/04-verification-operations-and-user-docs.json",
+    "workflow/active/desktop-notifications-pwa-tauri/task-packets/05-optional-tauri-client-design.json"
+  ]
+}

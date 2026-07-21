@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: knowledge-driven business analytics",
+  "BLOCK_BRIEF.md": "Brief for the knowledge-driven business analytics workflow",
+  "ARCHITECT_PLAN.json": "Architect execution plan for knowledge-driven business analytics",
+  "EXECUTOR_REPORT.knowledge-driven-business-analytics.md": "Executor report for the MVP implementation slice",
+  "TASK_ACCEPTANCE.knowledge-driven-business-analytics.md": "Acceptance report for the MVP implementation slice",
+  "task-packets": "Implementation task packets for the analytics workflow"
+}

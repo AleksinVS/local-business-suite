@@ -1,0 +1,37 @@
+{
+  "task_id": "01-right-panel-provider-contract",
+  "status": "completed",
+  "title": "Right panel provider contract and registry",
+  "goal": "Add a narrow provider registry for module-owned right drawer panels.",
+  "read_scope": [
+    "apps/core/source_adapters.py",
+    "apps/core/tests.py",
+    "apps/workorders/source_adapter.py",
+    "apps/waiting_list/source_adapter.py",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md"
+  ],
+  "write_scope": [
+    "apps/core/right_panels.py",
+    "apps/core/tests.py",
+    "apps/core/.desc.json"
+  ],
+  "requirements": [
+    "Create RightPanelDescriptor with source_code, object_type, object_id, mode, title, htmx_url, target, swap, drawer_size and context_hint.",
+    "Create RightPanelProvider protocol with can_open() and build_panel().",
+    "Create register/get/list registry helpers.",
+    "Validate source_code, object_type and mode as non-empty stable strings.",
+    "Reject duplicate providers unless replace=True is explicitly passed.",
+    "Unknown provider or unsupported mode must fail closed.",
+    "Do not import workorders or waiting_list in apps.core."
+  ],
+  "acceptance": [
+    "Provider registration and duplicate protection are unit-tested.",
+    "Descriptor serialization is deterministic and contains no HTML body.",
+    "Unknown provider/mode returns a safe validation error.",
+    "apps.core remains independent of domain modules."
+  ],
+  "verification": [
+    "python manage.py test apps.core.tests",
+    "python manage.py check"
+  ]
+}

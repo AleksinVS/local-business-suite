@@ -1,0 +1,41 @@
+{
+  "task_id": "01-canon-skeleton-and-cli-frame",
+  "title": "Скелет канона (T0) и каркас CLI с базовыми функциями (T1)",
+  "status": "ready",
+  "objective": "Создать скелет канона docs/knowledge/ дословно по §3 плана и каркас scripts/dev/kb.py: разбор аргументов всех команд, определение корня репозитория, базовые функции нормализации/парсинга/чанкинга с тестами U1-U7.",
+  "plan_sections": ["§0", "§1", "§3.1-3.6", "§5", "§9 T0-T1", "§10 U1-U7"],
+  "write_scope": [
+    "docs/knowledge/",
+    "docs/.desc.json",
+    "scripts/dev/kb.py",
+    "scripts/dev/tests/",
+    "scripts/dev/.desc.json",
+    "PROJECT_STRUCTURE.yaml (через генератор)"
+  ],
+  "requirements": [
+    "Шаг 1 (T0). Создать файлы §3 плана дословно: .gitattributes (§3.1), schema/concept-types.yaml (§3.2), schema/edge-types.yaml (§3.3), 7 шаблонов schema/templates/<type>.md по таблице §3.4 (каждый - H1-плейсхолдер '# <Название>' плюс пустые H2 в заданном порядке), index.md (§3.5), eval/golden.yaml (§3.6). Все файлы - LF, UTF-8 без BOM; запись через open(..., 'w', encoding='utf-8', newline='') или редактором с явной LF-настройкой.",
+    "Шаг 2 (T0). Обновить docs/.desc.json, создать docs/knowledge/.desc.json (и .desc.json вложенных директорий schema/, eval/), запустить node scripts/dev/generate-structure.js.",
+    "Шаг 3 (T1). scripts/dev/kb.py: argparse-каркас всех команд (sync, lint, query, neighbors, page, log, queue, eval, impact) с сигнатурами из плана; нереализованная команда печатает 'не реализовано' и завершается кодом 2. На старте определить корень репозитория (git rev-parse --show-toplevel) и работать от него - запуск из поддиректории не меняет поведение (§1).",
+    "Шаг 4 (T1). Реализовать функции §5 дословно: normalize и h (§5.1), parse_page (§5.2), chunk (§5.3), relations_hash (§5.4), load_vocab (§5.5).",
+    "Шаг 5 (T1). Тесты U1-U7 (§10) в scripts/dev/tests/test_kb.py; создать scripts/dev/tests/ с .desc.json.",
+    "ЗАПРЕЩЕНО: отклоняться от дословного содержимого §3; добавлять зависимости; наполнять канон содержательными страницами (это фаза 2, вне блока)."
+  ],
+  "acceptance_checks": [
+    "git check-attr text eol -- docs/knowledge/index.md показывает eol: lf.",
+    "python -c \"import yaml; yaml.safe_load(open('docs/knowledge/schema/edge-types.yaml', encoding='utf-8'))\" - без ошибок; то же для concept-types.yaml и golden.yaml.",
+    "Все созданные файлы не содержат байтов '\\r' и BOM (бинарная проверка).",
+    "python -m pytest scripts/dev/tests -q -k \"normalize or parse or chunk\" - зелёный (U1-U7).",
+    "python scripts/dev/kb.py query \"x\" (нереализованная команда) печатает 'не реализовано', код выхода 2; запуск из поддиректории repo работает так же.",
+    ".desc.json обновлены, PROJECT_STRUCTURE.yaml перегенерирован."
+  ],
+  "verification_commands": [
+    "git check-attr text eol -- docs/knowledge/index.md",
+    "python -c \"import yaml; yaml.safe_load(open('docs/knowledge/schema/edge-types.yaml', encoding='utf-8'))\"",
+    "python -m pytest scripts/dev/tests -q -k \"normalize or parse or chunk\"",
+    "node scripts/dev/generate-structure.js"
+  ],
+  "notes": [
+    "План - docs/planning/active/project-knowledge-system-mvp.md; при любом расхождении с проектным документом прав план.",
+    "Хэш h считается от нормализованного содержимого (CRLF/CR -> LF): U2 проверяет равенство хэшей CRLF- и LF-вариантов."
+  ]
+}

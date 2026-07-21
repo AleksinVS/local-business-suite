@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Проблемы памяти | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+{% include "memory/review/_nav.html" %}
+
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Очередь ревью</p>
+      <h1>Проблемы памяти</h1>
+    </div>
+  </div>
+
+  <form method="get" class="memory-review-filters">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Поиск по сообщению, источнику, объекту">
+    <select name="status">
+      <option value="">Все статусы</option>
+      {% for value, label in issue_statuses %}
+        <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="severity">
+      <option value="">Любая критичность</option>
+      {% for value, label in issue_severities %}
+        <option value="{{ value }}" {% if filters.severity == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="issue_kind">
+      <option value="">Все типы</option>
+      {% for value, label in issue_kinds %}
+        <option value="{{ value }}" {% if filters.issue_kind == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="source">
+      <option value="">Все источники</option>
+      {% for source in sources %}
+        <option value="{{ source }}" {% if filters.source == source %}selected{% endif %}>{{ source }}</option>
+      {% endfor %}
+    </select>
+    <select name="flag">
+      <option value="">Все группы</option>
+      <option value="privacy" {% if filters.flag == "privacy" %}selected{% endif %}>Персональные данные</option>
+      <option value="blocker" {% if filters.flag == "blocker" %}selected{% endif %}>Блокирующие</option>
+      <option value="index" {% if filters.flag == "index" %}selected{% endif %}>Индекс</option>
+    </select>
+    <button type="submit">Фильтр</button>
+    <a class="button-link-muted" href="{% url 'memory:review_issue_list' %}">Сбросить</a>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Критичность</th>
+          <th>Тип</th>
+          <th>Статус</th>
+          <th>Источник</th>
+          <th>Объект</th>
+          <th>Назначено</th>
+          <th>Создано</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for issue in issues %}
+          <tr>
+            <td><span class="badge memory-badge-{{ issue.severity }}">{{ issue.get_severity_display }}</span></td>
+            <td>{{ issue.get_issue_kind_display }}</td>
+            <td>{{ issue.get_status_display }}</td>
+            <td><code>{{ issue.source.code }}</code></td>
+            <td>{{ issue.source_object.relative_path|default:"" }}</td>
+            <td>{{ issue.assigned_to|default:"" }}</td>
+            <td>{{ issue.created_at }}</td>
+            <td><a class="button-link-muted" href="{% url 'memory:review_issue_detail' issue.pk %}">Открыть</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="muted">Проблемы не найдены.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

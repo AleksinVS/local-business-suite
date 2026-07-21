@@ -1,0 +1,25 @@
+{
+  "title": "Memory Retrieval Budget",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "hot_path",
+    "rank_fusion",
+    "context_packing",
+    "optional_llm_rerank",
+    "background_batches"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "hot_path": { "type": "object" },
+    "rank_fusion": { "type": "object" },
+    "context_packing": { "type": "object" },
+    "optional_llm_rerank": { "type": "object" },
+    "background_batches": { "type": "object" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,35 @@
+{
+  "task_id": "07-data-store-debt-stubs",
+  "title": "Заглушки и debt-артефакты для этапов data store 5а/5б",
+  "status": "ready",
+  "objective": "Оставить в коде типизированные заглушки и DEBT-маркеры для этапов data store 5а/5б из ADR-0030, зафиксировать долг тестом и сверить debt-записи backlog, чтобы этапы гарантированно не потерялись. Сам data store не реализуется.",
+  "write_scope": [
+    "apps/memory/data_store.py",
+    "apps/memory/chat_memory.py",
+    "apps/memory/management/commands/memory_reconcile.py",
+    "apps/memory/tests.py",
+    "docs/planning/backlog.md"
+  ],
+  "requirements": [
+    "Создать apps/memory/data_store.py: функции capture(dataset, observation) и query_dataset(dataset, query_name, params) поднимают NotImplementedError с текстом-ссылкой на ADR-0030 решение 7 (этапы 5а/5б) и концепт параграф 3.1; docstring модуля описывает целевой контракт: дескриптор датасета = концепт-страница type: Dataset, реестр - производная проекция, аддитивная эволюция схемы, идемпотентный capture (дедуп-ключ), fail-safe маршрутизация.",
+    "Маркер '# DEBT(ADR-0030-5a):' в точке маршрутизации memory.remember (chat_memory.py) - где появится fail-safe классификация наблюдение/знание: запись в data store только при совпадении со схемой зарегистрированного датасета, иначе файл знания; сейчас все идет в файл знания (текущее поведение сохранено и описано в комментарии).",
+    "Маркер '# DEBT(ADR-0030-5a):' в memory_reconcile - где появится материализация реестра датасетов из страниц type: Dataset.",
+    "Маркер '# DEBT(ADR-0030-5b):' в модуле рефлексии/семантической дорожки - где появится детекция рекуррентных фактов и предложение датасета с миграцией.",
+    "Unit-тест фиксирует контракт долга: data_store.capture и data_store.query_dataset существуют и поднимают NotImplementedError; заглушки не задействованы ни в одном runtime-пути.",
+    "Сверить debt-записи backlog: в Later существует запись по этапам 5а/5б с критериями старта (5а - после приемки этапов 1-4; 5б - после работоспособного 5а) и ссылкой на шаблон дескриптора в проектном плане; при расхождении - актуализировать.",
+    "Ничего не реализовывать сверх заглушек: никакого реестра, физических таблиц, парсинга Dataset-страниц."
+  ],
+  "acceptance_checks": [
+    "apps/memory/data_store.py существует, документирован, обе функции поднимают NotImplementedError; тест на это проходит.",
+    "grep 'DEBT(ADR-0030-5a)' находит два маркера (маршрутизация remember, reconcile); grep 'DEBT(ADR-0030-5b)' - один (рефлексия).",
+    "memory.remember и memory_reconcile работают как прежде: заглушки не вызываются в runtime.",
+    "Debt-запись в backlog Later актуальна и ссылается на ADR-0030 и проектный план."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ],
+  "notes": [
+    "Ссылки: ADR-0030 решение 7 (этапы 5а/5б); концепт параграф 3.1; шаблон дескриптора датасета - в docs/planning/active/memory-hybrid-knowledge-v05-alignment.md."
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  ".": "Шаблоны контура File Source Auto Organization (заморожен ADR-0030 решением 5)",
+  "review/": "Операторское ревью автоупорядочивания файлов: baseline placements, proposals и move jobs",
+  "files/": "Пользовательский UI виртуальных файловых структур"
+}

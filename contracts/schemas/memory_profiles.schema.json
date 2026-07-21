@@ -1,0 +1,184 @@
+{
+  "title": "Memory Profiles",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "chunking_profiles",
+    "extractor_profiles",
+    "embedding_profiles",
+    "index_profiles",
+    "ranking_profiles"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "chunking_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "strategy",
+          "max_tokens",
+          "overlap_tokens",
+          "preserve_fields"
+        ],
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": ["field_aware", "heading_aware", "json_pointer"]
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "overlap_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "preserve_fields": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extractor_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "mode",
+          "graph_extraction",
+          "entity_types",
+          "requires_local_llm"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["text", "structured_json", "business_event", "business_object"]
+          },
+          "graph_extraction": { "type": "boolean" },
+          "entity_types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "requires_local_llm": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "embedding_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "provider",
+          "model",
+          "dimensions",
+          "normalization"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["local"]
+          },
+          "model": { "type": "string" },
+          "dimensions": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "normalization": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "index_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "index_kind",
+          "backend",
+          "embedding_profile",
+          "store_safe_text_only"
+        ],
+        "properties": {
+          "index_kind": {
+            "type": "string",
+            "enum": ["vector", "fulltext", "graph"]
+          },
+          "backend": {
+            "type": "string",
+            "enum": ["lancedb", "qdrant", "sqlite_fts", "kuzu"]
+          },
+          "embedding_profile": {
+            "type": ["string", "null"]
+          },
+          "store_safe_text_only": { "type": "boolean" },
+          "runtime_status": {
+            "type": "string",
+            "enum": ["enabled", "degraded", "planned", "disabled", "not_ready"]
+          },
+          "runtime_note": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ranking_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "fusion",
+          "vector_weight",
+          "fulltext_weight",
+          "graph_weight",
+          "reranker",
+          "max_results"
+        ],
+        "properties": {
+          "fusion": {
+            "type": "string",
+            "enum": ["rrf", "weighted_sum"]
+          },
+          "vector_weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "fulltext_weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "graph_weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reranker": {
+            "type": "string",
+            "enum": ["none", "local_optional"]
+          },
+          "max_results": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

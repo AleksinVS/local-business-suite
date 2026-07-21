@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div data-ai-context="{{ detail_ai_context_json }}">
+  {% include "workorders/partials/detail_sections.html" %}
+</div>
+{% endblock %}

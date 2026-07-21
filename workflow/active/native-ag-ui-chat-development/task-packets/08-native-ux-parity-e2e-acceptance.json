@@ -1,0 +1,56 @@
+{
+  "task_id": "08-native-ux-parity-e2e-acceptance",
+  "title": "Native UX parity e2e, regression matrix and acceptance",
+  "type": "verification",
+  "objective": "Закрыть приемку native-чата как основного варианта и проверить, что legacy и CopilotKit остаются рабочими fallback/alternative drivers.",
+  "read_scope": [
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "scripts/e2e/tests/copilotkit_sidebar.spec.ts",
+    "scripts/e2e/tests/sidebar_ai_context.spec.ts",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md",
+    "docs/deployment/AI_UI_PROTOCOL_DEPLOYMENT.md",
+    "workflow/active/native-ag-ui-chat-development/"
+  ],
+  "write_scope": [
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "apps/ai/tests.py",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md",
+    "docs/deployment/AI_UI_PROTOCOL_DEPLOYMENT.md",
+    "workflow/active/native-ag-ui-chat-development/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/native-ag-ui-chat-development/TASK_ACCEPTANCE.implementation.md",
+    "docs/planning/backlog.md"
+  ],
+  "instructions": [
+    "Добавить Playwright coverage для native sidebar parity: history after reload, model selection, clear, full chat link, error unlock.",
+    "Добавить Playwright coverage для native full-page parity: session list, switch session, rename, delete, Markdown, commands, attachments where implemented.",
+    "Запустить unit/integration/e2e matrix для native, legacy и CopilotKit. Если CopilotKit runtime или LLM key недоступны, зафиксировать пропуск и остаточный риск.",
+    "Проверить service worker/static cache: native assets должны обновляться через version query и не зависать в старом состоянии.",
+    "Обновить operations/deployment docs по фактическому parity status, rollback и known gaps.",
+    "Подготовить финальный executor report и acceptance report с командами, результатами и нерешенными рисками."
+  ],
+  "acceptance": [
+    "Все реализованные parity-сценарии покрыты unit или e2e проверками.",
+    "Native режим проходит основной пользовательский сценарий после чистого запуска и после reload.",
+    "Legacy rollback проходит smoke.",
+    "CopilotKit alternative driver не сломан или риск явно зафиксирован.",
+    "Backlog отражает только оставшиеся незакрытые gaps.",
+    "Workflow содержит executor report и acceptance report."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py test apps.ai.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native\"",
+    "E2E_AI_UI_DRIVER=legacy npm run test:e2e -- --project=chromium --grep \"context-aware sidebar\"",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\"",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "non_goals": [
+    "Не проводить production deployment без отдельного host-specific deployment package.",
+    "Не обновлять AG-UI/CopilotKit версии без согласования.",
+    "Не архивировать workflow до пользовательской приемки владельцем."
+  ]
+}

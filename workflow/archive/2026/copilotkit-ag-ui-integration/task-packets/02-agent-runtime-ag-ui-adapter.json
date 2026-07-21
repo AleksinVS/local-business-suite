@@ -1,0 +1,38 @@
+{
+  "task_id": "02-agent-runtime-ag-ui-adapter",
+  "title": "AG-UI endpoint and event mapper in agent runtime",
+  "status": "planned",
+  "goal": "Expose the existing LangGraph agent through a safe AG-UI-compatible SSE endpoint without breaking the current chat endpoints.",
+  "read_scope": [
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/graph.py",
+    "services/agent_runtime/schemas.py",
+    "services/agent_runtime/tests/test_normalization.py",
+    "apps/ai/runtime_client.py",
+    "apps/ai/views.py"
+  ],
+  "write_scope": [
+    "services/agent_runtime/ag_ui_adapter.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/schemas.py",
+    "services/agent_runtime/tests/",
+    "services/agent_runtime/README.md"
+  ],
+  "non_goals": [
+    "Do not remove /chat or /chat/stream.",
+    "Do not change Django tool execution semantics.",
+    "Do not expose raw tool payloads in AG-UI events."
+  ],
+  "acceptance": [
+    "POST /ag-ui accepts a RunAgentInput-compatible payload.",
+    "The stream emits RUN_STARTED and RUN_FINISHED or RUN_ERROR.",
+    "Text chunks map to TEXT_MESSAGE_* events with stable messageId.",
+    "Tool calls map to TOOL_CALL_* events without leaking secrets.",
+    "ui_command maps to allow-listed state/custom event.",
+    "Existing /chat/stream tests still pass."
+  ],
+  "verification": [
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "python manage.py test apps.ai.tests"
+  ]
+}

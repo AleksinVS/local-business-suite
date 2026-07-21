@@ -1,0 +1,74 @@
+{
+  "block_id": "block-ai-memory-service-2026-05-19",
+  "slice_id": "slice-retrieval-tool",
+  "task_id": "task-memory-retrieval-tool",
+  "goal": "Implement the memory.search retrieval tool and orchestration layer.",
+  "risk_class": "R2",
+  "read_files": [
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/task_types.py",
+    "apps/memory/**"
+  ],
+  "write_files": [
+    "apps/memory/retrieval.py",
+    "apps/memory/routing.py",
+    "apps/memory/policies.py",
+    "apps/memory/selectors.py",
+    "apps/memory/services.py",
+    "apps/memory/tests.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/task_types.py",
+    "contracts/ai/tools.json",
+    "contracts/ai/task_types.json"
+  ],
+  "forbidden_moves": [
+    "Do not let agent runtime write directly to memory indexes.",
+    "Do not expose raw snapshots through memory.search.",
+    "Do not return uncited memory context unless the tool explicitly reports no sources found."
+  ],
+  "required_docs": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/architecture/MEMORY_SERVICE_IMPLEMENTATION_PLAN.md"
+  ],
+  "required_checks": [
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py check",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ],
+  "mandatory_tests": [
+    "Tool registry drift validation",
+    "Forbidden-scope retrieval tests",
+    "Citations present in successful memory.search responses",
+    "Sensitive route denial tests"
+  ],
+  "deliverables": [
+    "memory.search declared tool",
+    "Retrieval orchestration services",
+    "AI gateway integration",
+    "Forbidden-scope tests",
+    "EXECUTOR_REPORT.task-memory-retrieval-tool.md"
+  ],
+  "escalation_path": [
+    "Tool contract requires changing the AI identity model",
+    "Cloud route behavior needs a new ADR",
+    "Existing AI task type validation cannot represent memory.search"
+  ],
+  "source_plan": "workflow/active/block-ai-memory-service-2026-05-19/ARCHITECT_PLAN.json",
+  "runtime_binding": {
+    "role": "executor",
+    "launcher": "codex",
+    "provider": "openai",
+    "model": "default",
+    "tier": "medium",
+    "reasoning_effort": "medium"
+  },
+  "artifact_expectations": [
+    "Return compact cited context only.",
+    "Keep route decisions server-side.",
+    "Preserve existing AI tool confirmation and audit conventions."
+  ]
+}

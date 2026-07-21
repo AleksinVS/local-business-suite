@@ -1,0 +1,34 @@
+{
+  "task_id": "02-review-selectors-and-services",
+  "title": "Build review selectors, permission filters and action services",
+  "status": "completed",
+  "read_scope": [
+    "apps/memory/models.py",
+    "apps/memory/selectors.py",
+    "apps/memory/services.py",
+    "apps/memory/policies.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/management/commands/memory_reindex.py",
+    "apps/settings_center/policies.py",
+    "apps/memory/tests.py"
+  ],
+  "write_scope": [
+    "apps/memory/selectors.py",
+    "apps/memory/services.py",
+    "apps/memory/policies.py",
+    "apps/memory/tests.py"
+  ],
+  "requirements": [
+    "Add selectors for review dashboard counters, issue queue, issue detail, index health list and search document detail.",
+    "Return ReviewQueueItem projection objects for unified issue/index queue lists without persisting ReviewCase.",
+    "Apply server-side visibility filters for source, source object, search document and access audit.",
+    "Add services for acknowledge, assign, request expert review, resolve, ignore, reopen and comment.",
+    "Add services for dry-run reindex request, enqueue reindex, retry failed index and delete stale index records.",
+    "Every state-changing service must write MemoryReviewAction.",
+    "Services must reject force-index for secret_blocked documents."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ]
+}

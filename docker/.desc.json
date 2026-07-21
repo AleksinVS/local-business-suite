@@ -1,0 +1,4 @@
+{
+  ".": "Runtime-скрипты контейнерного production запуска",
+  "entrypoint.prod.sh": "Entrypoint web-контейнера: migrate, collectstatic, seed roles, gunicorn"
+}

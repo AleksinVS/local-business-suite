@@ -1,0 +1,7 @@
+<section class="board-scroll" id="board-columns">
+  <div class="board-grid" style="--board-columns: {{ board_columns|length }}; --board-visible-slots: {{ board_visible_slots }};">
+  {% for column in board_columns %}
+    {% include "workorders/partials/kanban_column.html" with column=column %}
+  {% endfor %}
+  </div>
+</section>

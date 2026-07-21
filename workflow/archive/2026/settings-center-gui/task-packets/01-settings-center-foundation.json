@@ -1,0 +1,41 @@
+{
+  "task_id": "01-settings-center-foundation",
+  "title": "Settings Center foundation",
+  "goal": "Create apps.settings_center with descriptor registry, dashboard shell, permission checks and audit skeleton.",
+  "read_scope": [
+    "docs/adr/ADR-0007-settings-center-and-contextual-help.md",
+    "docs/architecture/SETTINGS_CENTER_IMPLEMENTATION_PLAN.md",
+    "apps/core/views.py",
+    "apps/core/urls.py",
+    "apps/workorders/policies.py",
+    "templates/",
+    "config/settings.py"
+  ],
+  "write_scope": [
+    "apps/settings_center/",
+    "config/settings.py",
+    "config/urls.py",
+    "templates/settings_center/",
+    "apps/core/settings_descriptors.py",
+    "apps/accounts/settings_descriptors.py",
+    "apps/ai/settings_descriptors.py",
+    "apps/memory/settings_descriptors.py",
+    "docs/guides/",
+    "docs/deployment/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance": [
+    "apps.settings_center is added to INSTALLED_APPS with clear app boundary.",
+    "Descriptor registry can collect descriptors from core, accounts, AI and memory modules.",
+    "Dashboard lists registered domains/sections and blocks unauthorized users server-side.",
+    "SettingsChange or equivalent audit skeleton exists and stores masked metadata only.",
+    "No domain-specific business logic is embedded in the Settings Center registry.",
+    "Project structure metadata is updated after adding the app."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.settings_center.tests",
+    "make gen-struct"
+  ]
+}

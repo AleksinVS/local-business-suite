@@ -1,0 +1,36 @@
+{
+  "task_id": "04-rename-chunk-fields",
+  "title": "Переименовать остаточные chunk-поля в document-поля",
+  "status": "ready",
+  "objective": "Убрать старую терминологию chunks из аудита, eval, backend API и тестов.",
+  "write_scope": [
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/services.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/vector_backends.py",
+    "apps/memory/admin.py",
+    "apps/memory/tests.py",
+    "apps/ai/tests.py",
+    "contracts/ai/",
+    "docs/"
+  ],
+  "requirements": [
+    "Переименовать MemoryAccessAudit.returned_chunk_ids в returned_document_ids.",
+    "Переименовать MemoryEvalCase.expected_chunk_ids в expected_document_ids.",
+    "Удалить chunk_id compatibility aliases из MemoryIndexRecord и MemorySearchResult.",
+    "Перевести traces, tests, admin labels и docs на document_id.",
+    "Так как внедрения не было, не писать совместимый data migration."
+  ],
+  "acceptance_checks": [
+    "rg по active code не находит returned_chunk_ids, expected_chunk_ids или chunk_id aliases вне исторических migrations/archive.",
+    "Audit записывает returned_document_ids.",
+    "Eval использует expected_document_ids.",
+    "Tests проходят."
+  ],
+  "verification_commands": [
+    "rg -n \"returned_chunk_ids|expected_chunk_ids|chunk_id\" apps contracts docs --glob '!**/migrations/**' --glob '!workflow/archive/**' --glob '!docs/planning/archive/**'",
+    "./.venv/bin/python manage.py test apps.memory.tests apps.ai.tests",
+    "./.venv/bin/python manage.py validate_architecture_contracts"
+  ]
+}

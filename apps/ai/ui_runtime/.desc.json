@@ -1,0 +1,7 @@
+{
+  ".": "Общий runtime-слой AI UI: выбор драйвера, actor context, подпись и config payload",
+  "__init__.py": "Инициализация пакета общего AI UI runtime",
+  "actor.py": "Создание и HMAC-подпись actor/session payload для UI-драйверов",
+  "config.py": "Сборка безопасной конфигурации AI UI sidebar для браузера",
+  "drivers.py": "Разрешение драйверов AI UI: copilotkit, native"
+}

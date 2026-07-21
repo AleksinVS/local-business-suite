@@ -1,0 +1,8 @@
+{
+  "title": "Workflow Rules",
+  "type": "object",
+  "required": [
+    "statuses",
+    "transitions"
+  ]
+}

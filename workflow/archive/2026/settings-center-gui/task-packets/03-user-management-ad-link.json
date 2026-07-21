@@ -1,0 +1,36 @@
+{
+  "task_id": "03-user-management-ad-link",
+  "title": "Local user management and AD identity link",
+  "goal": "Add governed local user management screens and explicit Active Directory identity linking.",
+  "read_scope": [
+    "apps/accounts/models.py",
+    "apps/accounts/ldap_backend.py",
+    "apps/accounts/admin.py",
+    "apps/core/models.py",
+    "apps/workorders/policies.py",
+    "docs/architecture/SETTINGS_CENTER_IMPLEMENTATION_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/accounts/",
+    "apps/accounts/migrations/",
+    "apps/accounts/settings_descriptors.py",
+    "apps/settings_center/",
+    "templates/settings_center/",
+    "docs/guides/",
+    "docs/deployment/"
+  ],
+  "acceptance": [
+    "Local portal users can be created, disabled and updated through service-layer forms.",
+    "Local groups/roles and department assignment can be changed with audit.",
+    "Staff/superuser changes require elevated permission and are audited separately.",
+    "An explicit AD identity link model or equivalent structure stores provider, SID/subject id, sAMAccountName, UPN, DN, domain, sync status and last sync.",
+    "LDAP lookup/test action can validate an AD identity link without storing AD passwords in user records.",
+    "AD group data does not overwrite local roles unless an explicit sync policy is enabled.",
+    "Tests cover disabled user behavior, role audit and AD link validation."
+  ],
+  "verification": [
+    "python manage.py check",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py test apps.accounts.tests apps.settings_center.tests"
+  ]
+}

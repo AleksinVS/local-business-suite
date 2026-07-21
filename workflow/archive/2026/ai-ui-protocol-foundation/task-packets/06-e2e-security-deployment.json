@@ -1,0 +1,33 @@
+{
+  "task_id": "06-e2e-security-deployment",
+  "title": "E2E, security checks and deployment profile documentation",
+  "status": "partially_completed",
+  "objective": "Verify legacy, CopilotKit and native AI UI drivers end to end, then document production deployment choices and rollback.",
+  "write_scope": [
+    "scripts/e2e/tests/",
+    "docs/guides/",
+    "docs/deployment/",
+    "docs/planning/active/ai-ui-protocol-foundation.md",
+    "workflow/active/ai-ui-protocol-foundation/"
+  ],
+  "non_goals": [
+    "Do not commit host-specific deployment files.",
+    "Do not store secrets outside deployment silos.",
+    "Do not enable telemetry in on-prem defaults."
+  ],
+  "acceptance_checks": [
+    "E2E covers legacy, CopilotKit and native driver smoke paths.",
+    "Security checks cover invalid signature, expired actor payload and unauthorized UI command cases.",
+    "Deployment docs describe process matrix and reverse proxy routing.",
+    "Rollback returns to legacy sidebar by setting LOCAL_BUSINESS_AI_UI_DRIVER=legacy."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.ai.tests",
+    "python -m unittest services.agent_runtime.tests.test_normalization -v",
+    "npm run test:e2e -- --project=chromium",
+    "make gen-struct",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ]
+}

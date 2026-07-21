@@ -1,0 +1,40 @@
+{
+  "$schema": "./schemas/workorder_status_colors.schema.json",
+  "statuses": {
+    "new": {
+      "label": "Новая",
+      "color": "#3b82f6",
+      "background": "#eff6ff"
+    },
+    "accepted": {
+      "label": "Принята",
+      "color": "#10b981",
+      "background": "#ecfdf5"
+    },
+    "in_progress": {
+      "label": "В работе",
+      "color": "#f59e0b",
+      "background": "#fffbeb"
+    },
+    "on_hold": {
+      "label": "Ожидание",
+      "color": "#8b5cf6",
+      "background": "#f5f3ff"
+    },
+    "resolved": {
+      "label": "Выполнена",
+      "color": "#059669",
+      "background": "#ecfdf5"
+    },
+    "closed": {
+      "label": "Закрыта",
+      "color": "#6b7280",
+      "background": "#f3f4f6"
+    },
+    "cancelled": {
+      "label": "Отменена",
+      "color": "#ef4444",
+      "background": "#fef2f2"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  ".": "Task packets для автоупорядочивания файловых источников",
+  "01-adr-contracts-and-stable-identity.json": "Task packet: ADR, contracts и stable file identity",
+  "02-baseline-virtual-structure.json": "Task packet: автоматическая исходная виртуальная структура",
+  "03-incoming-folder-processing.json": "Task packet: обработка входного каталога",
+  "04-user-views-statistics-and-proposals.json": "Task packet: пользовательские структуры, статистика и предложения",
+  "05-managed-physical-transfer.json": "Task packet: безопасный физический перенос в managed root",
+  "06-ui-e2e-operations-and-handoff.json": "Task packet: UI, e2e, операционная документация и handoff"
+}

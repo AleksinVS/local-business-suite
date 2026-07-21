@@ -1,0 +1,468 @@
+{
+  "version": "1.0",
+  "name": "chat_agent_task_types",
+  "description": "Каталог намерений для чата и агентного блока.",
+  "task_types": [
+    {
+      "id": "workorders.list",
+      "title": "Список заявок",
+      "mode": "read",
+      "description": "Показать заявки с фильтром по статусу или области видимости.",
+      "allowed_tools": [
+        "workorders.list"
+      ],
+      "required_slots": [
+        "status_or_scope"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "status_aliases": {
+        "new": [
+          "Новая",
+          "new"
+        ],
+        "accepted": [
+          "Принята",
+          "accepted"
+        ],
+        "in_progress": [
+          "В работе",
+          "in_progress"
+        ],
+        "on_hold": [
+          "Ожидание",
+          "on_hold"
+        ],
+        "resolved": [
+          "Выполнена",
+          "resolved"
+        ],
+        "closed": [
+          "Закрыта",
+          "closed"
+        ],
+        "cancelled": [
+          "Отменена",
+          "cancelled"
+        ]
+      },
+      "example_requests": [
+        "Покажи новые заявки",
+        "Какие заявки в работе у меня сейчас?"
+      ]
+    },
+    {
+      "id": "workorders.get.detail",
+      "title": "Подробности заявки",
+      "mode": "read",
+      "description": "Показать одну заявку подробно по ID или номеру.",
+      "allowed_tools": [
+        "workorders.get"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "workorder_id",
+        "number"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи подробности заявки 123",
+        "Что с заявкой номер REQ-456?"
+      ]
+    },
+    {
+      "id": "workorders.create",
+      "title": "Создать заявку",
+      "mode": "write",
+      "description": "Создать новую заявку из запроса в диалоге.",
+      "allowed_tools": [
+        "workorders.create",
+        "departments.list",
+        "devices.list"
+      ],
+      "required_slots": [
+        "department",
+        "subject",
+        "description"
+      ],
+      "optional_slots": [
+        "device",
+        "priority"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "priority_aliases": {
+        "low": [
+          "Низкий",
+          "low"
+        ],
+        "medium": [
+          "Средний",
+          "medium"
+        ],
+        "high": [
+          "Высокий",
+          "high"
+        ],
+        "critical": [
+          "Критичный",
+          "critical"
+        ]
+      },
+      "example_requests": [
+        "Создай заявку на починку раковины в стационаре",
+        "Нужна заявка на светильник в поликлинике"
+      ]
+    },
+    {
+      "id": "workorders.transition",
+      "title": "Изменить статус заявки",
+      "mode": "write",
+      "description": "Перевести заявку в следующий разрешенный статус.",
+      "allowed_tools": [
+        "workorders.get",
+        "workorders.transition"
+      ],
+      "required_slots": [
+        "workorder",
+        "target_status"
+      ],
+      "optional_slots": [],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "status_aliases": {
+        "new": [
+          "Новая",
+          "new"
+        ],
+        "accepted": [
+          "Принята",
+          "accepted"
+        ],
+        "in_progress": [
+          "В работе",
+          "in_progress"
+        ],
+        "on_hold": [
+          "Ожидание",
+          "on_hold"
+        ],
+        "resolved": [
+          "Выполнена",
+          "resolved"
+        ],
+        "closed": [
+          "Закрыта",
+          "closed"
+        ],
+        "cancelled": [
+          "Отменена",
+          "cancelled"
+        ]
+      },
+      "example_requests": [
+        "Переведи заявку 12 в работу",
+        "Закрой заявку 18"
+      ]
+    },
+    {
+      "id": "workorders.comment",
+      "title": "Комментарий к заявке",
+      "mode": "write",
+      "description": "Добавить комментарий в историю заявки.",
+      "allowed_tools": [
+        "workorders.comment"
+      ],
+      "required_slots": [
+        "workorder",
+        "text"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Добавь комментарий к заявке 7: нужен доступ в подвал"
+      ]
+    },
+    {
+      "id": "workorders.delete",
+      "title": "Удалить заявку",
+      "mode": "write",
+      "description": "Удалить видимую заявку после подтверждения пользователя.",
+      "allowed_tools": [
+        "workorders.get",
+        "workorders.delete"
+      ],
+      "required_slots": [
+        "workorder_id"
+      ],
+      "optional_slots": [],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Удали заявку 12",
+        "Удалить созданную заявку"
+      ]
+    },
+    {
+      "id": "workorders.confirm_closure",
+      "title": "Подтвердить закрытие заявки",
+      "mode": "write",
+      "description": "Подтвердить закрытие выполненной заявки.",
+      "allowed_tools": [
+        "workorders.confirm_closure"
+      ],
+      "required_slots": [
+        "workorder_id"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Подтверди закрытие заявки 123",
+        "Заявка 456 выполнена, закрывай"
+      ]
+    },
+    {
+      "id": "workorders.rate",
+      "title": "Оценить заявку",
+      "mode": "write",
+      "description": "Поставить оценку закрытой заявке.",
+      "allowed_tools": [
+        "workorders.rate"
+      ],
+      "required_slots": [
+        "workorder_id",
+        "rating"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Оцени заявку 123 на 5",
+        "Поставь 4 звезды за заявку 456"
+      ]
+    },
+    {
+      "id": "lookup.departments",
+      "title": "Поиск подразделений",
+      "mode": "read",
+      "description": "Найти подразделение по названию или ветке дерева.",
+      "allowed_tools": [
+        "departments.list"
+      ],
+      "required_slots": [],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "example_requests": [
+        "Покажи подразделения",
+        "Какие есть отделения в дереве?"
+      ]
+    },
+    {
+      "id": "lookup.devices",
+      "title": "Поиск медизделий",
+      "mode": "read",
+      "description": "Найти медизделие по названию или показать список.",
+      "allowed_tools": [
+        "devices.list"
+      ],
+      "required_slots": [],
+      "requires_confirmation": false,
+      "output_mode": "structured_list",
+      "example_requests": [
+        "Покажи медизделия",
+        "Найди КТ аппарат"
+      ]
+    },
+    {
+      "id": "inventory.devices.create",
+      "title": "Создать медизделие",
+      "mode": "write",
+      "description": "Создать новое медицинское изделие.",
+      "allowed_tools": [
+        "inventory.devices.create",
+        "departments.list"
+      ],
+      "required_slots": [
+        "name",
+        "department_id"
+      ],
+      "optional_slots": [
+        "model",
+        "serial_number"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Добавь новый тонометр в кардиологию"
+      ]
+    },
+    {
+      "id": "inventory.devices.update",
+      "title": "Обновить медизделие",
+      "mode": "write",
+      "description": "Обновить существующее медицинское изделие.",
+      "allowed_tools": [
+        "inventory.devices.update",
+        "departments.list",
+        "devices.list"
+      ],
+      "required_slots": [
+        "device_id"
+      ],
+      "optional_slots": [
+        "name",
+        "department_id",
+        "model",
+        "serial_number"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Измени серийный номер у тонометра 123"
+      ]
+    },
+    {
+      "id": "inventory.devices.archive",
+      "title": "Архивировать медизделие",
+      "mode": "write",
+      "description": "Перенести медицинское изделие в архив.",
+      "allowed_tools": [
+        "inventory.devices.archive",
+        "devices.list"
+      ],
+      "required_slots": [
+        "device_id"
+      ],
+      "requires_confirmation": true,
+      "output_mode": "confirmation_then_result",
+      "example_requests": [
+        "Спиши аппарат 123",
+        "Отправь в архив рентген"
+      ]
+    },
+    {
+      "id": "analytics.summary.status",
+      "title": "Аналитика по статусам",
+      "mode": "read",
+      "description": "Показать сводку заявок с группировкой по статусам.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по статусам"
+      ]
+    },
+    {
+      "id": "analytics.summary.departments",
+      "title": "Аналитика по подразделениям",
+      "mode": "read",
+      "description": "Показать сводку заявок с группировкой по подразделениям.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по отделениям"
+      ]
+    },
+    {
+      "id": "analytics.summary.assignees",
+      "title": "Аналитика по исполнителям",
+      "mode": "read",
+      "description": "Показать сводку заявок с группировкой по исполнителям.",
+      "allowed_tools": [
+        "analytics.summary"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "summary_type"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Покажи статистику по исполнителям"
+      ]
+    },
+    {
+      "id": "memory.search",
+      "title": "Поиск в памяти",
+      "mode": "read",
+      "description": "Искать в индексированном контексте памяти с источниками.",
+      "allowed_tools": [
+        "memory.search"
+      ],
+      "required_slots": [
+        "query"
+      ],
+      "optional_slots": [
+        "limit",
+        "sensitivity",
+        "search_mode",
+        "ranking_profile",
+        "include_source_data"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Найди в памяти сведения о правилах обработки заявок",
+        "Поищи в базе знаний инструкции по медизделиям"
+      ]
+    },
+    {
+      "id": "memory.remember",
+      "title": "Запомнить из чата",
+      "mode": "write",
+      "description": "Поставить выбранные сообщения чата в очередь сохранения в личную или общую память.",
+      "allowed_tools": [
+        "memory.remember"
+      ],
+      "required_slots": [],
+      "optional_slots": [
+        "session_id",
+        "message_ids",
+        "target_scope",
+        "user_note",
+        "importance"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Запомни это для меня",
+        "Запомни это для всей организации"
+      ]
+    },
+    {
+      "id": "memory.update_personal",
+      "title": "Обновить личную память",
+      "mode": "write",
+      "description": "Изменить или удалить одну запись личной памяти пользователя.",
+      "allowed_tools": [
+        "memory.update_personal"
+      ],
+      "required_slots": [
+        "memory_id",
+        "operation"
+      ],
+      "optional_slots": [
+        "new_text"
+      ],
+      "requires_confirmation": false,
+      "output_mode": "result",
+      "example_requests": [
+        "Исправь то, что ты обо мне помнишь",
+        "Забудь этот факт из моей памяти"
+      ]
+    }
+  ]
+}

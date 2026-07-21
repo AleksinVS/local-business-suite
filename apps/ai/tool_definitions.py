@@ -1,0 +1,633 @@
+TOOL_REGISTRY_ROOT = {
+    "version": "1.0",
+    "name": "chat_agent_tool_registry",
+    "description": "Заявленные инструменты, доступные чату и агентному блоку.",
+    "default_policies": {
+        "authentication_required": True,
+        "policy_enforced": True,
+        "writes_require_confirmation": True,
+        "direct_sql_writes_allowed": False,
+    },
+}
+
+TOOLS = [
+    {
+        "id": "ui.get_current_context",
+        "title": "Получить текущий контекст UI",
+        "domain": "ui",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть безопасный контекст текущего окна, связанный с текущим запросом чата.",
+        "inputs": [],
+        "outputs": [
+            "status",
+            "context",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "ui.open_right_panel",
+        "title": "Открыть объект в правой панели",
+        "domain": "ui",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть безопасную команду браузера для открытия видимого объекта модуля в общей правой панели.",
+        "inputs": [
+            "source_code",
+            "object_type",
+            "object_id",
+            "mode",
+        ],
+        "input_schemas": {
+            "mode": {
+                "description": "Режим правой панели. В MVP поддерживается только просмотр.",
+                "enum": ["view"],
+            },
+        },
+        "outputs": [
+            "status",
+            "ui_command",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "workorders.list",
+        "title": "Список заявок",
+        "domain": "workorders",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть заявки с фильтром по статусу и ограничением количества.",
+        "inputs": [
+            "status",
+            "limit",
+        ],
+        "input_schemas": {
+            "status": {
+                "description": "Фильтр по статусу заявки.",
+                "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
+            },
+            "limit": {
+                "description": "Максимальное количество результатов.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "items",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "workorders.get",
+        "title": "Получить заявку",
+        "domain": "workorders",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть одну заявку по внутреннему id или человекочитаемому номеру.",
+        "inputs": [
+            "workorder_id",
+            "number",
+        ],
+        "outputs": [
+            "workorder",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "workorders.search",
+        "title": "Поиск заявок",
+        "domain": "workorders",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Искать индексированные данные заявок через память с проверкой доступа к заявкам.",
+        "inputs": [
+            "query",
+            "limit",
+        ],
+        "input_schemas": {
+            "query": {
+                "description": "Поисковый запрос по заявкам на естественном языке.",
+                "type": "string",
+            },
+            "limit": {
+                "description": "Максимальное количество найденных заявок.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "items",
+            "citations",
+            "meta",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "waiting_list.get",
+        "title": "Получить запись листа ожидания",
+        "domain": "waiting_list",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть безопасные метаданные одной видимой записи листа ожидания по id.",
+        "inputs": [
+            "entry_id",
+        ],
+        "input_schemas": {
+            "entry_id": {
+                "description": "Внутренний id записи листа ожидания.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "entry",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "workorders.create",
+        "title": "Создать заявку",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Создать заявку с подразделением, темой, описанием, необязательным изделием и приоритетом.",
+        "inputs": [
+            "department_id",
+            "subject",
+            "description",
+            "device_id",
+            "priority",
+        ],
+        "input_schemas": {
+            "priority": {
+                "description": "Уровень приоритета заявки.",
+                "enum": ["low", "medium", "high", "critical"],
+            },
+        },
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "create",
+    },
+    {
+        "id": "workorders.transition",
+        "title": "Изменить статус заявки",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Перевести заявку в разрешенный следующий статус.",
+        "inputs": [
+            "workorder_id",
+            "target_status",
+        ],
+        "input_schemas": {
+            "target_status": {
+                "description": "Целевой статус перехода. Должен быть разрешен правилами процесса.",
+                "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"],
+            },
+        },
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "transition",
+    },
+    {
+        "id": "workorders.comment",
+        "title": "Добавить комментарий к заявке",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Добавить комментарий в историю заявки.",
+        "inputs": [
+            "workorder_id",
+            "text",
+        ],
+        "outputs": [
+            "comment",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "comment",
+    },
+    {
+        "id": "workorders.delete",
+        "title": "Удалить заявку",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Удалить видимую заявку, если у пользователя есть права редактирования этой заявки.",
+        "inputs": [
+            "workorder_id",
+        ],
+        "input_schemas": {
+            "workorder_id": {
+                "description": "Внутренний id заявки.",
+                "type": "integer",
+            },
+        },
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "edit",
+    },
+    {
+        "id": "workorders.confirm_closure",
+        "title": "Подтвердить закрытие заявки",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Подтвердить закрытие выполненной заявки.",
+        "inputs": [
+            "workorder_id",
+        ],
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "confirm_closure",
+    },
+    {
+        "id": "workorders.rate",
+        "title": "Оценить заявку",
+        "domain": "workorders",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Поставить оценку закрытой заявке.",
+        "inputs": [
+            "workorder_id",
+            "rating",
+        ],
+        "outputs": [
+            "workorder",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "rate",
+    },
+    {
+        "id": "departments.list",
+        "title": "Список подразделений",
+        "domain": "core",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть иерархическое дерево подразделений или отфильтрованную часть.",
+        "inputs": [
+            "query",
+            "parent_id",
+        ],
+        "outputs": [
+            "items",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "devices.list",
+        "title": "Список изделий",
+        "domain": "inventory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть изделия для выбора и поиска.",
+        "inputs": [
+            "query",
+            "department_id",
+            "archived",
+        ],
+        "outputs": [
+            "items",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "inventory.devices.create",
+        "title": "Создать изделие",
+        "domain": "inventory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Создать новое медицинское изделие в инвентаре.",
+        "inputs": [
+            "name",
+            "department_id",
+            "model",
+            "serial_number",
+        ],
+        "outputs": [
+            "device",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "manage",
+    },
+    {
+        "id": "inventory.devices.update",
+        "title": "Обновить изделие",
+        "domain": "inventory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Обновить существующее медицинское изделие.",
+        "inputs": [
+            "device_id",
+            "name",
+            "department_id",
+            "model",
+            "serial_number",
+        ],
+        "outputs": [
+            "device",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "manage",
+    },
+    {
+        "id": "inventory.devices.archive",
+        "title": "Архивировать изделие",
+        "domain": "inventory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Архивировать медицинское изделие, чтобы его больше нельзя было назначать.",
+        "inputs": [
+            "device_id",
+        ],
+        "outputs": [
+            "device",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "manage",
+    },
+    {
+        "id": "analytics.summary",
+        "title": "Сводка аналитики",
+        "domain": "analytics",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть аналитические сводки только для чтения по статусам, подразделениям или исполнителям.",
+        "inputs": [
+            "summary_type",
+        ],
+        "outputs": [
+            "summary",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "memory.search",
+        "title": "Поиск в памяти",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": (
+            "Искать принятые знания памяти и необязательные ссылки на исходные данные с цитатами и служебными "
+            "метаданными маршрутизации. Единственный профиль ранжирования (гибрид FTS + вектор, слияние RRF) "
+            "применяется всегда; выбор весов каналов или именованного профиля недоступен ИИ-боту (ADR-0030 "
+            "решение 6). Профили ранжирования ADR-0016 — отложенный архитектурный долг, не публичный параметр."
+        ),
+        "inputs": [
+            "query",
+            "limit",
+            "sensitivity",
+            "corpus",
+        ],
+        "input_schemas": {
+            "query": {
+                "description": "Поисковый запрос на естественном языке.",
+                "type": "string",
+            },
+            "limit": {
+                "description": "Максимальное количество элементов памяти.",
+                "type": "integer",
+            },
+            "sensitivity": {
+                "description": "Максимальный допустимый уровень чувствительности для найденного контекста памяти.",
+                "enum": [
+                    "public",
+                    "internal",
+                    "confidential",
+                    "pii_redacted",
+                    "pii_original",
+                    "secret",
+                ],
+            },
+            "corpus": {
+                "description": (
+                    "Корпус поиска. knowledge (по умолчанию) — принятые знания, с автоматическим fallback к "
+                    "source_data, если знаний не найдено. source_data — только явные исходные объекты "
+                    "(файлы/заявки/иные источники), результат всегда помечается предупреждением, что это не "
+                    "принятое знание. Веса каналов и именованный профиль ранжирования не передаются: единственный "
+                    "серверный профиль (RRF, фикс. веса fulltext/vector) применяется всегда."
+                ),
+                "enum": ["knowledge", "source_data"],
+            },
+        },
+        "outputs": [
+            "items",
+            "citations",
+            "meta",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "memory.remember",
+        "title": "Запомнить знание из чата",
+        "domain": "memory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Синхронно записать выбранные сообщения ИИ-чата как личную или организационную память: файл знания, git commit и поисковый индекс создаются за один вызов.",
+        "inputs": [
+            "session_id",
+            "message_ids",
+            "target_scope",
+            "user_note",
+            "importance",
+        ],
+        "input_schemas": {
+            "target_scope": {
+                "description": "Целевая область памяти. По умолчанию personal.",
+                "enum": ["personal", "organization"],
+            },
+            "message_ids": {
+                "description": "ID сообщений чата, которые используются как источник происхождения.",
+                "type": "array",
+            },
+            "user_note": {
+                "description": "Необязательная заметка пользователя о том, что нужно запомнить.",
+                "type": "string",
+            },
+            "importance": {
+                "description": "Необязательная подсказка важности, например high или organization_candidate.",
+                "type": "string",
+            },
+        },
+        "outputs": [
+            "memory_id",
+            "target_scope",
+            "knowledge_file_path",
+            "knowledge_file_commit",
+            "secret_handles",
+            "index_status",
+            "message",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "memory.update_personal",
+        "title": "Обновить личную память",
+        "domain": "memory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Изменить или удалить один элемент личной памяти, принадлежащий пользователю.",
+        "inputs": [
+            "memory_id",
+            "operation",
+            "new_text",
+        ],
+        "input_schemas": {
+            "operation": {
+                "description": "Операция с личной памятью.",
+                "enum": ["edit", "delete"],
+            },
+            "memory_id": {
+                "description": "Стабильный id элемента памяти.",
+                "type": "string",
+            },
+            "new_text": {
+                "description": "Новый текст памяти для операции изменения.",
+                "type": "string",
+            },
+        },
+        "outputs": [
+            "memory_id",
+            "event_id",
+            "status",
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "ai.skills.create_or_update",
+        "title": "Создать или обновить рабочий навык ИИ",
+        "domain": "ai",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Атомарно создать или обновить рабочий навык ИИ с инструкциями в data/contracts/ai/skills. Требуется ai.manage_skills.",
+        "inputs": [
+            "skill_id",
+            "name",
+            "description",
+            "source_code",
+            "object_types",
+            "required_tools",
+            "trigger_examples",
+            "body",
+        ],
+        "input_schemas": {
+            "skill_id": {
+                "description": "Нормализованный id навыка, например module.workflow.",
+                "type": "string",
+            },
+            "required_tools": {
+                "description": "ID существующих инструментов, которые нужны навыку.",
+                "type": "array",
+            },
+            "body": {
+                "description": "Тело SKILL.md только с инструкциями. Без скриптов, assets и произвольных файлов.",
+                "type": "string",
+            },
+        },
+        "outputs": [
+            "status",
+            "skill_id",
+            "path",
+            "required_tools",
+            "message",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "ai.manage_skills",
+    },
+    {
+        "id": "access.update_role_permissions",
+        "title": "Обновить права роли",
+        "domain": "access",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Обновить права конкретной роли в конфигурации правил ролей.",
+        "inputs": [
+            "role_name",
+            "permissions_map",
+        ],
+        "outputs": [
+            "ok",
+            "message",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "superuser",
+    },
+    {
+        "id": "access.get_role_rules",
+        "title": "Получить правила ролей",
+        "domain": "access",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть текущую конфигурацию ролей из role_rules.json.",
+        "inputs": [],
+        "outputs": [
+            "rules",
+        ],
+        "required_role_scope": "visible",
+    },
+    {
+        "id": "access.users.list",
+        "title": "Список пользователей",
+        "domain": "access",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть пользователей с ролями и подразделениями. Только для администраторов.",
+        "inputs": [
+            "query",
+        ],
+        "outputs": [
+            "items",
+        ],
+        "required_role_scope": "superuser",
+    },
+    {
+        "id": "access.users.update",
+        "title": "Обновить пользователя",
+        "domain": "access",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Обновить данные пользователя: активность, подразделение и группы. Только для администраторов.",
+        "inputs": [
+            "user_id",
+            "is_active",
+            "department_id",
+            "group_names",
+        ],
+        "outputs": [
+            "user",
+        ],
+        "requires_confirmation": True,
+        "required_role_scope": "superuser",
+    },
+    {
+        "id": "access.groups.list",
+        "title": "Список групп",
+        "domain": "access",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Вернуть все доступные группы Django. Только для администраторов.",
+        "inputs": [],
+        "outputs": [
+            "items",
+        ],
+        "required_role_scope": "superuser",
+    },
+]
+
+
+def get_tool_registry():
+    return {tool["id"]: tool for tool in TOOLS}
+
+
+def get_registry_payload():
+    return {**TOOL_REGISTRY_ROOT, "tools": TOOLS}

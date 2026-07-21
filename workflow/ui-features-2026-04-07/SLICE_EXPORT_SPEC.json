@@ -1,0 +1,21 @@
+{
+  "source_plan": "workflow/ui-features-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "a59bdc1b805fc7a5e553b8b2f984e6e6887ac66b171f4171e6280dec00a7b094",
+  "tasks": [
+    {
+      "task_id": "task-sidebar-tooltips-implement",
+      "slice_id": "slice-sidebar-tooltips",
+      "output_path": "workflow/ui-features-2026-04-07/task-packets/task-sidebar-tooltips-implement.json"
+    },
+    {
+      "task_id": "task-favorites-scaffold",
+      "slice_id": "slice-favorites-feature",
+      "output_path": "workflow/ui-features-2026-04-07/task-packets/task-favorites-scaffold.json"
+    },
+    {
+      "task_id": "task-favorites-logic",
+      "slice_id": "slice-favorites-feature",
+      "output_path": "workflow/ui-features-2026-04-07/task-packets/task-favorites-logic.json"
+    }
+  ]
+}

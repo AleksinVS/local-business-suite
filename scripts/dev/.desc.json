@@ -1,0 +1,4 @@
+{
+  ".": "Инструменты разработки для сопровождения структуры проекта",
+  "generate-structure.js": "Генератор PROJECT_STRUCTURE.yaml из .desc.json"
+}

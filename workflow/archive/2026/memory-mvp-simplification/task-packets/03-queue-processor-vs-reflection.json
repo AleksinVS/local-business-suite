@@ -1,0 +1,29 @@
+{
+  "task_id": "03-queue-processor-vs-reflection",
+  "title": "Разделить обработку очереди памяти и будущую рефлексию",
+  "status": "completed",
+  "objective": "Зафиксировать, что текущая команда обрабатывает очередь запросов на запоминание и не является полноценной ночной рефлексией.",
+  "write_scope": [
+    "apps/memory/management/commands/",
+    "apps/memory/tests.py",
+    "docs/architecture/MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md",
+    "docs/architecture/MEMORY_MVP_SIMPLIFICATION_PLAN.md",
+    "docs/guides/MEMORY_USER_GUIDE.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md"
+  ],
+  "requirements": [
+    "Добавить или задокументировать понятное имя команды обработки очереди.",
+    "По возможности сохранить совместимость с текущим эксплуатационным использованием команды.",
+    "Оставить ночную рефлексию для будущего анализа окон чата и объединения знаний.",
+    "Обновить справку команды, документацию развертывания и тесты, чтобы терминология не вводила в заблуждение."
+  ],
+  "acceptance_checks": [
+    "Оператор может запустить обработчик очереди и не ожидать от него полной рефлексии.",
+    "Для существующего расписания есть путь совместимости.",
+    "Документация различает обработку queued remember и будущую рефлексию."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  ".": "Task packet для политики тестирования и независимой проверки",
+  "01-testing-policy-docs.json": "Создание project guide, обновление AGENTS/README и workflow-отчетов",
+  "02-test-runtime-acceleration.json": "Команда keepdb, guide ускорения тестов и исполнительные отчеты"
+}

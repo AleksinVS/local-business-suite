@@ -1,0 +1,57 @@
+{
+  "task_id": "02-pwa-browser-notification-client",
+  "title": "PWA and browser notification client",
+  "status": "pending",
+  "objective": "Add PWA installability, service worker scaffold and browser notification UI for an open portal tab or PWA window without third-party Web Push.",
+  "read_scope": [
+    "templates/base.html",
+    "static/src/js/",
+    "static/src/css/app.css",
+    "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/deployment/IIS_SSO.md"
+  ],
+  "write_scope": [
+    "templates/base.html",
+    "templates/notifications/",
+    "static/src/js/notifications.js",
+    "static/src/js/pwa.js",
+    "static/src/css/app.css",
+    "static/manifest.webmanifest",
+    "static/service-worker.js or Django route for root-scoped service worker",
+    "apps/notifications/views.py",
+    "apps/notifications/urls.py",
+    "apps/notifications/tests.py",
+    "scripts/e2e/tests/notifications.spec.ts",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not register Push API subscriptions.",
+    "Do not request notification permission on page load.",
+    "Do not show marketing-style install prompts.",
+    "Do not rely on browser notification as the only visible notification path."
+  ],
+  "requirements": [
+    "The user must first see an in-app explanation before the browser permission prompt.",
+    "The notification center must work without browser permission.",
+    "Polling must use the cursor API and back off on repeated failures.",
+    "System notifications must include safe title, body and target URL.",
+    "Service worker cache rules must not serve stale authenticated pages.",
+    "PWA install metadata must use project branding and proper icons."
+  ],
+  "acceptance_checks": [
+    "The notification center appears in the portal shell.",
+    "Browser permission prompt is triggered only after a user click.",
+    "Denied permission leaves the notification center usable.",
+    "An incoming server notification appears in the center and, if allowed, as a system notification.",
+    "Clicking the notification opens the portal URL.",
+    "A closed browser is documented as unsupported for system notifications in stage 1."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.notifications.tests",
+    "npm run test:e2e -- --project=chromium --grep \"notifications\"",
+    "git diff --check"
+  ]
+}

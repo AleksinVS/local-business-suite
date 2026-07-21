@@ -1,0 +1,68 @@
+# Прод-compose не привязан к конкретному хосту: путь к env-файлу задается
+# переменной окружения LOCAL_BUSINESS_ENV_FILE (например,
+# deployments/<host>/.env — см. AGENTS.md, раздел «Изоляция сред
+# развертывания»). Без переменной compose падает с понятной ошибкой вместо
+# молчаливого использования чужого/несуществующего окружения.
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${LOCAL_BUSINESS_ENV_FILE:?set LOCAL_BUSINESS_ENV_FILE to the path of the host env file, e.g. deployments/<host>/.env}
+    environment:
+      LOCAL_BUSINESS_AGENT_RUNTIME_URL: http://agent-runtime:8090
+    volumes:
+      - ./data:/app/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health/').read()\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: services/agent_runtime/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${LOCAL_BUSINESS_ENV_FILE:?set LOCAL_BUSINESS_ENV_FILE to the path of the host env file, e.g. deployments/<host>/.env}
+    environment:
+      DJANGO_AI_GATEWAY_URL: http://web:8000/ai/gateway
+    volumes:
+      - ./data:/app/data:ro
+    networks:
+      - internal
+    depends_on:
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health').read()\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+    networks:
+      - internal
+    depends_on:
+      - web
+      - agent-runtime
+
+networks:
+  internal:
+    external: true
+    name: ${LOCAL_BUSINESS_SHARED_NETWORK:-local-business-suite_internal}
+
+# Именованных томов нет: db/media/static/logs нигде не монтировались (мёртвая
+# конфигурация), а caddy_data реально используется как bind-mount ./caddy_data
+# у сервиса caddy, а не как top-level named volume.

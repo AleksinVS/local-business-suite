@@ -1,0 +1,38 @@
+[
+  {
+    "code": "department_report_received",
+    "title": "Отчет подразделения получен",
+    "owner": "operations",
+    "description": "Отчет руководителя подразделения получен и разобран.",
+    "dimensions": ["department", "period", "author"],
+    "measures": ["reports"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "department_issue_reported",
+    "title": "Проблема подразделения зафиксирована",
+    "owner": "operations",
+    "description": "Отчет содержит риск, проблему или операционный сбой.",
+    "dimensions": ["department", "issue_type", "period"],
+    "measures": ["issues"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "regulator_request_received",
+    "title": "Запрос регулятора получен",
+    "owner": "compliance",
+    "description": "Получен запрос от регулятора.",
+    "dimensions": ["regulator", "topic", "department"],
+    "measures": ["requests", "requested_documents", "deadline_days"],
+    "sensitivity": "confidential"
+  },
+  {
+    "code": "deadline_committed",
+    "title": "Срок обязательства зафиксирован",
+    "owner": "operations",
+    "description": "Из источника извлечен срок или обязательство.",
+    "dimensions": ["department", "commitment_type"],
+    "measures": ["commitments"],
+    "sensitivity": "confidential"
+  }
+]

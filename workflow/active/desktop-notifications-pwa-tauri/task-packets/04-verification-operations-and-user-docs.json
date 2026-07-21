@@ -1,0 +1,52 @@
+{
+  "task_id": "04-verification-operations-and-user-docs",
+  "title": "Verification, operations and user documentation",
+  "status": "pending",
+  "objective": "Add focused tests and operator/user documentation for stage 1 notifications.",
+  "read_scope": [
+    "docs/guides/TESTING_POLICY.md",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/deployment/IIS_SSO.md",
+    "README.md",
+    "AGENTS.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "write_scope": [
+    "docs/guides/NOTIFICATIONS_USER_GUIDE.md",
+    "docs/deployment/DEPLOYMENT.md",
+    "docs/architecture/PWA_AND_TAURI_NOTIFICATIONS_PLAN.md",
+    "docs/planning/active/desktop-notifications-pwa-tauri.md",
+    "workflow/active/desktop-notifications-pwa-tauri/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/desktop-notifications-pwa-tauri/TASK_ACCEPTANCE.implementation.md",
+    "apps/notifications/tests.py",
+    "scripts/e2e/tests/notifications.spec.ts",
+    ".desc.json files",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Do not archive the workflow before owner acceptance.",
+    "Do not claim background notification support for closed browsers in stage 1.",
+    "Do not skip e2e for the main user path unless the environment lacks browser permissions support."
+  ],
+  "requirements": [
+    "User docs must explain browser permission recovery.",
+    "Deployment docs must explain HTTPS and service worker cache requirements.",
+    "Tests must cover permission denied fallback.",
+    "Tests must cover access isolation between users.",
+    "Final report must state exactly which checks ran and which were not possible."
+  ],
+  "acceptance_checks": [
+    "User guide describes enable, disable, denied permission and closed-browser limitations.",
+    "Deployment guide describes HTTPS/service worker requirements.",
+    "E2E verifies notification center and browser permission flow.",
+    "Acceptance report records residual risk for unsupported browser behavior."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.notifications.tests apps.workorders.tests",
+    "npm run test:e2e -- --project=chromium --grep \"notifications\"",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

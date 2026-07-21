@@ -1,0 +1,5 @@
+{
+  ".": "Автономные сервисы (вне Django)",
+  "agent_runtime/": "Сервис AI agent runtime (отдельный Python/ASGI-процесс)",
+  "copilot_runtime/": "Сервис CopilotKit Runtime (отдельный Node.js-процесс, мост React CopilotKit UI -> AG-UI)"
+}

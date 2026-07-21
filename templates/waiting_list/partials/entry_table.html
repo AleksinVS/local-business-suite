@@ -1,0 +1,39 @@
+<tbody id="entry-table">
+  {% if entries %}
+    {% for entry in entries %}
+    <tr
+      hx-get="{% url 'waiting_list:detail' entry.pk %}"
+      hx-target="#entry-detail-panel-content"
+      hx-swap="innerHTML"
+      onclick="openWaitingListDrawer('{{ entry.pk }}')"
+      style="cursor: pointer;"
+    >
+      <td>
+        {{ entry.created_at|date:"d.m.Y H:i" }}
+      </td>
+      <td>
+        <strong>{{ entry.patient_name }}</strong>
+        <br>
+        <span style="font-size: 0.75rem; color: var(--text-muted)">
+          Дата рожд: {{ entry.patient_dob }}
+        </span>
+      </td>
+      <td>{{ entry.patient_phone }}</td>
+      <td>{{ entry.get_service_id_display }}</td>
+      <td>
+        {% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}
+        {% if entry.priority_cito %}
+          <span class="cito-indicator">CITO!</span>
+        {% endif %}
+      </td>
+      <td>
+        <span class="badge" data-status="{{ entry.status }}">{{ entry.get_status_display }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  {% else %}
+    <tr>
+      <td colspan="6" class="empty-state">Ничего не найдено</td>
+    </tr>
+  {% endif %}
+</tbody>

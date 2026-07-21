@@ -1,0 +1,47 @@
+{
+  "task_id": "01-file-canon-and-reconciler",
+  "title": "Файл знания как канон и pull-reconciler",
+  "status": "ready",
+  "objective": "Сделать frontmatter файла знания авторитетным источником метаданных, заменить жесткие хэш-падения на needs-reconcile, ввести кроссплатформенную блокировку записи и команду memory_reconcile с двойной сверкой и путем отката.",
+  "write_scope": [
+    "apps/memory/knowledge_files.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/services.py",
+    "apps/memory/selectors.py",
+    "apps/memory/management/commands/memory_reconcile.py",
+    "apps/memory/management/commands/memory_verify_knowledge_files.py",
+    "apps/memory/tests.py",
+    "config/",
+    "docs/architecture/MEMORY_MVP_CURRENT_STATE.md"
+  ],
+  "requirements": [
+    "Ввести кроссплатформенную межпроцессную блокировку записи в knowledge_repo вместо fcntl-only реализации: единый интерфейс с msvcrt.locking на Windows и fcntl на POSIX, платформонезависимый эксклюзивный lock-файл, либо PostgreSQL advisory lock (pg_advisory_xact_lock) в основном репозитории - кроссплатформенный по построению. Целевая среда - и Linux, и Windows; блокировка реально исключает второй процесс на обеих платформах (проверяется тестом). Выполняется первым, до остальных изменений.",
+    "Чтение знания идет из файла: scope, владелец, kind, sensitivity, scope_tokens, status, source_refs, supersedes, lifecycle читаются из frontmatter; MemoryKnowledgeItem используется только как пересобираемая индексная карточка.",
+    "Чистота канона: index_status, text_hash, file_hash и прочее состояние производных слоев выводится из frontmatter при миграции существующих файлов; состояние индексации живет в проекции.",
+    "Расхождение файла и проекции при чтении не является ошибкой: страница помечается lifecycle: needs-reconcile и ставится в очередь; чтение возвращает содержимое файла.",
+    "Команда memory_reconcile: хранит хэш последнего материализованного коммита, сравнивает с HEAD, с гейтом по content-hash пересобирает проекции измененных файлов; поддерживает --dry-run; идемпотентна (повторный запуск без изменений не выполняет работу); вызывается при старте, по таймеру и после операций записи.",
+    "Валидатор reconciler отклоняет молчаливое понижение sensitivity/scope_tokens ручной правкой: страница держится на прежнем уровне и помечается pending до явного ревью; автоматическое движение метки только вверх.",
+    "Двойная работа: авторитет переключается настройкой (флагом); до переключения выполняется полная сверка memory_verify_knowledge_files; путь отката - возврат флага на чтение из проекций.",
+    "Идентичность концепта - путь файла; knowledge_id остается стабильным ключом в frontmatter.",
+    "Не менять путь записи memory.remember в этой задаче (очередь еще работает); не удалять таблицы."
+  ],
+  "acceptance_checks": [
+    "Ручная правка тела и frontmatter файла знания -> memory_reconcile -> обновленное знание находится поиском, чтение не падает.",
+    "Понижение sensitivity ручной правкой не применяется молча: страница pending, прежний уровень действует.",
+    "Повторный запуск memory_reconcile без изменений сообщает ноль обработанных файлов.",
+    "Тест блокировки: второй процесс не может писать одновременно, на обеих платформенных ветках (POSIX и Windows).",
+    "memory_verify_knowledge_files проходит чисто на мигрированном репозитории; откат флага возвращает старое поведение чтения.",
+    "Frontmatter мигрированных файлов не содержит index_status и собственных хэшей."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py test apps.memory.tests",
+    "python manage.py memory_verify_knowledge_files",
+    "python manage.py memory_reconcile --dry-run"
+  ],
+  "notes": [
+    "Рискованная задача: независимая проверка субагентом по AGENTS.md.",
+    "Ссылки: ADR-0030 решение 1-2; концепт v0.5 параграф 7.1, инварианты 1-4 и 9."
+  ]
+}

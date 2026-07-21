@@ -1,0 +1,22 @@
+{
+  ".": "File Source Auto Organization: 11 моделей MemoryFile*, baseline/incoming/move/stats сервисы и UI. Контур заморожен ADR-0030 решением 5 (см. README.md) до выбора пилотного источника",
+  "README.md": "Статус заморозки контура, условия разморозки и границы с apps.memory",
+  "models.py": "11 моделей MemoryFile*: stable file identity, версии, физические/виртуальные размещения, usage events, organization proposals/decisions и move jobs; db_table закреплен за исходными таблицами memory_memoryfile*",
+  "admin.py": "Регистрация моделей MemoryFile* в Django Admin",
+  "apps.py": "Конфигурация Django-приложения filehub",
+  "file_organization.py": "Базовый сервис автоупорядочивания файлов: profiles, stable file identity, path aliases и system views",
+  "file_organization_baseline.py": "Генератор исходной виртуальной файловой структуры с confidence, evidence, conflicts и review issues",
+  "file_organization_incoming.py": "Worker входного каталога для стабильных файлов, secret blocking и виртуального размещения",
+  "file_organization_stats.py": "Безопасные usage events, aggregation thresholds и предложения общей файловой структуры",
+  "file_organization_move.py": "Согласованный managed_fs перенос файлов с copy/verify/quarantine/purge gate",
+  "views.py": "UI: пользовательские виртуальные структуры (/memory/files/) и операторское ревью автоупорядочивания (/memory/review/file-organization/)",
+  "urls.py": "URL-маршруты /memory/files/ и /memory/review/file-organization/ (примонтированы в config/urls.py под тем же префиксом memory/)",
+  "tests.py": "Тесты контура автоупорядочивания файлов (MemoryFileAutoOrganizationTests) и admin observability",
+  "management/": "Management commands автоупорядочивания файлов",
+  "management/commands/memory_file_organization_baseline.py": "Dry-run/run команда генерации baseline virtual structure файлового источника",
+  "management/commands/memory_file_incoming_worker.py": "Dry-run/run worker входного каталога автоупорядочиваемого файлового источника",
+  "management/commands/memory_file_structure_stats.py": "Агрегация usage events и создание organization proposals файловой структуры",
+  "management/commands/memory_file_move_worker.py": "Worker согласованных managed_fs переносов и purge после retention/backup checkpoint",
+  "management/commands/memory_file_auto_organization_e2e.py": "E2E-проверка baseline -> incoming -> proposal -> managed_fs move -> purge gate",
+  "migrations/": "Миграции приложения filehub: state-only перенос моделей из apps.memory без изменения физических таблиц"
+}

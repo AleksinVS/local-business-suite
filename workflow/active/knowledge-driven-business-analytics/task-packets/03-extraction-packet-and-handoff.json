@@ -1,0 +1,28 @@
+{
+  "task_id": "03-extraction-packet-and-handoff",
+  "title": "Create shared extraction packet and handoff to memory and analytics",
+  "status": "mvp_implemented",
+  "read_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "apps/ai/",
+    "docs/architecture/KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md"
+  ],
+  "write_scope": [
+    "apps/analytics/",
+    "apps/memory/",
+    "apps/ai/",
+    "contracts/analytics/",
+    "tests"
+  ],
+  "requirements": [
+    "Define ExtractionPacket with source identity, fingerprints, normalized text, safe snippets, entities, claims, business facts, DLP findings and provenance.",
+    "Generate KnowledgeDelta for memory and AnalyticsFactDelta for metrics from one extraction result.",
+    "Make downstream handoff idempotent and replay-safe.",
+    "Do not duplicate expensive parser/LLM extraction between memory and analytics."
+  ],
+  "acceptance_checks": [
+    "python manage.py test apps.analytics.tests apps.memory.tests",
+    "python manage.py analytics_extract_source --source-code <code> --dry-run"
+  ]
+}

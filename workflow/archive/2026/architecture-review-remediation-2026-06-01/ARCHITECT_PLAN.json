@@ -1,0 +1,42 @@
+{
+  "block_id": "architecture-review-remediation-2026-06-01",
+  "title": "Исправления по архитектурному ревью 2026-06-01",
+  "status": "planned",
+  "source_review": "docs/guides/ARCHITECTURE_REVIEW_2026-06-01.md",
+  "planning_doc": "docs/planning/active/architecture-review-remediation-2026-06-01.md",
+  "tasks": [
+    {
+      "task_id": "01-runtime-migrations-and-deployment",
+      "packet": "task-packets/01-runtime-migrations-and-deployment.json",
+      "risk": "high",
+      "summary": "Сделать единый путь применения миграций для default, chat, knowledge_meta и analytics_control."
+    },
+    {
+      "task_id": "02-contract-write-paths-and-role-settings",
+      "packet": "task-packets/02-contract-write-paths-and-role-settings.json",
+      "risk": "high",
+      "summary": "Свести изменение role_rules к Settings Center service layer, atomic write и audit."
+    },
+    {
+      "task_id": "03-ai-gateway-mcp-identity-and-prompt-logging",
+      "packet": "task-packets/03-ai-gateway-mcp-identity-and-prompt-logging.json",
+      "risk": "high",
+      "summary": "Усилить identity checks AI gateway/MCP и убрать raw prompt из runtime logs."
+    },
+    {
+      "task_id": "04-docs-root-hygiene-and-structure",
+      "packet": "task-packets/04-docs-root-hygiene-and-structure.json",
+      "risk": "medium",
+      "summary": "Перенести debug log из корня, обновить устаревшие ссылки и структуру проекта."
+    }
+  ],
+  "required_checks": [
+    ".venv/bin/python manage.py check",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    ".venv/bin/python manage.py makemigrations --check --dry-run",
+    ".venv/bin/python manage.py test apps.core.tests apps.ai.tests apps.memory.tests apps.analytics.tests apps.settings_center.tests",
+    "git diff --check"
+  ],
+  "adr_required": false,
+  "adr_note": "Новый ADR не нужен, пока работы остаются в рамках ADR-0007, ADR-0011, ADR-0021 и ADR-0024. ADR нужен при решении публиковать MCP наружу или менять модель доверия AI gateway."
+}

@@ -1,0 +1,43 @@
+{
+  "block_id": "kanban-ui-refactor-2026-04-07",
+  "slice_id": "slice-kanban-drawer-fixes",
+  "task_id": "fix-drawer-logic-base",
+  "goal": "Fix foundational drawer logic within the base template for consistency across the application.",
+  "risk_class": "R1",
+  "read_files": [
+    "templates/base.html",
+    "templates/workorders/board.html",
+    "static/src/css/app.css"
+  ],
+  "write_files": [
+    "templates/base.html"
+  ],
+  "forbidden_moves": [
+    "Modifying core workorder business logic in models",
+    "Changing global CSS without verification"
+  ],
+  "required_docs": [],
+  "required_checks": [
+    "Verify drawer opens/closes correctly on mobile",
+    "Check for Z-index issues with kanban cards"
+  ],
+  "mandatory_tests": [],
+  "deliverables": [
+    "Refactored drawer logic in base.html"
+  ],
+  "escalation_path": [
+    "Unexpected conflicts with other global components",
+    "Broken layout on other pages"
+  ],
+  "source_plan": "workflow/kanban-ui-refactor-2026-04-07/ARCHITECT_PLAN.json",
+  "source_plan_hash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+  "runtime_binding": null,
+  "development_method": null,
+  "method_phase": null,
+  "method_step_id": null,
+  "review_scope": null,
+  "iteration": null,
+  "contract_scope": null,
+  "rework_of": null,
+  "artifact_expectations": []
+}

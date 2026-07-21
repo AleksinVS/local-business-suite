@@ -1,0 +1,8 @@
+{
+  ".": "Task packets: удаление MemorySnapshot/MemoryChunk из активного пути памяти",
+  "01-search-document-model.json": "Модель прямой индексной записи MemorySearchDocument",
+  "02-knowledge-indexing-without-chunks.json": "Индексация знаний без MemoryChunk",
+  "03-source-data-indexing-without-snapshots.json": "Индексация source_data без MemorySnapshot",
+  "04-remove-snapshot-chunk-runtime.json": "Удаление активного использования MemorySnapshot и MemoryChunk",
+  "05-docs-tests-acceptance.json": "Документация, проверки и приемка блока"
+}

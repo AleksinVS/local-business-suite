@@ -1,0 +1,6 @@
+{
+  ".": "Общие protocol primitives для AI UI",
+  "__init__.py": "Инициализация common protocol пакета",
+  "capabilities.py": "Protocol metadata, версии и список расширений local_business",
+  "ui_commands.py": "Нормализация и allow-list UI-команд"
+}

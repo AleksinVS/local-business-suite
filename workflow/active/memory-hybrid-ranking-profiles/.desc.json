@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки workflow-блока",
+  "ARCHITECT_PLAN.json": "Исполнительный план и порядок task packets",
+  "EXECUTOR_REPORT.memory-hybrid-ranking-profiles.md": "Отчет исполнения по профилям ранжирования, source semantic search и policy reindex",
+  "TASK_ACCEPTANCE.memory-hybrid-ranking-profiles.md": "Приемка workflow-блока по реализации профилей памяти",
+  "RETROSPECTIVE.md": "Краткая ретроспектива по результатам реализации",
+  "task-packets": "Task packets для реализации профилей ранжирования памяти"
+}

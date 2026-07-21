@@ -1,0 +1,43 @@
+{
+  "task_id": "05-e2e-docs-and-handoff",
+  "status": "completed",
+  "title": "E2E, documentation and handoff",
+  "goal": "Verify the universal right drawer flow end to end and update operator/user documentation.",
+  "read_scope": [
+    "scripts/e2e/tests/",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
+    "docs/planning/active/universal-right-drawer-ai-navigation.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "write_scope": [
+    "scripts/e2e/tests/",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "workflow/active/universal-right-drawer-ai-navigation/",
+    "PROJECT_STRUCTURE.yaml",
+    "scripts/e2e/tests/.desc.json"
+  ],
+  "requirements": [
+    "Add e2e for opening a workorder in the global drawer from the AI chat page.",
+    "Add e2e for opening a waiting-list entry in the global drawer.",
+    "Add e2e or integration test for denied access.",
+    "Capture screenshots into .local/ only.",
+    "Update user/operator documentation with the provider pattern and supported MVP modules.",
+    "Run make gen-struct after structural changes.",
+    "Create executor report and acceptance report for the workflow block."
+  ],
+  "acceptance": [
+    "E2E passes for workorders and waiting-list opening.",
+    "Screenshots show the drawer on AI chat page.",
+    "Docs explain how a new module registers a right panel provider.",
+    "Workflow report and acceptance are present.",
+    "PROJECT_STRUCTURE.yaml is regenerated."
+  ],
+  "verification": [
+    "npm run test:e2e -- --project=chromium",
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

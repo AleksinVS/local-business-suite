@@ -1,0 +1,11 @@
+{
+    auto_https off
+}
+
+:80 {
+    encode zstd gzip
+
+    handle {
+        reverse_proxy web:8000
+    }
+}

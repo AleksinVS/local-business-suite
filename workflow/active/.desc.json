@@ -1,0 +1,12 @@
+{
+  ".": "Активные workflow-блоки",
+  "README.md": "Правила для активных workflow-блоков",
+  "knowledge-driven-business-analytics": "Workflow: knowledge-driven business analytics",
+  "memory-hybrid-ranking-profiles": "Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота",
+  "design-patterns-hardening-2026-06-01": "Workflow: внедрение архитектурных паттернов 2026-06-01",
+  "desktop-notifications-pwa-tauri": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
+  "native-ag-ui-chat-development": "Workflow: разработка самописного AG-UI ИИ-чата",
+  "postgresql-primary-store-migration": "Workflow: миграция основного хранилища на PostgreSQL",
+  "memory-alignment-hardening": "Workflow: доводка памяти после ревью целевой архитектуры (3 task packets)",
+  "project-knowledge-base-mvp": "Workflow: MVP базы проектных знаний для ИИ-агентов kb (6 task packets)"
+}

@@ -1,0 +1,11 @@
+{
+  ".": "Task packets блока memory-hybrid-knowledge-v05-alignment",
+  "01-file-canon-and-reconciler.json": "Файл знания как канон, кроссплатформенная блокировка, memory_reconcile, двойная сверка и откат",
+  "02-direct-write-and-queue-collapse.json": "Прямая запись memory.remember, единая таблица-очередь с DLQ, index.md вместо _summary.md",
+  "03-git-review-and-candidates.json": "Кандидатство и ревью через pending-страницы поверх git, log.md из истории, перенацеливание review UI",
+  "04-filehub-extraction-and-freeze.json": "Вынос автоупорядочивания файлов в apps.filehub без изменений и заморозка",
+  "05-graph-contour-removal-and-edge-vocabulary.json": "Удаление graph-extraction контура, словарь типов рёбер, валидатор и детерминированный материализатор",
+  "06-single-ranking-profile.json": "Один профиль ранжирования RRF и сокращение публичных режимов поиска до выбора корпуса",
+  "07-data-store-debt-stubs.json": "Заглушки data_store.py, DEBT-маркеры 5а/5б, тест контракта долга и сверка debt-записей backlog",
+  "08-docs-tests-acceptance.json": "Документация, e2e acceptance-сценарии и Definition of Done блока"
+}

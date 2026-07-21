@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Пользователи и доступ</p>
+      <h1>Пользователи портала</h1>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+      <a class="button" href="{% url 'settings_center:user_create' %}">Создать пользователя</a>
+    </div>
+  </div>
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Логин</th>
+          <th>ФИО</th>
+          <th>Подразделение</th>
+          <th>Группы</th>
+          <th>Связь с AD</th>
+          <th>Статус</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for portal_user in portal_users %}
+          <tr>
+            <td>{{ portal_user.username }}</td>
+            <td>{{ portal_user.get_full_name }}</td>
+            <td>{{ portal_user.department|default:"" }}</td>
+            <td>{% for group in portal_user.groups.all %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td>
+              {% for identity in portal_user.external_identities.all %}
+                {{ identity.domain }}\{{ identity.username }}
+              {% empty %}
+                <span class="muted">нет</span>
+              {% endfor %}
+            </td>
+            <td>{% if portal_user.is_active %}Активен{% else %}Отключен{% endif %}</td>
+            <td class="row-actions">
+              <a href="{% url 'settings_center:user_edit' portal_user.pk %}">Изменить</a>
+              <a href="{% url 'settings_center:user_ad_link' portal_user.pk %}">AD</a>
+              {% if portal_user.is_active %}
+                <form method="post" action="{% url 'settings_center:user_disable' portal_user.pk %}">
+                  {% csrf_token %}
+                  <button type="submit">Отключить</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .row-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .row-actions button { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 0.35rem 0.5rem; cursor: pointer; }
+</style>
+{% endblock %}

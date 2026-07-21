@@ -1,0 +1,28 @@
+{
+  "task_id": "01-sqlite-fork-and-baseline",
+  "title": "SQLite fork и baseline",
+  "goal": "Завершить вынос текущего SQLite-варианта из основного направления разработки.",
+  "write_scope": [
+    "remote fork or branch metadata",
+    "README.md",
+    "docs/deployment/",
+    "docs/planning/active/postgresql-primary-store-migration.md"
+  ],
+  "non_goals": [
+    "Не менять runtime-код PostgreSQL",
+    "Не удалять SQLite-файлы из data/",
+    "Не обещать SQLite как production target основного репозитория"
+  ],
+  "implementation_notes": [
+    "Локальная ветка baseline уже создана: sqlite-legacy-2026-06-15.",
+    "Нужно создать удаленный fork или отдельный remote branch по решению владельца.",
+    "В SQLite-fork README указать ограничения: small-install, single-host, без production-гарантий для конкурирующей записи и heavy ingestion.",
+    "В основном репозитории добавить ссылку на SQLite-fork только после появления удаленного адреса."
+  ],
+  "acceptance_checks": [
+    "git branch --list sqlite-legacy-2026-06-15",
+    "git status --short",
+    "Документация SQLite-fork содержит ограничения поддержки",
+    "Основной active plan ссылается на фактический fork/branch"
+  ]
+}

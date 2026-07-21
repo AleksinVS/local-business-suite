@@ -1,0 +1,54 @@
+{
+  "task_id": "05-sidebar-history-model-and-clear-parity",
+  "title": "Native sidebar parity: history, model selection, clear and full chat entrypoint",
+  "type": "implementation",
+  "objective": "Довести native sidebar до функционального уровня старого HTMX sidebar без изменения доменной логики и без зависимости от Copilot Runtime.",
+  "read_scope": [
+    "templates/ai/partials/sidebar_chat.html",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/views.py",
+    "apps/ai/services.py",
+    "apps/ai/ui_runtime/config.py",
+    "apps/ai/tests.py",
+    "scripts/e2e/tests/native_ai_ui.spec.ts"
+  ],
+  "write_scope": [
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "apps/ai/ui_runtime/config.py",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "apps/ai/tests.py",
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md"
+  ],
+  "instructions": [
+    "Расширить /ai/ui/config/ так, чтобы native sidebar получал последние сообщения активной sidebar-сессии в безопасном формате: id, role, content, created_at, tool_name, metadata flags без raw tool payload.",
+    "При загрузке native sidebar отрисовывать последние сообщения из Django, а не пустой локальный state.",
+    "Добавить выбор модели по тем же данным LOCAL_BUSINESS_AI_MODELS, что старый sidebar, и обновлять model_id в ChatSession через существующий или новый same-origin endpoint.",
+    "Добавить очистку текущего sidebar-чата с подтверждением. Поведение должно соответствовать старому hx endpoint: удалить сообщения текущей sidebar-сессии и sidebar_summary, не удалять пользователя и не трогать чужие сессии.",
+    "Добавить ссылку или кнопку открытия полной страницы чата для текущей session/thread.",
+    "Показывать timestamps для сообщений и понятные состояния загрузки, отправки, ошибки и пустой истории.",
+    "Сохранять текущую защиту: browser не получает gateway token, actor payload пересоздается Django, UI-команды остаются allow-listed."
+  ],
+  "acceptance": [
+    "После reload native sidebar показывает последние сообщения активной sidebar-сессии.",
+    "Пользователь может выбрать модель; следующий run использует выбранный model_id и ChatSession.metadata обновляется.",
+    "Пользователь может очистить текущий sidebar-чат после подтверждения; UI и Django history становятся пустыми.",
+    "Есть переход в полный чат текущей session/thread.",
+    "Старый legacy sidebar продолжает работать при LOCAL_BUSINESS_AI_UI_DRIVER=legacy.",
+    "CopilotKit-драйвер не меняет поведение."
+  ],
+  "verification": [
+    ".venv/bin/python manage.py test apps.ai.tests",
+    "node --check static/src/ai_ui/native_ai.js",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native chat UX parity\"",
+    "git diff --check -- . ':(exclude)BACKLOG.md'"
+  ],
+  "non_goals": [
+    "Не реализовывать вложения, Markdown и slash-команды в этом task packet.",
+    "Не менять модели ChatSession, ChatMessage, ChatAttachment без отдельного решения.",
+    "Не переносить доменные write tools в браузер."
+  ]
+}

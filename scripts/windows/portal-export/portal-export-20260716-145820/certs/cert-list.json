@@ -1,0 +1,12 @@
+{
+    "subject":  "CN=WMSvc-SHA2-STC-WEB",
+    "issuer":  "CN=WMSvc-SHA2-STC-WEB",
+    "thumbprint":  "0EE6BBDAE70C5267999204ED2241B151F55C21CA",
+    "not_before":  "2026-04-14T10:16:00.0000000+03:00",
+    "not_after":  "2036-04-11T10:16:00.0000000+03:00",
+    "has_private_key":  true,
+    "dns_names":  [
+
+                  ],
+    "friendly_name":  "WMSVC-SHA2"
+}

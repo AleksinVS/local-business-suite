@@ -1,0 +1,5 @@
+{
+  ".": "Исходники React-острова CopilotKit для основной Django-оболочки",
+  "copilotkit.css": "Локальные стили встраивания CopilotKit в левую панель портала",
+  "main.jsx": "Точка входа React-острова CopilotKit"
+}

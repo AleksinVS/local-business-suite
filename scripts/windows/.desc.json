@@ -1,0 +1,14 @@
+{
+  ".": "Windows-скрипты запуска, IIS-подготовки и автозапуска",
+  "check_agent_runtime_autostart.ps1": "Диагностика задач планировщика и процессов Agent Runtime",
+  "export_portal.ps1": "Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост",
+  "import_portal.ps1": "Восстановление Portal из бандла на новом хосте: IIS-фичи, файрвол, код, venv, AppPool+сайт, wfastcgi, scheduled task, health-check",
+  "prepare_target_host.ps1": "Подготовка целевого хоста Windows 10 Pro к импорту Portal: проверка Python, домена, LDAP, IIS, портов, создание структуры каталогов",
+  "convert_xml.ps1": "Конвертация XML в PDF/DOCX через Microsoft Word с декодированием HTML-entities (&Fcy; &Icy; и т.д.)",
+  "init_project.ps1": "Инициализация каталогов и прав для IIS deployment",
+  "run_agent_runtime.ps1": "Временный запуск Agent Runtime в PowerShell Job",
+  "run_windows.ps1": "Локальный запуск Django и Agent Runtime на Windows",
+  "setup_agent_runtime_autostart.ps1": "Создание единственной задачи автозапуска Agent Runtime через Task Scheduler",
+  "start_agent_runtime.bat": "Ручной запуск Agent Runtime через BAT",
+  "start_agent_runtime.ps1": "Ручной запуск Agent Runtime через PowerShell"
+}

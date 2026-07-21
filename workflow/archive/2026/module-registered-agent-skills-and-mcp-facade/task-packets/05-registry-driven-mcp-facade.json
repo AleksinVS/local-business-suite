@@ -1,0 +1,40 @@
+{
+  "task_id": "05-registry-driven-mcp-facade",
+  "status": "implemented",
+  "title": "Registry-driven MCP facade",
+  "goal": "Refactor the existing MCP server toward shared registries and add safe read-only resources for skills, tools and module capabilities.",
+  "read_scope": [
+    "services/agent_runtime/mcp_server.py",
+    "services/agent_runtime/gateway_client.py",
+    "apps/ai/tool_definitions.py",
+    "apps/core/ai_skills.py",
+    "apps/core/right_panels.py",
+    "apps/core/source_adapters.py",
+    "contracts/ai/registry.json",
+    "services/agent_runtime/README.md"
+  ],
+  "write_scope": [
+    "services/agent_runtime/mcp_server.py",
+    "services/agent_runtime/tests/test_normalization.py",
+    "services/agent_runtime/README.md"
+  ],
+  "requirements": [
+    "Keep the existing MCP endpoint mounted at /mcp.",
+    "Add safe resources for skills, tools and module capabilities.",
+    "Do not expose secrets, PII, raw paths or gateway tokens in resources.",
+    "Preserve existing MCP tools during the refactor.",
+    "Where safe, derive tool/resource descriptions from existing registries instead of duplicating text.",
+    "Do not open external deployment/auth scope in this task."
+  ],
+  "acceptance": [
+    "MCP server still starts with the agent runtime.",
+    "MCP resources are available for registered skills and tool descriptions.",
+    "Existing MCP tools continue to call Django gateway.",
+    "README documents that MCP is an external facade, not the internal sidebar transport."
+  ],
+  "verification": [
+    ".venv/bin/python -m unittest services.agent_runtime.tests.test_normalization -v",
+    ".venv/bin/python manage.py check",
+    "curl -fsS http://127.0.0.1:8090/health"
+  ]
+}

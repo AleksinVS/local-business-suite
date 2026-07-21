@@ -1,0 +1,37 @@
+{
+  "task_id": "06-single-ranking-profile",
+  "title": "Один профиль ранжирования и упрощение режимов поиска",
+  "status": "ready",
+  "objective": "Свести runtime-поиск знаний к одному профилю ранжирования по умолчанию (гибрид FTS + вектор, RRF) и сократить публичные параметры ИИ-бота до выбора корпуса knowledge/source_data, сохранив trace и все гейты доступа.",
+  "write_scope": [
+    "apps/memory/retrieval.py",
+    "apps/memory/tests.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tests.py",
+    "contracts/ai/tools.json",
+    "docs/guides/MEMORY_USER_GUIDE.md"
+  ],
+  "requirements": [
+    "Оставить один профиль ранжирования по умолчанию: RRF-слияние fulltext и vector каналов; конфигурация нескольких профилей выводится из публичного контракта.",
+    "Публичные параметры memory.search сокращаются до корпуса (knowledge / source_data) и лимита; выбор весов и профилей ИИ-ботом невозможен.",
+    "Trust-гейт, sensitivity/scope_tokens фильтрация, source_data fallback и audit не изменяются.",
+    "Trace поиска сохраняет каналы, RRF-позиции и итоговый score для диагностики.",
+    "Внутренняя точка расширения для будущих профилей (ADR-0016, отложенный долг) остается одной функцией выбора профиля с одним значением; комментарий-ссылка на ADR-0016 и ADR-0030 решение 6.",
+    "Обновить контракт tools.json и подсказки инструмента под сокращенные параметры."
+  ],
+  "acceptance_checks": [
+    "memory.search принимает только корпус и лимит; передача профиля или весов отклоняется валидацией контракта.",
+    "Гибридная выдача использует RRF; trace показывает позиции каналов.",
+    "Тесты прав, trust-гейта и fallback проходят без изменений поведения.",
+    "В коде осталась одна точка выбора профиля с комментарием-ссылкой на отложенный долг ADR-0016."
+  ],
+  "verification_commands": [
+    "python manage.py check",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py test apps.memory.tests apps.ai.tests",
+    "python manage.py memory_file_content_search_e2e"
+  ],
+  "notes": [
+    "Ссылки: ADR-0030 решение 6; ADR-0016 (статус: реализация отложена)."
+  ]
+}

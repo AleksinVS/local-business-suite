@@ -1,0 +1,37 @@
+{
+  "task_id": "06-e2e-acceptance",
+  "title": "Run end-to-end acceptance for CopilotKit production candidate",
+  "status": "planned",
+  "read_scope": [
+    "scripts/e2e/tests/",
+    "docs/guides/COPILOTKIT_AG_UI_OPERATIONS.md",
+    "docs/deployment/COPILOTKIT_AG_UI_DEPLOYMENT.md",
+    "workflow/active/copilotkit-ai-ui-chat-development/"
+  ],
+  "write_scope": [
+    "scripts/e2e/tests/",
+    "workflow/active/copilotkit-ai-ui-chat-development/EXECUTOR_REPORT.implementation.md",
+    "workflow/active/copilotkit-ai-ui-chat-development/TASK_ACCEPTANCE.implementation.md"
+  ],
+  "goals": [
+    "Verify the full CopilotKit chat path against running Django, Agent Runtime and Copilot Runtime services.",
+    "Record commands, results, failures and residual risks.",
+    "Prepare owner acceptance handoff."
+  ],
+  "non_goals": [
+    "Do not mask failing e2e checks by narrowing tests without documenting the reason.",
+    "Do not write temporary logs outside .local/."
+  ],
+  "acceptance": [
+    "Django, Agent Runtime and Copilot Runtime health checks pass.",
+    "CopilotKit e2e scenario passes.",
+    "Legacy rollback smoke is executed or explicitly deferred with risk.",
+    "Implementation report and acceptance report are written."
+  ],
+  "verification": [
+    "curl -fsS http://127.0.0.1:8001/health/",
+    "curl -fsS http://127.0.0.1:8090/health",
+    "curl -fsS http://127.0.0.1:3100/health",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"CopilotKit\""
+  ]
+}

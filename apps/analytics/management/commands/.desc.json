@@ -1,0 +1,10 @@
+{
+  ".": "Management commands for knowledge-driven analytics",
+  "analytics_dedup_source.py": "Find duplicate and near-duplicate analytics content objects",
+  "analytics_extract_source.py": "Extract knowledge and analytics facts from source content",
+  "analytics_recalculate_metrics.py": "Recalculate analytics metrics and monitors",
+  "analytics_reflect_knowledge.py": "Reflect over analytics facts and propose metric candidates",
+  "analytics_run_diagnostic.py": "Run diagnostic workflow for an analytics signal",
+  "analytics_sync_source.py": "Sync analytics sources from contracts or source fixtures",
+  "migrate_legacy_analytics_control_db.py": "Copy legacy analytics tables from main_vault.sqlite3 to data/db/analytics_control.sqlite3"
+}

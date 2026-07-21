@@ -1,0 +1,27 @@
+{
+    "bundle_name":  "portal-export-20260716-145820",
+    "created_at_utc":  "2026-07-16T11:58:54.0313100Z",
+    "source_host":  "STC-WEB",
+    "portal_root":  "C:\\inetpub\\portal",
+    "iis_site":  "portal",
+    "iis_apppool":  "portal",
+    "scheduled_task":  "\\Portal\\Portal Agent Runtime",
+    "includes":  {
+                     "iis":  true,
+                     "task":  true,
+                     "firewall":  true,
+                     "certs":  true,
+                     "source":  true,
+                     "data":  false,
+                     "db":  true,
+                     "env":  true
+                 },
+    "target_instructions":  "Используйте import_portal.ps1 для восстановления на новом хосте.",
+    "sizes_mb":  {
+                     "iis":  0.42,
+                     "firewall":  0,
+                     "tasks":  0,
+                     "source":  0,
+                     "certs":  0
+                 }
+}

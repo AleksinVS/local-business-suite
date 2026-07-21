@@ -1,0 +1,12 @@
+{
+  ".": "Workflow: PWA-first уведомления и опциональный Tauri-клиент",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ, read/write scope и приемки уведомлений",
+  "ARCHITECT_PLAN.json": "Исполнительный план этапов PWA/Tauri уведомлений",
+  "EXECUTOR_REPORT.documentation.md": "Отчет о подготовке проектной и исполнительной документации",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка документационного среза уведомлений",
+  "EXECUTOR_REPORT.implementation.md": "Отчет о реализации этапа 1 PWA/browser notifications",
+  "TASK_ACCEPTANCE.implementation.md": "Техническая приемка реализации этапа 1 PWA/browser notifications",
+  "EXECUTOR_REPORT.tauri.md": "Отчет о реализации этапа 2 Tauri desktop notifier",
+  "TASK_ACCEPTANCE.tauri.md": "Техническая приемка этапа 2 Tauri desktop notifier",
+  "task-packets": "Task packets для серверного домена, PWA, событий заявок, проверок и Tauri"
+}

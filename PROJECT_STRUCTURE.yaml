@@ -1,0 +1,634 @@
+# PROJECT STRUCTURE
+# AUTO-GENERATED - DO NOT EDIT
+
+apps: # Django-приложения: бизнес-логика, API и шаблоны
+  accounts: # Аутентификация, хелперы и сидирование ролей
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    ldap_backend.py: file # LDAP-бэкенд аутентификации
+    middleware.py: file # Middleware для согласования ручного входа с REMOTE_USER
+    models.py: file # Расширенная модель пользователя (CustomUser)
+    services.py: file # Сервисы локального управления пользователями и AD identity link
+    settings_descriptors.py: file # Доменные descriptors для Settings Center по пользователям и AD link
+    signals.py: file # Сигналы Django (пост-сохранение пользователя)
+    tests.py: file # Тесты приложения
+    views.py: file # Представления аутентификации
+  ai: # Панель управления чат-агентом, шлюз инструментов и аудит AI
+    management: # Management command package for AI chat runtime data
+      commands: file
+    ui_runtime: # Общий runtime-слой AI UI: выбор драйвера, actor context, подпись и config payload
+      __init__.py: file # Инициализация пакета общего AI UI runtime
+      actor.py: file # Создание и HMAC-подпись actor/session payload для UI-драйверов
+      config.py: file # Сборка безопасной конфигурации AI UI sidebar для браузера
+      drivers.py: file # Разрешение драйверов AI UI: copilotkit, native
+    admin.py: file # Регистрация моделей в Django Admin
+    ai_skills.py: file # Системные AI skills приложения AI, включая ai.skill_creator
+    chat_settings.py: file # Разрешение эффективных runtime-настроек full-page/sidebar AI-чата
+    commands.py: file # Предопределённые slash-команды
+    context_processors.py: file # Template flags и базовый route context для встроенного AI-чата без DB-запросов
+    contracts.py: file # Валидаторы доменных контрактов ИИ (реестр, инструменты, типы задач, настройки чата, семантические кросс-проверки), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    forms.py: file # Формы ввода чата
+    media_policies.py: file # Политика защищённой выдачи вложений ИИ-чата (префикс chat_attachments) для media-dispatcher: доступ владельцу по цепочке ChatAttachment->message->session->user
+    models.py: file # Модели: ChatSession, ChatMessage, AIWindowContextSnapshot, PendingAction, AgentActionLog, SlashCommand
+    page_context.py: file # Валидация, server-side snapshot и resolver безопасного контекста окна для AI-чата
+    runtime_client.py: file # Клиент для связи с agent runtime (HTTP)
+    services.py: file # Сервисы: генерация заголовков, история сессий, операции с нарядами
+    settings_descriptors.py: file # Доменные descriptors Settings Center для AI runtime contracts
+    skill_authoring.py: file # Валидация и атомарная запись runtime AI skills
+    skills_service.py: file # Сервис каталога AI skills из модульного registry и contract-файлов
+    tool_definitions.py: file # Определения инструментов (source of truth)
+    tooling.py: file # Движок выполнения инструментов и confirmation flow
+    urls.py: file # URL-маршруты AI-чата
+    views.py: file # Представления: чат, стриминг, генерация заголовков, CRUD команд
+  analytics: # Операционные дашборды внутри Django
+    management: # Analytics management command package
+      commands: file
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    contracts.py: file # Валидаторы доменных контрактов аналитики (реестр датасетов, источники, scope-правила, бизнес-факты, метрики, мониторы, playbook-и, workflow-маршруты, dedup и retention), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    models.py: file # Модели аналитики
+    services.py: file # Сервисы knowledge-driven analytics pipeline и analytics projection из SourceObjectEnvelope
+    urls.py: file # URL-маршруты аналитики
+    views.py: file # Представления дашбордов
+  core: # Общие словари, дашборд, формы настроек и AI-утилиты
+    management: # Пакет management-команд core
+      commands: file
+    admin.py: file # Регистрация моделей в Django Admin
+    ai_skills.py: file # Общий контракт AgentSkillProvider и registry модульных AI skills
+    apps.py: file # Конфигурация приложения (в ready регистрирует system checks)
+    checks.py: file # Django system checks: валидация бизнес-контрактов (тег contracts), вынесенная с импорта settings в штатный manage.py check (ADR-0031)
+    context_processors.py: file # Контекстные процессоры шаблонов
+    contract_drift.py: file # Диагностика дрейфа default (contracts/) vs runtime (data/contracts/) по всем контрактам реестра Settings Center: три исхода (совпадает / рабочая копия изменена / кандидат на перенос из дефолта), только диагностика без автослияния (ADR-0031 п.4)
+    contract_store.py: file # Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)
+    contracts.py: file # Core-workflow валидаторы, не принадлежащие доменам: реестр интеграций, task brief и change plan (артефакты агентного workflow и общий SDK-реестр)
+    debug_views.py: file # Debug-представления (включаются в DEBUG=True)
+    forms.py: file # Формы настроек
+    health_views.py: file # Health-check endpoint (/health/)
+    json_utils.py: file # Универсальные JSON-примитивы ядра: pretty_json/load_json_file/atomic_write_json и общие внутренние проверки _ensure_* (доменные валидаторы вынесены в contracts.py приложений, правила 3/5 AGENTS.md)
+    media.py: file # Единый защищённый media-dispatcher: реестр доменных политик по префиксу первого сегмента пути (register_media_policy) + hardening (null-байт, path traversal); ядро не импортирует доменные модели, приложения сами регистрируют политику в ready() (правила 3/5 AGENTS.md)
+    middleware.py: file # Middleware (PATH_INFO fix для IIS, debug logging)
+    models.py: file # Общие модели (Department и др.)
+    performance.py: file # Опциональный сбор latency-событий и расчет p50/p95 для базовой наблюдаемости
+    postgresql_migration.py: file # Утилиты export/import/validate для переноса legacy SQLite runtime-данных в PostgreSQL; здесь же строится словарь путей к архивным SQLite-файлам (legacy_sqlite_databases) из env — конфиг инструмента миграции, не глобальная настройка Django
+    right_panels.py: file # Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре
+    settings_descriptors.py: file # Доменные descriptors Settings Center для core contracts и .env status
+    source_adapters.py: file # Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты приложения
+    views.py: file # Представления дашборда и настроек
+  filehub: # File Source Auto Organization: 11 моделей MemoryFile*, baseline/incoming/move/stats сервисы и UI. Контур заморожен ADR-0030 решением 5 (см. README.md) до выбора пилотного источника
+    admin.py: file # Регистрация моделей MemoryFile* в Django Admin
+    apps.py: file # Конфигурация Django-приложения filehub
+    file_organization_baseline.py: file # Генератор исходной виртуальной файловой структуры с confidence, evidence, conflicts и review issues
+    file_organization_incoming.py: file # Worker входного каталога для стабильных файлов, secret blocking и виртуального размещения
+    file_organization_move.py: file # Согласованный managed_fs перенос файлов с copy/verify/quarantine/purge gate
+    file_organization_stats.py: file # Безопасные usage events, aggregation thresholds и предложения общей файловой структуры
+    file_organization.py: file # Базовый сервис автоупорядочивания файлов: profiles, stable file identity, path aliases и system views
+    models.py: file # 11 моделей MemoryFile*: stable file identity, версии, физические/виртуальные размещения, usage events, organization proposals/decisions и move jobs; db_table закреплен за исходными таблицами memory_memoryfile*
+    README.md: file # Статус заморозки контура, условия разморозки и границы с apps.memory
+    tests.py: file # Тесты контура автоупорядочивания файлов (MemoryFileAutoOrganizationTests) и admin observability
+    urls.py: file # URL-маршруты /memory/files/ и /memory/review/file-organization/ (примонтированы в config/urls.py под тем же префиксом memory/)
+    views.py: file # UI: пользовательские виртуальные структуры (/memory/files/) и операторское ревью автоупорядочивания (/memory/review/file-organization/)
+  inventory: # Каталог управляемых активов (медицинские устройства)
+    admin.py: file # Регистрация моделей в Django Admin
+    apps.py: file # Конфигурация приложения
+    forms.py: file # Формы устройств
+    models.py: file # Модель MedicalDevice (с архивацией)
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты инвентаря
+    views.py: file # Представления CRUD устройств
+  memory: # Метаданные AI memory service: sources, search documents, knowledge items, jobs, audit and eval cases
+    acl.py: file # ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens
+    admin.py: file # Регистрация моделей памяти в Django Admin
+    apps.py: file # Конфигурация Django-приложения memory
+    chat_memory.py: file # Синхронный memory.remember (файл+commit+индекс), personal/org chat knowledge writer path, organization candidacy (pending pages) и reflection
+    contracts.py: file # Валидаторы доменных контрактов памяти (sources, profiles, routing, trust/claims policy, retrieval budget, graph schema, ingestion и file organization), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    deidentification.py: file # Детерминированная деидентификация и редактирование PII перед индексированием
+    document_ingestion.py: file # Discovery/ingestion корпоративных документов из local/UNC источников и issue queue (graph schema bootstrapping/extraction helpers удалены, ADR-0030 решение 3)
+    embeddings.py: file # Локальные embedding providers для векторного индекса памяти: deterministic test profile и optional SentenceTransformers
+    external_connectors.py: file # External API connector landing zone, database/sqlite queue backends and memory handoff
+    graph_backends.py: file # Интерфейсы будущего graph backend; прямой графовый поиск временно выключен до отдельной стратегии (ADR-0030 решение 3: LLM graph-extraction контур удален, канал остается заглушкой)
+    ingestion.py: file # Общие текстовые helpers для indexing без legacy snapshots/chunks
+    knowledge_edges.py: file # Валидатор блока relations: frontmatter против контролируемого словаря типов рёбер и детерминированный материализатор MemoryKnowledgeEdge (ADR-0030 решение 3, без LLM)
+    knowledge_files.py: file # Файловый Git-репозиторий знаний: Markdown+YAML формат, безопасная запись/чтение, cross-platform lock, генерация index.md и log.md из git
+    models.py: file # Модели metadata/authority слоя памяти, trusted sources, search documents, claims и knowledge items
+    policies.py: file # Политики доступа к search documents, knowledge items, scope tokens и trusted source decisions
+    retrieval.py: file # Оркестрация memory.search с FTS/vector candidates, trusted-source gate, deterministic rank fusion, citations и audit
+    review_safety.py: file # Безопасная сериализация текста и metadata для UI ревью памяти без raw secrets/PII
+    review_selectors.py: file # Selectors и read-only ReviewQueueItem projection для очереди ревью, состояния индекса, pending-знаний и комбинированного аудита (issues+queue+git log)
+    review_services.py: file # Сервисный слой действий ревью issue/индекса (мутация записи + safe review_log в metadata) и accept/reject pending-кандидатов знаний
+    routing.py: file # Server-side routing decisions for memory retrieval by sensitivity level
+    secret_backends.py: file # Provider-neutral secret handle backend with Vaultwarden-compatible external link MVP
+    security.py: file # DLP-guard для блокировки credential material перед попаданием в memory pipeline
+    selectors.py: file # QuerySet-селекторы источников, search documents и jobs
+    services.py: file # Сервисы синхронизации sources, lifecycle jobs, audit записи и memory projection из SourceObjectEnvelope
+    settings_descriptors.py: file # Доменные descriptors Settings Center для memory contracts, ACL и ingestion settings
+    source_text_extraction.py: file # Извлечение безопасного search text из текстовых, CSV/TSV и .xls/.xlsx файлов для FTS/vector индексов
+    storage_backends.py: file # StorageBackend MVP для managed_fs с проверкой относительных путей, SHA-256 и размера (используется apps.filehub)
+    urls.py: file # URL-маршруты UI ревью памяти под /memory/review/ (контур File Source Auto Organization вынесен в apps.filehub, ADR-0030 решение 5)
+    vector_backends.py: file # Backend-neutral vector/full-text interface, PostgreSQL FTS, SQLite FTS5 fallback and LanceDB vector backend
+    views.py: file # Django views рабочего UI ревью памяти и поискового индекса
+  notifications: # Домен пользовательских уведомлений: серверная очередь, получатели, настройки, браузерные клиенты и API
+    admin.py: file # Регистрация моделей уведомлений в Django Admin
+    apps.py: file # Конфигурация приложения уведомлений
+    models.py: file # Модели событий уведомлений, получателей, настроек, браузерных клиентов, device tokens и кодов подключения
+    selectors.py: file # Выборки уведомлений текущего пользователя и счетчики
+    services.py: file # Сервисы создания безопасных уведомлений, отметок состояний, настроек, регистрации браузеров и device-токенов
+    tests.py: file # Unit и integration тесты домена уведомлений
+    urls.py: file # URL-маршруты центра уведомлений и API
+    views.py: file # JSON API уведомлений, страница центра уведомлений и корневой service worker
+  settings_center: # Reusable Settings Center: descriptors, registry, UI, audit, runtime contract apply, env proposals and contextual help
+    admin.py: file # Django Admin registration for Settings Center audit models
+    apps.py: file # Django AppConfig for Settings Center
+    contract_services.py: file # Runtime contract preview/apply service with validation and atomic writes
+    descriptors.py: file # Dataclass contract for setting descriptors and safe context masking
+    env_services.py: file # .env effective status and proposal generation service
+    forms.py: file # Forms for contracts, env proposals, help and user workflows
+    help_services.py: file # Contextual help context and mini-chat response service
+    models.py: file # Audit and env proposal models
+    policies.py: file # Server-side permissions for settings and user management
+    registry.py: file # Registry loading domain descriptors from core/accounts/ai/memory
+    services.py: file # Generic audit/hash/masked diff helpers
+    tests.py: file # Settings Center tests
+    urls.py: file # URL routes for Settings Center
+    views.py: file # Django template/HTMX views for Settings Center
+  waiting_list: # Лист ожидания клиентов
+    admin.py: file # Регистрация моделей в Django Admin
+    ai_skills.py: file # Модульные AI skills листа ожидания для открытия записей и workflow-инструкций
+    apps.py: file # Конфигурация приложения
+    forms.py: file # Формы листа ожидания
+    models.py: file # Модель WaitingListEntry
+    policies.py: file # Политики доступа
+    right_panel.py: file # RightPanelProvider листа ожидания для безопасного открытия записи в общем правом сайдбаре
+    services.py: file # Сервисы листа ожидания
+    source_adapter.py: file # SourceAdapter листа ожидания для memory source_data search и analytics projection
+    tests.py: file # Тесты приложения
+    urls.py: file # URL-маршруты
+    views.py: file # Представления листа ожидания
+  workorders: # Модуль заявок с workflow (наряды-заказы)
+    admin.py: file # Регистрация моделей в Django Admin
+    ai_skills.py: file # Модульные AI skills заявок для открытия карточек и workflow-инструкций
+    apps.py: file # Конфигурация приложения
+    contracts.py: file # Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    forms.py: file # Формы нарядов
+    media_policies.py: file # Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки
+    models.py: file # Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority
+    notification_events.py: file # Производители безопасных уведомлений по событиям заявок
+    policies.py: file # Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory
+    right_panel.py: file # RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре
+    selectors.py: file # Запросы для получения видимых нарядов
+    services.py: file # Сервисы: создание, переходы статусов, подтверждение закрытия, оценка
+    settings_descriptors.py: file # Дескрипторы настроек заявок для центра настроек
+    source_adapter.py: file # SourceAdapter заявок для memory source_data search и analytics projection
+    tests.py: file # Тесты приложения
+    tree.py: file # Серверная проекция дерева заявок по подразделениям, медизделиям и заявкам
+    urls.py: file # URL-маршруты нарядов
+    views.py: file # Представления: Kanban-доска, детали наряда, комментарии
+archive: # Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы
+  AGENT_RUNTIME_SETUP.md: file # Настройка agent runtime (устарело)
+  AI_FIRST_CODE_FIRST_REMEDIATION_PLAN.md: file # План remediation AI-first
+  AI_FIRST_CODE_FIRST_REVIEW.md: file # Ревью AI-first подхода
+  BUGFIX_400_BAD_REQUEST.md: file # Отчёт об исправлении 400 ошибок
+  BUGFIX_IIS_AUTHENTICATION.md: file # Отчёт об исправлении IIS аутентификации
+  IIS_PATH_INFO_FIX.md: file # Исправление PATH_INFO для IIS FastCGI
+  PROJECT_HANDOFF.md: file # Handoff-документ: история проекта и текущее состояние
+  SECURE_SECRETS.md: file # Гайд по безопасному хранению секретов (устарел → .env)
+clients: # Пользовательские клиентские приложения, устанавливаемые отдельно от Django
+  desktop-notifier: # Опциональный Tauri-клиент уведомлений в трее для Windows и Linux
+    src: # Frontend-код окна Tauri-клиента уведомлений
+      main.js: file # Подключение устройства, Stronghold storage, polling, уведомления ОС и открытие портала
+      styles.css: file # Стили окна Tauri-клиента
+    src-tauri: # Rust runtime Tauri 2 для настольного клиента уведомлений
+      build.rs: file # Tauri build hook
+      Cargo.toml: file # Cargo manifest Tauri-клиента и plugin dependencies
+      tauri.conf.json: file # Конфигурация окна, сборки, bundle и security policy
+    index.html: file # HTML-точка входа Tauri webview
+    package-lock.json: file # Lock-файл npm-зависимостей Tauri-клиента
+    package.json: file # npm-скрипты клиента, зависимости Tauri/Vite и команды сборки
+config: # Конфигурация Django и JSON-контракты
+  asgi.py: file # ASGI-точка входа
+  settings.py: file # Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)
+  urls.py: file # Корневые URL-маршруты (include всех приложений)
+  views.py: file # Корневые представления (redirect)
+  wsgi.py: file # WSGI-точка входа
+contracts: # Версионируемые default-контракты; runtime-копии создаются в data/contracts/
+  ai: # Default AI-контракты, которые читает Django и agent runtime
+    chat_settings.json: file # Общий runtime contract настроек основного и встроенного AI-чата
+    memory_claims_policy.json: file # Политика жизненного цикла claims/beliefs памяти
+    memory_file_organization_profiles.json: file # Дефолтные профили автоупорядочивания файловых источников без host-specific путей
+    memory_graph_schema.json: file # Контролируемый словарь типов рёбер/концептов для relations: frontmatter и MemoryKnowledgeEdge материализатора (ADR-0030 решение 3; LLM bootstrapping/extraction контур удален)
+    memory_ingestion_profiles.json: file # Дефолтные профили ingestion-коннектора памяти: adapters, parsers, OCR, limits и policies
+    memory_profiles.json: file # Дефолтные профили chunking, extraction, indexing и ranking для памяти
+    memory_retrieval_budget.json: file # Бюджеты lightweight retrieval orchestration без обязательного LLM в hot path
+    memory_routing.json: file # Дефолтные правила sensitivity routing для памяти
+    memory_sources.json: file # Дефолтный каталог источников сервиса памяти СоСНА
+    memory_trust_policy.json: file # Политика надежных источников памяти и допуска в direct agent context
+    models.json: file # Каталог моделей для AI runtime
+    registry.json: file # AI registry и ссылки на каталоги
+    task_types.json: file # Каталог bounded task types
+    tools.json: file # Каталог доступных AI tools
+  analytics: # Default analytics dataset contracts copied to data/contracts/analytics on first run
+    analysis_scope_rules.json: file # Rules that constrain analytics samples before AI processing
+    business_facts.json: file # Business fact types materialized from knowledge extraction
+    datasets.json: file # Canonical default analytics dataset registry
+    dedup_rules.json: file # Cross-source content and semantic deduplication rules
+    diagnostic_playbooks.json: file # AI diagnostic playbooks for analytics signals
+    metrics.json: file # Metric definitions calculated from analytics facts
+    monitors.json: file # Monitor thresholds that create analytics signals
+    retention_profiles.json: file # Retention profiles for analytics runtime artifacts
+    sources.json: file # Analytics source declarations including IMAP, memory, DMS and API sources
+    workflow_routes.json: file # Workflow routes launched from analytics diagnostics
+  integrations: # Default контракты интеграций
+    registry.json: file # Реестр внешних систем и их transport/business границ
+  schemas: # JSON Schema для машинно-читаемых контрактов проекта
+    analytics_business_facts.schema.json: file # Schema для типов бизнес-фактов аналитики
+    analytics_dedup_rules.schema.json: file # Schema для правил дедупликации аналитики
+    analytics_diagnostic_playbooks.schema.json: file # Schema для diagnostic playbooks аналитики
+    analytics_metrics.schema.json: file # Schema для метрик аналитики
+    analytics_monitors.schema.json: file # Schema для мониторов аналитики
+    analytics_retention_profiles.schema.json: file # Schema для retention profiles аналитики
+    analytics_scope_rules.schema.json: file # Schema для правил ограничения аналитической выборки
+    analytics_sources.schema.json: file # Schema для источников knowledge-driven analytics
+    analytics_workflow_routes.schema.json: file # Schema для workflow routes аналитики
+    memory_claims_policy.schema.json: file # Schema для политики claims/beliefs памяти
+    memory_file_organization_profiles.schema.json: file # Schema для профилей автоупорядочивания файловых источников
+    memory_graph_schema.schema.json: file # Schema для контролируемого словаря типов рёбер/концептов relations: (ADR-0030 решение 3)
+    memory_ingestion_profiles.schema.json: file # Schema для профилей ingestion-коннектора памяти
+    memory_profiles.schema.json: file # Schema для профилей chunking, extraction, indexing и ranking памяти
+    memory_retrieval_budget.schema.json: file # Schema для бюджета retrieval orchestration памяти
+    memory_routing.schema.json: file # Schema для правил sensitivity routing памяти
+    memory_sources.schema.json: file # Schema для каталога источников сервиса памяти
+    memory_trust_policy.schema.json: file # Schema для политики надежных источников памяти
+    workorder_status_colors.schema.json: file # Schema для палитры цветов статусов заявок
+  role_rules.json: file # Default правила ролей и capabilities
+  workflow_rules.json: file # Default workflow статусы и переходы
+  workorder_status_colors.json: file # Default палитра цветов статусов заявок для интерфейса
+docker: # Runtime-скрипты контейнерного production запуска
+  entrypoint.prod.sh: file # Entrypoint web-контейнера: migrate, collectstatic, seed roles, gunicorn
+docs: # Документация проекта
+  adr: # Architecture Decision Records
+    ADR-0001-local-first-monorepo.md: file # ADR: Local-first monorepo архитектура
+    ADR-0002-config-driven-policy-and-workflow.md: file # ADR: Config-driven политики и workflow
+    ADR-0003-ai-memory-service.md: file # ADR: Архитектура сервиса памяти СоСНА
+    ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md: file # ADR: Ingestion-коннектор памяти и bootstrapping схемы графа
+    ADR-0005-chat-derived-memory-and-secret-handles.md: file # ADR: Память из AI-чата, reflection jobs и secret handles
+    ADR-0006-external-system-knowledge-connectors.md: file # ADR: Коннекторы сбора знаний из внешних информационных систем
+    ADR-0007-settings-center-and-contextual-help.md: file # ADR: Settings Center, контекстная справка и управляемые runtime-настройки
+    ADR-0008-knowledge-driven-business-analytics.md: file # ADR: Knowledge-driven business analytics
+    ADR-0009-trusted-memory-sources-claims-and-lightweight-retrieval.md: file # ADR: Trusted memory sources, claim/belief layer and lightweight retrieval
+    ADR-0010-memory-mvp-simplification.md: file # ADR: Упрощение MVP-архитектуры памяти
+    ADR-0011-file-backed-knowledge-and-unified-search.md: file # ADR: Файловые знания, раздельные базы и единый поиск
+    ADR-0012-data-anonymization-and-privacy-pipeline.md: file # ADR: Надежное обезличивание данных и контур приватности
+    ADR-0013-file-only-knowledge-body.md: file # ADR: Текст знания только в файле знания
+    ADR-0014-mlflow-memory-evaluation-and-tracing.md: file # ADR: MLflow для оценки качества и трассировки системы памяти
+    ADR-0015-file-content-fts-vector-search.md: file # ADR: FTS и векторный поиск по содержимому файлов
+    ADR-0016-memory-hybrid-ranking-profiles.md: file # ADR: Профили гибридного ранжирования памяти
+    ADR-0017-memory-audit-review-ui.md: file # ADR: UI аудита и ревью проблем памяти и поискового индекса
+    ADR-0018-universal-source-adapters-memory-analytics.md: file # ADR: Универсальные источники для памяти и аналитики
+    ADR-0019-context-aware-sidebar-ai-chat.md: file # ADR: Контекстный ИИ-чат в левой боковой панели
+    ADR-0020-universal-right-drawer-ai-navigation.md: file # ADR: Универсальное открытие правого сайдбара ИИ-ботом
+    ADR-0021-module-registered-agent-skills-and-mcp-facade.md: file # ADR: Модульные AI skills и registry-driven MCP-фасад
+    ADR-0022-interface-russification-and-localization-roadmap.md: file # ADR: Русскоязычный интерфейс портала и путь к локализации
+    ADR-0023-workorder-tree-view-and-customer-branch-access.md: file # ADR: Дерево заявок и доступ заказчика по ветке отделения
+    ADR-0024-service-extraction-readiness.md: file # ADR: Готовность к выносу сервисов без смены основного стека
+    ADR-0025-file-source-auto-organization.md: file # ADR: Автоупорядочивание файловых источников через виртуальные структуры и управляемый перенос
+    ADR-0026-pwa-first-and-optional-tauri-notifications.md: file # ADR: PWA-first уведомления без стороннего Web Push и опциональный Tauri-клиент
+    ADR-0027-copilotkit-ag-ui-django-integration.md: file # ADR: CopilotKit и AG-UI как дополнительный интерфейс ИИ-чата в Django UI
+    ADR-0028-versioned-ai-ui-protocol-foundation.md: file # ADR: Версионируемая основа AI UI протоколов для CopilotKit и самописного интерфейса
+    ADR-0029-postgresql-primary-store-and-sqlite-fork.md: file # ADR: PostgreSQL как основное хранилище и вынос SQLite-варианта
+    ADR-0030-memory-alignment-hybrid-knowledge-v05.md: file # ADR: Приведение системы памяти к архитектуре hybrid-knowledge v0.5
+    ADR-0031-runtime-contract-store-and-delivery.md: file # ADR: Единый слой доступа к runtime-контрактам и их доставка в agent-runtime
+    ADR-0032-retire-legacy-ai-ui-driver.md: file # ADR: Вывод legacy-драйвера AI UI
+    ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md: file # ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)
+  ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
+    NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
+    NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
+  architecture: # Архитектурные документы проекта
+    AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
+    ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
+    ARCHITECTURE.md: file # Общая архитектура (слои, правила)
+    blueprint.md: file # Blueprint — детальный план системы
+    COPILOTKIT_AG_UI_INTEGRATION_PLAN.md: file # План интеграции CopilotKit и AG-UI в основной Django UI
+    COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md: file # План разработки ИИ-чата в режиме CopilotKit UI
+    DESIGN_PATTERNS_REVIEW_2026-06-01.md: file # Анализ полезных паттернов проектирования для текущей архитектуры
+    DOMAIN_MODEL.md: file # Доменная модель (сущности, инварианты)
+    INTEGRATIONS.md: file # Интеграции с внешними системами
+    KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md: file # План непрерывной бизнес-аналитики из знаний, email, документов и DMS
+    MEMORY_CHAT_REFLECTION_AND_SECRET_HANDLES_PLAN.md: file # План памяти из AI-чата, reflection и secret handles
+    MEMORY_COMPLETION_GAP_ANALYSIS.md: file # Gap analysis текущей реализации системы памяти
+    MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_GAP_REVIEW.md: file # Legacy gap review реализации external information system connector MVP
+    MEMORY_EXTERNAL_SYSTEMS_CONNECTOR_PLAN.md: file # План сбора знаний из внешних информационных систем
+    MEMORY_FILE_BACKED_KNOWLEDGE_PLAN.md: file # План файлового хранения знаний, раздельных баз и единого поиска
+    MEMORY_FILE_ONLY_KNOWLEDGE_BODY_PLAN.md: file # План хранения текста знания только в файле знания
+    MEMORY_FILE_SOURCE_AUTO_ORGANIZATION_PLAN.md: file # План автоупорядочивания файловых источников: baseline, incoming, виртуальные структуры, перенос и S3-ready storage
+    MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md: file # План ingestion-коннектора и bootstrapping схемы графа памяти
+    MEMORY_MVP_CURRENT_STATE.md: file # Текущее фактическое состояние MVP системы памяти
+    MEMORY_MVP_REMEDIATION_PLAN.md: file # План исправления разрывов MVP-памяти
+    MEMORY_MVP_SIMPLIFICATION_PLAN.md: file # План упрощения MVP-архитектуры памяти
+    MEMORY_SERVICE_IMPLEMENTATION_PLAN.md: file # План реализации сервиса памяти СоСНА
+    MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md: file # План trusted sources, claim/belief layer и lightweight retrieval orchestration
+    NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md: file # План разработки основного самописного AG-UI ИИ-чата
+    OBSERVABILITY_BASELINE.md: file # Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report
+    POLICY_MODEL.md: file # Модель политик доступа
+    POSTGRESQL_PRIMARY_STORE_PLAN.md: file # План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта
+    project-knowledge-system-v0.1.md: file # Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)
+    PWA_AND_TAURI_NOTIFICATIONS_PLAN.md: file # План PWA-first уведомлений и опционального Tauri-клиента
+    SERVICE_EXTRACTION_GUIDE.md: file # Правила безопасного выноса технических сервисов из Django
+    SETTINGS_CENTER_IMPLEMENTATION_PLAN.md: file # План реализации Settings Center, GUI настроек и контекстной справки
+  deployment: # Гайды по деплою (Docker, IIS)
+    AI_UI_PROTOCOL_DEPLOYMENT.md: file # Deployment note по выбору AI UI драйвера copilotkit/native
+    COPILOTKIT_AG_UI_DEPLOYMENT.md: file # Deployment note для CopilotKit Runtime, AG-UI endpoint и React island
+    DEPLOYMENT.md: file # Основной гайд по деплою (Docker + VPS)
+    DESKTOP_NOTIFIER_DEPLOYMENT.md: file # Инструкция сборки и распространения Tauri-клиента уведомлений
+    IIS_SSO.md: file # Настройка IIS с Windows Authentication SSO
+    MEMORY_DEPLOYMENT.md: file # Развертывание, runtime contracts и smoke-проверки системы памяти
+    POSTGRESQL_MIGRATION.md: file # Runbook миграции основного репозитория с SQLite на одну PostgreSQL database
+    SETTINGS_CENTER_DEPLOYMENT.md: file # Deployment note для Settings Center, env proposals, migrations и restart semantics
+    WINDOWS_RUN.md: file # Запуск на Windows (разработка)
+  guides: # Руководства разработчика
+    AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
+    AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
+    AI_UI_PROTOCOL_OPERATIONS.md: file # Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native
+    ARCHITECTURE_REVIEW_2026-06-01.md: file # Архитектурное ревью проекта от 2026-06-01 и план рекомендуемых исправлений
+    ARCHITECTURE_REVIEW_2026-07-04.md: file # Архитектурное ревью 2026-07-04: находки, решения владельца и приоритеты remediation
+    CHANGE_PATTERNS.md: file # Паттерны внесения изменений
+    COPILOTKIT_AG_UI_OPERATIONS.md: file # Операционный guide по включению, проверке, разбору ошибок и rollback CopilotKit/AG-UI
+    DESKTOP_NOTIFIER_USER_GUIDE.md: file # Руководство пользователя по Tauri-клиенту уведомлений в трее
+    INTERFACE_RUSSIFICATION.md: file # Правила русскоязычных UI-строк до внедрения полноценной локализации
+    KNOWLEDGE_ANALYTICS_OPERATIONS.md: file # Операционный guide по knowledge-driven business analytics, IMAP, DMS и дедупликации
+    MEMORY_EXTERNAL_SYSTEMS_QUESTIONNAIRES.md: file # Опросники для подключения внешних информационных систем и первичного описания сущностей графа знаний
+    MEMORY_INGESTION_OPERATIONS.md: file # Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти
+    MEMORY_USER_GUIDE.md: file # Руководство пользователя и администратора по системе памяти
+    NOTIFICATIONS_USER_GUIDE.md: file # Руководство пользователя по центру уведомлений, PWA и ограничениям браузерных уведомлений
+    PROJECT_REVIEW.md: file # Чек-лист ревью проекта
+    PROJECT_STRUCTURE_SYSTEM.md: file # Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)
+    SETTINGS_CENTER_OPERATIONS.md: file # Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals
+    TEST_ACCELERATION.md: file # Практический guide по ускорению тестов без снижения покрытия
+    TESTING_POLICY.md: file # Политика тестирования, матрица обязательных проверок и независимая проверка субагентом
+    WORKER_AND_QUEUE_OPERATIONS.md: file # Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости
+  legacy: # Устаревшая документация (MVP)
+    MVP_Architecture.md: file # Архитектура MVP
+    MVP_Implementation_Plan.md: file # План реализации MVP
+  planning: # Планирование работ: backlog, активные планы и архив планов
+    active: # Активные планы крупных направлений
+      data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
+      design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
+      desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
+      knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
+      memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
+      memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
+      native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
+      postgresql-primary-store-migration.md: file # Активный план миграции основного хранилища на PostgreSQL
+      project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
+      README.md: file # Правила для активных planning-файлов
+    archive: # Архив закрытых или остановленных планов
+      2026: file
+      README.md: file # Описание архива planning-файлов
+    backlog.md: file # Актуальный backlog без архивного раздела
+    README.md: file # Правила planning-системы проекта
+drafts: directory... # Черновики и незавершённые планы, прототипы
+scripts: # Скрипты и инструменты разработки
+  dev: # Инструменты разработки для сопровождения структуры проекта
+    generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
+  e2e: # Playwright e2e configuration and tests
+    tests: # Permanent Playwright e2e scenarios
+      copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
+      health.spec.ts: file # Checks that the Django health endpoint is reachable
+      native_ai_ui.spec.ts: file # Checks native AG-UI-compatible sidebar embedding and stream parsing
+      notifications.spec.ts: file # Checks PWA manifest, root service worker and authenticated notification center behavior
+      right_panel_ai_navigation.spec.ts: file # Checks opening module objects in the shared right panel from the AI chat page
+      workorder_tree.spec.ts: file # Checks workorder tree view navigation and right drawer opening
+    playwright.config.ts: file # Playwright configuration for project e2e tests with artifacts under .local/playwright
+  linux: # Linux deployment и обслуживание
+    deploy.sh: file # Скрипт деплоя на Linux/VPS
+    setup-docker-rights.sh: file # Настройка прав пользователя для Docker на VPS
+  utils: # Утилиты локальной проверки
+    verify_ui.py: file # Верификация UI через локальный браузерный сценарий
+  windows: # Windows-скрипты запуска, IIS-подготовки и автозапуска
+    check_agent_runtime_autostart.ps1: file # Диагностика задач планировщика и процессов Agent Runtime
+    init_project.ps1: file # Инициализация каталогов и прав для IIS deployment
+    run_agent_runtime.ps1: file # Временный запуск Agent Runtime в PowerShell Job
+    run_windows.ps1: file # Локальный запуск Django и Agent Runtime на Windows
+    setup_agent_runtime_autostart.ps1: file # Создание единственной задачи автозапуска Agent Runtime через Task Scheduler
+    start_agent_runtime.bat: file # Ручной запуск Agent Runtime через BAT
+    start_agent_runtime.ps1: file # Ручной запуск Agent Runtime через PowerShell
+services: # Автономные сервисы (вне Django)
+  agent_runtime: # Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач
+    protocols: # Версионируемые AI UI protocol adapters agent runtime
+      __init__.py: file # Инициализация пакета protocol adapters
+    app.py: file # FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)
+    config.py: file # Конфигурация runtime (из переменных окружения); резолвер и источник AI-контрактов (ADR-0031)
+    contract_cache.py: file # Кэш JSON-контрактов с инвалидацией по (st_mtime_ns, st_size, st_ino) — перечитывание без перезапуска (ADR-0031)
+    gateway_client.py: file # HTTP-клиент для связи с Django tool gateway
+    graph.py: file # LangGraph graph — логика агента, активация skills и вызов инструментов
+    mcp_server.py: file # MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities
+    prompting.py: file # Системные промпты для агента
+    requirements.lock: file # Lock-файл зависимостей этого сервиса (pip-compile), отдельный от корневого requirements.lock
+    requirements.txt: file # Зависимости этого сервиса (человекочитаемый вход pip-compile)
+    schemas.py: file # Pydantic-схемы данных (запросы, ответы)
+    task_types.py: file # Обработчики типов задач (workorders, lookup, inventory, analytics)
+    tools.py: file # Клиент для вызова инструментов Django (HTTP → gateway)
+  copilot_runtime: # CopilotKit Runtime: Node-сервис, связывающий React CopilotKit UI с Python AG-UI agent runtime
+    Dockerfile: file # Контейнер Node.js для CopilotKit Runtime
+    server.mjs: file # HTTP-сервер CopilotKit Runtime v2 с AG-UI HttpAgent
+static: # Исходные статические ресурсы (CSS, JS)
+  icons: # Иконки PWA и статические пиктограммы портала
+    pwa-icon-192.png: file # PNG-иконка PWA 192x192 для Chromium/Edge
+    pwa-icon-512.png: file # PNG-иконка PWA 512x512 для Chromium/Edge
+    pwa-icon.svg: file # Масштабируемая иконка PWA для manifest.webmanifest
+  src: # Исходный код статических ресурсов
+    ai_ui: # Самописный AG-UI-compatible AI sidebar без Copilot Runtime
+      native_ai.css: file # Стили самописного AI sidebar
+      native_ai.js: file # Native AI UI driver: config, AG-UI SSE parsing и безопасные UI-команды
+    copilotkit: # Исходники React-острова CopilotKit для основной Django-оболочки
+      copilotkit.css: file # Локальные стили встраивания CopilotKit в левую панель портала
+      main.jsx: file # Точка входа React-острова CopilotKit
+  manifest.webmanifest: file # PWA manifest портала
+  service-worker.js: file # Service worker PWA без кэширования защищенных HTML/API, CopilotKit dist bundle и native AI UI bundle
+templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
+  ai: # Шаблоны чат-интерфейса AI
+    chat_detail.html: file # Основной шаблон чата (HTMX streaming, sidebar, commands)
+    copilotkit_chat.html: file # Страница CopilotKit-чата для режима LOCAL_BUSINESS_AI_UI_DRIVER=copilotkit
+    hub.html: file # Панель управления AI (инструменты, типы задач, сессии)
+  analytics: # Шаблоны аналитических дашбордов
+    dashboard.html: file # Дашборд аналитики
+  core: # Шаблоны дашборда, настроек, ролей
+    dashboard.html: file # Главный дашборд
+    department_form.html: file # Форма подразделения
+    department_list.html: file # Список подразделений
+    role_rules_form.html: file # Форма редактирования ролей
+  filehub: # Шаблоны контура File Source Auto Organization (заморожен ADR-0030 решением 5)
+    files: # Пользовательские виртуальные структуры файлов памяти
+      user_views.html: file # Личная виртуальная структура доступных пользователю файлов
+    review: # Операторское ревью автоупорядочивания файлов
+      file_organization.html: file # Сводка автоупорядочивания файлов: baseline placements, proposals и move jobs; переиспользует навигацию memory/review/_nav.html
+  inventory: # Шаблоны инвентаря (медицинские устройства)
+    device_form.html: file # Форма устройства
+    device_list.html: file # Список устройств
+  memory: # Шаблоны домена памяти
+    review: # Шаблоны рабочего UI ревью памяти
+      _nav.html: file # Навигация между сводкой, issues, индексом, файлами (apps.filehub) и журналом
+      audit.html: file # Комбинированный аудит: решенные issues, задания очереди памяти и git-история знаний
+      dashboard.html: file # Сводка открытых issues, privacy/blocker счетчиков и состояния индекса
+      index_detail.html: file # Карточка search document и действия reindex/delete stale
+      index_list.html: file # Список MemorySearchDocument с diagnostics FTS/vector
+      issue_detail.html: file # Карточка issue, безопасные metadata и действия ревью
+      issue_list.html: file # Очередь MemoryIngestionIssue с фильтрами
+      pending_list.html: file # Кандидаты personal->organization и понижения классификации, ожидающие ревью (lifecycle: pending)
+  notifications: # Шаблоны центра пользовательских уведомлений
+    partials: # Частичные шаблоны уведомлений
+      center.html: file # Выпадающий центр уведомлений в шапке портала
+    center.html: file # Страница всех уведомлений текущего пользователя
+    devices.html: file # Страница подключения и отзыва настольных клиентов уведомлений
+  registration: # Шаблоны аутентификации
+    login.html: file # Форма входа
+  settings_center: # Шаблоны Settings Center: dashboard, runtime contracts, users, env proposals и contextual help
+    partials: # HTMX partials for Settings Center contextual help
+      help_answer.html: file # Частичный ответ миничата
+      help_panel.html: file # Плавающее окно справки и миничата по конкретному setting_id
+    ad_link_form.html: file # Форма явной привязки локального пользователя к AD identity
+    dashboard.html: file # Дашборд зарегистрированных settings descriptors и audit
+    env_proposal.html: file # Форма создания .env proposal в data/
+    env_status.html: file # Статус bootstrap .env настроек
+    setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
+    user_form.html: file # Создание и изменение локального пользователя
+    user_list.html: file # Локальное управление пользователями портала
+    workflow_transitions.html: file # Матрица настройки переходов статусов заявок через workflow_rules contract
+    workorder_status_colors.html: file # Форма настройки цветов статусов заявок через runtime contract
+  waiting_list: # Шаблоны листа ожидания
+    dashboard.html: file # Дашборд листа ожидания
+    entry_detail.html: file # Детали записи
+    entry_form.html: file # Форма записи
+  workorders: # Шаблоны нарядов-заказов (Kanban, детали, формы)
+    partials: # HTMX partials заявок: доска, дерево, детали, формы и действия
+      attachments.html: file # Вложения заявки
+      board_columns.html: file # Контейнер колонок канбан-доски
+      column_config_card.html: file # Карточка настройки колонки канбана
+      column_config_form.html: file # Форма настройки колонки канбана
+      comments.html: file # Комментарии заявки
+      detail_panel_empty.html: file # Пустое состояние правой панели
+      detail_panel.html: file # Правая панель деталей заявки
+      detail_sections.html: file # Секции детальной информации заявки
+      kanban_column.html: file # Одна колонка канбан-доски с карточками заявок
+      rating_section.html: file # Оценка закрытой заявки
+      status_section.html: file # Блок статуса и переходов заявки
+      tree_row.html: file # Одна строка дерева заявок
+      tree_view.html: file # Сворачиваемое дерево заявок по подразделениям и медизделиям
+      workorder_edit_form_partial.html: file # Форма редактирования заявки для правой панели
+      workorder_form_partial.html: file # Форма создания заявки для правой панели
+      workorder_view_switcher.html: file # Переключатель режимов просмотра Доска/Дерево
+      workorders_view.html: file # Обертка текущего режима просмотра заявок: доска или дерево
+    board.html: file # Страница заявок с режимами доски и дерева
+    workorder_detail.html: file # Детали наряда
+    workorder_form.html: file # Форма создания/редактирования наряда
+  400.html: file # Страница ошибки 400
+  403.html: file # Страница ошибки 403 (Forbidden)
+  404.html: file # Страница ошибки 404
+  500.html: file # Страница ошибки 500
+  base.html: file # Базовый шаблон (navbar, sidebar, общий правый сайдбар, HTMX скрипты)
+workflow: # Исполнительные workflow-пакеты для сложных работ
+  active: # Активные workflow-блоки
+    design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки внедрения архитектурных паттернов
+      EXECUTOR_REPORT.ai-gateway-and-role-write-path.md: file # Отчет исполнения среза AI gateway, runtime logging и role write-path
+      TASK_ACCEPTANCE.ai-gateway-and-role-write-path.md: file # Приемка среза AI gateway, runtime logging и role write-path
+    desktop-notifications-pwa-tauri: # Workflow: PWA-first уведомления и опциональный Tauri-клиент
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план этапов PWA/Tauri уведомлений
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ, read/write scope и приемки уведомлений
+      EXECUTOR_REPORT.documentation.md: file # Отчет о подготовке проектной и исполнительной документации
+      EXECUTOR_REPORT.implementation.md: file # Отчет о реализации этапа 1 PWA/browser notifications
+      EXECUTOR_REPORT.tauri.md: file # Отчет о реализации этапа 2 Tauri desktop notifier
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза уведомлений
+      TASK_ACCEPTANCE.implementation.md: file # Техническая приемка реализации этапа 1 PWA/browser notifications
+      TASK_ACCEPTANCE.tauri.md: file # Техническая приемка этапа 2 Tauri desktop notifier
+    knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Architect execution plan for knowledge-driven business analytics
+      BLOCK_BRIEF.md: file # Brief for the knowledge-driven business analytics workflow
+      EXECUTOR_REPORT.knowledge-driven-business-analytics.md: file # Executor report for the MVP implementation slice
+      TASK_ACCEPTANCE.knowledge-driven-business-analytics.md: file # Acceptance report for the MVP implementation slice
+    memory-alignment-hardening: # Workflow: доводка памяти после ревью целевой архитектуры (дополнения ADR-0030 от 2026-07-06 по 2026-07-13)
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов
+      BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
+    memory-hybrid-ranking-profiles: # Workflow: профили гибридного ранжирования памяти и подсказки ИИ-бота
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план и порядок task packets
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки workflow-блока
+      EXECUTOR_REPORT.memory-hybrid-ranking-profiles.md: file # Отчет исполнения по профилям ранжирования, source semantic search и policy reindex
+      RETROSPECTIVE.md: file # Краткая ретроспектива по результатам реализации
+      TASK_ACCEPTANCE.memory-hybrid-ranking-profiles.md: file # Приемка workflow-блока по реализации профилей памяти
+    native-ag-ui-chat-development: # Workflow: разработка самописного AG-UI ИИ-чата
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Исполнительный план task packets для native AG-UI чата
+      BLOCK_BRIEF.md: file # Краткое описание цели, границ и приемки native AG-UI чата
+      EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза native AG-UI чата
+      EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого реализационного среза native AG-UI чата
+      EXECUTOR_REPORT.sidebar-parity.md: file # Отчет исполнения sidebar parity native-чата: история, модель, очистка и полный чат
+      EXECUTOR_REPORT.ux-parity-planning.md: file # Отчет подготовки исполнительной документации UX parity native-чата
+      TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза native AG-UI чата
+      TASK_ACCEPTANCE.implementation.md: file # Приемка первого реализационного среза native AG-UI чата
+      TASK_ACCEPTANCE.sidebar-parity.md: file # Приемка sidebar parity native-чата
+      TASK_ACCEPTANCE.ux-parity-planning.md: file # Приемка исполнительной документации UX parity native-чата
+    postgresql-primary-store-migration: # Workflow: миграция основного хранилища на PostgreSQL
+      task-packets: file
+      ARCHITECT_PLAN.json: file # План задач workflow-блока миграции на PostgreSQL
+      BLOCK_BRIEF.md: file # Краткое описание целей, границ и приемки миграции на PostgreSQL
+      EXECUTOR_REPORT.postgresql-code-slice.md: file # Отчет реализации кодового среза миграции на PostgreSQL
+      TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
+    project-knowledge-base-mvp: # Workflow: MVP базы проектных знаний для ИИ-агентов (kb) — исполнение спецификации T0–T6
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, ключевые ловушки для исполнителя со слабой LLM
+      BLOCK_BRIEF.md: file # Цель, границы и результат приемки блока
+    README.md: file # Правила для активных workflow-блоков
+  ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
+  archive: # Архив workflow-блоков
+    2026: # Архив workflow-блоков за 2026 год
+      ai-ui-protocol-foundation: file
+      architecture-review-remediation-2026-06-01: file
+      architecture-review-remediation-2026-07-04: file
+      block-ai-memory-service-2026-05-19: file
+      context-aware-sidebar-ai-chat: file
+      copilotkit-ag-ui-integration: file
+      copilotkit-ai-ui-chat-development: file
+      interface-russification: file
+      memory-audit-review-ui: file
+      memory-chat-reflection-secret-handles: file
+      memory-external-systems-connector: file
+      memory-file-backed-knowledge: file
+      memory-file-content-search: file
+      memory-file-only-knowledge-body: file
+      memory-file-source-auto-organization: file
+      memory-mvp-remediation: file
+      memory-mvp-simplification: file
+      memory-snapshot-chunk-removal: file
+      memory-trusted-sources-claims-retrieval: file
+      module-registered-agent-skills-and-mcp-facade: file
+      settings-center-gui: file
+      testing-policy-and-independent-verification: file
+      universal-right-drawer-ai-navigation: file
+      universal-source-adapters-memory-analytics: file
+      workorder-tree-view: file
+    README.md: file # Правила и описание архива workflow-блоков
+  templates: directory... # Шаблоны workflow-артефактов
+.dockerignore: file # Исключения из Docker build context
+.env.example: file # Шаблон переменных окружения
+.gitignore: file # Исключения из Git
+AGENTS.md: file # Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)
+BACKLOG.md: file # Корневой указатель на актуальный backlog в docs/planning/backlog.md
+Caddyfile: file # Конфигурация Caddy reverse proxy
+CLAUDE.md: file # Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)
+docker-compose.prod.yml: file # Production Docker Compose (web + agent-runtime + caddy)
+docker-compose.yml: file # Локальный Docker Compose (dev)
+Dockerfile: file # Docker-образ для web (Django + Gunicorn)
+Makefile: file # Команды сборки и проверки (venv, install, check, test, contracts, gen-struct)
+manage.py: file # Точка входа Django CLI
+package-lock.json: file # Lock-файл Node.js зависимостей
+package.json: file # Node.js зависимости и npm-скрипты: Playwright, CopilotKit React bundle, CopilotKit runtime
+pytest.ini: file # Конфигурация pytest
+requirements.lock: file # Lock-файл зависимостей (pip-compile)
+requirements.txt: file # Зависимости Python
+vite.copilotkit.config.mjs: file # Vite-конфигурация сборки React-острова CopilotKit в static/dist/copilotkit

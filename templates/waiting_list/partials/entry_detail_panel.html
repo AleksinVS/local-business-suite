@@ -1,0 +1,107 @@
+<div class="waiting-list-detail-panel" data-ai-context="{{ detail_ai_context_json }}">
+<button type="button" class="close-btn close-btn-global" onclick="closeWaitingListDrawer()">&times;</button>
+
+<div class="drawer-header">
+  <div class="header-main-info">
+    <h2>{{ entry.patient_name }}</h2>
+  </div>
+</div>
+
+<div class="drawer-content">
+  <div class="status-stepper-container" style="margin-bottom: 2rem;">
+    <div class="status-stepper">
+      <div class="stepper-track">
+        {% for status_val, status_label in status_choices %}
+          {% if status_val == entry.status %}
+            <div class="step-item active" data-status="{{ status_val }}">
+              <span class="step-label">{{ status_label }}</span>
+            </div>
+          {% else %}
+            <form hx-post="{% url 'waiting_list:transition' entry.pk %}"
+                  hx-target="#entry-detail-panel-content"
+                  hx-swap="innerHTML"
+                  class="step-form">
+              {% csrf_token %}
+              <input type="hidden" name="status" value="{{ status_val }}">
+              <button type="submit" class="step-item available" data-status="{{ status_val }}">
+                <span class="step-label">{{ status_label }}</span>
+              </button>
+            </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-grid">
+    <div class="info-item">
+      <span class="info-label">ФИО пациента</span>
+      <span class="info-value">{{ entry.patient_name }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Дата рождения</span>
+      <span class="info-value">{{ entry.patient_dob }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Телефон</span>
+      <span class="info-value">{{ entry.patient_phone }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Услуга</span>
+      <span class="info-value">{{ entry.get_service_id_display }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Целевая дата</span>
+      <span class="info-value">{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Крайняя дата</span>
+      <span class="info-value">{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</span>
+    </div>
+    <div class="info-item full-width">
+      <span class="info-label">Приоритет</span>
+      <span class="info-value">{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный{% endif %}</span>
+    </div>
+  </div>
+
+  {% if entry.comment %}
+  <div class="content-block">
+    <div class="block-header">
+      <span class="detail-label">Комментарий</span>
+    </div>
+    <div class="description-text">{{ entry.comment|linebreaks }}</div>
+  </div>
+  {% endif %}
+
+  <div class="content-block" style="margin-top: 2rem;">
+    <div class="block-header">
+      <span class="detail-label">История изменений</span>
+    </div>
+    <div class="timeline" id="audit-timeline">
+      {% if entry.audit_logs.all %}
+        {% for log in entry.audit_logs.all reversed %}
+        <div class="timeline-item">
+          <div class="timeline-time">{{ log.created_at|date:"d.m.Y H:i" }}</div>
+          <div class="timeline-text">
+            <span class="timeline-user">{{ log.actor.get_full_name|default:log.actor.username }}</span>
+            {{ log.action }}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="timeline-item">
+          <div class="timeline-text" style="color: var(--text-muted)">Нет истории</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="drawer-footer">
+  <button class="btn btn-outline"
+          hx-get="{% url 'waiting_list:update' entry.pk %}"
+          hx-target="#entry-detail-panel-content"
+          hx-swap="innerHTML">Редактировать</button>
+  <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Закрыть</button>
+</div>
+</div>

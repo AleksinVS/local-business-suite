@@ -1,0 +1,125 @@
+[
+  {
+    "code": "memory_knowledge",
+    "title": "Изменения базы знаний памяти",
+    "source_kind": "memory",
+    "owner": "analytics",
+    "enabled": true,
+    "sync_mode": "scheduled",
+    "schedule": "nightly",
+    "scope_tokens": ["org:default"],
+    "sensitivity": "internal",
+    "retention_profile": "normalized_default",
+    "config": {
+      "description": "Преобразует выбранные изменения базы знаний памяти в аналитические факты."
+    }
+  },
+  {
+    "code": "workorders",
+    "title": "Данные заявок",
+    "source_kind": "django_model",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "scope_tokens": ["org:default"],
+    "sensitivity": "internal",
+    "retention_profile": "normalized_default",
+    "config": {
+      "source_origin": "internal",
+      "source_adapter": "workorders",
+      "privacy_profile": "pii_off",
+      "access_policy": {
+        "mode": "adapter_check",
+        "policy_ref": "workorders.visible",
+        "scope_tokens": ["org:default"]
+      }
+    }
+  },
+  {
+    "code": "waiting_list",
+    "title": "Данные листа ожидания",
+    "source_kind": "django_model",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "scope_tokens": ["org:default"],
+    "sensitivity": "internal",
+    "retention_profile": "normalized_default",
+    "config": {
+      "source_origin": "internal",
+      "source_adapter": "waiting_list",
+      "privacy_profile": "pii_off",
+      "access_policy": {
+        "mode": "adapter_check",
+        "policy_ref": "waiting_list.visible",
+        "scope_tokens": ["org:default"]
+      }
+    }
+  },
+  {
+    "code": "department_reports_imap",
+    "title": "Почтовый ящик отчетов подразделений",
+    "source_kind": "email_imap",
+    "owner": "operations",
+    "enabled": false,
+    "sync_mode": "scheduled",
+    "schedule": "*/15 * * * *",
+    "scope_tokens": ["org:default"],
+    "sensitivity": "confidential",
+    "retention_profile": "email_normalized_default",
+    "config": {
+      "mailbox_code": "department_reports",
+      "folders": ["INBOX"],
+      "body_analysis": true,
+      "attachments": "metadata_and_handoff",
+      "fixture_messages": [
+        {
+          "uidvalidity": "fixture",
+          "uid": "1",
+          "message_id": "<department-report-001@example.local>",
+          "folder": "INBOX",
+          "subject": "Отчет заведующего отделением терапии за неделю 2026-W21",
+          "from": "head.therapy@example.local",
+          "to": ["reports@example.local"],
+          "sent_at": "2026-05-21T09:00:00+03:00",
+          "body": "Отчет заведующего: отделение терапии, период 2026-W21. Риск: кадровый дефицит. Обязательство: подготовить график дежурств до 2026-05-24.",
+          "attachments": []
+        }
+      ]
+    }
+  },
+  {
+    "code": "regulator_requests_imap",
+    "title": "Почтовый ящик запросов регулятора",
+    "source_kind": "email_imap",
+    "owner": "compliance",
+    "enabled": false,
+    "sync_mode": "scheduled",
+    "schedule": "*/15 * * * *",
+    "scope_tokens": ["org:default", "role:management"],
+    "sensitivity": "confidential",
+    "retention_profile": "email_normalized_default",
+    "config": {
+      "mailbox_code": "regulatory",
+      "folders": ["INBOX", "Sent"],
+      "body_analysis": true,
+      "attachments": "metadata_and_handoff",
+      "fixture_messages": [
+        {
+          "uidvalidity": "fixture",
+          "uid": "1",
+          "message_id": "<reg-request-001@example.local>",
+          "folder": "INBOX",
+          "subject": "Запрос Росздравнадзора N 2026-0012",
+          "from": "regulator@example.local",
+          "to": ["regulatory@example.local"],
+          "sent_at": "2026-05-21T10:30:00+03:00",
+          "body": "Просим предоставить 12 документов по теме описания УЗИ. Срок ответа 5 дней.",
+          "attachments": []
+        }
+      ]
+    }
+  }
+]

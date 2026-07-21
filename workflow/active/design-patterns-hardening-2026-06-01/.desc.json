@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: внедрение архитектурных паттернов 2026-06-01",
+  "BLOCK_BRIEF.md": "Краткое описание цели, границ и приемки внедрения архитектурных паттернов",
+  "ARCHITECT_PLAN.json": "Исполнительный план task packets для внедрения архитектурных паттернов",
+  "EXECUTOR_REPORT.ai-gateway-and-role-write-path.md": "Отчет исполнения среза AI gateway, runtime logging и role write-path",
+  "TASK_ACCEPTANCE.ai-gateway-and-role-write-path.md": "Приемка среза AI gateway, runtime logging и role write-path",
+  "task-packets": "Task packets для сервисного слоя, AI-команд, политик, переходников и фоновых задач"
+}

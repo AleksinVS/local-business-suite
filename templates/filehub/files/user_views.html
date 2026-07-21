@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Мои файлы памяти | {{ app_display_name }}{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Память</p>
+      <h1>Моя файловая структура</h1>
+    </div>
+  </div>
+
+  <form method="post" class="settings-form">
+    {% csrf_token %}
+    <div class="form-grid">
+      <label>
+        <span>Файл</span>
+        <select name="file_object_id" required>
+          {% for item in file_objects %}
+            <option value="{{ item.id }}">{{ item.source_code }} / {{ item.path }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Виртуальный путь</span>
+        <input type="text" name="virtual_path" placeholder="Проекты/2026/Документы/example.txt" required>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="button-link">Сохранить</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head">
+    <h2>Сохраненные размещения</h2>
+  </div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Виртуальный путь</th>
+          <th>Источник</th>
+          <th>Файл</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for placement in placements %}
+          <tr>
+            <td>{{ placement.virtual_path }}</td>
+            <td><code>{{ placement.view.source.code }}</code></td>
+            <td><code>{{ placement.file_object.file_id }}</code></td>
+            <td>{{ placement.get_status_display }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="muted">Личных размещений пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

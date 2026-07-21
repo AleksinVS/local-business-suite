@@ -1,0 +1,269 @@
+[
+  {
+    "code": "project_architecture_docs",
+    "title": "Архитектурные документы проекта",
+    "description": "Версионируемые архитектурные документы и ADR, которые можно индексировать как внутренние знания проекта.",
+    "source_kind": "documentation",
+    "domain": "project",
+    "owner": "engineering",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "docs/architecture",
+    "scope_rule": "authenticated_user",
+    "sensitivity": "internal",
+    "pii_policy": "no_pii_expected",
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "review_required",
+    "authority_class": "candidate_input",
+    "trusted_for_context": false,
+    "requires_source_review": true,
+    "review_owner": "knowledge_owner",
+    "trusted_context_kinds": [
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "project_docs_v1",
+    "chunking_profile": "long_policy_doc_v1",
+    "index_profiles": [
+      "fulltext_default"
+    ],
+    "ignore_patterns": [
+      "**/.local/**",
+      "**/deployments/**"
+    ]
+  },
+  {
+    "code": "ai_contract_defaults",
+    "title": "Дефолтные контракты ИИ",
+    "description": "Управляемые через Git ИИ-контракты и схемы без runtime-состояния, секретов и данных пациентов.",
+    "source_kind": "contract_file",
+    "domain": "ai",
+    "owner": "engineering",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "contracts/ai",
+    "scope_rule": "contract_admin",
+    "sensitivity": "internal",
+    "pii_policy": "reject_pii",
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "contract_json_v1",
+    "chunking_profile": "structured_contract_v1",
+    "index_profiles": [
+      "fulltext_default"
+    ],
+    "ignore_patterns": [
+      "**/*.tmp",
+      "**/.DS_Store"
+    ]
+  },
+  {
+    "code": "workorders",
+    "title": "Данные заявок",
+    "description": "Внутренние канбан-заявки, доступные через универсальный адаптер источников для поиска source_data и аналитики.",
+    "source_kind": "django_model",
+    "source_origin": "internal",
+    "domain": "workorders",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "django:apps.workorders.WorkOrder",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "pii_off",
+    "privacy_profile": "pii_off",
+    "access_policy": {
+      "mode": "adapter_check",
+      "policy_ref": "workorders.visible",
+      "scope_tokens": [
+        "org:default"
+      ]
+    },
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "operations",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "vector_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "waiting_list",
+    "title": "Данные листа ожидания",
+    "description": "Внутренние записи листа ожидания, доступные через универсальный адаптер источников для поиска source_data и аналитики.",
+    "source_kind": "django_model",
+    "source_origin": "internal",
+    "domain": "waiting_list",
+    "owner": "operations",
+    "enabled": true,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "django:apps.waiting_list.WaitingListEntry",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "pii_off",
+    "privacy_profile": "pii_off",
+    "access_policy": {
+      "mode": "adapter_check",
+      "policy_ref": "waiting_list.visible",
+      "scope_tokens": [
+        "org:default"
+      ]
+    },
+    "versioning_mode": "snapshot_only",
+    "retention_policy": "default_internal",
+    "trust_status": "trusted",
+    "authority_class": "system_of_record",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "operations",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default",
+      "vector_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "synthetic_workorder_timeline",
+    "title": "Синтетическая история заявок",
+    "description": "Синтетические непациентские события обслуживания для проверки поиска и RBAC.",
+    "source_kind": "synthetic_fixture",
+    "domain": "workorders",
+    "owner": "operations",
+    "enabled": false,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "synthetic:workorders.timeline",
+    "scope_rule": "workorder_visibility",
+    "sensitivity": "internal",
+    "pii_policy": "deidentify_before_index",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "short_lived_eval",
+    "trust_status": "trusted",
+    "authority_class": "approved_corpus",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "workorder_event_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "synthetic_inventory_reference",
+    "title": "Синтетический справочник медизделий",
+    "description": "Синтетические справочные записи медизделий для безопасных локальных проверок индексации.",
+    "source_kind": "synthetic_fixture",
+    "domain": "inventory",
+    "owner": "operations",
+    "enabled": false,
+    "sync_mode": "manual",
+    "schedule": null,
+    "source_ref": "synthetic:inventory.devices",
+    "scope_rule": "inventory_visibility",
+    "sensitivity": "internal",
+    "pii_policy": "no_pii_expected",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "short_lived_eval",
+    "trust_status": "trusted",
+    "authority_class": "approved_corpus",
+    "trusted_for_context": true,
+    "requires_source_review": false,
+    "review_owner": "engineering",
+    "trusted_context_kinds": [
+      "retrieved_chunk",
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "inventory_device_v1",
+    "chunking_profile": "short_business_event_v1",
+    "index_profiles": [
+      "fulltext_default"
+    ],
+    "ignore_patterns": []
+  },
+  {
+    "code": "external_api_landing_zone",
+    "title": "Зона приема внешних API",
+    "description": "Отключенный по умолчанию шаблон источника для коннекторов внешних информационных систем с очередью нормализованных пакетов.",
+    "source_kind": "external_api_snapshot",
+    "domain": "external_systems",
+    "owner": "knowledge_owner",
+    "enabled": false,
+    "sync_mode": "scheduled",
+    "schedule": "manual_until_pilot_selected",
+    "source_ref": "data/memory/external_api",
+    "scope_rule": "manual_scope_mapping",
+    "sensitivity": "internal",
+    "pii_policy": "deidentify_before_index",
+    "versioning_mode": "hard_active_soft_raw",
+    "retention_policy": "external_default",
+    "trust_status": "review_required",
+    "authority_class": "candidate_input",
+    "trusted_for_context": false,
+    "requires_source_review": true,
+    "review_owner": "knowledge_owner",
+    "trusted_context_kinds": [
+      "citation"
+    ],
+    "untrusted_handling": "review_required",
+    "extractor_profile": "external_api_object_v1",
+    "chunking_profile": "external_api_object_v1",
+    "index_profiles": [
+      "fulltext_default"
+    ],
+    "ignore_patterns": [],
+    "ingestion_profile": "external_api_snapshot_v1",
+    "external_connector": {
+      "queue_backend": "sqlite",
+      "raw_mode": "short_lived_raw_quarantine",
+      "scope_mapping": "manual",
+      "retention": {
+        "raw_quarantine_days": 14,
+        "normalized_envelope_days": 90,
+        "manifest_days": 365,
+        "tombstone_days": 1095
+      }
+    }
+  }
+]

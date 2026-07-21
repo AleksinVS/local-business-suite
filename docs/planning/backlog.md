@@ -187,6 +187,7 @@ Generic external connector MVP архивирован как reference implement
 Контекст:
 - черновое архитектурное решение находится в `docs/adr/ADR-0012-data-anonymization-and-privacy-pipeline.md`;
 - черновой план находится в `docs/planning/active/data-anonymization-privacy-pipeline.md`;
+- обзор моделей-кандидатов глубокого слоя (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) — в `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`;
 - связанный Settings Center план (реализован, принят) — в архиве: `docs/planning/archive/2026/settings-center-gui.md`.
 
 Предварительный scope:
@@ -233,10 +234,10 @@ Generic external connector MVP архивирован как reference implement
 
 ### База проектных знаний для ИИ-агентов (project knowledge base, kb)
 
-Спроектирована локальная система знаний о проекте для агентов-архитекторов и агентов-разработчиков (адаптация гибридной концепции управления знаниями): markdown-канон `docs/knowledge/` + производная SQLite-проекция (FTS5, граф рёбер, очередь), CLI `kb`, двухуровневый контур качества с сессией-уборщиком. Проект прошёл внутреннее ревью и перенос применимых находок ревью основной системы знаний (версия 0.5); исполнительная спецификация T0–T6 готова и рассчитана на исполнителя со слабой LLM.
+Спроектирована локальная система знаний о проекте для агентов-архитекторов и агентов-разработчиков (адаптация гибридной концепции управления знаниями): markdown-канон `docs/knowledge/` + производная SQLite-проекция (FTS5, граф рёбер, очередь), CLI `kb`, двухуровневый контур качества с сессией-уборщиком. Проект прошёл внутреннее ревью и перенос применимых находок ревью основной системы знаний (версия 0.5); исполнительная спецификация T0–T6 готова — DDL, алгоритмы и форматы заданы дословно, исполнение воспроизводимо любой моделью.
 
 Контекст:
-- проектный документ: `docs/architecture/project-knowledge-system-v0.1.md` (v0.7, Proposed);
+- проектный документ: `docs/architecture/project-knowledge-system-v0.1.md` (v0.9, Proposed);
 - исполнительный план: `docs/planning/active/project-knowledge-system-mvp.md`;
 - workflow-блок: `workflow/active/project-knowledge-base-mvp/` (6 task packets, готов к исполнению);
 - базовая концепция: `docs/architecture/hybrid-knowledge-architecture-v0.5.md`.

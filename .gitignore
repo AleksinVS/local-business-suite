@@ -32,5 +32,3 @@ clients/*/dist/
 playwright-report/
 test-results/
 .playwright-mcp/
-
-_backup_pre_update/

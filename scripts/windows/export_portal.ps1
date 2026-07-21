@@ -1,4 +1,4 @@
-﻿# Export Portal Configuration for Migration
+# Export Portal Configuration for Migration
 # Снимает дамп конфигурации IIS, Scheduled Task, файрвола, сертификатов
 # и копию кода проекта в отдельный каталог для переноса на другой хост.
 #
@@ -69,14 +69,6 @@ if (-not $isAdmin) {
 Write-Host "=== Export Portal Configuration ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Фиксируем директорию скрипта как базовую (важно при самоподъёме администратора)
-# Используем $PSCommandPath вместо $PSScriptRoot, т.к. при самоподъёме $PSScriptRoot меняется
-$scriptRoot = Split-Path -Parent $PSCommandPath
-if (-not $scriptRoot) { $scriptRoot = $PSScriptRoot }
-Set-Location $scriptRoot
-Write-Host "Working directory: $scriptRoot" -ForegroundColor Gray
-Write-Host "Script path: $PSCommandPath" -ForegroundColor Gray
-
 # --- Утилиты -----------------------------------------------------------------
 function Write-Step($name) {
     Write-Host ""
@@ -107,12 +99,6 @@ Write-Host "PortalRoot: $PortalRoot" -ForegroundColor Gray
 # --- Куда пишем --------------------------------------------------------------
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $bundleName = "portal-export-$timestamp"
-# Делаем OutputDir абсолютным — важно при самоподъёме администратора
-if ([System.IO.Path]::IsPathRooted($OutputDir)) {
-    $OutputDir = $OutputRoot = (Resolve-Path $OutputDir).Path
-} else {
-    $OutputDir = Join-Path $scriptRoot $OutputDir.TrimStart(".\")
-}
 $bundleRoot = Join-Path $OutputDir $bundleName
 
 # Создать родительскую директорию, если её нет

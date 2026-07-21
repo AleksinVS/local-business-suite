@@ -23,6 +23,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[Observability Baseline](OBSERVABILITY_BASELINE.md)**: Minimal p50/p95 metrics and local latency event reporting before performance or stack decisions.
 - **[Service Extraction Guide](SERVICE_EXTRACTION_GUIDE.md)**: Rules for safely extracting technical workers/services while keeping Django as the business source of truth.
 - **[Design Patterns Review](DESIGN_PATTERNS_REVIEW_2026-06-01.md)**: Recommended design patterns for the current Django monorepo, AI gateway, contracts, memory, analytics and future workers.
+- **[Privacy Deep Layer Models Review](PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md)**: Evaluation of PII recognizer candidates for the anonymization deep layer (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio + RU NER engines) and integration recommendations for ADR-0012.
 - **[PostgreSQL Primary Store Plan](POSTGRESQL_PRIMARY_STORE_PLAN.md)**: Target migration from SQLite-separated runtime files to one PostgreSQL primary store, with SQLite moved to a separate fork.
 - **[PWA and Tauri Notifications Plan](PWA_AND_TAURI_NOTIFICATIONS_PLAN.md)**: PWA-first user notifications without third-party Web Push and optional Tauri tray client.
 - **[Knowledge-driven Analytics Plan](KNOWLEDGE_DRIVEN_ANALYTICS_PLAN.md)**: Continuous business analytics from memory, email contents, documents, optional DMS and AI diagnostics.
@@ -51,6 +52,7 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0006: External system knowledge connectors](../adr/ADR-0006-external-system-knowledge-connectors.md)
 - [ADR-0008: Knowledge-driven business analytics](../adr/ADR-0008-knowledge-driven-business-analytics.md)
 - [ADR-0011: File-backed knowledge and unified search](../adr/ADR-0011-file-backed-knowledge-and-unified-search.md)
+- [ADR-0012: Data anonymization and privacy pipeline (draft)](../adr/ADR-0012-data-anonymization-and-privacy-pipeline.md)
 - [ADR-0024: Service extraction readiness](../adr/ADR-0024-service-extraction-readiness.md)
 - [ADR-0026: PWA-first notifications and optional Tauri client](../adr/ADR-0026-pwa-first-and-optional-tauri-notifications.md)
 - [ADR-0029: PostgreSQL primary store and SQLite fork](../adr/ADR-0029-postgresql-primary-store-and-sqlite-fork.md)

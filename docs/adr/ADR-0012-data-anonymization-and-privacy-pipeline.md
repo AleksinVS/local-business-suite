@@ -10,6 +10,8 @@
 
 Обновлено: 2026-05-26.
 
+Обновлено: 2026-07-13 — добавлены кандидаты в глубокий слой по итогам обзора моделей (`docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`).
+
 ## Контекст
 
 Проект обрабатывает данные из нескольких источников:
@@ -178,6 +180,14 @@ off -> observe -> warn -> redact/pseudonymize -> block/review
 - OCR quality checks;
 - поиск косвенных идентификаторов;
 - risk scoring для повторной идентификации.
+
+Кандидаты в распознаватели глубокого слоя (обзор от 2026-07-13, детали и оценка применимости в `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`; итоговый состав фиксируется после eval-пилота):
+
+- **Presidio-совместимый адаптер + RU-движок** (Natasha/Slovnet или spaCy `ru_core_news_lg`) — основная детекция свободного русского текста; ни одна готовая открытая PII-модель русский язык не заявляет, поэтому RU закрывается связкой framework + RU NER + доменные распознаватели;
+- **`openai/privacy-filter`** (Apache 2.0, 1.5B/50M активных, ONNX Q4 на CPU, 8 категорий) — дополнительный независимый распознаватель секретов и латинских/формато-подобных PII (`secret`, `account_number`, `private_email`, `private_url`, `private_phone`) на границах `before_cloud_llm` и `before_external_export`; англоцентрична, для кириллических имен/адресов основой не является; подключение только за feature flag, сначала в режиме `observe`;
+- **GLiNER2-PII** (`fastino/gliner2-privacy-filter-PII-multi`, 0.3B, 42 типа, таксономия задается списком меток) — кандидат на гибкое расширение таксономии; включить в eval-прогон наравне с privacy-filter;
+- **Piiranha v1** (mdeberta-v3-base) — резерв для возможного RU-дообучения на многоязычной базе;
+- тяжелые RU NER (DeepPavlov `ner_rus_bert`) — только если легкие RU-движки не пройдут eval по качеству.
 
 Если глубокий слой недоступен, профиль должен явно определить поведение. Для чувствительных данных режим по умолчанию: fail closed, то есть блокировать или отправлять в review queue, а не индексировать.
 
@@ -504,6 +514,7 @@ Django app
 
 ## Источники и ориентиры
 
+- Обзор моделей-кандидатов глубокого слоя (2026-07-13): `docs/architecture/PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md`
 - NIST SP 800-188, De-Identifying Government Datasets: Techniques and Governance: https://csrc.nist.gov/pubs/sp/800/188/final
 - NIST SP 800-226, Guidelines for Evaluating Differential Privacy Guarantees: https://csrc.nist.gov/pubs/sp/800/226/final
 - HHS HIPAA de-identification guidance: https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html

@@ -69,15 +69,6 @@ class LDAPBackend(BaseBackend):
         if not username or not password:
             return None
 
-        # Check if AD link is enabled
-        from django.conf import settings
-        if not getattr(settings, 'ACCOUNTS_AD_LINK_ENABLED', True):
-            # Skip LDAP authentication if AD link is disabled
-            return None
-
-        # TEMPORARY: Disable LDAP auth for debugging
-        return None
-
         username = normalize_username(username)
         try:
             config = LDAPConfig.from_env()
@@ -122,12 +113,6 @@ class RemoteUserLDAPBackend(RemoteUserBackend):
 
 def sync_remote_user(user):
     try:
-        from django.conf import settings
-        if not getattr(settings, 'ACCOUNTS_AD_LINK_ENABLED', True):
-            # Skip AD sync if disabled
-            return user
-        # TEMPORARY: Disable LDAP sync for debugging
-        return user
         config = LDAPConfig.from_env()
         _user_dn, attributes = find_ad_user(config, user.username)
         if attributes:
@@ -179,9 +164,6 @@ def service_connection(config):
 
 def ldap_connection(config, *, user, password):
     ldap3 = _ldap()
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"LDAP connection config v2: transport={config.transport}, host={config.host}, port={config.port}, allow_insecure={config.allow_insecure}, verify_cert={config.verify_cert}")
     server_kwargs = {}
     if config.transport in {"starttls", "ldaps"}:
         tls_kwargs = {
@@ -197,9 +179,14 @@ def ldap_connection(config, *, user, password):
         use_ssl=config.transport == "ldaps",
         **server_kwargs,
     )
-    from ldap3 import AUTO_BIND_NO_TLS
-    auto_bind = AUTO_BIND_NO_TLS if config.transport == "plain" else True
-    conn = ldap3.Connection(server, user=user, password=password, auto_bind=auto_bind)
+    conn = ldap3.Connection(server, user=user, password=password, auto_bind=False)
+    if config.transport == "starttls":
+        conn.open()
+        conn.start_tls()
+    if not conn.bind():
+        from ldap3.core.exceptions import LDAPBindError
+
+        raise LDAPBindError(conn.result)
     return _ConnectionContext(conn)
 
 

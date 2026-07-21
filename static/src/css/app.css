@@ -672,6 +672,16 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   width: 100%;
+  /* backdrop-filter above already establishes a stacking context, which traps
+     the header's z-index:1200 dropdowns (notifications / user / all-functions)
+     inside it. Without an explicit z-index the whole header paints at the
+     `auto` level, so later-in-DOM positioned toolbar controls (the
+     .multi-filter-dropdown pills, position:relative) render on top of the open
+     notification popup. Lift the header context above that page content — but
+     keep it below the detail-panel (30) / drawer overlay (40) / drawer (50) so
+     those modals still cover the header. */
+  position: relative;
+  z-index: 20;
 }
 
 .site-header-main {

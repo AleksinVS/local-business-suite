@@ -231,6 +231,11 @@
 
   Controller.prototype.measure = function () {
     var self = this;
+    // measure() физически возвращает контролы в строк формы (в т.ч. вынутые из
+    // меню воронки), нарушая раскладку. Сбрасываем кеш ключа, чтобы последующий
+    // relayout()/apply() гарантированно пересобрали DOM, иначе контролы застрянут
+    // в ряду при совпадении ключа — и воронка наедет на кнопку «Создать заявку».
+    this.key = null;
     this.toolbar.classList.remove("filters-collapsed");
     // Все контролы в строку перед триггером для замера естественной ширины.
     this.items.forEach(function (it) { self.form.insertBefore(it.el, self.overflow); });

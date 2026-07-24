@@ -32,13 +32,18 @@ class PathInfoDebugMiddleware:
         # 1. PATH_INFO is just '/'
         # 2. REQUEST_URI has a different path (not '/')
         # 3. REQUEST_URI is not empty
-        # 4. We're not dealing with favicon or static files
+        # 4. We're not dealing with favicon (favicon остаётся на IIS/404)
+        #
+        # /static/ намеренно НЕ исключаем: при раздаче статики через
+        # WhiteNoise (FastCGI-хендлер в web.config для /static/) PATH_INFO для
+        # статик-путей тоже искажается в "/", и его нужно починить — иначе
+        # WhiteNoise (стоит в MIDDLEWARE правее этого фикса) не опознаёт путь
+        # и не отдаёт файлы, в т.ч. стили Django admin.
         if (
             path_info == "/"
             and request_uri != "/"
             and request_uri
             and not request_uri.startswith("/favicon.")
-            and not request_uri.startswith("/static/")
         ):
             # Extract path from REQUEST_URI (remove query string)
             path = request_uri.split("?")[0]

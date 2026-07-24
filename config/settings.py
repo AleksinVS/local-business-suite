@@ -91,14 +91,19 @@ def build_middleware(iis_compat_enabled):
     (``MIDDLEWARE`` собирается один раз при импорте settings).
     """
 
+    # PathInfoDebugMiddleware должен идти ДО WhiteNoiseMiddleware: wfastcgi (IIS)
+    # искажает PATH_INFO в "/", и фикса этого значения требуется ещё до того,
+    # как WhiteNoise попытается опознать статик-путь по request.path_info — иначе
+    # WhiteNoise пропускает /static/... и стили Django admin не отдаются. На
+    # не-IIS средах фикс no-op (PATH_INFO уже корректный, условие не срабатывает).
     middleware = [
         "django.middleware.security.SecurityMiddleware",
-        "whitenoise.middleware.WhiteNoiseMiddleware",
-        "django.contrib.sessions.middleware.SessionMiddleware",
     ]
     if iis_compat_enabled:
         middleware.append("apps.core.middleware.PathInfoDebugMiddleware")
     middleware += [
+        "whitenoise.middleware.WhiteNoiseMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
         "django.middleware.common.CommonMiddleware",
         "apps.core.performance.PerformanceMetricsMiddleware",
         "django_htmx.middleware.HtmxMiddleware",

@@ -1020,8 +1020,10 @@ class IisCompatContourTests(TestCase):
         self.assertEqual(request.path, "/workorders/")
         self.assertEqual(request.path_info, "/workorders/")
 
-    def test_path_info_fix_skips_favicon_and_static_when_enabled(self):
-        """Тоже существующее поведение: favicon/static не переписываются."""
+    def test_path_info_fix_skips_favicon_when_enabled(self):
+        """favicon не переписывается (остаётся на IIS/404). Раньше здесь же
+        пропускался и /static/, но после перевода раздачи статики на WhiteNoise
+        PATH_INFO для /static/ нужно чинить — см. test_path_info_fix_rewrites_static."""
         from apps.core.middleware import PathInfoDebugMiddleware
 
         def get_response(inner_request):
@@ -1036,6 +1038,26 @@ class IisCompatContourTests(TestCase):
         self.assertEqual(request.META["PATH_INFO"], "/")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.path_info, "/")
+
+    def test_path_info_fix_rewrites_static(self):
+        """/static/ теперь переписывается по REQUEST_URI, чтобы WhiteNoise мог
+        опознать путь и отдать статику (в т.ч. стили Django admin). Регрессия к
+        багу, когда admin грузился без стилей под IIS/wfastcgi."""
+        from apps.core.middleware import PathInfoDebugMiddleware
+
+        def get_response(inner_request):
+            return HttpResponse("ok")
+
+        request = RequestFactory().get("/")
+        request.META["REQUEST_URI"] = "/static/admin/css/base.css"
+        request.META["PATH_INFO"] = "/"
+
+        PathInfoDebugMiddleware(get_response)(request)
+
+        self.assertEqual(request.META["PATH_INFO"], "/static/admin/css/base.css")
+        self.assertEqual(request.META["SCRIPT_NAME"], "")
+        self.assertEqual(request.path, "/static/admin/css/base.css")
+        self.assertEqual(request.path_info, "/static/admin/css/base.css")
 
     def test_middleware_logs_via_standard_logging_not_open(self):
         """Лог идёт через logging (logger 'apps.core.iis_path_debug'), не через

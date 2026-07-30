@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -23,6 +24,7 @@ from .registry import get_registry
 
 
 User = get_user_model()
+pytestmark = pytest.mark.integration
 
 
 class SettingsCenterRegistryTests(TestCase):

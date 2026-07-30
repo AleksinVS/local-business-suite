@@ -15,7 +15,7 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
-test.describe("CopilotKit AG-UI sidebar", () => {
+test.describe("@ai CopilotKit AG-UI sidebar", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
   test.skip(!copilotkitEnabled, "CopilotKit sidebar checks run only when E2E_AI_UI_DRIVER=copilotkit.");
 

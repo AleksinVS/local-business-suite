@@ -207,6 +207,7 @@ clients: # Пользовательские клиентские приложе�
     package.json: file # npm-скрипты клиента, зависимости Tauri/Vite и команды сборки
 config: # Конфигурация Django и JSON-контракты
   asgi.py: file # ASGI-точка входа
+  settings_test.py: file # Изолированные настройки автоматических тестов с быстрым хешером и артефактами только в .local
   settings.py: file # Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)
   urls.py: file # Корневые URL-маршруты (include всех приложений)
   views.py: file # Корневые представления (redirect)
@@ -617,6 +618,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       memory-trusted-sources-claims-retrieval: file
       module-registered-agent-skills-and-mcp-facade: file
       settings-center-gui: file
+      test-runtime-and-agent-cost-optimization: file
       testing-policy-and-independent-verification: file
       universal-right-drawer-ai-navigation: file
       universal-source-adapters-memory-analytics: file
@@ -638,6 +640,8 @@ manage.py: file # Точка входа Django CLI
 package-lock.json: file # Lock-файл Node.js зависимостей
 package.json: file # Node.js зависимости и npm-скрипты: Playwright, CopilotKit React bundle, CopilotKit runtime
 pytest.ini: file # Конфигурация pytest
+requirements-dev.lock: file # Зафиксированные версии средств разработки и тестирования
+requirements-dev.txt: file # Средства локальной разработки и тестирования поверх runtime-зависимостей
 requirements.lock: file # Lock-файл зависимостей (pip-compile)
 requirements.txt: file # Зависимости Python
 vite.copilotkit.config.mjs: file # Vite-конфигурация сборки React-острова CopilotKit в static/dist/copilotkit

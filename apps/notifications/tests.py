@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -20,12 +21,14 @@ from .services import (
 )
 
 User = get_user_model()
+pytestmark = pytest.mark.integration
 
 
 class NotificationApiTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="notify-user", password="pass")
-        self.other = User.objects.create_user(username="notify-other", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="notify-user", password="pass")
+        cls.other = User.objects.create_user(username="notify-other", password="pass")
 
     def _create_event(self, recipients=None, title="Новая заявка №1"):
         return create_notification_event(
@@ -122,9 +125,10 @@ class NotificationApiTests(TestCase):
 
 
 class NotificationDeviceApiTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="device-user", password="pass")
-        self.other = User.objects.create_user(username="device-other", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="device-user", password="pass")
+        cls.other = User.objects.create_user(username="device-other", password="pass")
 
     def _create_event(self, recipients=None, title="Заявка №10 назначена вам"):
         return create_notification_event(

@@ -11,7 +11,7 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
-test.describe("notifications PWA", () => {
+test.describe("@notifications notifications PWA", () => {
   test("serves manifest and root service worker", async ({ request }) => {
     const manifest = await request.get("/static/manifest.webmanifest");
     await expect(manifest).toBeOK();

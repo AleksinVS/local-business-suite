@@ -159,6 +159,7 @@ python manage.py runserver
 
 ```bash
 make lock                 # requirements.lock из requirements.txt
+make lock-dev             # requirements-dev.lock из requirements-dev.txt
 make lock-agent-runtime   # services/agent_runtime/requirements.lock
 ```
 
@@ -173,10 +174,13 @@ make lock-agent-runtime   # services/agent_runtime/requirements.lock
 Базовые проверки:
 
 ```bash
-python manage.py check
-python manage.py validate_architecture_contracts
-python manage.py test
+make install-dev
+make check
+make test-fast TEST_SCOPE=apps.accounts.tests
+make contracts
 ```
+
+Для повторного запуска падений используйте `make test-failed`, для поиска медленных тестов — `make test-profile TEST_SCOPE=<pytest-path>`. Полный контрольный прогон `make test` нужен перед приемкой крупной или рискованной работы; быстрый цикл переиспользует тестовую базу из `.local/`.
 
 Проверки системы памяти:
 

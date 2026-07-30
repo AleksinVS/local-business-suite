@@ -11,7 +11,7 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
-test.describe("AI right panel navigation", () => {
+test.describe("@ai AI right panel navigation", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
 
   test("opens a work order in the global right panel from the AI chat page", async ({ page }) => {

@@ -1,0 +1,33 @@
+{
+  "block_id": "test-runtime-and-agent-cost-optimization",
+  "status": "completed",
+  "created_at": "2026-07-30",
+  "completed_at": "2026-07-30",
+  "goal": "Reduce local, agent and CI testing cost without weakening risk-based verification.",
+  "execution_order": [
+    "01-test-runtime-and-agent-cost-optimization"
+  ],
+  "global_constraints": [
+    "Do not mutate or hide unrelated uncommitted work.",
+    "Keep temporary logs and profiles in .local/.",
+    "Use migrations in the final control run.",
+    "Do not enable parallel execution until file and contract tests are isolated.",
+    "Keep production password hashing and storage settings unchanged."
+  ],
+  "cross_cutting_acceptance": [
+    "One canonical pytest execution path is used locally and in CI.",
+    "Fast test settings remove production hashing and disk media overhead.",
+    "Agent rules define budgets, fail-fast output and when CI owns the full run.",
+    "CI avoids duplicate coverage and contract validation.",
+    "Targeted, full and e2e verification results are recorded."
+  ],
+  "verification_commands": [
+    "make check",
+    "make test-fast TEST_SCOPE=apps/accounts/tests.py",
+    "make test",
+    "make contracts",
+    "npm run test:e2e -- --project=chromium --grep @smoke",
+    "make gen-struct",
+    "git diff --check"
+  ]
+}

@@ -11,6 +11,7 @@
     "build:copilotkit": "vite build --config vite.copilotkit.config.mjs",
     "copilot-runtime:start": "node services/copilot_runtime/server.mjs",
     "test:e2e": "playwright test -c scripts/e2e/playwright.config.ts",
+    "test:e2e:smoke": "playwright test -c scripts/e2e/playwright.config.ts --grep @smoke",
     "test:e2e:headed": "playwright test -c scripts/e2e/playwright.config.ts --headed",
     "test:e2e:ui": "playwright test -c scripts/e2e/playwright.config.ts --ui",
     "desktop-notifier:dev": "npm --prefix clients/desktop-notifier run tauri:dev",

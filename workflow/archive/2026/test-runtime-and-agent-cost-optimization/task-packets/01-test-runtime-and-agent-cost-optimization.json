@@ -1,0 +1,32 @@
+{
+  "task_id": "01-test-runtime-and-agent-cost-optimization",
+  "status": "accepted",
+  "title": "Canonical fast test runtime, CI tiers and agent rules",
+  "goal": "Implement the approved testing optimization proposals end to end.",
+  "write_scope": [
+    "config/settings_test.py",
+    "Makefile",
+    "pytest.ini",
+    "requirements-dev.txt",
+    "requirements-dev.lock",
+    ".github/workflows/tests.yml",
+    "scripts/e2e/",
+    "apps/**/tests.py",
+    "apps/**/tests/test_*.py",
+    "services/agent_runtime/tests/",
+    "AGENTS.md",
+    "README.md",
+    "docs/guides/",
+    "docs/planning/",
+    "workflow/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance": [
+    "Fast test settings are isolated from production.",
+    "Pytest is the canonical local and CI runner.",
+    "Repeated setup and accidental test collection are reduced.",
+    "CI has quality, primary and compatibility tiers.",
+    "Agent rules prevent redundant full runs and destructive shared-worktree isolation.",
+    "Verification and residual risks are documented."
+  ]
+}

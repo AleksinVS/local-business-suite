@@ -20,6 +20,8 @@
   "vite.copilotkit.config.mjs": "Vite-конфигурация сборки React-острова CopilotKit в static/dist/copilotkit",
   "requirements.txt": "Зависимости Python",
   "requirements.lock": "Lock-файл зависимостей (pip-compile)",
+  "requirements-dev.txt": "Средства локальной разработки и тестирования поверх runtime-зависимостей",
+  "requirements-dev.lock": "Зафиксированные версии средств разработки и тестирования",
   "CLAUDE.md": "Инструкции для AI-агента Claude (включает Dual-Use Context, ссылки на PROJECT_STRUCTURE.yaml)",
   "AGENTS.md": "Протокол работы AI-агентов (включает Management Commands, ссылки на PROJECT_STRUCTURE.yaml)",
   "BACKLOG.md": "Корневой указатель на актуальный backlog в docs/planning/backlog.md",

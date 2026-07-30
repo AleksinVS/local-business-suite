@@ -4,6 +4,7 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
@@ -57,39 +58,41 @@ from .services import confirm_closure, create_workorder, transition_workorder
 User = get_user_model()
 
 
+@pytest.mark.integration
 class WorkOrderRoleMatrixTests(TestCase):
-    def setUp(self):
-        self.department = Department.objects.create(name="Диагностика")
-        self.device = MedicalDevice.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = Department.objects.create(name="Диагностика")
+        cls.device = MedicalDevice.objects.create(
             name="УЗИ аппарат",
             serial_number="SN-001",
-            department=self.department,
+            department=cls.department,
         )
-        self.customer = User.objects.create_user(
-            username="customer", password="pass", department=self.department
+        cls.customer = User.objects.create_user(
+            username="customer", password="pass", department=cls.department
         )
-        self.technician = User.objects.create_user(username="tech", password="pass")
-        self.manager = User.objects.create_user(username="manager", password="pass")
-        self.outsider = User.objects.create_user(username="outsider", password="pass")
+        cls.technician = User.objects.create_user(username="tech", password="pass")
+        cls.manager = User.objects.create_user(username="manager", password="pass")
+        cls.outsider = User.objects.create_user(username="outsider", password="pass")
 
         tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
 
-        self.technician.groups.add(tech_group)
-        self.manager.groups.add(manager_group)
-        self.customer.groups.add(customer_group)
+        cls.technician.groups.add(tech_group)
+        cls.manager.groups.add(manager_group)
+        cls.customer.groups.add(customer_group)
 
-        self.board = Board.objects.create(title="Test Board", slug="test-board-1")
-        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
-        self.workorder = WorkOrder.objects.create(
+        cls.board = Board.objects.create(title="Test Board", slug="test-board-1")
+        cls.board.allowed_groups.add(manager_group, tech_group, customer_group)
+        cls.workorder = WorkOrder.objects.create(
             title="Проверить датчик",
             description="Нестабильные показания.",
-            department=self.department,
-            author=self.customer,
-            board=self.board,
-            assignee=self.technician,
-            device=self.device,
+            department=cls.department,
+            author=cls.customer,
+            board=cls.board,
+            assignee=cls.technician,
+            device=cls.device,
         )
 
     def test_customer_and_manager_can_view_workorder(self):
@@ -267,44 +270,46 @@ class WorkOrderRoleMatrixTests(TestCase):
             self.assertFalse(can_transition(self.technician, self.workorder, WorkOrderStatus.CANCELLED))
 
 
+@pytest.mark.integration
 class WorkOrderViewPermissionTests(TestCase):
-    def setUp(self):
-        self.department = Department.objects.create(name="Стационар")
-        self.sub_department = Department.objects.create(name="ОРИТ", parent=self.department)
-        self.device = MedicalDevice.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = Department.objects.create(name="Стационар")
+        cls.sub_department = Department.objects.create(name="ОРИТ", parent=cls.department)
+        cls.device = MedicalDevice.objects.create(
             name="Монитор пациента",
             serial_number="SN-002",
-            department=self.sub_department,
+            department=cls.sub_department,
         )
-        self.customer = User.objects.create_user(
-            username="customer2", password="pass", department=self.sub_department
+        cls.customer = User.objects.create_user(
+            username="customer2", password="pass", department=cls.sub_department
         )
-        self.technician = User.objects.create_user(username="tech2", password="pass")
-        self.manager = User.objects.create_user(username="manager2", password="pass")
-        self.outsider = User.objects.create_user(username="outsider2", password="pass")
+        cls.technician = User.objects.create_user(username="tech2", password="pass")
+        cls.manager = User.objects.create_user(username="manager2", password="pass")
+        cls.outsider = User.objects.create_user(username="outsider2", password="pass")
 
         tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
 
-        self.technician.groups.add(tech_group)
-        self.manager.groups.add(manager_group)
-        self.customer.groups.add(customer_group)
+        cls.technician.groups.add(tech_group)
+        cls.manager.groups.add(manager_group)
+        cls.customer.groups.add(customer_group)
 
-        self.board = Board.objects.create(title="Test Board 2", slug="test-board-2")
-        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
-        KanbanColumnConfig.objects.create(board=self.board, code="new", title="Новые", position=10, statuses=["new"])
-        KanbanColumnConfig.objects.create(board=self.board, code="in_progress", title="В работе", position=20, statuses=["accepted", "in_progress", "on_hold"])
-        KanbanColumnConfig.objects.create(board=self.board, code="done", title="Выполнены", position=30, statuses=["resolved"])
-        KanbanColumnConfig.objects.create(board=self.board, code="archive", title="Архив", position=40, statuses=["closed", "cancelled"])
-        self.workorder = WorkOrder.objects.create(
+        cls.board = Board.objects.create(title="Test Board 2", slug="test-board-2")
+        cls.board.allowed_groups.add(manager_group, tech_group, customer_group)
+        KanbanColumnConfig.objects.create(board=cls.board, code="new", title="Новые", position=10, statuses=["new"])
+        KanbanColumnConfig.objects.create(board=cls.board, code="in_progress", title="В работе", position=20, statuses=["accepted", "in_progress", "on_hold"])
+        KanbanColumnConfig.objects.create(board=cls.board, code="done", title="Выполнены", position=30, statuses=["resolved"])
+        KanbanColumnConfig.objects.create(board=cls.board, code="archive", title="Архив", position=40, statuses=["closed", "cancelled"])
+        cls.workorder = WorkOrder.objects.create(
             title="Заменить кабель",
             description="Поврежден кабель питания.",
-            department=self.sub_department,
-            author=self.customer,
-            board=self.board,
-            assignee=self.technician,
-            device=self.device,
+            department=cls.sub_department,
+            author=cls.customer,
+            board=cls.board,
+            assignee=cls.technician,
+            device=cls.device,
         )
 
     def test_outsider_cannot_open_detail(self):
@@ -912,40 +917,42 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertNotContains(response, "Заявка другого исполнителя")
 
 
+@pytest.mark.integration
 class StepperContextTests(TestCase):
     """Tests for _stepper_context and status_section template variables."""
 
-    def setUp(self):
-        self.department = Department.objects.create(name="Рентген")
-        self.device = MedicalDevice.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = Department.objects.create(name="Рентген")
+        cls.device = MedicalDevice.objects.create(
             name="Рентген-аппарат",
             serial_number="SN-X01",
-            department=self.department,
+            department=cls.department,
         )
-        self.customer = User.objects.create_user(
-            username="cust_stepper", password="pass", department=self.department
+        cls.customer = User.objects.create_user(
+            username="cust_stepper", password="pass", department=cls.department
         )
-        self.technician = User.objects.create_user(username="tech_stepper", password="pass")
-        self.manager = User.objects.create_user(username="mgr_stepper", password="pass")
+        cls.technician = User.objects.create_user(username="tech_stepper", password="pass")
+        cls.manager = User.objects.create_user(username="mgr_stepper", password="pass")
 
         tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
 
-        self.technician.groups.add(tech_group)
-        self.manager.groups.add(manager_group)
-        self.customer.groups.add(customer_group)
+        cls.technician.groups.add(tech_group)
+        cls.manager.groups.add(manager_group)
+        cls.customer.groups.add(customer_group)
 
-        self.board = Board.objects.create(title="Stepper Board", slug="stepper-board")
-        self.board.allowed_groups.add(manager_group, tech_group, customer_group)
-        self.workorder = WorkOrder.objects.create(
+        cls.board = Board.objects.create(title="Stepper Board", slug="stepper-board")
+        cls.board.allowed_groups.add(manager_group, tech_group, customer_group)
+        cls.workorder = WorkOrder.objects.create(
             title="Stepper test",
             description="Testing stepper context.",
-            department=self.department,
-            author=self.customer,
-            board=self.board,
-            assignee=self.technician,
-            device=self.device,
+            department=cls.department,
+            author=cls.customer,
+            board=cls.board,
+            assignee=cls.technician,
+            device=cls.device,
         )
 
     def test_detail_view_includes_stepper_context(self):
@@ -994,6 +1001,7 @@ class StepperContextTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@pytest.mark.integration
 class WorkOrderAttachmentServingTests(TestCase):
     """Авторизованная выдача файлов вложений через view.
 

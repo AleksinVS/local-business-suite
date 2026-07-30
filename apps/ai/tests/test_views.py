@@ -1,30 +1,34 @@
 """Тесты представлений AI-чата, стриминга и прав доступа."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
+@pytest.mark.integration
 class AIViewsTests(TestCase):
     databases = RUNTIME_DATABASES
-    def setUp(self):
-        self.manager = User.objects.create_user(username="manager-ai", password="pass")
-        self.customer = User.objects.create_user(username="customer-ai", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.manager = User.objects.create_user(username="manager-ai", password="pass")
+        cls.customer = User.objects.create_user(username="customer-ai", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
-        self.manager.groups.add(manager_group)
-        self.customer.groups.add(customer_group)
-        self.department = Department.objects.create(name="Стационар")
-        self.manager.department = self.department
-        self.customer.department = self.department
-        self.manager.save(update_fields=["department"])
-        self.customer.save(update_fields=["department"])
-        self.board = Board.objects.create(title="Test Board", slug="test-board-ai")
-        self.board.allowed_groups.add(manager_group, customer_group)
-        self.customer_workorder = WorkOrder.objects.create(
+        cls.manager.groups.add(manager_group)
+        cls.customer.groups.add(customer_group)
+        cls.department = Department.objects.create(name="Стационар")
+        cls.manager.department = cls.department
+        cls.customer.department = cls.department
+        cls.manager.save(update_fields=["department"])
+        cls.customer.save(update_fields=["department"])
+        cls.board = Board.objects.create(title="Test Board", slug="test-board-ai")
+        cls.board.allowed_groups.add(manager_group, customer_group)
+        cls.customer_workorder = WorkOrder.objects.create(
             title="Сломан светильник",
             description="Нужна замена лампы",
-            department=self.department,
-            author=self.customer,
-            board=self.board,
+            department=cls.department,
+            author=cls.customer,
+            board=cls.board,
             status=WorkOrderStatus.NEW,
         )
 
@@ -803,6 +807,10 @@ class AIViewsTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_page_context_update_resolves_waiting_list_entry(self):
+        # Просмотр листа ожидания требует отдельного capability; авторство
+        # разрешает изменение записи, но само по себе не открывает список.
+        doctor_group, _created = Group.objects.get_or_create(name="doctor")
+        self.customer.groups.add(doctor_group)
         entry = create_entry(
             author=self.customer,
             patient_name="Контекстный Пациент",

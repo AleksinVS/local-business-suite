@@ -8,6 +8,8 @@ from pathlib import Path
 import json
 import tempfile
 
+import pytest
+
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
@@ -33,29 +35,31 @@ from .services import (
 
 User = get_user_model()
 RUNTIME_DATABASES = {"default"}
+pytestmark = pytest.mark.integration
 
 
 class AnalyticsDashboardTests(TestCase):
     databases = RUNTIME_DATABASES
-    def setUp(self):
-        self.department = Department.objects.create(name="Приемное отделение")
-        self.device = MedicalDevice.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = Department.objects.create(name="Приемное отделение")
+        cls.device = MedicalDevice.objects.create(
             name="Дефибриллятор",
             serial_number="SN-003",
-            department=self.department,
+            department=cls.department,
         )
-        self.manager = User.objects.create_user(username="chief", password="pass")
+        cls.manager = User.objects.create_user(username="chief", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
-        self.user = User.objects.create_user(username="guest", password="pass")
-        self.board = Board.objects.create(title="Test Board", slug="test-board-analytics")
+        cls.manager.groups.add(manager_group)
+        cls.user = User.objects.create_user(username="guest", password="pass")
+        cls.board = Board.objects.create(title="Test Board", slug="test-board-analytics")
         WorkOrder.objects.create(
             title="Плановое ТО",
             description="Проверка питания.",
-            department=self.department,
-            author=self.manager,
-            board=self.board,
-            device=self.device,
+            department=cls.department,
+            author=cls.manager,
+            board=cls.board,
+            device=cls.device,
             status=WorkOrderStatus.RESOLVED,
         )
 
@@ -151,7 +155,7 @@ class analytics_contract_settings:
         self.routes = contracts_dir / "workflow_routes.json"
         self.dedup = contracts_dir / "dedup_rules.json"
         self.retention = contracts_dir / "retention_profiles.json"
-        write_json(self.sources, test_sources_payload())
+        write_json(self.sources, sources_payload_fixture())
         write_json(self.scope_rules, [
             {
                 "code": "test_scope",
@@ -281,7 +285,7 @@ class analytics_contract_settings:
         self.temp_dir.cleanup()
 
 
-def test_sources_payload():
+def sources_payload_fixture():
     body = (
         "Отчет заведующего: отделение терапии, период 2026-W21. "
         "Риск: кадровый дефицит. Обязательство: подготовить график до 2026-05-24."

@@ -26,5 +26,6 @@
   "ai-ui-protocol-foundation.md": "Архивный план версионируемой основы AI UI протоколов (implemented, принят 2026-07-07)",
   "copilotkit-ai-ui-chat-development.md": "Архивный план ИИ-чата CopilotKit UI (заморожен как референс-драйвер; native — канон; 2026-07-07)",
   "copilotkit-ag-ui-integration.md": "Архивный план CopilotKit/AG-UI интеграции (поглощён планом copilotkit-ai-ui-chat-development, заморожен; 2026-07-07)",
-  "context-aware-sidebar-ai-chat.md": "Архивный план контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09)"
+  "context-aware-sidebar-ai-chat.md": "Архивный план контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09)",
+  "test-runtime-and-agent-cost-optimization.md": "Архивный план оптимизации времени и стоимости тестирования (implemented)"
 }

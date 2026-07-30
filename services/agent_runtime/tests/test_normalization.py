@@ -1180,17 +1180,16 @@ class TestChatModelDeadline(unittest.TestCase):
 
     def test_raises_runtime_error_when_call_exceeds_deadline(self):
         import time
-        with patch("services.agent_runtime.graph.LLM_DEADLINE_SECONDS", 1):
+        with patch("services.agent_runtime.graph.LLM_DEADLINE_SECONDS", 0.05):
             helper = self._import_helper()
             def slow_call(msgs):
-                time.sleep(5)  # far longer than the 1s deadline
+                time.sleep(0.15)  # longer than the patched 50ms deadline
                 return {"never": "reached"}
             started = time.time()
             with self.assertRaises(RuntimeError) as ctx:
                 helper(slow_call, [])
             elapsed = time.time() - started
-        # Must raise within deadline + small overhead (not wait 5s).
-        self.assertLess(elapsed, 3.0)
+        self.assertLess(elapsed, 0.14)
         self.assertIn("deadline", str(ctx.exception).lower())
 
     def test_propagates_exceptions_from_inner_call(self):

@@ -1,21 +1,25 @@
 """Тесты проброса identity-контекста в agent runtime."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
+@pytest.mark.integration
 class IdentityContextPropagationTests(TestCase):
     databases = RUNTIME_DATABASES
     """Verify that conversation_id, request_id, origin_channel, actor_version
     flow end-to-end through the tool execution path and are persisted in
     ChatSession.metadata, ChatMessage.metadata, and AgentActionLog.request_payload."""
 
-    def setUp(self):
-        self.manager = User.objects.create_user(username="manager-id", password="pass")
-        self.manager_group, _created = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(self.manager_group)
-        self.department = Department.objects.create(name="Test Dept")
-        self.main_board, _created = Board.objects.get_or_create(slug="main", defaults={"title": "Основная доска"})
-        self.main_board.allowed_groups.add(self.manager_group)
+    @classmethod
+    def setUpTestData(cls):
+        cls.manager = User.objects.create_user(username="manager-id", password="pass")
+        cls.manager_group, _created = Group.objects.get_or_create(name=ROLE_MANAGER)
+        cls.manager.groups.add(cls.manager_group)
+        cls.department = Department.objects.create(name="Test Dept")
+        cls.main_board, _created = Board.objects.get_or_create(slug="main", defaults={"title": "Основная доска"})
+        cls.main_board.allowed_groups.add(cls.manager_group)
 
     def test_execute_tool_persists_trace_context_in_session_metadata(self):
         """ChatSession.metadata should contain conversation_id after a tool call."""

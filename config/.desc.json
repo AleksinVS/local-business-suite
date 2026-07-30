@@ -1,6 +1,7 @@
 {
   ".": "Конфигурация Django и JSON-контракты",
   "settings.py": "Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)",
+  "settings_test.py": "Изолированные настройки автоматических тестов с быстрым хешером и артефактами только в .local",
   "urls.py": "Корневые URL-маршруты (include всех приложений)",
   "views.py": "Корневые представления (redirect)",
   "wsgi.py": "WSGI-точка входа",

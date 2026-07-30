@@ -1,7 +1,10 @@
 """Тесты видимости tool-сообщений в истории чата."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
+@pytest.mark.integration
 class ChatToolMessageVisibilityTests(TestCase):
     """Tool execution feedback ('Tool X executed successfully.') must not
     be rendered in the user-facing chat. The TOOL ChatMessage rows are
@@ -14,23 +17,26 @@ class ChatToolMessageVisibilityTests(TestCase):
     TOOL_CONTENT = "Tool workorders.list executed successfully."
     TOOL_NAME = "workorders.list"
 
-    def setUp(self):
-        self.user = User.objects.create_user(username="chat-tool-user", password="pass")
-        self.client.force_login(self.user)
-        self.session = ChatSession.objects.create(user=self.user, title="Tool chat")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="chat-tool-user", password="pass")
+        cls.session = ChatSession.objects.create(user=cls.user, title="Tool chat")
         # One full conversation turn: user → tool (hidden) → assistant.
         ChatMessage.objects.create(
-            session=self.session, role=ChatMessage.Role.USER,
+            session=cls.session, role=ChatMessage.Role.USER,
             content="Покажи список нарядов",
         )
         ChatMessage.objects.create(
-            session=self.session, role=ChatMessage.Role.TOOL,
-            tool_name=self.TOOL_NAME, content=self.TOOL_CONTENT,
+            session=cls.session, role=ChatMessage.Role.TOOL,
+            tool_name=cls.TOOL_NAME, content=cls.TOOL_CONTENT,
         )
         ChatMessage.objects.create(
-            session=self.session, role=ChatMessage.Role.ASSISTANT,
+            session=cls.session, role=ChatMessage.Role.ASSISTANT,
             content="Вот 7 активных нарядов…",
         )
+
+    def setUp(self):
+        self.client.force_login(self.user)
 
     def test_chat_detail_hides_tool_messages(self):
         response = self.client.get(

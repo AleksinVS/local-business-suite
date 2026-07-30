@@ -12,10 +12,11 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ImproperlyConfigured
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from apps.ai import context_processors
 from apps.ai.context_processors import sidebar_ai_chat
@@ -29,7 +30,8 @@ from config.settings import _validate_ai_ui_driver
 User = get_user_model()
 
 
-class FileAssetVersionTests(TestCase):
+@pytest.mark.unit
+class FileAssetVersionTests(SimpleTestCase):
     """Поведение ``_file_asset_version`` при разном состоянии ``staticfiles/``."""
 
     def setUp(self):
@@ -86,7 +88,8 @@ class FileAssetVersionTests(TestCase):
         self.assertNotEqual(version_a, version_b)
 
 
-class AssetVersionFunctionsTests(TestCase):
+@pytest.mark.unit
+class AssetVersionFunctionsTests(SimpleTestCase):
     """Открытые функции ``native_ai_asset_version`` и др. — smoke-тест."""
 
     def setUp(self):
@@ -111,16 +114,18 @@ class AssetVersionFunctionsTests(TestCase):
         self.assertGreater(len(version), 0)
 
 
+@pytest.mark.integration
 class SidebarAiChatDispatcherTests(TestCase):
     """Контекст-процессор возвращает корректные флаги под каждый драйвер."""
 
     databases = {"default"}
 
-    def setUp(self):
-        self.factory = RequestFactory()
-        self.user = User.objects.create_user(username="dispatcher-cp", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.factory = RequestFactory()
+        cls.user = User.objects.create_user(username="dispatcher-cp", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.user.groups.add(manager_group)
+        cls.user.groups.add(manager_group)
 
     def _context(self, settings_kwargs: dict):
         request = self.factory.get("/")

@@ -1,3 +1,4 @@
+import pytest
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -11,18 +12,20 @@ from .models import MedicalDevice, OperationalStatus
 User = get_user_model()
 
 
+@pytest.mark.integration
 class MedicalDeviceCrudTests(TestCase):
-    def setUp(self):
-        self.manager = User.objects.create_user(username="chief", password="pass")
-        self.regular_user = User.objects.create_user(username="viewer", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.manager = User.objects.create_user(username="chief", password="pass")
+        cls.regular_user = User.objects.create_user(username="viewer", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
-        self.department = Department.objects.create(name="Лучевая диагностика")
-        self.device = MedicalDevice.objects.create(
+        cls.manager.groups.add(manager_group)
+        cls.department = Department.objects.create(name="Лучевая диагностика")
+        cls.device = MedicalDevice.objects.create(
             name="Рентген",
             serial_number="INV-001",
             inventory_number="104-0001",
-            department=self.department,
+            department=cls.department,
             operational_status=OperationalStatus.ACTIVE,
         )
 
@@ -199,41 +202,43 @@ class MedicalDeviceCrudTests(TestCase):
         self.assertContains(response, "Срок службы")
 
 
+@pytest.mark.integration
 class MedicalDeviceGroupingTests(TestCase):
     """Проверяет рендер списка медизделий со сворачиваемыми группами по подразделениям."""
 
-    def setUp(self):
-        self.manager = User.objects.create_user(username="chief2", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.manager = User.objects.create_user(username="chief2", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
+        cls.manager.groups.add(manager_group)
 
-        self.parent = Department.objects.create(name="Диагностический блок")
-        self.child_a = Department.objects.create(name="Кабинет-А", parent=self.parent)
-        self.child_b = Department.objects.create(name="Кабинет-Б", parent=self.parent)
-        self.unrelated = Department.objects.create(name="Терапия")
+        cls.parent = Department.objects.create(name="Диагностический блок")
+        cls.child_a = Department.objects.create(name="Кабинет-А", parent=cls.parent)
+        cls.child_b = Department.objects.create(name="Кабинет-Б", parent=cls.parent)
+        cls.unrelated = Department.objects.create(name="Терапия")
 
-        self.device_parent = MedicalDevice.objects.create(
+        cls.device_parent = MedicalDevice.objects.create(
             name="МРТ Siemens",
             inventory_number="104-1000",
-            department=self.parent,
+            department=cls.parent,
             operational_status=OperationalStatus.ACTIVE,
         )
-        self.device_a = MedicalDevice.objects.create(
+        cls.device_a = MedicalDevice.objects.create(
             name="Флюорограф Philips",
             inventory_number="104-1001",
-            department=self.child_a,
+            department=cls.child_a,
             operational_status=OperationalStatus.ACTIVE,
         )
-        self.device_b = MedicalDevice.objects.create(
+        cls.device_b = MedicalDevice.objects.create(
             name="Сонограф GE",
             inventory_number="104-1002",
-            department=self.child_b,
+            department=cls.child_b,
             operational_status=OperationalStatus.ACTIVE,
         )
-        self.device_unrelated = MedicalDevice.objects.create(
+        cls.device_unrelated = MedicalDevice.objects.create(
             name="Измеритель АД",
             inventory_number="104-1003",
-            department=self.unrelated,
+            department=cls.unrelated,
             operational_status=OperationalStatus.ACTIVE,
         )
 

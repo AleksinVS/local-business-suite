@@ -11,7 +11,7 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
-test.describe("workorder tree view", () => {
+test.describe("@workorders workorder tree view", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
 
   test("switches to tree mode and opens a workorder drawer", async ({ page }) => {

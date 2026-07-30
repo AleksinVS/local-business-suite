@@ -1,8 +1,11 @@
 """Тесты trace-контекста запроса чата."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
+@pytest.mark.integration
 class ChatViewTraceContextTests(TestCase):
     databases = RUNTIME_DATABASES
     """Verify that AIChatMessageCreateView generates and stores trace context."""

@@ -1,9 +1,11 @@
 """Тесты валидации identity_model реестра AI."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
-class IdentityModelValidationTests(TestCase):
-    databases = RUNTIME_DATABASES
+@pytest.mark.unit
+class IdentityModelValidationTests(SimpleTestCase):
     """Tests for identity model alignment validation in json_utils."""
 
     def test_validate_ai_identity_model_alignment_passes_complete_fields(self):

@@ -12,7 +12,7 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
-test.describe("native AG-UI-compatible sidebar", () => {
+test.describe("@ai native AG-UI-compatible sidebar", () => {
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
   test.skip(aiUiDriver !== "native", "Native AI UI checks run only when E2E_AI_UI_DRIVER=native.");
 

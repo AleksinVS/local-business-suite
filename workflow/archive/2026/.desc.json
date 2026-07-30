@@ -24,5 +24,6 @@
   "ai-ui-protocol-foundation": "Архивный workflow-блок версионируемой основы AI UI протоколов (implemented, принят владельцем 2026-07-07)",
   "copilotkit-ai-ui-chat-development": "Архивный workflow-блок ИИ-чата CopilotKit UI (заморожен как референс-драйвер; native — канон; 2026-07-07)",
   "copilotkit-ag-ui-integration": "Архивный workflow-блок CopilotKit/AG-UI интеграции (поглощён copilotkit-ai-ui-chat-development, заморожен; 2026-07-07)",
-  "context-aware-sidebar-ai-chat": "Архивный workflow-блок контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09; концепции перешли в native)"
+  "context-aware-sidebar-ai-chat": "Архивный workflow-блок контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09; концепции перешли в native)",
+  "test-runtime-and-agent-cost-optimization": "Архивный workflow-блок оптимизации времени и стоимости тестирования (implemented)"
 }

@@ -12,6 +12,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -24,6 +25,7 @@ User = get_user_model()
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@pytest.mark.integration
 class ChatAttachmentServingTests(TestCase):
     @classmethod
     def tearDownClass(cls):

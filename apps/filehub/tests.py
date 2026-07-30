@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -35,6 +36,7 @@ from .models import (
 
 User = get_user_model()
 RUNTIME_DATABASES = {"default"}
+pytestmark = pytest.mark.integration
 
 
 def _file_organization_profiles(*, source_code, managed_root, enabled=True, retention_days=30, min_users=2, min_events=2, min_files=1, min_confidence=0.2):

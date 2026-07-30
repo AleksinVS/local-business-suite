@@ -1,9 +1,11 @@
 """Тесты контракта типов задач agent runtime."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
-class TaskTypeContractTests(TestCase):
-    databases = RUNTIME_DATABASES
+@pytest.mark.unit
+class TaskTypeContractTests(SimpleTestCase):
     """Tests for the code-enforced task type contracts in task_types.py."""
 
     def test_workorders_list_contract_allows_correct_tool(self):

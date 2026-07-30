@@ -1,9 +1,11 @@
 """Тесты семантических кросс-валидаторов контрактов AI."""
+import pytest
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
-class SemanticValidatorsTests(TestCase):
-    databases = RUNTIME_DATABASES
+@pytest.mark.unit
+class SemanticValidatorsTests(SimpleTestCase):
     """Tests for the cross-cut semantic validators in json_utils."""
 
     def test_validate_ai_task_types_tool_alignment_catches_missing_tool(self):

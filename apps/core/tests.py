@@ -7,6 +7,7 @@ import tempfile
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
@@ -14,7 +15,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import CommandError, call_command
 from django.core.management.base import SystemCheckError
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 import apps.core.json_utils as json_utils
@@ -226,7 +227,8 @@ class DatabaseConfigTests(TestCase):
         self.assertEqual(result["tables"][0]["actual"], 1)
 
 
-class PerformanceMetricsTests(TestCase):
+@pytest.mark.unit
+class PerformanceMetricsTests(SimpleTestCase):
     def test_summary_calculates_p50_and_p95_by_route(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "performance_events.jsonl"
@@ -295,7 +297,8 @@ class PerformanceMetricsTests(TestCase):
             self.assertNotIn("secret", json.dumps(stable_payload))
 
 
-class SourceAdapterContractTests(TestCase):
+@pytest.mark.unit
+class SourceAdapterContractTests(SimpleTestCase):
     def test_envelope_normalizes_privacy_and_access_policy(self):
         envelope = SourceObjectEnvelope(
             source_code="test_source",
@@ -336,7 +339,8 @@ class SourceAdapterContractTests(TestCase):
         self.assertIsNotNone(get_source_adapter("dummy_source"))
 
 
-class AgentSkillContractTests(TestCase):
+@pytest.mark.unit
+class AgentSkillContractTests(SimpleTestCase):
     def setUp(self):
         self.original_skills = registered_agent_skills()
         clear_agent_skills()
@@ -386,7 +390,8 @@ class AgentSkillContractTests(TestCase):
             )
 
 
-class RightPanelContractTests(TestCase):
+@pytest.mark.unit
+class RightPanelContractTests(SimpleTestCase):
     def setUp(self):
         self.original_providers = registered_right_panel_providers()
         clear_right_panel_providers()
@@ -478,13 +483,15 @@ class RightPanelContractTests(TestCase):
             )
 
 
+@pytest.mark.integration
 class DepartmentViewTests(TestCase):
-    def setUp(self):
-        self.manager = User.objects.create_user(username="manager-ui", password="pass")
-        self.staff = User.objects.create_user(username="staff-ui", password="pass", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.manager = User.objects.create_user(username="manager-ui", password="pass")
+        cls.staff = User.objects.create_user(username="staff-ui", password="pass", is_staff=True)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
-        self.department = Department.objects.create(name="Стационар")
+        cls.manager.groups.add(manager_group)
+        cls.department = Department.objects.create(name="Стационар")
 
     def test_manager_can_open_department_directory(self):
         self.client.force_login(self.manager)
@@ -964,9 +971,11 @@ class RoleRulesCapabilityUiTests(TestCase):
             self.assertFalse(doctor.get(flag), f"doctor.{flag} должен быть выключен")
 
 
+@pytest.mark.integration
 class DiagnosticEndpointTests(TestCase):
-    def setUp(self):
-        self.staff = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
             username="diagnostic-staff",
             password="pass",
             is_staff=True,
@@ -1015,6 +1024,7 @@ class DiagnosticEndpointTests(TestCase):
                 self.assertIn("role_rules", contracts["contracts"])
 
 
+@pytest.mark.serial
 class IisCompatContourTests(TestCase):
     """Пакет 04: PathInfoDebugMiddleware/debug_request изолированы флагом
     ``LOCAL_BUSINESS_IIS_COMPAT_ENABLED`` (default false), лог идёт через
@@ -1569,6 +1579,8 @@ class MemoryIngestionContractExpectationTests(TestCase):
             validator(payload)
 
 
+@pytest.mark.integration
+@pytest.mark.slow
 class DemoSeedCommandTests(TestCase):
     def test_seed_hospital_demo_creates_reference_data(self):
         call_command("seed_hospital_demo")

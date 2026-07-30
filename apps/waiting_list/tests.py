@@ -1,5 +1,6 @@
 from datetime import date
 
+import pytest
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -93,11 +94,13 @@ class WaitingListModelTests(TestCase):
         self.assertTrue(entry.priority_cito)
 
 
+@pytest.mark.integration
 class WaitingListValidationTests(TestCase):
     """Tests for server-side validation in services."""
 
-    def setUp(self):
-        self.user = User.objects.create_user(username="valuser", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="valuser", password="pass")
 
     def test_create_entry_requires_name_min_length(self):
         with self.assertRaises(WaitingListValidationError):
@@ -145,19 +148,21 @@ class WaitingListValidationTests(TestCase):
             )
 
 
+@pytest.mark.integration
 class WaitingListPolicyTests(TestCase):
     """Tests for waiting list policy layer."""
 
-    def setUp(self):
-        self.user = User.objects.create_user(username="policyuser", password="pass")
-        self.manager = User.objects.create_user(username="manager", password="pass")
-        self.outsider = User.objects.create_user(username="outsider", password="pass")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="policyuser", password="pass")
+        cls.manager = User.objects.create_user(username="manager", password="pass")
+        cls.outsider = User.objects.create_user(username="outsider", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
-        grant_doctor_role(self.user)
+        cls.manager.groups.add(manager_group)
+        grant_doctor_role(cls.user)
 
-        self.entry = create_entry(
-            author=self.user,
+        cls.entry = create_entry(
+            author=cls.user,
             patient_name="Пациент",
             patient_dob="01.01.1990",
             patient_phone="+7 (900) 111-22-33",
@@ -199,14 +204,16 @@ class WaitingListPolicyTests(TestCase):
         self.assertFalse(can_transition_waiting_list_entry(self.outsider, self.entry))
 
 
+@pytest.mark.integration
 class WaitingListRouteTests(TestCase):
     """Tests for waiting list routes and HTMX behavior."""
 
-    def setUp(self):
-        self.user = User.objects.create_user(username="routeuser", password="pass")
-        grant_doctor_role(self.user)
-        self.entry = create_entry(
-            author=self.user,
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="routeuser", password="pass")
+        grant_doctor_role(cls.user)
+        cls.entry = create_entry(
+            author=cls.user,
             patient_name="Маршрутный Пациент",
             patient_dob="15.04.1985",
             patient_phone="+7 (903) 123-45-67",

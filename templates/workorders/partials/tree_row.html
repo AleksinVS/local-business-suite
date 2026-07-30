@@ -50,6 +50,7 @@
       {% if row.node_type == "workorder" %}
         <div class="tree-workorder-meta">
           <span class="chip chip-priority-{{ row.workorder.priority|lower }}">{{ row.workorder.get_priority_display }}</span>
+          <span class="badge" data-status="{{ row.workorder.status }}">{{ row.workorder.get_status_display }}</span>
           {% if row.workorder.comment_count %}
             <span class="indicator" title="Комментарии">💬 {{ row.workorder.comment_count }}</span>
           {% endif %}
@@ -59,17 +60,6 @@
         </div>
       {% endif %}
     </div>
-  </div>
-  <div class="tree-cell tree-status-cell" role="gridcell">
-    {% if row.node_type == "workorder" %}
-      <span class="badge" data-status="{{ row.workorder.status }}">{{ row.workorder.get_status_display }}</span>
-    {% else %}
-      <div class="tree-status-stack">
-        {% for chip in row.status_chips %}
-          <span class="badge tree-status-badge" data-status="{{ chip.status }}">{{ chip.label }} · {{ chip.count }}</span>
-        {% endfor %}
-      </div>
-    {% endif %}
   </div>
   <div class="tree-cell tree-assignee-cell" role="gridcell">
     {% if row.node_type == "workorder" %}

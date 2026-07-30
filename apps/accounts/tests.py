@@ -3,9 +3,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -17,7 +18,8 @@ from .services import scope_tokens_for_principal, upsert_ad_identity_from_attrib
 from .views import MANUAL_AUTH_SESSION_KEY
 
 
-class LDAPAuthConfigTests(TestCase):
+@pytest.mark.unit
+class LDAPConfigParsingTests(SimpleTestCase):
     def test_normalize_username_accepts_windows_and_upn_formats(self):
         self.assertEqual(normalize_username("MSCHER\\ivanov"), "ivanov")
         self.assertEqual(normalize_username("ivanov@mscher.local"), "ivanov")
@@ -55,6 +57,9 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(config.transport, "plain")
         self.assertEqual(config.group_role_map, {"IT Support": "technician"})
 
+
+@pytest.mark.integration
+class LDAPAuthConfigTests(TestCase):
     def test_ad_group_sync_removes_only_ad_managed_missing_roles(self):
         User = get_user_model()
         user = User.objects.create_user(username="ldap-user")
@@ -92,6 +97,7 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(scope_tokens_for_principal(sid="S-1-5-21-linked"), {f"user:{user.id}"})
 
 
+@pytest.mark.integration
 class PortalAuthViewTests(TestCase):
     def test_logout_keeps_remote_user_from_immediate_relogin(self):
         User = get_user_model()
@@ -126,6 +132,8 @@ class PortalAuthViewTests(TestCase):
         self.assertEqual(response.wsgi_request.user.username, "local-user")
 
 
+@pytest.mark.integration
+@pytest.mark.slow
 class SeedRolesCommandTests(TestCase):
     """seed_roles создаёт группы ролей контракта + memory-группы и
     синхронизирует их GroupProfile (ADR-0034). Работает на изолированной

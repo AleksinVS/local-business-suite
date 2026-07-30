@@ -1,4 +1,4 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from apps.core.models import Department
 
@@ -41,8 +41,6 @@ def _empty_node(
         "workorder": workorder,
         "count": 0,
         "active_count": 0,
-        "status_counts": Counter(),
-        "status_chips": [],
         "has_children": False,
         "can_create_here": False,
         "sort_label": (sort_label or label).lower(),
@@ -63,8 +61,6 @@ def _device_subtitle(device):
 
 def build_workorder_tree(queryset, *, can_create_workorder=False):
     workorders = list(queryset)
-    status_labels = dict(WorkOrderStatus.choices)
-    status_order = [status for status, _label in WorkOrderStatus.choices]
 
     departments = {
         department.id: department
@@ -104,7 +100,6 @@ def build_workorder_tree(queryset, *, can_create_workorder=False):
         node["count"] += 1
         if status in ACTIVE_STATUSES:
             node["active_count"] += 1
-        node["status_counts"][status] += 1
 
     root = ensure_node(
         node_id="organization:root",
@@ -181,15 +176,6 @@ def build_workorder_tree(queryset, *, can_create_workorder=False):
         node["can_create_here"] = (
             can_create_workorder and node["node_type"] in {"department", "device"}
         )
-        node["status_chips"] = [
-            {
-                "status": status,
-                "label": status_labels.get(status, status),
-                "count": node["status_counts"][status],
-            }
-            for status in status_order
-            if node["status_counts"].get(status)
-        ]
 
     def sort_key(node_id):
         node = nodes[node_id]

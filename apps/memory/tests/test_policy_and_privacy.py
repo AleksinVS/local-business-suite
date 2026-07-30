@@ -1,4 +1,6 @@
 """Тесты политик доступа, проекции source adapter и privacy pipeline."""
+import pytest
+
 from apps.memory.tests._common import *  # noqa: F401,F403
 
 
@@ -54,29 +56,35 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(str(audit), "req-audit-1:allowed")
 
 
+@pytest.mark.integration
 class MemorySourceAdapterProjectionTests(TestCase):
     databases = RUNTIME_DATABASES
 
-    def setUp(self):
-        self.department = Department.objects.create(name="Диагностика")
-        self.device = MedicalDevice.objects.create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.department = Department.objects.create(name="Диагностика")
+        cls.device = MedicalDevice.objects.create(
             name="УЗИ аппарат",
             serial_number="USA-ADAPTER-001",
-            department=self.department,
+            department=cls.department,
         )
-        self.customer = User.objects.create_user(username="adapter-customer", password="pass")
-        self.technician = User.objects.create_user(username="adapter-tech", password="pass")
-        self.manager = User.objects.create_user(username="adapter-manager", password="pass")
-        self.outsider = User.objects.create_user(username="adapter-outsider", password="pass")
+        cls.customer = User.objects.create_user(username="adapter-customer", password="pass")
+        cls.technician = User.objects.create_user(username="adapter-tech", password="pass")
+        cls.manager = User.objects.create_user(username="adapter-manager", password="pass")
+        cls.doctor = User.objects.create_user(username="adapter-doctor", password="pass")
+        cls.outsider = User.objects.create_user(username="adapter-outsider", password="pass")
         for role, user in (
-            (ROLE_CUSTOMER, self.customer),
-            (ROLE_TECHNICIAN, self.technician),
-            (ROLE_MANAGER, self.manager),
+            (ROLE_CUSTOMER, cls.customer),
+            (ROLE_TECHNICIAN, cls.technician),
+            (ROLE_MANAGER, cls.manager),
+            ("doctor", cls.doctor),
         ):
             group, _created = Group.objects.get_or_create(name=role)
             user.groups.add(group)
-        self.board = Board.objects.create(title="Adapter Board", slug="adapter-board")
-        self.board.allowed_groups.set(Group.objects.filter(name__in=[ROLE_CUSTOMER, ROLE_TECHNICIAN, ROLE_MANAGER]))
+        cls.board = Board.objects.create(title="Adapter Board", slug="adapter-board")
+        cls.board.allowed_groups.set(
+            Group.objects.filter(name__in=[ROLE_CUSTOMER, ROLE_TECHNICIAN, ROLE_MANAGER])
+        )
 
     def test_workorder_adapter_reconcile_indexes_search_and_analytics_with_access_check(self):
         workorder = WorkOrder.objects.create(
@@ -136,7 +144,7 @@ class MemorySourceAdapterProjectionTests(TestCase):
                 from ..retrieval import memory_search
 
                 result = memory_search(
-                    actor=self.manager,
+                    actor=self.doctor,
                     query="waiting list beta",
                     search_mode="source_explicit",
                     include_source_data=True,

@@ -32,3 +32,14 @@ clients/*/dist/
 playwright-report/
 test-results/
 .playwright-mcp/
+
+# Деплой-артефакты хостов не коммитятся (AGENTS.md §2, инцидент 2026-07-30)
+.env
+*.env
+*.bak
+web.config*
+*— копия*
+_backup_pre_update/
+scripts/windows/portal-export/
+.claude/settings.local.json
+make_admin.py

@@ -1,8 +1,13 @@
 from django.conf import settings
 
-from apps.workorders.policies import can_manage_departments, can_manage_inventory
+from apps.workorders.policies import (
+    can_manage_departments,
+    can_manage_inventory,
+    can_view_analytics,
+)
 from apps.settings_center.policies import can_manage_settings
 from apps.memory.policies import can_view_memory_review_queue
+from apps.waiting_list.policies import can_view_waiting_list
 
 
 def navigation_flags(request):
@@ -16,4 +21,6 @@ def navigation_flags(request):
         "show_ai_admin_nav": is_authenticated and can_manage_inventory(user),
         "show_memory_review_nav": is_authenticated and can_view_memory_review_queue(user),
         "show_settings_center_nav": is_authenticated and can_manage_settings(user),
+        "show_analytics_nav": is_authenticated and can_view_analytics(user),
+        "show_waiting_list_nav": is_authenticated and can_view_waiting_list(user),
     }

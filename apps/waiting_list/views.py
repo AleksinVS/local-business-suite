@@ -50,11 +50,13 @@ def waiting_list_detail_page_context(request, entry):
 
 
 class WaitingListAccessMixin(LoginRequiredMixin):
-    """Mixin ensuring only authenticated users access waiting list."""
+    """Mixin ensuring only users with the view_waiting_list capability get access."""
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not can_view_waiting_list(request.user):
-            return HttpResponseForbidden("Доступ только для авторизованных пользователей.")
+            return HttpResponseForbidden(
+                "Доступ к листу ожидания есть только у ролей с правом просмотра (по умолчанию — «Врач»)."
+            )
         return super().dispatch(request, *args, **kwargs)
 
 

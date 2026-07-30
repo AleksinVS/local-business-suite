@@ -1,13 +1,18 @@
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import TestCase
+from django.core.management import call_command
+from django.test import TestCase, override_settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+import apps.core.json_utils as json_utils
 from .ldap_backend import LDAPConfig, normalize_username, sync_user_groups
-from .models import ExternalIdentity
+from .models import ExternalIdentity, GroupProfile
 from .services import scope_tokens_for_principal, upsert_ad_identity_from_attributes
 from .views import MANUAL_AUTH_SESSION_KEY
 
@@ -119,3 +124,74 @@ class PortalAuthViewTests(TestCase):
         response = self.client.get(reverse("core:dashboard"), REMOTE_USER="DOMAIN\\remote-user")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.wsgi_request.user.username, "local-user")
+
+
+class SeedRolesCommandTests(TestCase):
+    """seed_roles создаёт группы ролей контракта + memory-группы и
+    синхронизирует их GroupProfile (ADR-0034). Работает на изолированной
+    рабочей копии контракта ролей (override LOCAL_BUSINESS_ROLE_RULES_FILE),
+    чтобы тест не зависел от состояния data/contracts/ и не писал в него."""
+
+    EXPECTED_ROLE_GROUPS = {"customer", "technician", "manager", "admin", "doctor"}
+    EXPECTED_MEMORY_GROUPS = {
+        "memory_admin",
+        "memory_auditor",
+        "memory_index_operator",
+        "memory_observer",
+    }
+
+    def setUp(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        base_role_rules = json_utils.load_json_file("contracts/role_rules.json")
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        role_file = Path(self._tmpdir.name) / "role_rules.json"
+        role_file.write_text(json.dumps(base_role_rules, ensure_ascii=False), encoding="utf-8")
+
+        self._override = override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file)
+        self._override.enable()
+        self.addCleanup(self._override.disable)
+
+        _reset_for_tests()
+        self.addCleanup(_reset_for_tests)
+
+    def test_seed_roles_creates_all_expected_groups(self):
+        call_command("seed_roles")
+
+        expected = self.EXPECTED_ROLE_GROUPS | self.EXPECTED_MEMORY_GROUPS
+        created = set(
+            Group.objects.filter(name__in=expected).values_list("name", flat=True)
+        )
+        self.assertEqual(created, expected)
+
+    def test_doctor_and_admin_groups_get_predefined_profile_with_text(self):
+        call_command("seed_roles")
+
+        for name in ("doctor", "admin"):
+            group = Group.objects.get(name=name)
+            profile = group.profile
+            self.assertTrue(profile.is_predefined)
+            self.assertTrue(profile.title.strip(), f"{name}: пустой title")
+            self.assertTrue(profile.description.strip(), f"{name}: пустой description")
+
+    def test_seed_roles_is_idempotent_and_restores_edited_description(self):
+        call_command("seed_roles")
+        expected = self.EXPECTED_ROLE_GROUPS | self.EXPECTED_MEMORY_GROUPS
+        groups_after_first_run = Group.objects.filter(name__in=expected).count()
+
+        doctor_profile = Group.objects.get(name="doctor").profile
+        original_description = doctor_profile.description
+        doctor_profile.description = "испорчено вручную"
+        doctor_profile.save(update_fields=["description"])
+
+        call_command("seed_roles")
+
+        # Повторный вызов не плодит новые группы...
+        self.assertEqual(
+            Group.objects.filter(name__in=expected).count(), groups_after_first_run
+        )
+        # ...и восстанавливает описание, испорченное вручную.
+        doctor_profile.refresh_from_db()
+        self.assertEqual(doctor_profile.description, original_description)
+        self.assertNotEqual(doctor_profile.description, "испорчено вручную")

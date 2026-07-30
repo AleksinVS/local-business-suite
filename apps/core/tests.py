@@ -56,7 +56,7 @@ from apps.core.right_panels import (
     register_right_panel_provider,
     registered_right_panel_providers,
 )
-from apps.workorders.policies import ROLE_MANAGER
+from apps.workorders.policies import ROLE_MANAGER, capability_flags
 from apps.inventory.models import MedicalDevice
 from apps.waiting_list.models import WaitingListEntry
 from apps.workorders.models import WorkOrder
@@ -882,6 +882,86 @@ class ContractStoreTests(TestCase):
                 state = get_degradation_state()
                 self.assertTrue(state["degraded"])
                 self.assertIn("role_rules", state["contracts"])
+
+
+class RoleRulesCapabilityUiTests(TestCase):
+    """Редактор ролей показывает названия/описания из справочника
+    "$capabilities" контракта (ADR-0034) и не портит служебные ключи при
+    сохранении. Работает на изолированной рабочей копии контракта, чтобы не
+    писать в реальный data/contracts/."""
+
+    def setUp(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        self.manager = User.objects.create_user(username="rr-capability-manager", password="pass")
+        manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        self.manager.groups.add(manager_group)
+
+        self.base_role_rules = json_utils.load_json_file("contracts/role_rules.json")
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.role_file = Path(self._tmpdir.name) / "role_rules.json"
+        self.role_file.write_text(
+            json.dumps(self.base_role_rules, ensure_ascii=False), encoding="utf-8"
+        )
+
+        self._override = override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=self.role_file)
+        self._override.enable()
+        self.addCleanup(self._override.disable)
+
+        _reset_for_tests()
+        self.addCleanup(_reset_for_tests)
+
+    def test_page_shows_capability_label_and_legend_block(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:role_rules"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Просмотр листа ожидания")
+        self.assertContains(response, "Что означает каждое право")
+
+    def test_post_disabling_all_doctor_flags_preserves_capabilities_and_schema(self):
+        self.client.force_login(self.manager)
+
+        get_response = self.client.get(reverse("core:role_rules"))
+        base_hash = get_response.context["role_rules_base_hash"]
+        flags = capability_flags()
+        doctor_before_keys = set(self.base_role_rules["doctor"].keys())
+
+        # Полноценная отправка формы: для каждой роли передаём её текущее
+        # состояние (как реальный браузер отправляет отмеченные чекбоксы),
+        # кроме роли doctor — там все чекбоксы выключены явно.
+        post_data = {"base_hash": base_hash}
+        for role, config in self.base_role_rules.items():
+            if role.startswith("$"):
+                continue
+            post_data[f"role_{role}_view_scope"] = config.get("view_scope", "none")
+            if role == "doctor":
+                continue  # ни один чекбокс doctor не отмечен
+            for flag, _label, _description in flags:
+                if config.get(flag):
+                    post_data[f"role_{role}_{flag}"] = "on"
+
+        response = self.client.post(reverse("core:role_rules"), post_data)
+        self.assertEqual(response.status_code, 302)
+
+        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
+
+        # Служебный блок не потерян и не испорчен полями ролей.
+        self.assertIn("$schema", saved)
+        self.assertIn("$capabilities", saved)
+        self.assertIsInstance(saved["$capabilities"], dict)
+        self.assertIn("view_waiting_list", saved["$capabilities"])
+        self.assertEqual(
+            saved["$capabilities"]["view_waiting_list"]["label"], "Просмотр листа ожидания"
+        )
+
+        # doctor: все булевы права выключены, никаких новых/чужих ключей не появилось.
+        doctor = saved["doctor"]
+        self.assertEqual(set(doctor.keys()), doctor_before_keys)
+        for flag, _label, _description in flags:
+            self.assertFalse(doctor.get(flag), f"doctor.{flag} должен быть выключен")
 
 
 class DiagnosticEndpointTests(TestCase):

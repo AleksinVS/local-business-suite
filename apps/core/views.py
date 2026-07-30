@@ -11,6 +11,7 @@ from apps.workorders.policies import (
     can_manage_departments,
     can_manage_inventory,
     can_manage_roles,
+    capability_flags,
 )
 from .forms import DepartmentForm
 from .models import Department
@@ -88,21 +89,23 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         role_rules = get_contract("role_rules", request=self.request)
-        context["role_rules"] = role_rules
+        # Служебные ключи ("$schema", справочник "$capabilities") — не роли:
+        # в таблицу редактора попадают только настоящие роли.
+        context["role_rules"] = {
+            role: rules
+            for role, rules in role_rules.items()
+            if not role.startswith("$") and isinstance(rules, dict)
+        }
         # Хеш отрисованной версии уходит в форму hidden-полем: защита от
         # потерянного обновления «два администратора открыли форму, второй
         # сохранил позже» — запись со старым хешом будет отклонена.
         context["role_rules_base_hash"] = normalized_hash(role_rules)
 
-        # Define common boolean flags for UI
+        # Булевы права с названиями и комментариями — из справочника
+        # $capabilities контракта (единый источник для UI и policies).
         context["available_flags"] = [
-            ("create_workorder", "Создание заявок"),
-            ("manage_inventory", "Управление инвентарем"),
-            ("manage_board_columns", "Управление досками"),
-            ("manage_assignments", "Управление назначениями"),
-            ("view_analytics", "Просмотр аналитики"),
-            ("manage_departments", "Управление подразделениями"),
-            ("manage_roles", "Управление ролями"),
+            (key, label, description)
+            for key, label, description in capability_flags()
         ]
         context["view_scopes"] = [
             ("all", "Все заявки"),
@@ -125,20 +128,12 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
         # означает запись без проверки — обратная совместимость.
         base_hash = request.POST.get("base_hash") or None
 
-        # Обновляем только поля, которыми управляет упрощённый UI; остальные поля
-        # ролей (в т.ч. $schema) сохраняются как есть.
+        # Обновляем только поля, которыми управляет упрощённый UI; служебные
+        # ключи ("$schema", "$capabilities") и прочие поля ролей сохраняются как есть.
         for role_name, rules in current_rules.items():
-            if not isinstance(rules, dict):
+            if role_name.startswith("$") or not isinstance(rules, dict):
                 continue
-            for flag, _ in [
-                ("create_workorder", "Создание заявок"),
-                ("manage_inventory", "Управление инвентарем"),
-                ("manage_board_columns", "Управление досками"),
-                ("manage_assignments", "Управление назначениями"),
-                ("view_analytics", "Просмотр аналитики"),
-                ("manage_departments", "Управление подразделениями"),
-                ("manage_roles", "Управление ролями"),
-            ]:
+            for flag, _label, _description in capability_flags():
                 rules[flag] = request.POST.get(f"role_{role_name}_{flag}") == "on"
 
             view_scope = request.POST.get(f"role_{role_name}_view_scope")

@@ -2,11 +2,28 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Role Rules Configuration",
   "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "$capabilities": {
+      "type": "object",
+      "description": "Справочник прав: понятные названия и комментарии для нетехнических пользователей.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": { "enum": ["flag", "scope", "targets"] },
+          "label": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 }
+        },
+        "required": ["type", "label", "description"]
+      }
+    }
+  },
   "patternProperties": {
     "^[a-zA-Z0-9_]+$": {
       "type": "object",
       "properties": {
         "display_name": { "type": "string" },
+        "description": { "type": "string" },
         "view_scope": {
           "enum": ["all", "department_branch", "assigned_or_unassigned_or_authored", "authored", "none"]
         },
@@ -31,7 +48,9 @@
         "manage_roles": { "type": "boolean" },
         "manage_ai_skills": { "type": "boolean" },
         "memory_organization_write": { "type": "boolean" },
-        "memory_organization_review": { "type": "boolean" }
+        "memory_organization_review": { "type": "boolean" },
+        "view_waiting_list": { "type": "boolean" },
+        "create_waiting_list": { "type": "boolean" }
       },
       "required": [
         "view_scope",

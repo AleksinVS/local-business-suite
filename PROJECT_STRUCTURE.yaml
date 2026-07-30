@@ -300,6 +300,7 @@ docs: # Документация проекта
     ADR-0031-runtime-contract-store-and-delivery.md: file # ADR: Единый слой доступа к runtime-контрактам и их доставка в agent-runtime
     ADR-0032-retire-legacy-ai-ui-driver.md: file # ADR: Вывод legacy-драйвера AI UI
     ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md: file # ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)
+    ADR-0034-predefined-access-groups-and-capability-descriptions.md: file # ADR: Предопределённые группы доступа, комментарии к правам ($capabilities, GroupProfile), лист ожидания только врачам, направление row-level
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -347,6 +348,7 @@ docs: # Документация проекта
     SETTINGS_CENTER_DEPLOYMENT.md: file # Deployment note для Settings Center, env proposals, migrations и restart semantics
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
+    ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
     AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     AI_UI_PROTOCOL_OPERATIONS.md: file # Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native
@@ -388,6 +390,10 @@ docs: # Документация проекта
     backlog.md: file # Актуальный backlog без архивного раздела
     README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
+learning: # Учебный модуль владельца проекта по Python и устройству local-business-suite
+  LESSON_01_PYTHON_LANGUAGE_OVERVIEW.md: file # Урок 1: обзор Python как языка, синтаксиса и структуры программ
+  PYTHON_LEARNING_PROGRAM.md: file # Учебная программа по Python на базе проекта
+  README.md: file # Описание учебного модуля и связи с основным проектом
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json

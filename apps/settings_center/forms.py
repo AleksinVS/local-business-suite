@@ -24,9 +24,29 @@ class HelpQuestionForm(forms.Form):
     question = forms.CharField(label="Вопрос", widget=forms.TextInput(), required=False)
 
 
+class GroupWithProfileChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        profile = getattr(obj, "profile", None)
+        title = getattr(profile, "title", "") if profile else ""
+        if not title:
+            return obj.name
+        description = getattr(profile, "description", "") or ""
+        if len(description) > 100:
+            description = description[:100].rstrip() + "…"
+        if description:
+            return f"{title} ({obj.name}) — {description}"
+        return f"{title} ({obj.name})"
+
+
 class PortalUserCreateForm(forms.ModelForm):
     password = forms.CharField(label="Пароль", widget=forms.PasswordInput, required=False)
-    groups = forms.ModelMultipleChoiceField(label="Группы", queryset=Group.objects.order_by("name"), required=False)
+    groups = GroupWithProfileChoiceField(
+        label="Группы доступа",
+        queryset=Group.objects.select_related("profile").order_by("name"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Отметьте группы. Полное описание каждой группы — в списке ниже формы.",
+    )
 
     class Meta:
         model = get_user_model()

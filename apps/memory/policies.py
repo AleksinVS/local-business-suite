@@ -21,6 +21,26 @@ MEMORY_REVIEW_GROUP_CAPABILITIES = {
     "memory_index_operator": {"view_review_queue", "manage_search_index"},
     "memory_observer": {"view_review_queue"},
 }
+# Понятные названия и комментарии групп памяти для нетехнических пользователей;
+# синхронизируются в GroupProfile командой seed_roles (ADR-0034).
+MEMORY_REVIEW_GROUP_PROFILES = {
+    "memory_admin": (
+        "Администратор памяти",
+        "Полный доступ к обслуживанию памяти ИИ: очередь ревью, проблемы приватности, поисковый индекс и аудит доступа.",
+    ),
+    "memory_auditor": (
+        "Аудитор памяти",
+        "Проверяет очередь ревью памяти ИИ, включая проблемы приватности, и просматривает аудит доступа. Не управляет поисковым индексом.",
+    ),
+    "memory_index_operator": (
+        "Оператор индекса памяти",
+        "Обслуживает поисковый индекс памяти ИИ и видит очередь ревью. Не работает с проблемами приватности.",
+    ),
+    "memory_observer": (
+        "Наблюдатель памяти",
+        "Только просмотр очереди ревью памяти ИИ, без права принимать решения.",
+    ),
+}
 LEGACY_TRUST_STATUS_MAPPING = {
     "trusted": TRUSTED_STATUS,
     "candidate_only": REVIEW_REQUIRED_STATUS,

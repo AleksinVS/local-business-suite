@@ -10,11 +10,13 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from apps.accounts.models import GroupProfile
 from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
 
 from .contract_services import apply_contract_payload
 from .env_services import create_env_proposal
+from .forms import PortalUserCreateForm
 from .help_services import answer_help_question, build_help_context
 from .models import SettingsChange, SettingsEnvProposal
 from .registry import get_registry
@@ -100,7 +102,7 @@ class SettingsCenterContractTests(TestCase):
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             changed_payload = {**payload}
-            first_role = next(role for role in changed_payload if role != "$schema")
+            first_role = next(role for role in changed_payload if not role.startswith("$"))
             changed_payload[first_role] = {**changed_payload[first_role], "display_name": "Changed role name"}
 
             with override_settings(
@@ -126,7 +128,7 @@ class SettingsCenterContractTests(TestCase):
             role_file = Path(tmpdir) / "role_rules.json"
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            first_role = next(role for role in payload if role != "$schema")
+            first_role = next(role for role in payload if not role.startswith("$"))
 
             with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
                 _reset_for_tests()
@@ -293,3 +295,45 @@ class SettingsCenterUserViewsTests(TestCase):
         user.refresh_from_db()
         self.assertFalse(user.is_active)
         self.assertEqual(SettingsChange.objects.filter(action=SettingsChange.Action.AD_LINK).count(), 1)
+
+
+class SettingsCenterGroupProfileTests(TestCase):
+    def test_group_field_label_uses_profile_title_and_description(self):
+        group = Group.objects.create(name="doctor")
+        GroupProfile.objects.create(
+            group=group,
+            title="Врач",
+            description="Приём пациентов, ведение карт, назначение лечения.",
+        )
+
+        form = PortalUserCreateForm()
+        label = form.fields["groups"].label_from_instance(group)
+
+        self.assertIn("Врач", label)
+        self.assertIn("doctor", label)
+        self.assertIn("Приём пациентов", label)
+
+    def test_group_field_label_falls_back_to_name_without_profile(self):
+        group = Group.objects.create(name="no-profile-group")
+
+        form = PortalUserCreateForm()
+        label = form.fields["groups"].label_from_instance(group)
+
+        self.assertEqual(label, "no-profile-group")
+
+    def test_user_create_page_shows_group_reference_with_profile_title(self):
+        actor = User.objects.create_superuser(username="settings-root-groups", password="pass")
+        group = Group.objects.create(name="nurse")
+        GroupProfile.objects.create(
+            group=group,
+            title="Медсестра",
+            description="Помощь врачу, работа с расходными материалами.",
+        )
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:user_create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Описание групп доступа")
+        self.assertContains(response, "Медсестра")
+        self.assertContains(response, "Помощь врачу, работа с расходными материалами.")

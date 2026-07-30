@@ -11,11 +11,19 @@ User = get_user_model()
 
 from .models import SERVICE_CHOICES, WaitingListAuditLog, WaitingListEntry, WaitingListStatus
 from .policies import (
+    ROLE_DOCTOR,
     can_create_waiting_list,
     can_edit_waiting_list_entry,
     can_transition_waiting_list_entry,
     can_view_waiting_list,
 )
+
+
+def grant_doctor_role(*users):
+    """Выдать роль «Врач» (доступ к листу ожидания по ADR-0034)."""
+    doctor_group, _ = Group.objects.get_or_create(name=ROLE_DOCTOR)
+    for user in users:
+        user.groups.add(doctor_group)
 from .right_panel import WaitingListRightPanelProvider
 from .services import (
     WaitingListValidationError,
@@ -146,6 +154,7 @@ class WaitingListPolicyTests(TestCase):
         self.outsider = User.objects.create_user(username="outsider", password="pass")
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         self.manager.groups.add(manager_group)
+        grant_doctor_role(self.user)
 
         self.entry = create_entry(
             author=self.user,
@@ -155,8 +164,21 @@ class WaitingListPolicyTests(TestCase):
             service_id="s1",
         )
 
-    def test_authenticated_user_can_view(self):
+    def test_doctor_can_view(self):
         self.assertTrue(can_view_waiting_list(self.user))
+        self.assertTrue(can_create_waiting_list(self.user))
+
+    def test_non_doctor_cannot_view(self):
+        # ADR-0034: лист ожидания доступен только ролям с правом
+        # view_waiting_list (по умолчанию — «Врач»); менеджер и просто
+        # авторизованный пользователь доступа не имеют.
+        self.assertFalse(can_view_waiting_list(self.outsider))
+        self.assertFalse(can_view_waiting_list(self.manager))
+        self.assertFalse(can_create_waiting_list(self.outsider))
+
+    def test_superuser_can_view(self):
+        superuser = User.objects.create_superuser(username="wl-root", password="pass")
+        self.assertTrue(can_view_waiting_list(superuser))
 
     def test_author_can_edit(self):
         self.assertTrue(can_edit_waiting_list_entry(self.user, self.entry))
@@ -182,6 +204,7 @@ class WaitingListRouteTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username="routeuser", password="pass")
+        grant_doctor_role(self.user)
         self.entry = create_entry(
             author=self.user,
             patient_name="Маршрутный Пациент",
@@ -194,10 +217,16 @@ class WaitingListRouteTests(TestCase):
         response = self.client.get(reverse("waiting_list:dashboard"))
         self.assertEqual(response.status_code, 302)
 
-    def test_dashboard_returns_200_for_authenticated(self):
+    def test_dashboard_returns_200_for_doctor(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("waiting_list:dashboard"))
         self.assertEqual(response.status_code, 200)
+
+    def test_dashboard_forbidden_without_doctor_role(self):
+        non_doctor = User.objects.create_user(username="nondoctor", password="pass")
+        self.client.force_login(non_doctor)
+        response = self.client.get(reverse("waiting_list:dashboard"))
+        self.assertEqual(response.status_code, 403)
 
     def test_create_entry_form_renders(self):
         self.client.force_login(self.user)

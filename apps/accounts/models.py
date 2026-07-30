@@ -35,6 +35,47 @@ class User(AbstractUser):
         return "Без OU"
 
 
+class GroupProfile(models.Model):
+    """Понятное описание группы доступа для нетехнических пользователей.
+
+    Стандартная группа Django хранит только техническое имя (например,
+    ``doctor``). Профиль добавляет человекочитаемое название и комментарий:
+    кому выдавать группу и что она даёт. Для предопределённых групп профиль
+    синхронизируется командой ``seed_roles`` из контракта ролей.
+    """
+
+    group = models.OneToOneField(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="profile",
+        verbose_name="Группа",
+    )
+    title = models.CharField(
+        "Название",
+        max_length=150,
+        blank=True,
+        help_text="Понятное название группы, например «Врач».",
+    )
+    description = models.TextField(
+        "Комментарий",
+        blank=True,
+        help_text="Кому выдавать группу и какие возможности она даёт.",
+    )
+    is_predefined = models.BooleanField(
+        "Предопределённая",
+        default=False,
+        help_text="Создана автоматически из контракта ролей; название и комментарий обновляются командой seed_roles.",
+    )
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+
+    class Meta:
+        verbose_name = "Описание группы"
+        verbose_name_plural = "Описания групп"
+
+    def __str__(self):
+        return self.title or self.group.name
+
+
 class ExternalIdentity(models.Model):
     class Provider(models.TextChoices):
         ACTIVE_DIRECTORY = "active_directory", "Active Directory"

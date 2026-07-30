@@ -1,18 +1,46 @@
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 
+from apps.accounts.models import GroupProfile
 from apps.core.contract_store import get_contract
+from apps.memory.policies import MEMORY_REVIEW_GROUP_PROFILES
 
 
 class Command(BaseCommand):
-    help = "Create initial role groups for Корпоративный портал ВОБ №3."
+    help = (
+        "Create predefined access groups (contract roles + memory groups) "
+        "and sync their human-readable profiles."
+    )
 
     def handle(self, *args, **options):
-        roles = [role for role in get_contract("role_rules") if not role.startswith("$")]
-        for role in roles:
-            Group.objects.get_or_create(name=role)
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Role groups ensured: {', '.join(roles)}"
+        seeded = []
+
+        role_rules = get_contract("role_rules")
+        for role, config in role_rules.items():
+            if role.startswith("$") or not isinstance(config, dict):
+                continue
+            self._ensure_group(
+                name=role,
+                title=config.get("display_name", ""),
+                description=config.get("description", ""),
             )
+            seeded.append(role)
+
+        for name, (title, description) in MEMORY_REVIEW_GROUP_PROFILES.items():
+            self._ensure_group(name=name, title=title, description=description)
+            seeded.append(name)
+
+        self.stdout.write(
+            self.style.SUCCESS(f"Predefined groups ensured: {', '.join(seeded)}")
+        )
+
+    def _ensure_group(self, *, name, title, description):
+        group, _ = Group.objects.get_or_create(name=name)
+        GroupProfile.objects.update_or_create(
+            group=group,
+            defaults={
+                "title": title,
+                "description": description,
+                "is_predefined": True,
+            },
         )

@@ -56,6 +56,33 @@ REQUIRED_WORKFLOW_KEYS = {
     "transitions",
 }
 
+# Метаданные-ключи контракта ролей (не являются ролями). Ключи с префиксом "$"
+# зарезервированы под служебные блоки: "$schema" — ссылка на JSON-схему,
+# "$capabilities" — справочник прав с понятными названиями и комментариями
+# для нетехнических пользователей (ADR-0034).
+CAPABILITY_METADATA_KEY = "$capabilities"
+CAPABILITY_TYPES = {"flag", "scope", "targets"}
+
+
+def _validate_capability_metadata(metadata):
+    if not isinstance(metadata, dict):
+        raise ValidationError("Блок $capabilities должен быть JSON-объектом.")
+    for key, entry in metadata.items():
+        if not isinstance(entry, dict):
+            raise ValidationError(f"Описание права '{key}' должно быть JSON-объектом.")
+        if entry.get("type") not in CAPABILITY_TYPES:
+            raise ValidationError(
+                f"У права '{key}' поле type должно быть одним из: "
+                + ", ".join(sorted(CAPABILITY_TYPES))
+                + "."
+            )
+        for field in ("label", "description"):
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValidationError(
+                    f"У права '{key}' поле {field} должно быть непустой строкой."
+                )
+
 
 def validate_role_rules_payload(payload, workflow_payload=None):
     _ensure_non_empty_mapping(payload, "Конфигурация ролей")
@@ -64,7 +91,9 @@ def validate_role_rules_payload(payload, workflow_payload=None):
         known_statuses = set(workflow_payload.get("statuses", []))
 
     for role, config in payload.items():
-        if role == "$schema":
+        if role.startswith("$"):
+            if role == CAPABILITY_METADATA_KEY:
+                _validate_capability_metadata(config)
             continue
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")

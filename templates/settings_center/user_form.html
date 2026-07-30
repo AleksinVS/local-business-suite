@@ -20,5 +20,39 @@
       <button type="submit" class="button">Сохранить</button>
     </div>
   </form>
+
+  <details class="group-reference-legend">
+    <summary>Описание групп доступа</summary>
+    <dl>
+      {% for group in group_reference %}
+        <dt>{{ group.profile.title|default:group.name }}</dt>
+        {% if group.profile.description %}
+          <dd>{{ group.profile.description }}</dd>
+        {% else %}
+          <dd class="muted">Описание не заполнено.</dd>
+        {% endif %}
+      {% endfor %}
+    </dl>
+  </details>
 </section>
+
+<style>
+  .group-reference-legend {
+    margin-top: 24px;
+    color: var(--text-muted);
+  }
+  .group-reference-legend summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text, inherit);
+  }
+  .group-reference-legend dt {
+    margin-top: 10px;
+    font-weight: 600;
+    color: var(--text, inherit);
+  }
+  .group-reference-legend dd {
+    margin: 2px 0 0 0;
+  }
+</style>
 {% endblock %}

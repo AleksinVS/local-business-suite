@@ -89,16 +89,20 @@
                     <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Администрирование Django', '🛠️', '{% url 'admin:index' %}')">☆</button>
                   </a>
                 {% endif %}
-                <a href="{% url 'analytics:dashboard' %}">
-                  <span class="nav-icon">📊</span>
-                  <span class="nav-text">Аналитика</span>
-                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
-                </a>
-                <a href="{% url 'waiting_list:dashboard' %}">
-                  <span class="nav-icon">⏳</span>
-                  <span class="nav-text">Лист ожидания</span>
-                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
-                </a>
+                {% if show_analytics_nav %}
+                  <a href="{% url 'analytics:dashboard' %}">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Аналитика</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
+                {% if show_waiting_list_nav %}
+                  <a href="{% url 'waiting_list:dashboard' %}">
+                    <span class="nav-icon">⏳</span>
+                    <span class="nav-text">Лист ожидания</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
+                  </a>
+                {% endif %}
                 {% if user.is_authenticated %}
                   <form action="{% url 'logout' %}" method="post" class="logout-form">
                     {% csrf_token %}

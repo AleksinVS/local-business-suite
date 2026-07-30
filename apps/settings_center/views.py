@@ -5,6 +5,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -342,7 +343,16 @@ class UserListView(UserManagementMixin, ListView):
         return self.model.objects.select_related("department").prefetch_related("groups", "external_identities").order_by("username")
 
 
-class UserCreateView(UserManagementMixin, CreateView):
+class GroupReferenceContextMixin:
+    """Добавляет в контекст справочник групп доступа с их описанием (profile)."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["group_reference"] = Group.objects.select_related("profile").order_by("name")
+        return context
+
+
+class UserCreateView(GroupReferenceContextMixin, UserManagementMixin, CreateView):
     model = get_user_model()
     form_class = PortalUserCreateForm
     template_name = "settings_center/user_form.html"
@@ -365,7 +375,7 @@ class UserCreateView(UserManagementMixin, CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class UserUpdateView(UserManagementMixin, UpdateView):
+class UserUpdateView(GroupReferenceContextMixin, UserManagementMixin, UpdateView):
     model = get_user_model()
     form_class = PortalUserUpdateForm
     template_name = "settings_center/user_form.html"

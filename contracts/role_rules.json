@@ -1,7 +1,110 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
+  "$capabilities": {
+    "view_scope": {
+      "type": "scope",
+      "label": "Область видимости заявок",
+      "description": "Какие заявки пользователь видит на доске, в дереве и в карточках: все, только ветку своего подразделения, назначенные на себя или только поданные им самим."
+    },
+    "create_workorder": {
+      "type": "flag",
+      "label": "Создание заявок",
+      "description": "Разрешает подавать новые заявки на ремонт и обслуживание техники."
+    },
+    "edit_scope": {
+      "type": "scope",
+      "label": "Редактирование заявок",
+      "description": "Какие заявки пользователь может изменять после создания: все, только свои или никакие."
+    },
+    "comment_scope": {
+      "type": "scope",
+      "label": "Комментирование заявок",
+      "description": "К каким заявкам пользователь может оставлять комментарии. Обычно — ко всем, которые ему видны."
+    },
+    "upload_attachment_scope": {
+      "type": "scope",
+      "label": "Загрузка файлов к заявкам",
+      "description": "К каким заявкам пользователь может прикладывать файлы (фото, акты, документы)."
+    },
+    "confirm_closure_scope": {
+      "type": "scope",
+      "label": "Подтверждение закрытия",
+      "description": "По каким заявкам пользователь может подтверждать, что работа действительно выполнена, и закрывать их."
+    },
+    "rate_scope": {
+      "type": "scope",
+      "label": "Оценка выполненной работы",
+      "description": "По каким закрытым заявкам пользователь может ставить оценку исполнителю."
+    },
+    "transition_scope": {
+      "type": "scope",
+      "label": "Смена статусов заявок",
+      "description": "У каких заявок пользователь может менять статус (например, брать в работу или отменять)."
+    },
+    "transition_targets": {
+      "type": "targets",
+      "label": "Доступные статусы",
+      "description": "В какие именно статусы пользователь может переводить заявку. «*» означает любые статусы."
+    },
+    "manage_inventory": {
+      "type": "flag",
+      "label": "Управление инвентарём",
+      "description": "Добавление, изменение и архивирование карточек медицинских изделий."
+    },
+    "manage_board_columns": {
+      "type": "flag",
+      "label": "Управление досками",
+      "description": "Настройка колонок канбан-доски: названия, порядок, отображение."
+    },
+    "manage_assignments": {
+      "type": "flag",
+      "label": "Управление назначениями",
+      "description": "Назначение и снятие исполнителей на заявки."
+    },
+    "view_analytics": {
+      "type": "flag",
+      "label": "Просмотр аналитики",
+      "description": "Доступ к сводным отчётам и статистике по заявкам всей организации."
+    },
+    "manage_departments": {
+      "type": "flag",
+      "label": "Управление подразделениями",
+      "description": "Создание и изменение структуры подразделений организации."
+    },
+    "manage_roles": {
+      "type": "flag",
+      "label": "Управление ролями",
+      "description": "Изменение прав ролей на этой странице. Право уровня администратора — выдавать с осторожностью."
+    },
+    "manage_ai_skills": {
+      "type": "flag",
+      "label": "Управление ИИ-навыками",
+      "description": "Создание и изменение навыков (сценариев) ИИ-помощника."
+    },
+    "memory_organization_write": {
+      "type": "flag",
+      "label": "Запись в память организации",
+      "description": "Разрешает сохранять знания в общую память организации, доступную ИИ-помощнику."
+    },
+    "memory_organization_review": {
+      "type": "flag",
+      "label": "Ревью памяти организации",
+      "description": "Проверка и подтверждение записей, попадающих в общую память организации."
+    },
+    "view_waiting_list": {
+      "type": "flag",
+      "label": "Просмотр листа ожидания",
+      "description": "Доступ к листу ожидания пациентов. Содержит персональные данные (ФИО, дата рождения, телефон) — по правилам организации выдаётся только врачам (роль «Врач»)."
+    },
+    "create_waiting_list": {
+      "type": "flag",
+      "label": "Добавление в лист ожидания",
+      "description": "Разрешает добавлять новые записи в лист ожидания пациентов. По правилам организации выдаётся только врачам (роль «Врач»)."
+    }
+  },
   "customer": {
     "display_name": "Заказчик (Пользователь)",
+    "description": "Сотрудник подразделения: подаёт заявки на ремонт и обслуживание техники и следит за их выполнением. Видит только заявки ветки своего подразделения.",
     "view_scope": "department_branch",
     "create_workorder": true,
     "edit_scope": "authored",
@@ -19,10 +122,13 @@
     "manage_roles": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
-    "memory_organization_review": false
+    "memory_organization_review": false,
+    "view_waiting_list": false,
+    "create_waiting_list": false
   },
   "technician": {
     "display_name": "Техник (Медтехник)",
+    "description": "Исполнитель: берёт заявки в работу, меняет их статусы, прикладывает файлы о выполненных работах. Видит назначенные на себя и свободные заявки.",
     "view_scope": "assigned_or_unassigned_or_authored",
     "create_workorder": false,
     "edit_scope": "none",
@@ -40,10 +146,13 @@
     "manage_roles": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
-    "memory_organization_review": false
+    "memory_organization_review": false,
+    "view_waiting_list": false,
+    "create_waiting_list": false
   },
   "manager": {
-    "display_name": "Менеджер (Администратор)",
+    "display_name": "Менеджер (Руководитель)",
+    "description": "Руководитель направления: видит все заявки, управляет назначениями, досками, инвентарём, аналитикой и настройками ролей.",
     "view_scope": "all",
     "create_workorder": true,
     "edit_scope": "all",
@@ -61,6 +170,56 @@
     "manage_roles": true,
     "manage_ai_skills": true,
     "memory_organization_write": true,
-    "memory_organization_review": true
+    "memory_organization_review": true,
+    "view_waiting_list": false,
+    "create_waiting_list": false
+  },
+  "admin": {
+    "display_name": "Администратор портала",
+    "description": "Администратор: все права портала, включая управление ролями, подразделениями и ИИ. Для входа в панель администрирования дополнительно нужен флаг «Доступ к администрированию» в карточке пользователя.",
+    "view_scope": "all",
+    "create_workorder": true,
+    "edit_scope": "all",
+    "comment_scope": "visible",
+    "upload_attachment_scope": "visible",
+    "confirm_closure_scope": "all",
+    "rate_scope": "all",
+    "transition_scope": "all",
+    "transition_targets": "*",
+    "manage_inventory": true,
+    "manage_board_columns": true,
+    "manage_assignments": true,
+    "view_analytics": true,
+    "manage_departments": true,
+    "manage_roles": true,
+    "manage_ai_skills": true,
+    "memory_organization_write": true,
+    "memory_organization_review": true,
+    "view_waiting_list": false,
+    "create_waiting_list": false
+  },
+  "doctor": {
+    "display_name": "Врач",
+    "description": "Врач: работает с листом ожидания пациентов — просматривает и добавляет записи. Лист ожидания доступен только врачам; доступа к заявкам и другим разделам роль не даёт.",
+    "view_scope": "none",
+    "create_workorder": false,
+    "edit_scope": "none",
+    "comment_scope": "none",
+    "upload_attachment_scope": "none",
+    "confirm_closure_scope": "none",
+    "rate_scope": "none",
+    "transition_scope": "none",
+    "transition_targets": [],
+    "manage_inventory": false,
+    "manage_board_columns": false,
+    "manage_assignments": false,
+    "view_analytics": false,
+    "manage_departments": false,
+    "manage_roles": false,
+    "manage_ai_skills": false,
+    "memory_organization_write": false,
+    "memory_organization_review": false,
+    "view_waiting_list": true,
+    "create_waiting_list": true
   }
 }

@@ -636,7 +636,7 @@ class AIViewsTests(TestCase):
             role_file = Path(tmpdir) / "role_rules.json"
             role_rules = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(role_rules, ensure_ascii=False), encoding="utf-8")
-            first_role = next(role for role in role_rules if role != "$schema")
+            first_role = next(role for role in role_rules if not role.startswith("$"))
 
             with override_settings(
                 LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,

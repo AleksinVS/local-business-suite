@@ -36,6 +36,9 @@ def _override_contract_file(setting_name, filename, payload):
             finally:
                 _reset_for_tests()
 
+import apps.core.json_utils as json_utils
+from apps.core.contract_store import get_contract
+
 from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     ROLE_CUSTOMER,
@@ -45,6 +48,8 @@ from .policies import (
     can_rate,
     can_transition,
     can_view,
+    capability_flags,
+    superuser_rules,
 )
 from .right_panel import WorkOrderRightPanelProvider
 from .services import confirm_closure, create_workorder, transition_workorder
@@ -1099,3 +1104,62 @@ class WorkOrderAttachmentServingTests(TestCase):
         self.client.force_login(self.customer)
         response = self.client.get(self.file_url)
         self.assertEqual(response.status_code, 404)
+
+
+class CapabilityRegistryTests(TestCase):
+    """capability_flags()/superuser_rules() читают справочник "$capabilities"
+    контракта ролей (ADR-0034). Тесты работают на изолированной копии
+    contracts/role_rules.json, чтобы не зависеть от состояния data/contracts/."""
+
+    def setUp(self):
+        self.base_role_rules = json_utils.load_json_file("contracts/role_rules.json")
+
+    def test_capability_flags_returns_nonempty_triples_with_expected_keys(self):
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", self.base_role_rules
+        ):
+            flags = capability_flags()
+
+        self.assertTrue(flags)
+        for key, label, _description in flags:
+            self.assertTrue(key)
+            self.assertTrue(label)
+
+        keys = {key for key, _label, _description in flags}
+        self.assertIn("view_waiting_list", keys)
+        self.assertIn("memory_organization_write", keys)
+
+    def test_superuser_rules_grant_every_capability_flag_and_full_scope(self):
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", self.base_role_rules
+        ):
+            flags = capability_flags()
+            rules = superuser_rules()
+
+        # Регресс-тест дрейфа: любое новое булево право из контракта обязано
+        # автоматически попадать в права суперпользователя.
+        for key, _label, _description in flags:
+            self.assertTrue(rules.get(key), f"superuser_rules() не содержит право '{key}'")
+
+        self.assertEqual(rules["view_scope"], "all")
+        self.assertEqual(rules["transition_targets"], "*")
+
+    def test_every_contract_role_has_display_name_and_description(self):
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", self.base_role_rules
+        ):
+            role_rules = get_contract("role_rules")
+
+        roles_checked = 0
+        for role, config in role_rules.items():
+            if role.startswith("$"):
+                continue
+            roles_checked += 1
+            display_name = config.get("display_name")
+            description = config.get("description")
+            self.assertIsInstance(display_name, str)
+            self.assertTrue(display_name.strip(), f"{role}: пустой display_name")
+            self.assertIsInstance(description, str)
+            self.assertTrue(description.strip(), f"{role}: пустой description")
+
+        self.assertGreater(roles_checked, 0)

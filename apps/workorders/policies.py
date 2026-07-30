@@ -6,6 +6,41 @@ ROLE_CUSTOMER = "customer"
 ROLE_TECHNICIAN = "technician"
 ROLE_MANAGER = "manager"
 
+# Запасной список булевых прав на случай, если рабочая копия контракта ещё не
+# содержит блок $capabilities (например, деградация store на старый снимок).
+FALLBACK_BOOLEAN_CAPABILITIES = (
+    ("create_workorder", "Создание заявок", ""),
+    ("manage_inventory", "Управление инвентарём", ""),
+    ("manage_board_columns", "Управление досками", ""),
+    ("manage_assignments", "Управление назначениями", ""),
+    ("view_analytics", "Просмотр аналитики", ""),
+    ("manage_departments", "Управление подразделениями", ""),
+    ("manage_roles", "Управление ролями", ""),
+    ("manage_ai_skills", "Управление ИИ-навыками", ""),
+    ("memory_organization_write", "Запись в память организации", ""),
+    ("memory_organization_review", "Ревью памяти организации", ""),
+    ("view_waiting_list", "Просмотр листа ожидания", ""),
+    ("create_waiting_list", "Добавление в лист ожидания", ""),
+)
+
+
+def capability_flags():
+    """Булевы права из справочника $capabilities контракта ролей.
+
+    Возвращает список кортежей (ключ, название, комментарий) — единый источник
+    для редактора ролей и для superuser_rules(). Если справочника в рабочей
+    копии контракта нет, используется статический запасной список.
+    """
+    metadata = role_rules().get("$capabilities")
+    if not isinstance(metadata, dict):
+        return list(FALLBACK_BOOLEAN_CAPABILITIES)
+    flags = [
+        (key, entry.get("label", key), entry.get("description", ""))
+        for key, entry in metadata.items()
+        if isinstance(entry, dict) and entry.get("type") == "flag"
+    ]
+    return flags or list(FALLBACK_BOOLEAN_CAPABILITIES)
+
 def user_roles(user):
     if not user.is_authenticated:
         return set()
@@ -35,9 +70,12 @@ def active_role_rules(user):
 
 
 def superuser_rules():
-    return {
+    # Scope-поля заданы явно, а булевы права берутся из справочника контракта:
+    # новое право автоматически включается суперпользователю, ручной список
+    # больше не может отстать от контракта (ранее из-за этого суперпользователь
+    # терял memory_organization_write/review).
+    rules = {
         "view_scope": "all",
-        "create_workorder": True,
         "edit_scope": "all",
         "comment_scope": "visible",
         "upload_attachment_scope": "visible",
@@ -45,14 +83,10 @@ def superuser_rules():
         "rate_scope": "all",
         "transition_scope": "all",
         "transition_targets": "*",
-        "manage_inventory": True,
-        "manage_board_columns": True,
-        "manage_assignments": True,
-        "view_analytics": True,
-        "manage_departments": True,
-        "manage_roles": True,
-        "manage_ai_skills": True,
     }
+    for key, _label, _description in capability_flags():
+        rules[key] = True
+    return rules
 
 
 def has_role_capability(user, capability):

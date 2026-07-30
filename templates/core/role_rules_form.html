@@ -23,9 +23,9 @@
         <thead>
           <tr>
             <th>Роль</th>
-            <th>Область видимости</th>
-            {% for flag, label in available_flags %}
-              <th>{{ label }}</th>
+            <th title="Какие заявки пользователь видит на доске и в дереве">Область видимости</th>
+            {% for flag, label, description in available_flags %}
+              <th title="{{ description }}">{{ label }}</th>
             {% endfor %}
           </tr>
         </thead>
@@ -35,6 +35,11 @@
               <td>
                 <strong>{{ rules|attribute_lookup:"display_name"|default:role_name }}</strong>
                 <br><small class="muted">{{ role_name }}</small>
+                {% with role_description=rules|attribute_lookup:"description" %}
+                  {% if role_description %}
+                    <p class="role-description">{{ role_description }}</p>
+                  {% endif %}
+                {% endwith %}
               </td>
               <td>
                 <select name="role_{{ role_name }}_view_scope">
@@ -45,9 +50,10 @@
                   {% endfor %}
                 </select>
               </td>
-              {% for flag, label in available_flags %}
+              {% for flag, label, description in available_flags %}
                 <td class="text-center">
-                  <input type="checkbox" name="role_{{ role_name }}_{{ flag }}" 
+                  <input type="checkbox" name="role_{{ role_name }}_{{ flag }}"
+                         title="{{ description }}"
                          {% if rules|attribute_lookup:flag %}checked{% endif %}>
                 </td>
               {% endfor %}
@@ -61,6 +67,16 @@
       <button type="submit" class="button">Сохранить изменения</button>
     </div>
   </form>
+
+  <details class="capability-legend">
+    <summary>Что означает каждое право</summary>
+    <dl>
+      {% for flag, label, description in available_flags %}
+        <dt>{{ label }}</dt>
+        <dd>{{ description }}</dd>
+      {% endfor %}
+    </dl>
+  </details>
 </section>
 
 <style>
@@ -96,6 +112,28 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+  }
+  .role-description {
+    margin: 6px 0 0;
+    max-width: 260px;
+    font-size: 0.82em;
+    color: #666;
+  }
+  .capability-legend {
+    margin-top: 24px;
+    color: #444;
+  }
+  .capability-legend summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .capability-legend dt {
+    margin-top: 10px;
+    font-weight: 600;
+  }
+  .capability-legend dd {
+    margin: 2px 0 0 0;
+    color: #666;
   }
 </style>
 {% endblock %}

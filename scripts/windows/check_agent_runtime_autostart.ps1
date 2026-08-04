@@ -1,4 +1,4 @@
-# Diagnostics of Agent Runtime autostart without modifying the system.
+﻿# Diagnostics of Agent Runtime autostart without modifying the system.
 #
 # Distinguishes:
 #   * normal uvicorn multiprocessing (1 scheduled task + 1 root master

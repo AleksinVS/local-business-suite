@@ -1,4 +1,4 @@
-# Deploy Portal Update
+﻿# Deploy Portal Update
 # Обновляет код на работающем IIS-хосте: collectstatic, копирует critical assets,
 # перезапускает AppPool. Используется для регулярного деплоя изменений.
 #
@@ -36,7 +36,7 @@ if (-not $isAdmin) {
         if ($val -is [switch]) {
             if ($val.IsPresent) { $argList += "-$key" }
         } else {
-            $argList += "-$key", "`"$val`"" }
+            $argList += "-$key", "`"$val`""
         }
     }
     $proc = Start-Process -FilePath "powershell" -ArgumentList $argList -Verb RunAs -Wait -PassThru

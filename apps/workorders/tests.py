@@ -414,12 +414,14 @@ class WorkOrderViewPermissionTests(TestCase):
         detail_response = self.client.get(reverse("workorders:detail", args=[foreign.pk]))
         self.assertEqual(detail_response.status_code, 404)
 
-    def test_customer_without_department_sees_empty_branch(self):
+    def test_customer_in_unassigned_department_sees_empty_branch(self):
         customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
         no_department_customer = User.objects.create_user(
             username="customer_without_department", password="pass"
         )
         no_department_customer.groups.add(customer_group)
+
+        self.assertTrue(no_department_customer.requires_department_assignment)
 
         self.client.force_login(no_department_customer)
         response = self.client.get(reverse("workorders:board"))
@@ -1136,6 +1138,22 @@ class CapabilityRegistryTests(TestCase):
         keys = {key for key, _label, _description in flags}
         self.assertIn("view_waiting_list", keys)
         self.assertIn("memory_organization_write", keys)
+
+    def test_every_capability_has_ui_section_and_risk_metadata(self):
+        capabilities = self.base_role_rules["$capabilities"]
+
+        self.assertTrue(capabilities)
+        for key, metadata in capabilities.items():
+            self.assertIn(
+                metadata.get("section"),
+                {"workorders", "organization", "ai_memory", "personal_data"},
+                f"{key}: неизвестный section",
+            )
+            self.assertIn(
+                metadata.get("risk"),
+                {"normal", "elevated", "critical"},
+                f"{key}: неизвестный risk",
+            )
 
     def test_superuser_rules_grant_every_capability_flag_and_full_scope(self):
         with _override_contract_file(

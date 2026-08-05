@@ -259,6 +259,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/blueprint.md` — архитектурный blueprint.
 - `docs/architecture/DOMAIN_MODEL.md` — доменная модель.
 - `docs/architecture/POLICY_MODEL.md` — модель ролей и политик.
+- `docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md` — назначение ролей, итоговый доступ, риски и журнал изменений.
 - `docs/architecture/INTEGRATIONS.md` — стратегия интеграций.
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
 - `docs/architecture/OBSERVABILITY_BASELINE.md` — базовая наблюдаемость, p50/p95 и команда `performance_report`.

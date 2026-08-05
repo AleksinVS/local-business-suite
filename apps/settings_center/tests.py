@@ -11,13 +11,13 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from apps.accounts.models import GroupProfile
+from apps.accounts.models import AccessAssignmentAudit, GroupProfile
 from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
 
 from .contract_services import apply_contract_payload
 from .env_services import create_env_proposal
-from .forms import PortalUserCreateForm
+from .forms import PortalUserCreateForm, PortalUserProfileUpdateForm, PortalUserUpdateForm
 from .help_services import answer_help_question, build_help_context
 from .models import SettingsChange, SettingsEnvProposal
 from .registry import get_registry
@@ -68,6 +68,19 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Режим входа Django")
         self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
+
+    def test_role_rules_generic_editor_redirects_to_protected_card_editor(self):
+        staff = User.objects.create_user(username="settings-role-staff", password="pass", is_staff=True)
+        self.client.force_login(staff)
+
+        url = reverse(
+            "settings_center:setting_detail",
+            kwargs={"setting_id": "core.contract.role_rules"},
+        )
+        response = self.client.post(url, {"action": "apply", "payload": "{}", "confirm": "on"})
+
+        self.assertRedirects(response, reverse("core:role_rules"), fetch_redirect_response=False)
+        self.assertEqual(self.client.get(response["Location"]).status_code, 403)
 
     def test_env_status_shows_russian_title_and_english_keys(self):
         staff = User.objects.create_user(username="settings-env-staff", password="pass", is_staff=True)
@@ -255,9 +268,38 @@ class SettingsCenterEnvAndHelpTests(TestCase):
 
 
 class SettingsCenterUserViewsTests(TestCase):
+    def test_user_forms_require_real_department_and_hide_quarantine(self):
+        from apps.accounts.department_policy import get_unassigned_user_department
+        from apps.core.models import Department
+
+        quarantine = get_unassigned_user_department()
+        real_department = Department.objects.create(name="Реальное подразделение формы")
+        create_form = PortalUserCreateForm(
+            data={
+                "username": "missing-department",
+                "password": "",
+                "first_name": "",
+                "last_name": "",
+                "email": "",
+                "department": "",
+                "is_active": "on",
+            }
+        )
+
+        self.assertFalse(create_form.is_valid())
+        self.assertIn("department", create_form.errors)
+        choices = set(
+            PortalUserCreateForm().fields["department"].queryset.values_list("pk", flat=True)
+        )
+        self.assertNotIn(quarantine.pk, choices)
+        self.assertIn(real_department.pk, choices)
+        self.assertTrue(PortalUserProfileUpdateForm().fields["department"].required)
+
     def test_superuser_can_create_disable_and_link_user(self):
+        from apps.core.models import Department
+
         actor = User.objects.create_superuser(username="settings-root", password="pass")
-        group = Group.objects.create(name="operators")
+        department = Department.objects.create(name="Подразделение нового пользователя")
         self.client.force_login(actor)
 
         response = self.client.post(
@@ -268,14 +310,14 @@ class SettingsCenterUserViewsTests(TestCase):
                 "first_name": "Operator",
                 "last_name": "One",
                 "email": "operator@example.test",
+                "department": department.pk,
                 "is_active": "on",
-                "groups": [group.pk],
             },
         )
 
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(username="operator-1")
-        self.assertIn(group, user.groups.all())
+        self.assertFalse(user.groups.exists())
 
         response = self.client.post(
             reverse("settings_center:user_ad_link", kwargs={"pk": user.pk}),
@@ -298,44 +340,161 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertFalse(user.is_active)
         self.assertEqual(SettingsChange.objects.filter(action=SettingsChange.Action.AD_LINK).count(), 1)
 
+    def test_manage_roles_user_can_open_list_and_access_card_but_regular_user_cannot(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        manager = User.objects.create_user(username="role-manager")
+        manager.groups.add(manager_group)
+        regular = User.objects.create_user(username="role-regular")
+        target = User.objects.create_user(username="role-target")
 
-class SettingsCenterGroupProfileTests(TestCase):
-    def test_group_field_label_uses_profile_title_and_description(self):
-        group = Group.objects.create(name="doctor")
-        GroupProfile.objects.create(
-            group=group,
-            title="Врач",
-            description="Приём пациентов, ведение карт, назначение лечения.",
+        self.client.force_login(regular)
+        self.assertEqual(self.client.get(reverse("settings_center:user_list")).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk})).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse("settings_center:user_edit", kwargs={"pk": 999999})).status_code,
+            403,
         )
 
-        form = PortalUserCreateForm()
-        label = form.fields["groups"].label_from_instance(group)
+        self.client.force_login(manager)
+        user_list_response = self.client.get(reverse("settings_center:user_list"))
+        self.assertEqual(user_list_response.status_code, 200)
+        self.assertContains(user_list_response, "Роли доступа")
+        response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Итоговый доступ и источники")
+        self.assertEqual(
+            self.client.get(
+                reverse("settings_center:user_profile_edit", kwargs={"pk": target.pk})
+            ).status_code,
+            403,
+        )
+
+    def test_superuser_profile_update_preserves_roles_and_technical_groups(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="profile-root", password="pass")
+        target = User.objects.create_user(username="profile-user", first_name="До")
+        department = Department.objects.create(name="Подразделение профиля")
+        role, _ = Group.objects.get_or_create(name="customer")
+        technical, _ = Group.objects.get_or_create(name="memory_observer")
+        target.groups.add(role, technical)
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:user_profile_edit", kwargs={"pk": target.pk}),
+            {
+                "username": "profile-user",
+                "first_name": "После",
+                "last_name": "",
+                "email": "",
+                "department": department.pk,
+                "password": "",
+                "is_active": "on",
+                "is_staff": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        target.refresh_from_db()
+        self.assertEqual(target.first_name, "После")
+        self.assertEqual(target.department_id, department.pk)
+        self.assertTrue(target.is_staff)
+        self.assertEqual(
+            set(target.groups.values_list("name", flat=True)),
+            {"customer", "memory_observer"},
+        )
+        self.assertEqual(
+            SettingsChange.objects.filter(action=SettingsChange.Action.USER_UPDATE).count(),
+            1,
+        )
+
+    def test_access_card_preview_confirm_apply_preserves_technical_groups_and_flags(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        technical_group, _ = Group.objects.get_or_create(name="memory_observer")
+        actor = User.objects.create_user(username="assignment-manager")
+        actor.groups.add(manager_group)
+        target = User.objects.create_user(username="assignment-target", is_staff=True)
+        target.groups.add(customer_group, technical_group)
+        self.client.force_login(actor)
+        url = reverse("settings_center:user_edit", kwargs={"pk": target.pk})
+
+        direct_apply = self.client.post(url, {"action": "apply", "roles": [manager_group.pk]})
+        self.assertEqual(direct_apply.status_code, 200)
+        self.assertContains(direct_apply, "Сначала выполните предпросмотр")
+        self.assertEqual(set(target.groups.values_list("name", flat=True)), {"customer", "memory_observer"})
+
+        response = self.client.post(url, {"action": "preview", "roles": [manager_group.pk]})
+        self.assertEqual(response.status_code, 200)
+        preview = response.context["preview"]
+        self.assertTrue(preview["requires_confirmation"])
+
+        response = self.client.post(
+            url,
+            {
+                "action": "apply",
+                "roles": [manager_group.pk],
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        target.refresh_from_db()
+        self.assertTrue(target.is_staff)
+        self.assertFalse(target.is_superuser)
+        self.assertEqual(set(target.groups.values_list("name", flat=True)), {"manager", "memory_observer"})
+        self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
+
+
+class SettingsCenterGroupProfileTests(TestCase):
+    def test_role_field_label_uses_profile_title_and_description(self):
+        group, _ = Group.objects.get_or_create(name="doctor")
+        GroupProfile.objects.update_or_create(
+            group=group,
+            defaults={
+                "title": "Врач",
+                "description": "Приём пациентов, ведение карт, назначение лечения.",
+            },
+        )
+
+        form = PortalUserUpdateForm()
+        label = form.fields["roles"].label_from_instance(group)
 
         self.assertIn("Врач", label)
         self.assertIn("doctor", label)
         self.assertIn("Приём пациентов", label)
 
-    def test_group_field_label_falls_back_to_name_without_profile(self):
-        group = Group.objects.create(name="no-profile-group")
+    def test_role_field_label_falls_back_to_name_without_profile(self):
+        group, _ = Group.objects.get_or_create(name="customer")
+        GroupProfile.objects.filter(group=group).delete()
 
-        form = PortalUserCreateForm()
-        label = form.fields["groups"].label_from_instance(group)
+        form = PortalUserUpdateForm()
+        label = form.fields["roles"].label_from_instance(group)
 
-        self.assertEqual(label, "no-profile-group")
+        self.assertEqual(label, "customer")
 
-    def test_user_create_page_shows_group_reference_with_profile_title(self):
+    def test_user_access_page_shows_role_profile_and_keeps_technical_group_read_only(self):
         actor = User.objects.create_superuser(username="settings-root-groups", password="pass")
-        group = Group.objects.create(name="nurse")
-        GroupProfile.objects.create(
+        group, _ = Group.objects.get_or_create(name="doctor")
+        GroupProfile.objects.update_or_create(
             group=group,
-            title="Медсестра",
-            description="Помощь врачу, работа с расходными материалами.",
+            defaults={
+                "title": "Врач",
+                "description": "Работа с листом ожидания.",
+            },
         )
+        technical, _ = Group.objects.get_or_create(name="memory_auditor")
+        target = User.objects.create_user(username="profile-target")
+        target.groups.add(technical)
         self.client.force_login(actor)
 
-        response = self.client.get(reverse("settings_center:user_create"))
+        response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Описание групп доступа")
-        self.assertContains(response, "Медсестра")
-        self.assertContains(response, "Помощь врачу, работа с расходными материалами.")
+        self.assertContains(response, "Врач")
+        self.assertContains(response, "Работа с листом ожидания.")
+        self.assertContains(response, "memory_auditor")
+        self.assertNotContains(response, f'value="{technical.pk}"')

@@ -62,6 +62,8 @@ REQUIRED_WORKFLOW_KEYS = {
 # для нетехнических пользователей (ADR-0034).
 CAPABILITY_METADATA_KEY = "$capabilities"
 CAPABILITY_TYPES = {"flag", "scope", "targets"}
+CAPABILITY_SECTIONS = {"workorders", "organization", "ai_memory", "personal_data"}
+CAPABILITY_RISKS = {"normal", "elevated", "critical"}
 
 
 def _validate_capability_metadata(metadata):
@@ -76,12 +78,20 @@ def _validate_capability_metadata(metadata):
                 + ", ".join(sorted(CAPABILITY_TYPES))
                 + "."
             )
-        for field in ("label", "description"):
+        for field in ("label", "description", "section", "risk"):
             value = entry.get(field)
             if not isinstance(value, str) or not value.strip():
                 raise ValidationError(
                     f"У права '{key}' поле {field} должно быть непустой строкой."
                 )
+        if entry["section"] not in CAPABILITY_SECTIONS:
+            raise ValidationError(
+                f"У права '{key}' неизвестный раздел '{entry['section']}'."
+            )
+        if entry["risk"] not in CAPABILITY_RISKS:
+            raise ValidationError(
+                f"У права '{key}' неизвестный уровень риска '{entry['risk']}'."
+            )
 
 
 def validate_role_rules_payload(payload, workflow_payload=None):

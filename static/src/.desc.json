@@ -4,6 +4,7 @@
   "copilotkit/": "React-остров CopilotKit для встраивания AI-чата в основную Django-оболочку",
   "css/app.css": "Основные стили приложения",
   "js/ai_chat.js": "JavaScript для AI-чата (HTMX streaming, UI)",
+  "js/access_role_editor.js": "Клиентский предпросмотр изменений карточного редактора ролей и подсчёт затронутых сотрудников",
   "js/page_context.js": "Browser bridge для безопасного контекста текущего окна AI-чата",
   "js/right_panel.js": "Browser bridge для выполнения безопасных команд открытия объектов в общем правом сайдбаре",
   "js/pwa.js": "Регистрация service worker для PWA-режима портала",

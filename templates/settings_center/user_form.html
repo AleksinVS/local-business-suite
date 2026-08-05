@@ -1,58 +1,149 @@
 {% extends "base.html" %}
 
-{% block title %}Пользователь{% endblock %}
+{% block title %}{% if portal_user %}Доступ пользователя{% elif profile_user %}Учётная запись пользователя{% else %}Новый пользователь{% endif %}{% endblock %}
 
 {% block content %}
 <section class="panel">
   <div class="section-head">
     <div>
       <p class="eyebrow">Пользователи и доступ</p>
-      <h1>Пользователь</h1>
+      <h1>{% if portal_user %}Карточка доступа: {{ portal_user.username }}{% elif profile_user %}Учётная запись: {{ profile_user.username }}{% else %}Новый пользователь{% endif %}</h1>
     </div>
     <div class="header-actions">
       <a class="button-link" href="{% url 'settings_center:user_list' %}">К списку</a>
+      {% if portal_user and request.user.is_superuser %}<a class="button-link" href="{% url 'settings_center:user_profile_edit' portal_user.pk %}">Учётная запись</a>{% endif %}
     </div>
   </div>
-  <form method="post" class="settings-small-form">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <div class="table-actions">
-      <button type="submit" class="button">Сохранить</button>
-    </div>
-  </form>
 
-  <details class="group-reference-legend">
-    <summary>Описание групп доступа</summary>
-    <dl>
-      {% for group in group_reference %}
-        <dt>{{ group.profile.title|default:group.name }}</dt>
-        {% if group.profile.description %}
-          <dd>{{ group.profile.description }}</dd>
-        {% else %}
-          <dd class="muted">Описание не заполнено.</dd>
-        {% endif %}
-      {% endfor %}
-    </dl>
-  </details>
+  {% if portal_user %}
+    <div class="access-summary">
+      <p><strong>ФИО:</strong> {{ portal_user.get_full_name|default:"не указано" }}</p>
+      <p><strong>Подразделение:</strong> {{ portal_user.department|default:"не указано" }}</p>
+      <p><strong>Статус:</strong> {% if portal_user.is_active %}активен{% else %}отключён{% endif %}</p>
+    </div>
+    {% if portal_user.requires_department_assignment %}
+      <div class="message warning" role="alert">
+        Пользователь временно помещён в подразделение «Не назначено». Суперпользователь должен выбрать реальное подразделение в разделе «Учётная запись».
+      </div>
+    {% endif %}
+
+    <form method="post" class="settings-small-form">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {{ form.preview_token }}
+      <fieldset>
+        <legend>{{ form.roles.label }}</legend>
+        {{ form.roles.errors }}
+        {{ form.roles }}
+        <p class="muted">{{ form.roles.help_text }}</p>
+      </fieldset>
+      <div class="table-actions">
+        <button type="submit" name="action" value="preview" class="button-link">Предпросмотр изменений</button>
+      </div>
+
+      {% if preview %}
+        <section class="access-preview" aria-live="polite">
+          <h2>Предпросмотр</h2>
+          <p><strong>Добавятся роли:</strong> {{ preview.added|join:", "|default:"нет" }}</p>
+          <p><strong>Удалятся роли:</strong> {{ preview.removed|join:", "|default:"нет" }}</p>
+          <p><strong>Новые возможности:</strong> {{ preview.consequences.added|join:", "|default:"нет" }}</p>
+          <p><strong>Утраченные возможности:</strong> {{ preview.consequences.removed|join:", "|default:"нет" }}</p>
+          <p><strong>Изменённые области доступа:</strong> {{ preview.consequences.changed|join:", "|default:"нет" }}</p>
+          {% if preview.risk_markers %}
+            <div class="message warning">
+              <strong>Рискованный доступ</strong>
+              <ul>{% for marker in preview.risk_markers %}<li>{{ marker }}</li>{% endfor %}</ul>
+            </div>
+            <label>{{ form.confirm_risk }} {{ form.confirm_risk.label }}</label>
+          {% endif %}
+          <div class="table-actions">
+            <button type="submit" name="action" value="apply" class="button">Применить показанные изменения</button>
+          </div>
+        </section>
+      {% endif %}
+    </form>
+
+    <section class="effective-access">
+      <h2>Итоговый доступ и источники</h2>
+
+      <h3>Роли из контракта</h3>
+      <dl>
+        {% for role in effective_access.roles %}
+          <dt>{{ role.label }} <code>{{ role.code }}</code></dt>
+          <dd>{{ role.description|default:"Описание не заполнено." }}</dd>
+        {% empty %}<p class="muted">Роли доступа не назначены.</p>{% endfor %}
+      </dl>
+
+      <h3>Технические и специальные группы</h3>
+      <dl>
+        {% for group in effective_access.technical_groups %}
+          <dt>{{ group.label }} <code>{{ group.code }}</code> <span class="muted">Источник: спецгруппа</span></dt>
+          <dd>{{ group.description|default:"Описание не заполнено." }}</dd>
+        {% empty %}<p class="muted">Технических групп нет.</p>{% endfor %}
+      </dl>
+
+      <h3>Технические флаги</h3>
+      <ul>
+        {% for flag in effective_access.flags %}
+          <li>{{ flag.label }} <span class="muted">Источник: {{ flag.source }}</span></li>
+        {% empty %}<li class="muted">Флаги is_staff/is_superuser не установлены.</li>{% endfor %}
+      </ul>
+
+      <h3>Возможности</h3>
+      <dl>
+        {% for capability in effective_access.capabilities %}
+          <dt>{{ capability.label }} <code>{{ capability.code }}</code></dt>
+          <dd>
+            {{ capability.description }}
+            <ul>
+              {% for source in capability.sources %}
+                <li>Источник: {{ source.type }} — {{ source.label }}; значение: {{ source.value }}</li>
+              {% endfor %}
+            </ul>
+          </dd>
+        {% empty %}<p class="muted">Возможности из ролей не найдены.</p>{% endfor %}
+      </dl>
+
+      <h3>Django permissions</h3>
+      <dl>
+        {% for permission in effective_access.django_permissions %}
+          <dt>{{ permission.label }} <code>{{ permission.code }}</code></dt>
+          <dd>Источник: Django permission — {{ permission.sources|join:", " }}</dd>
+        {% empty %}<p class="muted">Отдельные Django permissions не назначены.</p>{% endfor %}
+      </dl>
+    </section>
+
+    <details>
+      <summary>Последние изменения ролей</summary>
+      <ul>
+        {% for audit in access_audits %}
+          <li>#{{ audit.pk }}, {{ audit.created_at }}: {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}; администратор ID {{ audit.actor_id }}</li>
+        {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
+      </ul>
+    </details>
+  {% elif profile_user %}
+    <p class="muted">Здесь изменяются профиль и технические флаги. Роли доступа назначаются в отдельной карточке доступа.</p>
+    <form method="post" class="settings-small-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="table-actions"><button type="submit" class="button">Сохранить учётную запись</button></div>
+    </form>
+  {% else %}
+    <p class="muted">После создания назначьте роли в карточке доступа. Технические группы через этот экран не назначаются.</p>
+    <form method="post" class="settings-small-form">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="table-actions"><button type="submit" class="button">Создать пользователя</button></div>
+    </form>
+  {% endif %}
 </section>
 
 <style>
-  .group-reference-legend {
-    margin-top: 24px;
-    color: var(--text-muted);
-  }
-  .group-reference-legend summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: var(--text, inherit);
-  }
-  .group-reference-legend dt {
-    margin-top: 10px;
-    font-weight: 600;
-    color: var(--text, inherit);
-  }
-  .group-reference-legend dd {
-    margin: 2px 0 0 0;
-  }
+  .access-summary { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
+  .access-summary p { margin: 0; }
+  .access-preview, .effective-access { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .effective-access dt { margin-top: 0.75rem; font-weight: 600; }
+  .effective-access dd { margin: 0.2rem 0 0 1rem; }
+  .message.warning { padding: 0.75rem; border: 1px solid #d97706; border-radius: 6px; }
 </style>
 {% endblock %}

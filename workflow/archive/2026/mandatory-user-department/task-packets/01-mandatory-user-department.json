@@ -1,0 +1,18 @@
+{
+  "task_id": "01-mandatory-user-department",
+  "goal": "Ввести обязательное подразделение с безопасной миграцией и интерфейсной видимостью карантина.",
+  "write_scope": [
+    "apps/accounts/",
+    "apps/settings_center/",
+    "templates/settings_center/",
+    "docs/",
+    "workflow/active/mandatory-user-department/"
+  ],
+  "acceptance": [
+    "NULL users migrate to a dedicated child quarantine department",
+    "User.department is PROTECT/null=False/blank=False",
+    "forms reject missing and quarantine department",
+    "programmatic creation without department is fail-closed",
+    "SQLite and PostgreSQL checks pass"
+  ]
+}

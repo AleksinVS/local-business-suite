@@ -1,0 +1,12 @@
+{
+  "task_id": "02-role-card-editor-and-preview",
+  "goal": "Заменить широкую матрицу карточным редактором ролей с разделами, diff-предпросмотром и журналом.",
+  "read_scope": ["apps/core/views.py", "templates/core/", "contracts/role_rules.json", "apps/settings_center/models.py"],
+  "write_scope": ["apps/core/", "templates/core/", "static/src/", "apps/core/tests.py"],
+  "acceptance_checks": [
+    "Права сгруппированы по предметным разделам.",
+    "Перед сохранением видны новые/отозванные права и число затронутых пользователей.",
+    "Чувствительные права выделены и требуют подтверждения.",
+    "Журнал изменений ролей доступен на том же экране."
+  ]
+}

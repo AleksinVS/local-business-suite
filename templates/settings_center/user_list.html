@@ -10,8 +10,12 @@
       <h1>Пользователи портала</h1>
     </div>
     <div class="header-actions">
-      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
-      <a class="button" href="{% url 'settings_center:user_create' %}">Создать пользователя</a>
+      {% if request.user.is_staff or request.user.is_superuser %}
+        <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+      {% else %}
+        <a class="button-link" href="{% url 'core:dashboard' %}">На главную</a>
+      {% endif %}
+      {% if request.user.is_superuser %}<a class="button" href="{% url 'settings_center:user_create' %}">Создать пользователя</a>{% endif %}
     </div>
   </div>
   <div class="table-container">
@@ -21,7 +25,8 @@
           <th>Логин</th>
           <th>ФИО</th>
           <th>Подразделение</th>
-          <th>Группы</th>
+          <th>Роли доступа</th>
+          <th>Технические группы</th>
           <th>Связь с AD</th>
           <th>Статус</th>
           <th></th>
@@ -32,8 +37,12 @@
           <tr>
             <td>{{ portal_user.username }}</td>
             <td>{{ portal_user.get_full_name }}</td>
-            <td>{{ portal_user.department|default:"" }}</td>
-            <td>{% for group in portal_user.groups.all %}{{ group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td>
+              {{ portal_user.department|default:"" }}
+              {% if portal_user.requires_department_assignment %}<span class="risk-marker risk-marker-critical">Требует назначения</span>{% endif %}
+            </td>
+            <td>{{ portal_user.access_overview.roles|join:", "|default:"нет" }}</td>
+            <td>{{ portal_user.access_overview.technical_groups|join:", "|default:"нет" }}</td>
             <td>
               {% for identity in portal_user.external_identities.all %}
                 {{ identity.domain }}\{{ identity.username }}
@@ -43,9 +52,10 @@
             </td>
             <td>{% if portal_user.is_active %}Активен{% else %}Отключен{% endif %}</td>
             <td class="row-actions">
-              <a href="{% url 'settings_center:user_edit' portal_user.pk %}">Изменить</a>
-              <a href="{% url 'settings_center:user_ad_link' portal_user.pk %}">AD</a>
-              {% if portal_user.is_active %}
+              <a href="{% url 'settings_center:user_edit' portal_user.pk %}">Доступ</a>
+              {% if request.user.is_superuser %}<a href="{% url 'settings_center:user_profile_edit' portal_user.pk %}">Учётная запись</a>{% endif %}
+              {% if request.user.is_superuser %}<a href="{% url 'settings_center:user_ad_link' portal_user.pk %}">AD</a>{% endif %}
+              {% if request.user.is_superuser and portal_user.is_active %}
                 <form method="post" action="{% url 'settings_center:user_disable' portal_user.pk %}">
                   {% csrf_token %}
                   <button type="submit">Отключить</button>

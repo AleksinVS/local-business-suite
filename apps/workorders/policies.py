@@ -31,15 +31,33 @@ def capability_flags():
     для редактора ролей и для superuser_rules(). Если справочника в рабочей
     копии контракта нет, используется статический запасной список.
     """
-    metadata = role_rules().get("$capabilities")
-    if not isinstance(metadata, dict):
-        return list(FALLBACK_BOOLEAN_CAPABILITIES)
     flags = [
-        (key, entry.get("label", key), entry.get("description", ""))
-        for key, entry in metadata.items()
-        if isinstance(entry, dict) and entry.get("type") == "flag"
+        (key, label, description)
+        for key, label, description, capability_type in capability_definitions()
+        if capability_type == "flag"
     ]
     return flags or list(FALLBACK_BOOLEAN_CAPABILITIES)
+
+
+def capability_definitions():
+    """Метаданные всех прав для понятного отображения и редактирования в UI."""
+    metadata = role_rules().get("$capabilities")
+    if not isinstance(metadata, dict):
+        return [
+            (key, label, description, "flag")
+            for key, label, description in FALLBACK_BOOLEAN_CAPABILITIES
+        ]
+    return [
+        (
+            key,
+            entry.get("label", key),
+            entry.get("description", ""),
+            entry.get("type", ""),
+        )
+        for key, entry in metadata.items()
+        if isinstance(entry, dict)
+    ]
+
 
 def user_roles(user):
     if not user.is_authenticated:

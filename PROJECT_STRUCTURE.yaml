@@ -5,10 +5,12 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
   accounts: # Аутентификация, хелперы и сидирование ролей
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
+    department_policy.py: file # Fail-closed политика обязательного подразделения и карантинной записи
     ldap_backend.py: file # LDAP-бэкенд аутентификации
     middleware.py: file # Middleware для согласования ручного входа с REMOTE_USER
-    models.py: file # Расширенная модель пользователя (CustomUser)
-    services.py: file # Сервисы локального управления пользователями и AD identity link
+    models.py: file # Пользователи, профили групп и журнал назначения доступа
+    selectors.py: file # Селекторы контрактных ролей, технических групп и итогового доступа
+    services.py: file # Транзакционные сервисы назначения ролей, локальных пользователей и AD identity link
     settings_descriptors.py: file # Доменные descriptors для Settings Center по пользователям и AD link
     signals.py: file # Сигналы Django (пост-сохранение пользователя)
     tests.py: file # Тесты приложения
@@ -302,6 +304,7 @@ docs: # Документация проекта
     ADR-0032-retire-legacy-ai-ui-driver.md: file # ADR: Вывод legacy-драйвера AI UI
     ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md: file # ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)
     ADR-0034-predefined-access-groups-and-capability-descriptions.md: file # ADR: Предопределённые группы доступа, комментарии к правам ($capabilities, GroupProfile), лист ожидания только врачам, направление row-level
+    ADR-0035-mandatory-user-department.md: file # ADR: Обязательное подразделение пользователя и безопасный карантин для нераспределённых учётных записей
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -350,6 +353,7 @@ docs: # Документация проекта
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
+    ACCESS_MANAGEMENT_USER_GUIDE.md: file # Руководство администратора по ролям доступа, техническим группам, предпросмотру и журналу
     AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     AI_UI_PROTOCOL_OPERATIONS.md: file # Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native
@@ -501,7 +505,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     env_proposal.html: file # Форма создания .env proposal в data/
     env_status.html: file # Статус bootstrap .env настроек
     setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
-    user_form.html: file # Создание и изменение локального пользователя
+    user_form.html: file # Создание пользователя, отдельное изменение учётной записи и карточка доступа
     user_list.html: file # Локальное управление пользователями портала
     workflow_transitions.html: file # Матрица настройки переходов статусов заявок через workflow_rules contract
     workorder_status_colors.html: file # Форма настройки цветов статусов заявок через runtime contract
@@ -597,6 +601,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков
     2026: # Архив workflow-блоков за 2026 год
+      access-management-ux: file
       ai-ui-protocol-foundation: file
       architecture-review-remediation-2026-06-01: file
       architecture-review-remediation-2026-07-04: file
@@ -605,6 +610,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       copilotkit-ag-ui-integration: file
       copilotkit-ai-ui-chat-development: file
       interface-russification: file
+      mandatory-user-department: file
       memory-audit-review-ui: file
       memory-chat-reflection-secret-handles: file
       memory-external-systems-connector: file

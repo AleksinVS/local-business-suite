@@ -7,7 +7,7 @@
   "env_status.html": "Статус bootstrap .env настроек",
   "env_proposal.html": "Форма создания .env proposal в data/",
   "user_list.html": "Локальное управление пользователями портала",
-  "user_form.html": "Создание и изменение локального пользователя",
+  "user_form.html": "Создание пользователя, отдельное изменение учётной записи и карточка доступа",
   "ad_link_form.html": "Форма явной привязки локального пользователя к AD identity",
   "partials/help_panel.html": "Плавающее окно contextual help mini-chat",
   "partials/help_answer.html": "Ответ contextual help mini-chat"

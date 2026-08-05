@@ -48,10 +48,17 @@
                     <span class="nav-text">Подразделения</span>
                     <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
                   </a>
+                {% endif %}
+                {% if show_access_nav %}
+                  <a href="{% url 'settings_center:user_list' %}">
+                    <span class="nav-icon">🔐</span>
+                    <span class="nav-text">Пользователи и доступ</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'user-access', 'Пользователи и доступ', '🔐', '{% url 'settings_center:user_list' %}')">☆</button>
+                  </a>
                   <a href="{% url 'core:role_rules' %}">
                     <span class="nav-icon">👥</span>
-                    <span class="nav-text">Роли</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли', '👥', '{% url 'core:role_rules' %}')">☆</button>
+                    <span class="nav-text">Роли доступа</span>
+                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли доступа', '👥', '{% url 'core:role_rules' %}')">☆</button>
                   </a>
                 {% endif %}
                 {% if show_ai_nav %}

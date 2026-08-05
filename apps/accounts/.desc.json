@@ -1,13 +1,16 @@
 {
   ".": "Аутентификация, хелперы и сидирование ролей",
-  "models.py": "Расширенная модель пользователя (CustomUser)",
+  "models.py": "Пользователи, профили групп и журнал назначения доступа",
   "views.py": "Представления аутентификации",
   "middleware.py": "Middleware для согласования ручного входа с REMOTE_USER",
   "ldap_backend.py": "LDAP-бэкенд аутентификации",
-  "services.py": "Сервисы локального управления пользователями и AD identity link",
+  "services.py": "Транзакционные сервисы назначения ролей, локальных пользователей и AD identity link",
+  "selectors.py": "Селекторы контрактных ролей, технических групп и итогового доступа",
+  "department_policy.py": "Fail-closed политика обязательного подразделения и карантинной записи",
   "settings_descriptors.py": "Доменные descriptors для Settings Center по пользователям и AD link",
   "signals.py": "Сигналы Django (пост-сохранение пользователя)",
   "management/commands/seed_roles.py": "Сидирование ролей и групп",
+  "management/commands/access_management_e2e.py": "Откатываемая сквозная проверка назначения рискованной роли",
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",
   "tests.py": "Тесты приложения"

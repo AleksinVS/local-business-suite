@@ -2,8 +2,9 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
+from apps.accounts.department_policy import available_user_departments
 from apps.accounts.models import ExternalIdentity
-from apps.core.models import Department
+from apps.accounts.selectors import contract_role_names
 
 
 class ContractPayloadForm(forms.Form):
@@ -40,22 +41,16 @@ class GroupWithProfileChoiceField(forms.ModelMultipleChoiceField):
 
 class PortalUserCreateForm(forms.ModelForm):
     password = forms.CharField(label="Пароль", widget=forms.PasswordInput, required=False)
-    groups = GroupWithProfileChoiceField(
-        label="Группы доступа",
-        queryset=Group.objects.select_related("profile").order_by("name"),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
-        help_text="Отметьте группы. Полное описание каждой группы — в списке ниже формы.",
-    )
 
     class Meta:
         model = get_user_model()
-        fields = ["username", "first_name", "last_name", "email", "department", "is_active", "is_staff", "is_superuser", "groups"]
+        fields = ["username", "first_name", "last_name", "email", "department", "is_active", "is_staff", "is_superuser"]
 
     department = forms.ModelChoiceField(
         label="Подразделение",
-        queryset=Department.objects.order_by("parent_id", "name"),
-        required=False,
+        queryset=available_user_departments(),
+        required=True,
+        empty_label="Выберите подразделение",
     )
 
     def __init__(self, *args, **kwargs):
@@ -74,8 +69,30 @@ class PortalUserCreateForm(forms.ModelForm):
                 self.fields[field_name].label = label
 
 
-class PortalUserUpdateForm(PortalUserCreateForm):
-    password = forms.CharField(label="Пароль", widget=forms.PasswordInput, required=False)
+class PortalUserProfileUpdateForm(PortalUserCreateForm):
+    """Профиль и технические флаги без ролей и групп доступа."""
+
+
+class PortalUserUpdateForm(forms.Form):
+    roles = GroupWithProfileChoiceField(
+        label="Роли доступа",
+        queryset=Group.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Можно назначать только роли из контракта. Технические группы сохраняются без изменений.",
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    confirm_risk = forms.BooleanField(
+        label="Подтверждаю выдачу рискованного доступа",
+        required=False,
+    )
+
+    def __init__(self, *args, portal_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        role_names = contract_role_names()
+        self.fields["roles"].queryset = Group.objects.filter(name__in=role_names).select_related("profile").order_by("name")
+        if portal_user is not None and not self.is_bound:
+            self.initial["roles"] = list(portal_user.groups.filter(name__in=role_names).values_list("pk", flat=True))
 
 
 class ExternalIdentityForm(forms.ModelForm):

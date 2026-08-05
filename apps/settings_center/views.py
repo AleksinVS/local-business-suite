@@ -5,17 +5,29 @@ import json
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.contrib.auth.models import Group
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
-from apps.accounts.models import ExternalIdentity
-from apps.accounts.services import create_local_user, disable_local_user, link_ad_identity, update_local_user
+from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity
+from apps.accounts.selectors import (
+    effective_access_for_user,
+    split_user_groups,
+    user_access_overview,
+)
+from apps.accounts.services import (
+    apply_role_assignment,
+    create_local_user,
+    disable_local_user,
+    link_ad_identity,
+    preview_role_assignment,
+    update_local_user,
+)
 from apps.core.json_utils import pretty_json
+from apps.workorders.policies import can_manage_roles
 
 from .contract_services import apply_contract_payload, preview_contract_payload, read_contract_value
 from .env_services import create_env_proposal, env_status_rows
@@ -25,11 +37,12 @@ from .forms import (
     ExternalIdentityForm,
     HelpQuestionForm,
     PortalUserCreateForm,
+    PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
 )
 from .help_services import answer_help_question, initial_help_text
 from .models import SettingsChange
-from .policies import can_manage_settings, can_manage_users
+from .policies import can_manage_settings
 from .registry import get_registry
 from .services import record_settings_change
 
@@ -41,7 +54,12 @@ class SettingsManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 class UserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return can_manage_users(self.request.user)
+        return can_manage_roles(self.request.user)
+
+
+class SuperuserUserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return bool(self.request.user.is_authenticated and self.request.user.is_superuser)
 
 
 class SettingsDashboardView(SettingsManagementMixin, TemplateView):
@@ -60,6 +78,8 @@ class SettingDetailView(SettingsManagementMixin, FormView):
 
     def dispatch(self, request, *args, **kwargs):
         self.descriptor = get_registry().get(kwargs["setting_id"])
+        if self.descriptor.setting_id == "core.contract.role_rules":
+            return redirect("core:role_rules")
         return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
@@ -340,19 +360,18 @@ class UserListView(UserManagementMixin, ListView):
     paginate_by = 50
 
     def get_queryset(self):
-        return self.model.objects.select_related("department").prefetch_related("groups", "external_identities").order_by("username")
-
-
-class GroupReferenceContextMixin:
-    """Добавляет в контекст справочник групп доступа с их описанием (profile)."""
+        return self.model.objects.select_related("department__parent").prefetch_related(
+            "groups__profile", "external_identities"
+        ).order_by("username")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["group_reference"] = Group.objects.select_related("profile").order_by("name")
+        for portal_user in context["portal_users"]:
+            portal_user.access_overview = user_access_overview(portal_user)
         return context
 
 
-class UserCreateView(GroupReferenceContextMixin, UserManagementMixin, CreateView):
+class UserCreateView(SuperuserUserManagementMixin, CreateView):
     model = get_user_model()
     form_class = PortalUserCreateForm
     template_name = "settings_center/user_form.html"
@@ -375,22 +394,91 @@ class UserCreateView(GroupReferenceContextMixin, UserManagementMixin, CreateView
         return HttpResponseRedirect(self.get_success_url())
 
 
-class UserUpdateView(GroupReferenceContextMixin, UserManagementMixin, UpdateView):
-    model = get_user_model()
+class UserUpdateView(UserManagementMixin, FormView):
     form_class = PortalUserUpdateForm
     template_name = "settings_center/user_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated or not can_manage_roles(request.user):
+            return super().dispatch(request, *args, **kwargs)
+        self.portal_user = get_object_or_404(
+            get_user_model().objects.select_related("department__parent"),
+            pk=kwargs["pk"],
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["portal_user"] = self.portal_user
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        _roles, technical_groups = split_user_groups(self.portal_user)
+        context.update(
+            {
+                "portal_user": self.portal_user,
+                "effective_access": effective_access_for_user(self.portal_user),
+                "technical_groups": technical_groups,
+                "access_audits": AccessAssignmentAudit.objects.filter(
+                    target_user=self.portal_user
+                ).select_related("actor")[:10],
+            }
+        )
+        return context
+
+    def form_valid(self, form):
+        selected_role_names = [group.name for group in form.cleaned_data["roles"]]
+        if self.request.POST.get("action") == "preview":
+            try:
+                preview = preview_role_assignment(
+                    actor=self.request.user,
+                    target_user=self.portal_user,
+                    selected_role_names=selected_role_names,
+                )
+            except (PermissionDenied, ValidationError) as exc:
+                form.add_error(None, exc)
+                return self.form_invalid(form)
+            mutable_data = form.data.copy()
+            mutable_data["preview_token"] = preview["preview_token"]
+            form.data = mutable_data
+            return self.render_to_response(self.get_context_data(form=form, preview=preview))
+
+        try:
+            _user, audit = apply_role_assignment(
+                actor=self.request.user,
+                target_user=self.portal_user,
+                selected_role_names=selected_role_names,
+                preview_token=form.cleaned_data["preview_token"],
+                risk_confirmed=form.cleaned_data["confirm_risk"],
+            )
+        except (PermissionDenied, ValidationError) as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
+        messages.success(self.request, f"Роли доступа сохранены. Аудит #{audit.pk}.")
+        return redirect("settings_center:user_edit", pk=self.portal_user.pk)
+
+
+class UserProfileUpdateView(SuperuserUserManagementMixin, UpdateView):
+    model = get_user_model()
+    form_class = PortalUserProfileUpdateForm
+    template_name = "settings_center/user_form.html"
+    context_object_name = "profile_user"
     success_url = reverse_lazy("settings_center:user_list")
 
     def form_valid(self, form):
         before = {
             "user_id": self.object.id,
             "username": self.object.username,
-            "groups": list(self.object.groups.values_list("name", flat=True)),
             "is_staff": self.object.is_staff,
             "is_superuser": self.object.is_superuser,
             "is_active": self.object.is_active,
         }
-        user = update_local_user(actor=self.request.user, user=self.object, cleaned_data=form.cleaned_data.copy())
+        user = update_local_user(
+            actor=self.request.user,
+            user=self.object,
+            cleaned_data=form.cleaned_data.copy(),
+        )
         descriptor = get_registry().get("accounts.users.local_management")
         record_settings_change(
             actor=self.request.user,
@@ -401,18 +489,17 @@ class UserUpdateView(GroupReferenceContextMixin, UserManagementMixin, UpdateView
             after={
                 "user_id": user.id,
                 "username": user.username,
-                "groups": list(user.groups.values_list("name", flat=True)),
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
                 "is_active": user.is_active,
             },
             validation_result={"valid": True},
         )
-        messages.success(self.request, "Пользователь обновлен.")
+        messages.success(self.request, "Учётная запись пользователя обновлена.")
         return HttpResponseRedirect(self.get_success_url())
 
 
-class UserDisableView(UserManagementMixin, View):
+class UserDisableView(SuperuserUserManagementMixin, View):
     def post(self, request, pk):
         User = get_user_model()
         user = get_object_or_404(User, pk=pk)
@@ -436,11 +523,13 @@ class UserDisableView(UserManagementMixin, View):
         return redirect("settings_center:user_list")
 
 
-class UserADLinkView(UserManagementMixin, FormView):
+class UserADLinkView(SuperuserUserManagementMixin, FormView):
     template_name = "settings_center/ad_link_form.html"
     form_class = ExternalIdentityForm
 
     def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return super().dispatch(request, *args, **kwargs)
         User = get_user_model()
         self.portal_user = get_object_or_404(User, pk=kwargs["pk"])
         self.identity = ExternalIdentity.objects.filter(user=self.portal_user).first()

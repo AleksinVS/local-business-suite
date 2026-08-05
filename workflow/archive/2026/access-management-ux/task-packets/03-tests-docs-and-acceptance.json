@@ -1,0 +1,12 @@
+{
+  "task_id": "03-tests-docs-and-acceptance",
+  "goal": "Проверить серверную авторизацию, UI-сценарии, e2e, документацию и структуру.",
+  "read_scope": ["apps/accounts/", "apps/core/", "templates/", "docs/", "workflow/active/access-management-ux/"],
+  "write_scope": ["apps/accounts/tests.py", "apps/core/tests.py", "docs/", "workflow/active/access-management-ux/", "PROJECT_STRUCTURE.yaml"],
+  "acceptance_checks": [
+    "Unit/integration тесты затронутого scope зелёные.",
+    "Постоянный e2e проверяет назначение роли и итоговый доступ.",
+    "make contracts и make check выполнены либо остаточный риск зафиксирован.",
+    "Документация и PROJECT_STRUCTURE актуальны."
+  ]
+}

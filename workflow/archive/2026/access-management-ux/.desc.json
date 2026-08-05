@@ -1,0 +1,13 @@
+{
+  ".": "Workflow: удобное управление ролями и итоговым доступом",
+  "BLOCK_BRIEF.md": "Цель, границы и критерии приемки блока",
+  "ARCHITECT_PLAN.json": "Архитектурный порядок реализации",
+  "task-packets": "Пакеты задач серверного контура, интерфейса и приемки",
+  "EXECUTOR_REPORT.01-access-assignment-and-effective-access.md": "Отчёт по назначению ролей, итоговому доступу и аудиту",
+  "EXECUTOR_REPORT.02-role-card-editor-and-preview.md": "Отчёт по карточному редактору, предпросмотру и журналу",
+  "EXECUTOR_REPORT.03-tests-docs-and-acceptance.md": "Итоговый отчёт по интеграции, тестам и документации",
+  "TASK_ACCEPTANCE.01-access-assignment-and-effective-access.md": "Приёмка серверного контура назначения доступа",
+  "TASK_ACCEPTANCE.02-role-card-editor-and-preview.md": "Приёмка карточного редактора ролей",
+  "TASK_ACCEPTANCE.03-tests-docs-and-acceptance.md": "Итоговая приёмка проверок и документации",
+  "RETROSPECTIVE.md": "Ретроспектива реализации и остаточные риски"
+}

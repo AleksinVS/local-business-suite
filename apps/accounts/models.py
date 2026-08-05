@@ -9,12 +9,10 @@ class User(AbstractUser):
 
     department = models.ForeignKey(
         "core.Department",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="users",
         verbose_name="Подразделение",
-        help_text="Подразделение пользователя (синхронизируется с AD OU)",
+        help_text="Обязательное подразделение пользователя (синхронизируется с AD OU)",
     )
 
     class Meta:
@@ -23,6 +21,22 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.get_full_name() or self.username
+
+    def save(self, *args, **kwargs):
+        if self.department_id is None:
+            from .department_policy import get_unassigned_user_department
+
+            self.department = get_unassigned_user_department()
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"department"}
+        return super().save(*args, **kwargs)
+
+    @property
+    def requires_department_assignment(self):
+        from .department_policy import is_unassigned_user_department
+
+        return is_unassigned_user_department(self.department)
 
     def get_department_path(self):
         """Получить полный путь подразделения"""
@@ -74,6 +88,42 @@ class GroupProfile(models.Model):
 
     def __str__(self):
         return self.title or self.group.name
+
+
+class AccessAssignmentAudit(models.Model):
+    """Журнал изменения контрактных ролей пользователя без профильных данных."""
+
+    actor = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="access_assignment_actions",
+        verbose_name="Кто изменил",
+    )
+    target_user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="access_assignment_history",
+        verbose_name="Чей доступ изменён",
+    )
+    roles_before = models.JSONField("Роли до изменения", default=list)
+    roles_after = models.JSONField("Роли после изменения", default=list)
+    roles_added = models.JSONField("Добавленные роли", default=list)
+    roles_removed = models.JSONField("Удалённые роли", default=list)
+    risk_markers = models.JSONField("Маркеры риска", default=list)
+    risk_confirmed = models.BooleanField("Риск подтверждён", default=False)
+    created_at = models.DateTimeField("Создано", auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["actor", "-created_at"], name="accounts_ac_actor_i_40b502_idx"),
+            models.Index(fields=["target_user", "-created_at"], name="accounts_ac_target__cd1db8_idx"),
+        ]
+        verbose_name = "Изменение доступа"
+        verbose_name_plural = "Изменения доступа"
+
+    def __str__(self):
+        return f"Изменение доступа #{self.pk}"
 
 
 class ExternalIdentity(models.Model):

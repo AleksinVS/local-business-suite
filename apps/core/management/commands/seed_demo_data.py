@@ -240,6 +240,9 @@ class Command(BaseCommand):
         # (включая их комментарии/вложения/переходы статусов).
         deleted_board = Board.objects.filter(slug=DEMO_BOARD_SLUG).delete()[0]
         deleted_devices = MedicalDevice.objects.filter(inventory_number__startswith=DEMO_INVENTORY_PREFIX).delete()[0]
+        # User.department защищен через PROTECT: сначала удаляем демо-пользователей,
+        # и только затем подразделения, на которые они ссылаются.
+        deleted_users = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX).delete()[0]
 
         # Подразделения с self-FK parent=PROTECT: удаляем от листьев к корню,
         # иначе удаление родителя раньше ребенка упадет с ProtectedError.
@@ -249,8 +252,6 @@ class Command(BaseCommand):
         for department in demo_departments:
             department.delete()
             deleted_departments += 1
-
-        deleted_users = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX).delete()[0]
 
         self.stdout.write(
             self.style.WARNING(

@@ -2,11 +2,20 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import ExternalIdentity
+from apps.workorders.policies import can_manage_roles
+
+from .models import AccessAssignmentAudit, ExternalIdentity
+from .selectors import (
+    access_assignment_consequences,
+    contract_role_configs,
+    role_risk_markers,
+    selected_role_names_for_user,
+)
 
 
 SAFE_AD_ATTRIBUTE_KEYS = {
@@ -20,11 +29,110 @@ SAFE_AD_ATTRIBUTE_KEYS = {
     "userPrincipalName",
 }
 
+ACCESS_PREVIEW_SIGNING_SALT = "accounts.access-assignment-preview.v1"
+ACCESS_PREVIEW_MAX_AGE_SECONDS = 600
+
+
+def preview_role_assignment(*, actor, target_user, selected_role_names):
+    """Строит канонический diff и подписывает его для последующего применения."""
+
+    _require_role_manager(actor)
+    after = _validate_role_names(selected_role_names)
+    before = selected_role_names_for_user(target_user)
+    configs = contract_role_configs()
+    added = sorted(set(after) - set(before))
+    removed = sorted(set(before) - set(after))
+    risk_markers = [
+        marker
+        for role_name in added
+        for marker in role_risk_markers(role_name, configs[role_name])
+    ]
+    payload = {
+        "actor_id": actor.pk,
+        "target_id": target_user.pk,
+        "before": before,
+        "after": after,
+    }
+    return {
+        "before": before,
+        "after": after,
+        "added": added,
+        "removed": removed,
+        "risk_markers": risk_markers,
+        "requires_confirmation": bool(risk_markers),
+        "consequences": access_assignment_consequences(before, after),
+        "preview_token": signing.dumps(payload, salt=ACCESS_PREVIEW_SIGNING_SALT, compress=True),
+    }
+
+
+@transaction.atomic
+def apply_role_assignment(
+    *,
+    actor,
+    target_user,
+    selected_role_names,
+    preview_token,
+    risk_confirmed=False,
+):
+    """Меняет только контрактные роли и пишет audit в той же транзакции."""
+
+    _require_role_manager(actor)
+    after = _validate_role_names(selected_role_names)
+    signed_preview = _load_preview_token(preview_token)
+    if signed_preview.get("actor_id") != actor.pk or signed_preview.get("target_id") != target_user.pk:
+        raise ValidationError("Предпросмотр относится к другому пользователю или администратору.")
+    if signed_preview.get("after") != after:
+        raise ValidationError("Выбранные роли изменились после предпросмотра. Выполните предпросмотр снова.")
+
+    User = get_user_model()
+    locked_target = User.objects.select_for_update().get(pk=target_user.pk)
+    before = selected_role_names_for_user(locked_target)
+    if signed_preview.get("before") != before:
+        raise ValidationError("Роли пользователя уже изменены. Выполните предпросмотр снова.")
+
+    configs = contract_role_configs()
+    added = sorted(set(after) - set(before))
+    removed = sorted(set(before) - set(after))
+    risk_markers = [
+        marker
+        for role_name in added
+        for marker in role_risk_markers(role_name, configs[role_name])
+    ]
+    if risk_markers and not risk_confirmed:
+        raise ValidationError("Добавление рискованной роли требует явного подтверждения.")
+
+    selected_groups = list(Group.objects.filter(name__in=after).order_by("name"))
+    selected_group_names = {group.name for group in selected_groups}
+    missing_groups = sorted(set(after) - selected_group_names)
+    if missing_groups:
+        raise ValidationError(
+            "Группы ролей ещё не созданы: " + ", ".join(missing_groups) + ". Выполните seed_roles."
+        )
+    contract_names = set(configs)
+    current_role_groups = list(locked_target.groups.filter(name__in=contract_names))
+    if current_role_groups:
+        locked_target.groups.remove(*current_role_groups)
+    if selected_groups:
+        locked_target.groups.add(*selected_groups)
+
+    audit = AccessAssignmentAudit.objects.create(
+        actor=actor,
+        target_user=locked_target,
+        roles_before=before,
+        roles_after=after,
+        roles_added=added,
+        roles_removed=removed,
+        risk_markers=risk_markers,
+        risk_confirmed=bool(risk_markers and risk_confirmed),
+    )
+    return locked_target, audit
+
 
 def create_local_user(*, actor, cleaned_data):
     _require_superuser(actor)
     User = get_user_model()
-    groups = cleaned_data.pop("groups", [])
+    if "groups" in cleaned_data:
+        raise ValidationError("Группы назначаются только через карточку доступа.")
     password = cleaned_data.pop("password", "")
     user = User(**cleaned_data)
     if password:
@@ -33,14 +141,13 @@ def create_local_user(*, actor, cleaned_data):
         user.set_unusable_password()
     with transaction.atomic():
         user.save()
-        if groups:
-            user.groups.set(groups)
     return user
 
 
 def update_local_user(*, actor, user, cleaned_data):
     _require_superuser(actor)
-    groups = cleaned_data.pop("groups", None)
+    if "groups" in cleaned_data:
+        raise ValidationError("Группы назначаются только через карточку доступа.")
     password = cleaned_data.pop("password", "")
     for field, value in cleaned_data.items():
         setattr(user, field, value)
@@ -48,8 +155,6 @@ def update_local_user(*, actor, user, cleaned_data):
         user.set_password(password)
     with transaction.atomic():
         user.save()
-        if groups is not None:
-            user.groups.set(groups)
     return user
 
 
@@ -134,6 +239,43 @@ def scope_tokens_for_group_names(group_names):
     existing = set(Group.objects.filter(name__in=list(group_names)).values_list("name", flat=True))
     tokens.update(f"role:{name}" for name in existing)
     return tokens
+
+
+def _validate_role_names(role_names):
+    requested = []
+    for value in role_names or []:
+        name = getattr(value, "name", value)
+        if not isinstance(name, str) or not name or name.startswith("$"):
+            raise ValidationError("Передан недопустимый идентификатор роли.")
+        requested.append(name)
+    canonical = sorted(set(requested))
+    unknown = sorted(set(canonical) - set(contract_role_configs()))
+    if unknown:
+        raise ValidationError("Неизвестные роли: " + ", ".join(unknown))
+    return canonical
+
+
+def _load_preview_token(preview_token):
+    if not preview_token:
+        raise ValidationError("Сначала выполните предпросмотр изменения доступа.")
+    try:
+        payload = signing.loads(
+            preview_token,
+            salt=ACCESS_PREVIEW_SIGNING_SALT,
+            max_age=ACCESS_PREVIEW_MAX_AGE_SECONDS,
+        )
+    except signing.SignatureExpired as exc:
+        raise ValidationError("Предпросмотр устарел. Выполните его снова.") from exc
+    except signing.BadSignature as exc:
+        raise ValidationError("Подпись предпросмотра недействительна.") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError("Предпросмотр имеет неверный формат.")
+    return payload
+
+
+def _require_role_manager(actor):
+    if not getattr(actor, "is_authenticated", False) or not can_manage_roles(actor):
+        raise PermissionDenied("Требуется право управления ролями.")
 
 
 def _require_superuser(actor):

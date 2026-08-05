@@ -1,139 +1,176 @@
 {% extends "base.html" %}
-{% load core_tags %}
+{% load static %}
 
 {% block content %}
-<section class="panel">
+<section class="panel access-role-editor">
   <div class="section-head">
     <div>
       <p class="eyebrow">Настройки доступа</p>
-      <h1>Права ролей</h1>
+      <h1>Роли доступа</h1>
     </div>
     <div class="header-actions">
-        <a href="{% url 'core:department_list' %}" class="button-link">К подразделениям</a>
+      <a href="{% url 'core:department_list' %}" class="button-link">К подразделениям</a>
     </div>
   </div>
-  
-  <p class="description">Управление глобальными правами для ролей. Изменения сохраняются в рабочем контракте ролей.</p>
 
-  <form method="post" class="role-rules-form">
+  <p class="description">
+    Роль доступа — понятный набор бизнес-прав из контракта. Технические группы Django —
+    служебные группы для интеграций и специальных разрешений; на этом экране они не изменяются.
+  </p>
+
+  <form method="post" class="role-rules-form" id="role-rules-form" novalidate>
     {% csrf_token %}
     <input type="hidden" name="base_hash" value="{{ role_rules_base_hash }}">
-    <div class="table-container">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Роль</th>
-            <th title="Какие заявки пользователь видит на доске и в дереве">Область видимости</th>
-            {% for flag, label, description in available_flags %}
-              <th title="{{ description }}">{{ label }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for role_name, rules in role_rules.items %}
-            <tr>
-              <td>
-                <strong>{{ rules|attribute_lookup:"display_name"|default:role_name }}</strong>
-                <br><small class="muted">{{ role_name }}</small>
-                {% with role_description=rules|attribute_lookup:"description" %}
-                  {% if role_description %}
-                    <p class="role-description">{{ role_description }}</p>
-                  {% endif %}
-                {% endwith %}
-              </td>
-              <td>
-                <select name="role_{{ role_name }}_view_scope">
-                  {% for scope_value, scope_label in view_scopes %}
-                    <option value="{{ scope_value }}" {% if rules.view_scope == scope_value %}selected{% endif %}>
-                      {{ scope_label }}
-                    </option>
-                  {% endfor %}
-                </select>
-              </td>
-              {% for flag, label, description in available_flags %}
-                <td class="text-center">
-                  <input type="checkbox" name="role_{{ role_name }}_{{ flag }}"
-                         title="{{ description }}"
-                         {% if rules|attribute_lookup:flag %}checked{% endif %}>
-                </td>
-              {% endfor %}
-            </tr>
+
+    <section class="access-preview" aria-labelledby="access-preview-title">
+      <div>
+        <h2 id="access-preview-title">Предпросмотр изменений</h2>
+        <p id="access-preview-summary" class="muted" aria-live="polite">
+          Изменений пока нет.
+        </p>
+      </div>
+      <ul id="access-preview-list" class="access-preview-list" aria-live="polite"></ul>
+    </section>
+
+    <div class="role-card-list">
+      {% for role in role_cards %}
+        <article class="role-card" data-role-name="{{ role.name }}" data-member-count="{{ role.member_count }}">
+          <header class="role-card-header">
+            <div>
+              <h2>{{ role.display_name }}</h2>
+              <p class="role-card-code">{{ role.name }}</p>
+              {% if role.description %}<p class="role-card-description">{{ role.description }}</p>{% endif %}
+            </div>
+            <p class="role-member-count">Сотрудников с ролью: {{ role.member_count }}</p>
+          </header>
+
+          {% for section in role.sections %}
+            <fieldset class="role-capability-section">
+              <legend>{{ section.name }}</legend>
+              <div class="role-capability-list">
+                {% for capability in section.capabilities %}
+                  <div class="role-capability{% if capability.risk == "elevated" %} role-capability-elevated{% elif capability.risk == "critical" %} role-capability-critical{% endif %}">
+                    <div class="role-capability-copy">
+                      <label for="role_{{ role.name }}_{{ capability.name }}">{{ capability.label }}</label>
+                      {% if capability.risk == "elevated" %}
+                        <span class="risk-marker risk-marker-elevated">Повышенный риск</span>
+                      {% elif capability.risk == "critical" %}
+                        <span class="risk-marker risk-marker-critical">Критическое право: требует подтверждения</span>
+                      {% endif %}
+                      <p>{{ capability.description }}</p>
+                    </div>
+                    <div class="role-capability-control">
+                      {% if capability.type == "flag" %}
+                        <input id="role_{{ role.name }}_{{ capability.name }}"
+                               name="role_{{ role.name }}_{{ capability.name }}"
+                               type="checkbox"
+                               value="on"
+                               data-role-capability
+                               data-role-label="{{ role.display_name }}"
+                               data-capability-label="{{ capability.label }}"
+                               data-capability-type="flag"
+                               data-original="{% if capability.value %}true{% else %}false{% endif %}"
+                               data-risk="{{ capability.risk }}"
+                               data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}"
+                               {% if capability.value %}checked{% endif %}>
+                      {% elif capability.type == "scope" %}
+                        <select id="role_{{ role.name }}_{{ capability.name }}"
+                                name="role_{{ role.name }}_{{ capability.name }}"
+                                data-role-capability
+                                data-role-label="{{ role.display_name }}"
+                                data-capability-label="{{ capability.label }}"
+                                data-capability-type="scope"
+                                data-original="{{ capability.value }}"
+                                data-risk="{{ capability.risk }}"
+                                data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}">
+                          {% for scope_value, scope_label in scope_choices %}
+                            <option value="{{ scope_value }}" {% if capability.value == scope_value %}selected{% endif %}>{{ scope_label }}</option>
+                          {% endfor %}
+                        </select>
+                      {% else %}
+                        <input id="role_{{ role.name }}_{{ capability.name }}"
+                               name="role_{{ role.name }}_{{ capability.name }}"
+                               type="text"
+                               value="{{ capability.targets_value }}"
+                               aria-describedby="role_{{ role.name }}_{{ capability.name }}_hint"
+                               data-role-capability
+                               data-role-label="{{ role.display_name }}"
+                               data-capability-label="{{ capability.label }}"
+                               data-capability-type="targets"
+                               data-original="{{ capability.targets_value }}"
+                               data-risk="{{ capability.risk }}"
+                               data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}">
+                        <span id="role_{{ role.name }}_{{ capability.name }}_hint" class="field-hint">Статусы через запятую или *</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </fieldset>
           {% endfor %}
-        </tbody>
-      </table>
+        </article>
+      {% empty %}
+        <p class="empty-state">В рабочем контракте пока нет ролей доступа.</p>
+      {% endfor %}
     </div>
+
+    <section class="capability-descriptions" aria-labelledby="capability-descriptions-title">
+      <div>
+        <h2 id="capability-descriptions-title">Описания прав</h2>
+        <p class="description">Пишите, какой результат получает сотрудник. Эти описания используются во всех карточках ролей.</p>
+      </div>
+      <div class="capability-description-grid">
+        {% for capability in capability_descriptions %}
+          <div class="capability-description-field">
+            <label for="capability_{{ capability.name }}_description">
+              {{ capability.label }} <span class="muted">({{ capability.name }})</span>
+            </label>
+            <textarea id="capability_{{ capability.name }}_description"
+                      name="capability_{{ capability.name }}_description"
+                      rows="3"
+                      required
+                      data-capability-description
+                      data-capability-label="{{ capability.label }}"
+                      data-original="{{ capability.description }}">{{ capability.description }}</textarea>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="sensitive-confirmation" id="sensitive-confirmation" hidden aria-labelledby="sensitive-confirmation-title">
+      <h2 id="sensitive-confirmation-title">Подтверждение чувствительных изменений</h2>
+      <label>
+        <input type="checkbox" name="confirm_sensitive_changes" value="yes" id="confirm-sensitive-changes">
+        Я проверил(а) изменения чувствительных прав и подтверждаю сохранение.
+      </label>
+    </section>
 
     <div class="table-actions">
       <button type="submit" class="button">Сохранить изменения</button>
     </div>
   </form>
 
-  <details class="capability-legend">
-    <summary>Что означает каждое право</summary>
-    <dl>
-      {% for flag, label, description in available_flags %}
-        <dt>{{ label }}</dt>
-        <dd>{{ description }}</dd>
-      {% endfor %}
-    </dl>
-  </details>
-</section>
+  {{ role_member_ids|json_script:"role-member-ids" }}
 
-<style>
-  .role-rules-form {
-    margin-top: 20px;
-  }
-  .table-container {
-    overflow-x: auto;
-    margin-bottom: 20px;
-  }
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-  }
-  .data-table th, .data-table td {
-    padding: 12px;
-    border: 1px solid #eee;
-    text-align: left;
-  }
-  .data-table th {
-    background: #f8f9fa;
-    font-weight: 600;
-  }
-  .text-center {
-    text-align: center !important;
-  }
-  .description {
-    color: #666;
-    margin-bottom: 20px;
-  }
-  .table-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-  }
-  .role-description {
-    margin: 6px 0 0;
-    max-width: 260px;
-    font-size: 0.82em;
-    color: #666;
-  }
-  .capability-legend {
-    margin-top: 24px;
-    color: #444;
-  }
-  .capability-legend summary {
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .capability-legend dt {
-    margin-top: 10px;
-    font-weight: 600;
-  }
-  .capability-legend dd {
-    margin: 2px 0 0 0;
-    color: #666;
-  }
-</style>
+  <section class="access-change-history" aria-labelledby="access-change-history-title">
+    <h2 id="access-change-history-title">Журнал изменений ролей</h2>
+    {% if role_change_history %}
+      <ul class="access-history-list">
+        {% for change in role_change_history %}
+          <li>
+            <strong>{{ change.get_status_display }}</strong>
+            <span>{{ change.created_at|date:"d.m.Y H:i" }}</span>
+            <span>{% if change.actor %}{{ change.actor.get_full_name|default:change.actor.username }}{% else %}Система{% endif %}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Изменений ролей ещё не было.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'js/access_role_editor.js' %}"></script>
 {% endblock %}

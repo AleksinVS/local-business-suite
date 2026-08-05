@@ -3716,3 +3716,284 @@ textarea:focus {
   .app-main { height: calc(100vh - 60px); }
   .ai-chat-layout { grid-template-columns: 1fr; }
 }
+
+/* Редактор ролей: компактные предметные карточки вместо широкой матрицы. */
+.access-role-editor {
+  max-width: 1120px;
+}
+
+.role-rules-form {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.access-preview,
+.role-card,
+.capability-descriptions,
+.sensitive-confirmation,
+.access-change-history {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.access-preview,
+.capability-descriptions,
+.sensitive-confirmation,
+.access-change-history {
+  padding: 1rem;
+}
+
+.access-preview {
+  display: grid;
+  gap: 0.65rem;
+  border-left: 4px solid var(--accent);
+}
+
+.access-preview h2,
+.capability-descriptions h2,
+.sensitive-confirmation h2,
+.access-change-history h2,
+.role-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.access-preview-list,
+.access-history-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-preview-list:empty {
+  display: none;
+}
+
+.access-preview-list li {
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--primary);
+  background: var(--bg-color);
+  font-size: 0.9rem;
+}
+
+.access-preview-list li[data-risk="elevated"] {
+  border-left-color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.access-preview-list li[data-risk="critical"] {
+  border-left-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.role-card-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.role-card {
+  overflow: hidden;
+}
+
+.role-card-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.role-card-code,
+.role-member-count {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.role-member-count {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.role-card-description,
+.role-capability-copy p {
+  max-width: 65ch;
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.role-capability-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0.85rem 1rem 0;
+  border: 0;
+}
+
+.role-capability-section + .role-capability-section {
+  border-top: 1px solid var(--border);
+}
+
+.role-capability-section legend {
+  padding: 0;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.role-capability-list {
+  display: grid;
+}
+
+.role-capability {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(156px, 260px);
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.role-capability:first-child {
+  border-top: 0;
+}
+
+.role-capability-copy label {
+  font-weight: 650;
+}
+
+.role-capability-control {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.role-capability-control input[type="checkbox"] {
+  justify-self: start;
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.role-capability-control select,
+.role-capability-control input[type="text"],
+.capability-description-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  color: var(--text-main);
+  background: var(--surface);
+}
+
+.role-capability-control select:focus-visible,
+.role-capability-control input:focus-visible,
+.capability-description-field textarea:focus-visible,
+.sensitive-confirmation input:focus-visible {
+  outline: 3px solid rgba(19, 93, 102, 0.35);
+  outline-offset: 2px;
+}
+
+.role-capability-elevated {
+  padding-left: 0.65rem;
+  border-left: 3px solid var(--warning);
+}
+
+.role-capability-critical {
+  padding-left: 0.65rem;
+  border-left: 3px solid var(--danger);
+}
+
+.risk-marker {
+  display: inline-block;
+  margin: 0.4rem 0 0;
+  padding: 0.18rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.risk-marker-elevated {
+  color: #92400e;
+  background: var(--warning-bg);
+}
+
+.risk-marker-critical {
+  color: #9f1239;
+  background: var(--danger-bg);
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.capability-description-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.capability-description-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.capability-description-field label {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.sensitive-confirmation {
+  border-left: 4px solid var(--danger);
+}
+
+.sensitive-confirmation label {
+  display: flex;
+  align-items: start;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+.access-history-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.access-history-list li:first-child {
+  border-top: 0;
+}
+
+.access-history-list strong {
+  color: var(--text-main);
+}
+
+@media (max-width: 700px) {
+  .role-card-header,
+  .role-capability {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .role-member-count {
+    white-space: normal;
+  }
+
+  .role-capability-control {
+    max-width: none;
+  }
+
+  .capability-description-grid {
+    grid-template-columns: 1fr;
+  }
+}

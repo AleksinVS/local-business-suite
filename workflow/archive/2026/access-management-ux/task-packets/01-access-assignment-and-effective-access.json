@@ -1,0 +1,12 @@
+{
+  "task_id": "01-access-assignment-and-effective-access",
+  "goal": "Реализовать серверные selectors/services для ролей, технических групп, итогового доступа и аудита назначений.",
+  "read_scope": ["apps/accounts/", "apps/workorders/policies.py", "apps/memory/policies.py", "apps/settings_center/"],
+  "write_scope": ["apps/accounts/", "templates/accounts/", "apps/accounts/tests.py"],
+  "acceptance_checks": [
+    "Доступ только у пользователя с manage_roles или superuser.",
+    "Назначение меняет только группы, соответствующие ролям, и сохраняет технические группы.",
+    "Итоговый доступ объясняет источники и технические флаги.",
+    "Рискованные роли требуют подтверждения и создают audit запись."
+  ]
+}

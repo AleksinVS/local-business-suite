@@ -12,9 +12,11 @@
         "properties": {
           "type": { "enum": ["flag", "scope", "targets"] },
           "label": { "type": "string", "minLength": 1 },
-          "description": { "type": "string", "minLength": 1 }
+          "description": { "type": "string", "minLength": 1 },
+          "section": { "enum": ["workorders", "organization", "ai_memory", "personal_data"] },
+          "risk": { "enum": ["normal", "elevated", "critical"] }
         },
-        "required": ["type", "label", "description"]
+        "required": ["type", "label", "description", "section", "risk"]
       }
     }
   },

@@ -11,6 +11,7 @@
 - резервный SSO bypass для автоматических публичных ресурсов;
 - явные favicon/apple-touch ссылки на существующие PWA icons;
 - общая проверка `web.config` в Windows setup/import scripts;
+- идемпотентное применение на существующем хосте с backup/rollback;
 - HTTP-регрессия реального GET формы и POST с включённой CSRF-проверкой;
 - аудит `/static/`, manifest, service worker и стандартных browser icons.
 
@@ -26,4 +27,5 @@
   SSO-сессию или конкурирующую CSRF-cookie;
 - форма ролей после первого Remote User GET проходит реальную CSRF-проверку POST;
 - Windows-скрипты распознают обязательный favicon bypass;
+- updater поддерживает `-CheckOnly`, `-DryRun`, атомарную запись и откат;
 - документация содержит исправление хоста и отдельное требование `DEBUG=0`.

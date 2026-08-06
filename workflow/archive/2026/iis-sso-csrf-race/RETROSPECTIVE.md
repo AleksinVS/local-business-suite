@@ -14,3 +14,7 @@
 Приватный `web.config.template` и каждый уже развёрнутый Windows-хост обновляются
 отдельно. До фактической Windows-проверки кодовая защита закрывает гонку SSO, но
 не доказывает корректность IIS handler mapping.
+
+Linux CI проверяет постоянный контракт updater, но не исполняет PowerShell,
+`WebAdministration` и `appcmd`. Первый запуск на целевом хосте обязателен с
+`-DryRun`, после него — применение с `-FaviconUrl` и отдельный `-CheckOnly`.

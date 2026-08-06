@@ -96,7 +96,7 @@ $webConfigPath = Join-Path $PortalRoot "web.config"
 if (Test-IisFaviconFastCgiBypass -WebConfigPath $webConfigPath) {
     Write-Ok "favicon.ico исключён из FastCGI (защита SSO/CSRF)"
 } else {
-    Write-Warn "web.config не исключает favicon.ico из FastCGI; добавьте location из docs/deployment/IIS_SSO.md"
+    Write-Warn "web.config не исключает favicon.ico из FastCGI; запустите scripts\windows\update_iis_favicon_bypass.ps1"
 }
 
 # --- Check only mode ---------------------------------------------------------

@@ -428,6 +428,7 @@ scripts: # Скрипты и инструменты разработки
     setup_agent_runtime_autostart.ps1: file # Создание единственной задачи автозапуска Agent Runtime через Task Scheduler
     start_agent_runtime.bat: file # Ручной запуск Agent Runtime через BAT
     start_agent_runtime.ps1: file # Ручной запуск Agent Runtime через PowerShell
+    update_iis_favicon_bypass.ps1: file # Идемпотентное обновление web.config: backup, атомарная запись favicon bypass, IIS validation, recycle и rollback
 services: # Автономные сервисы (вне Django)
   agent_runtime: # Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач
     protocols: # Версионируемые AI UI protocol adapters agent runtime

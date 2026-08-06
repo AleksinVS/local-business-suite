@@ -9,6 +9,7 @@
 - [x] Первый POST редактора ролей проходит enforced CSRF.
 - [x] Соседние автоматические ресурсы проверены.
 - [x] Windows-скрипты предупреждают о старом web.config.
+- [x] Существующий хост обновляется идемпотентно с backup и rollback.
 - [x] ADR, deployment guide, private deployment handoff и структура обновлены.
 - [x] Полный набор выполнен; два несвязанных ранее существовавших AI UI asset
   expectation failures зафиксированы в executor report.

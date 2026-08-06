@@ -1452,6 +1452,46 @@ class IisCompatContourTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@pytest.mark.unit
+class WindowsIisFaviconUpdateScriptTests(SimpleTestCase):
+    """Контракт Windows-скрипта проверяется без PowerShell/IIS в Linux CI."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        scripts_dir = Path(settings.BASE_DIR) / "scripts" / "windows"
+        cls.script = (scripts_dir / "update_iis_favicon_bypass.ps1").read_text(encoding="utf-8")
+        cls.helper = (scripts_dir / "iis_web_config.ps1").read_text(encoding="utf-8")
+
+    def test_update_script_exposes_safe_operational_modes(self):
+        for parameter in (
+            "[switch]$CheckOnly",
+            "[switch]$DryRun",
+            "[switch]$SkipRecycle",
+            "[switch]$HandlersOnly",
+        ):
+            with self.subTest(parameter=parameter):
+                self.assertIn(parameter, self.script)
+
+    def test_update_script_backs_up_writes_atomically_and_rolls_back(self):
+        self.assertIn("Copy-Item -LiteralPath $webConfigPath -Destination $backupPath", self.script)
+        self.assertIn("Set-Acl -LiteralPath $backupPath", self.script)
+        self.assertIn("Set-Acl -LiteralPath $temporaryPath", self.script)
+        self.assertIn("Set-Acl -LiteralPath $rollbackPath", self.script)
+        self.assertIn("[System.IO.File]::Replace", self.script)
+        self.assertIn("Restore-WebConfigAtomically", self.script)
+        self.assertIn("Restart-WebAppPool -Name $AppPoolName", self.script)
+        self.assertIn('appcmd.exe"', self.script)
+        self.assertIn("$statusCode -in @(200, 204, 404)", self.script)
+
+    def test_shared_helper_updates_single_favicon_location(self):
+        self.assertIn("function Set-IisFaviconFastCgiBypassXml", self.helper)
+        self.assertIn('$location.SetAttribute("path", "favicon.ico")', self.helper)
+        self.assertIn('$handlers.AppendChild($WebConfig.CreateElement("clear"))', self.helper)
+        self.assertIn('$anonymous.SetAttribute("enabled", "true")', self.helper)
+        self.assertIn('$windows.SetAttribute("enabled", "false")', self.helper)
+
+
 class ArchitectureContractTests(TestCase):
     def test_validate_architecture_contracts_command_passes(self):
         required_settings = (

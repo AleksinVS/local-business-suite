@@ -312,6 +312,52 @@ HTML главной страницы и не содержит `Set-Cookie`.
 Это не отменяет исключение на уровне IIS. Скрипты `setup_wfastcgi.ps1 -CheckOnly`
 и `import_portal.ps1` предупреждают, если исключение отсутствует.
 
+#### Автоматическое обновление существующего Windows-хоста
+
+Для уже развёрнутого хоста используйте идемпотентный скрипт. Сначала выполните
+пробный запуск, затем применение и итоговую проверку:
+
+```powershell
+cd C:\inetpub\portal
+
+.\scripts\windows\update_iis_favicon_bypass.ps1 `
+  -PortalRoot C:\inetpub\portal `
+  -SiteName portal `
+  -DryRun
+
+.\scripts\windows\update_iis_favicon_bypass.ps1 `
+  -PortalRoot C:\inetpub\portal `
+  -SiteName portal `
+  -FaviconUrl http://stc-web/favicon.ico
+
+.\scripts\windows\update_iis_favicon_bypass.ps1 `
+  -PortalRoot C:\inetpub\portal `
+  -CheckOnly `
+  -FaviconUrl http://stc-web/favicon.ico
+```
+
+Скрипт:
+
+- не меняет код Django, базу, роли, `.env` или секреты;
+- распознаёт уже установленную защиту и не создаёт второй `location`;
+- перед записью создаёт уникальный `web.config.backup-*` рядом с конфигурацией;
+- записывает XML через временный файл и атомарную замену;
+- проверяет конфигурацию через `appcmd` и перезапускает только используемый пул;
+- автоматически восстанавливает резервную копию при ошибке XML/IIS/recycle;
+- считает HTTP-проверку успешной, только если favicon не возвращает HTML главной
+  страницы и не устанавливает `Set-Cookie`.
+
+Если IIS отклоняет только вложенные настройки `authentication` с ошибкой 500.19,
+не разблокируйте раздел глобально. После анализа ошибки повторите команду с
+`-HandlersOnly`: FastCGI handler всё равно будет исключён, а Windows/Anonymous
+Authentication останутся унаследованными. `-SkipRecycle` разрешён только для
+контролируемого обслуживания, когда recycle выполняется отдельно.
+
+Команда выводит путь резервной копии и готовую команду ручного отката. Параметр
+`-CheckOnly` ничего не меняет и возвращает ненулевой код, если защита отсутствует.
+Параметр `-DryRun` строит изменения только в памяти: резервная копия, запись и
+recycle не выполняются.
+
 Проверены соседние автоматические запросы:
 
 - `/static/...` обслуживает WhiteNoise до middleware аутентификации, а отсутствующие

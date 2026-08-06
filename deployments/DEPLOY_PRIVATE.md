@@ -32,6 +32,11 @@ cd deployments/vob3 && git pull && cd ../..
 конкурирующие session/CSRF cookie при первом Windows SSO-входе. Проверка:
 `scripts/windows/setup_wfastcgi.ps1 -CheckOnly`.
 
+На существующем хосте конфигурацию можно безопасно применить скриптом
+`scripts/windows/update_iis_favicon_bypass.ps1`: сначала `-DryRun`, затем обычный
+запуск с явными `-PortalRoot`, `-SiteName` и `-FaviconUrl`. Скрипт создаёт
+host-local резервную копию `web.config.backup-*`; она не коммитится.
+
 ## Замечания
 
 - Не коммитьте файлы из `deployments/` в основной репозиторий.

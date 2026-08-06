@@ -1,0 +1,66 @@
+{
+  "task_id": "03-ai-driver-lifecycle-and-page-context",
+  "title": "Сворачивание AI UI драйверов и многозначный page context",
+  "type": "security_ui_implementation",
+  "objective": "Добавить общий lifecycle filters/chat без потери AI session/stream и передавать повторяемые фильтры в безопасном PageContextEnvelope.",
+  "read_scope": [
+    "templates/workorders/partials/board_sidebar.html",
+    "templates/base.html",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "static/src/copilotkit/main.jsx",
+    "static/src/copilotkit/copilotkit.css",
+    "static/src/js/page_context.js",
+    "apps/ai/page_context.py",
+    "apps/ai/tests/test_views.py",
+    "package.json",
+    "package-lock.json",
+    "config/settings.py"
+  ],
+  "write_scope": [
+    "static/src/js/workorder_department_filter.js",
+    "static/src/js/page_context.js",
+    "static/src/ai_ui/native_ai.js",
+    "static/src/ai_ui/native_ai.css",
+    "static/src/copilotkit/main.jsx",
+    "static/src/copilotkit/copilotkit.css",
+    "static/src/css/app.css",
+    "apps/ai/page_context.py",
+    "apps/ai/tests/test_views.py",
+    "templates/workorders/partials/board_sidebar.html",
+    "templates/base.html",
+    "static/src/js/.desc.json"
+  ],
+  "instructions": [
+    "Контроллер панели хранит filters/chat только в DOM/памяти документа; не читать и не писать это состояние в storage, URL или session.",
+    "Начальное состояние всегда filters. Компактный проектный button раскрывает чат; project-owned collapse button и корректный Escape возвращают filters и фокус на активатор.",
+    "Корень активного драйвера не размонтировать при toggle. Streaming completion не должен auto-open chat и не должен повторять UI commands.",
+    "Определить локальные события open/collapse/focus/status. Native и CopilotKit фокусируют собственный textbox внутри своего кода; generic controller не ищет private CopilotKit DOM selectors.",
+    "Исправить клиентский сбор повторяемых FormData keys в arrays и серверный sanitize PageContextEnvelope.filters. Ограничить массив числом элементов, длиной каждого значения и общим payload limit; поддержать только scalar primitives.",
+    "Сохранить same-origin credentials, CSRF, signed actor replacement, allow-listed UI commands и server-side context resolution.",
+    "Сверить package.json/package-lock и LOCAL_BUSINESS_AI_UI_AGUI_PROFILE. Не обновлять @ag-ui/client/CopilotKit и не менять AG-UI wire contract.",
+    "Обеспечить reduced-motion, aria-expanded/controls/live и mobile focus trap без перехвата Escape у вложенного dialog/menu."
+  ],
+  "acceptance": [
+    "Native и CopilotKit по reload начинают в filters и раскрываются с фокусом в настоящем textbox.",
+    "Collapse button и Escape возвращают filters и фокус, history/thread/model не сбрасываются.",
+    "Collapse во время native SSE или Copilot run не отменяет ответ; завершение не раскрывает панель.",
+    "PageContextEnvelope сохраняет все department/status/assignee/device значения в ограниченных arrays.",
+    "Forged/oversized array payload отвергается или безопасно нормализуется без 500 и без раскрытия данных.",
+    "Версии остаются @ag-ui/client 0.0.55, ag-ui profile 0.0.55, CopilotKit 1.59.5."
+  ],
+  "verification": [
+    "make check",
+    "make test-fast TEST_SCOPE=apps/ai/tests",
+    "node --check static/src/js/workorder_department_filter.js",
+    "node --check static/src/js/page_context.js",
+    "node --check static/src/ai_ui/native_ai.js",
+    "npm run build:copilotkit"
+  ],
+  "non_goals": [
+    "Не менять services/agent_runtime или AG-UI event schema.",
+    "Не обновлять npm dependencies.",
+    "Не менять полную страницу AI chat.",
+    "Не создавать новый backend endpoint только для визуального состояния панели."
+  ]
+}

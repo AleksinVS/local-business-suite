@@ -1,0 +1,60 @@
+<div class="workorders-sidebar-shell" data-workorders-sidebar-shell data-ai-sidebar-mode="filters">
+  <section class="workorders-filter-panel" data-workorders-filter-panel aria-labelledby="department-filter-title">
+    <header class="workorders-sidebar-header">
+      <div>
+        <p class="eyebrow">Канбан заявок</p>
+        <h2 id="department-filter-title">Подразделения</h2>
+      </div>
+      <button type="button" class="workorders-sidebar-close" data-workorders-sidebar-close aria-label="Закрыть панель фильтров">
+        Закрыть
+      </button>
+    </header>
+
+    {% include "workorders/partials/department_filter_tree.html" %}
+
+    <button
+      type="button"
+      class="workorders-ai-launcher"
+      data-workorders-ai-launcher
+      aria-controls="workorders-sidebar-chat"
+      aria-expanded="false"
+    >
+      <span aria-hidden="true">✦</span>
+      <span data-workorders-ai-launcher-text>Сообщение ИИ...</span>
+      <span class="visually-hidden" data-workorders-ai-launcher-status aria-live="polite"></span>
+    </button>
+  </section>
+
+  <section id="workorders-sidebar-chat" class="workorders-sidebar-chat" data-workorders-ai-panel aria-label="ИИ-чат" aria-hidden="true">
+    <header class="workorders-sidebar-header">
+      <h2>ИИ-чат</h2>
+      <button type="button" class="workorders-ai-collapse" data-workorders-ai-collapse aria-label="Свернуть ИИ-чат">
+        Свернуть
+      </button>
+    </header>
+    {% if copilotkit_enabled %}
+      <div
+        id="copilotkit-sidebar-root"
+        class="copilotkit-sidebar-root"
+        data-config-url="{% url 'ai:copilotkit_config' %}"
+        data-new-session-url="{% url 'ai:ui_session_new' %}"
+        data-runtime-url="{{ copilotkit_runtime_url }}"
+        data-agent-id="{{ copilotkit_agent_id }}"
+      >
+        <div class="sidebar-chat-loading">Загрузка чата...</div>
+      </div>
+    {% elif native_ai_ui_enabled %}
+      <div
+        id="native-ai-sidebar-root"
+        class="native-ai-sidebar-root"
+        data-config-url="{% url 'ai:ui_config' %}"
+        data-new-session-url="{% url 'ai:ui_session_new' %}"
+      >
+        <div class="sidebar-chat-loading">Загрузка чата...</div>
+      </div>
+    {% else %}
+      <div class="sidebar-chat-loading">Войдите, чтобы открыть ИИ-чат.</div>
+    {% endif %}
+  </section>
+</div>
+<div class="workorders-sidebar-backdrop" data-workorders-sidebar-backdrop hidden></div>

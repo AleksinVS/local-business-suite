@@ -29,6 +29,7 @@ from .models import AIWindowContextSnapshot, ChatMessage
 
 PAGE_CONTEXT_SCHEMA_VERSION = "1"
 PAGE_CONTEXT_MAX_BYTES = 16 * 1024
+PAGE_CONTEXT_FILTER_ARRAY_MAX_ITEMS = 20
 PAGE_CONTEXT_TTL_HOURS = 24
 ALLOWED_MODULES = {
     "workorders",
@@ -67,7 +68,7 @@ def sanitize_page_context_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         "window_id": _safe_string(envelope.get("window_id"), max_len=128),
         "page": _sanitize_mapping(envelope.get("page"), ALLOWED_PAGE_KEYS, max_value_len=200),
         "selection": _sanitize_mapping(envelope.get("selection"), ALLOWED_SELECTION_KEYS, max_value_len=240),
-        "filters": _sanitize_mapping(envelope.get("filters"), None, max_value_len=120),
+        "filters": _sanitize_filter_mapping(envelope.get("filters"), max_value_len=120),
         "ui_state": _sanitize_mapping(envelope.get("ui_state"), ALLOWED_UI_STATE_KEYS, max_value_len=80),
         "capabilities": {},
     }
@@ -339,6 +340,45 @@ def _sanitize_mapping(value: Any, allowed_keys: set[str] | None, *, max_value_le
         if isinstance(item, (str, int, float, bool)) or item is None:
             clean[key_text] = _safe_string(item, max_len=max_value_len) if not isinstance(item, bool) else item
     return clean
+
+
+def _sanitize_filter_mapping(value: Any, *, max_value_len: int) -> dict[str, Any]:
+    """Очищает плоские фильтры, сохраняя повторяемые query-параметры.
+
+    PageContextEnvelope не является источником прав. Ограничения здесь защищают
+    snapshot и agent runtime от вложенных структур и неограниченных массивов, а
+    предметные идентификаторы повторно разрешаются серверными селекторами.
+    """
+
+    if not isinstance(value, dict):
+        return {}
+    clean: dict[str, Any] = {}
+    for key, item in value.items():
+        key_text = _safe_string(key, max_len=80)
+        if not key_text:
+            continue
+        if isinstance(item, (list, tuple)):
+            items = []
+            for entry in item[:PAGE_CONTEXT_FILTER_ARRAY_MAX_ITEMS]:
+                sanitized = _sanitize_scalar(entry, max_len=max_value_len)
+                if sanitized in {None, ""} or sanitized in items:
+                    continue
+                items.append(sanitized)
+            if items:
+                clean[key_text] = items
+            continue
+        sanitized = _sanitize_scalar(item, max_len=max_value_len)
+        if sanitized is not None:
+            clean[key_text] = sanitized
+    return clean
+
+
+def _sanitize_scalar(value: Any, *, max_len: int) -> str | bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (str, int, float)) or value is None:
+        return _safe_string(value, max_len=max_len)
+    return None
 
 
 def _safe_string(value: Any, *, max_len: int) -> str:

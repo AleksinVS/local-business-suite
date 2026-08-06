@@ -1,11 +1,10 @@
 from collections import OrderedDict
 import json
-from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
-from django.db.models import Q, Count
+from django.db.models import Count, Q
 
 User = get_user_model()
 from django.http import HttpResponse, HttpResponseForbidden
@@ -14,9 +13,11 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
-from apps.core.models import Department
-
 from . import notification_events
+from .department_filter import (
+    build_department_filter_read_model,
+    department_search_ids,
+)
 from .forms import (
     KanbanColumnTitleForm,
     WorkOrderAttachmentForm,
@@ -45,20 +46,16 @@ from .policies import (
     can_upload_attachment,
 )
 from .selectors import (
+    resolve_visible_department_selection,
     visible_boards_queryset,
     visible_departments_queryset,
     visible_devices_queryset,
     visible_workorders_queryset,
 )
 from .services import confirm_closure, transition_workorder
-from .tree import build_workorder_tree
 
 
 VIEW_BOARD = "board"
-VIEW_TREE = "tree"
-VIEW_MODES = {VIEW_BOARD, VIEW_TREE}
-# Ключ сессии для запоминания последнего выбранного режима (доска/дерево).
-VIEW_SESSION_KEY = "workorders:view_mode"
 
 
 def quick_transition_choices_for(user, workorder):
@@ -126,32 +123,6 @@ def _workorder_status_color_style():
     return "; ".join(declarations)
 
 
-def _requested_view_mode(request):
-    """Режим просмотра заявок (доска/дерево).
-
-    Явный валидный ``?view=`` имеет приоритет и запоминается в сессии, чтобы при
-    следующем заходе без параметра восстановить последний выбор пользователя.
-    Отсутствующий/некорректный параметр → запомненное значение, иначе доска.
-    """
-    raw = request.GET.get("view")
-    if raw is not None and raw.strip() in VIEW_MODES:
-        view_mode = raw.strip()
-        if request.session.get(VIEW_SESSION_KEY) != view_mode:
-            request.session[VIEW_SESSION_KEY] = view_mode
-        return view_mode
-    remembered = request.session.get(VIEW_SESSION_KEY)
-    if remembered in VIEW_MODES:
-        return remembered
-    return VIEW_BOARD
-
-
-def _with_query(url, params):
-    cleaned = {key: value for key, value in params.items() if value not in {None, ""}}
-    if not cleaned:
-        return url
-    return f"{url}?{urlencode(cleaned)}"
-
-
 def _mark_workorders_changed(response):
     response["HX-Trigger"] = "workordersChanged"
     return response
@@ -177,47 +148,25 @@ def _related_user_search_q(relation_name, query):
     return search_query
 
 
-def _department_search_ids(query):
-    matched_ids = set(
-        Department.objects.filter(name__icontains=query).values_list("id", flat=True)
-    )
-    if not matched_ids:
-        return set()
-
-    children_map = {}
-    for department_id, parent_id in Department.objects.values_list("id", "parent_id"):
-        children_map.setdefault(parent_id, []).append(department_id)
-
-    department_ids = set()
-    stack = list(matched_ids)
-    while stack:
-        department_id = stack.pop()
-        if department_id in department_ids:
-            continue
-        department_ids.add(department_id)
-        stack.extend(children_map.get(department_id, []))
-    return department_ids
-
-
-def workorders_board_page_context(request, board, view_mode=VIEW_BOARD):
+def workorders_board_page_context(request, board, department_values=()):
     return {
         "schema_version": "1",
         "page": {
             "path": request.path,
-            "title": "Дерево заявок" if view_mode == VIEW_TREE else "Канбан заявок",
+            "title": "Канбан заявок",
             "module": "workorders",
-            "view": view_mode,
+            "view": VIEW_BOARD,
         },
         "selection": {},
         "filters": {
             "board": board.slug if board else "",
             "q": request.GET.get("q", ""),
-            "department": _filter_values(request, "department"),
+            "department": [str(value) for value in department_values],
             "status": _filter_values(request, "status"),
             "assignee": _filter_values(request, "assignee"),
             "device": _filter_values(request, "device"),
         },
-        "ui_state": {"focused_region": "tree" if view_mode == VIEW_TREE else "board"},
+        "ui_state": {"focused_region": "board"},
     }
 
 
@@ -244,16 +193,61 @@ def workorder_detail_page_context(request, workorder):
 class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     template_name = "workorders/board.html"
 
-    def get_view_mode(self):
-        return _requested_view_mode(self.request)
+    def get(self, request, *args, **kwargs):
+        request.session.pop("workorders:view_mode", None)
+        department_selection = self.get_department_selection()
+        canonical_url = self._canonical_filter_url(department_selection)
+        normalized_department_values = [
+            str(value) for value in department_selection.selected_ids
+        ]
+        needs_canonical_url = (
+            "view" in request.GET
+            or request.GET.getlist("department")
+            != normalized_department_values
+        )
+        if needs_canonical_url and not request.htmx:
+            return redirect(canonical_url)
+
+        response = super().get(request, *args, **kwargs)
+        if needs_canonical_url:
+            response["HX-Replace-Url"] = canonical_url
+        return response
+
+    def _canonical_filter_url(self, department_selection):
+        query = self.request.GET.copy()
+        query.pop("view", None)
+        if department_selection.selected_ids:
+            query.setlist(
+                "department",
+                [str(value) for value in department_selection.selected_ids],
+            )
+        else:
+            query.pop("department", None)
+        encoded_query = query.urlencode()
+        if encoded_query:
+            return f"{self.request.path}?{encoded_query}"
+        return self.request.path
+
+    def get_department_selection(self):
+        if not hasattr(self, "_department_selection"):
+            self._department_selection = resolve_visible_department_selection(
+                self.request.user,
+                self.request.GET.getlist("department"),
+            )
+        return self._department_selection
 
     def get_board(self):
         slug = self.kwargs.get("board_slug")
-        boards = visible_boards_queryset(self.request.user)
+        boards = self.get_visible_boards()
         if slug:
             return get_object_or_404(boards, slug=slug)
         board = boards.first()
         return board
+
+    def get_visible_boards(self):
+        if not hasattr(self, "_visible_boards"):
+            self._visible_boards = visible_boards_queryset(self.request.user)
+        return self._visible_boards
 
     def get_queryset(self, board):
         queryset = visible_workorders_queryset(self.request.user, board=board).order_by(
@@ -264,13 +258,16 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             attachment_count=Count("attachments", distinct=True),
         )
         q = self.request.GET.get("q", "").strip()
-        departments = _filter_values(self.request, "department")
+        department_selection = self.get_department_selection()
         status_values = _filter_values(self.request, "status")
         assignees = _filter_values(self.request, "assignee")
         devices = _filter_values(self.request, "device")
 
         if q:
-            matched_department_ids = _department_search_ids(q)
+            matched_department_ids = department_search_ids(
+                q,
+                department_selection.visible_departments,
+            )
             search_filter = (
                 Q(number__icontains=q)
                 | Q(title__icontains=q)
@@ -284,12 +281,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             if matched_department_ids:
                 search_filter |= Q(department_id__in=matched_department_ids)
             queryset = queryset.filter(search_filter)
-        if departments:
-            selected_departments = Department.objects.filter(pk__in=departments)
-            department_ids = set()
-            for selected_department in selected_departments:
-                department_ids.update(selected_department.descendant_ids())
-            queryset = queryset.filter(department_id__in=department_ids) if department_ids else queryset.none()
+        if department_selection.selected_ids:
+            queryset = queryset.filter(
+                department_id__in=department_selection.branch_ids
+            )
         if status_values:
             queryset = queryset.filter(status__in=status_values)
         if assignees:
@@ -301,13 +296,46 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         board = self.get_board()
-        view_mode = self.get_view_mode()
+        department_selection = self.get_department_selection()
         context["page_ai_context_json"] = page_context_json(
-            workorders_board_page_context(self.request, board, view_mode=view_mode)
+            workorders_board_page_context(
+                self.request,
+                board,
+                department_values=department_selection.selected_ids,
+            )
+        )
+        department_nodes = build_department_filter_read_model(
+            department_selection.visible_departments,
+            department_selection.selected_ids,
+        )
+        context["departments"] = department_selection.visible_departments
+        context["department_filter"] = {
+            "nodes": department_nodes,
+            "selected_ids": department_selection.selected_ids,
+            "selected_count": len(department_selection.selected_ids),
+            "is_empty": not department_nodes,
+        }
+        context["visible_boards"] = self.get_visible_boards()
+        context["workorder_status_color_style"] = _workorder_status_color_style()
+        context["status_choices"] = WorkOrderStatus.choices
+        context["assignees"] = User.objects.order_by("first_name", "username")
+        context["devices"] = visible_devices_queryset(self.request.user)
+        context["filters"] = {
+            "view": VIEW_BOARD,
+            "q": self.request.GET.get("q", ""),
+            "department_values": [
+                str(value) for value in department_selection.selected_ids
+            ],
+            "status_values": _filter_values(self.request, "status"),
+            "assignee_values": _filter_values(self.request, "assignee"),
+            "device_values": _filter_values(self.request, "device"),
+        }
+        context["can_manage_board_columns"] = can_manage_board_columns(
+            self.request.user
         )
         if not board:
             context["no_boards"] = True
-            context["current_view"] = view_mode
+            context["current_view"] = VIEW_BOARD
             return context
 
         queryset = self.get_queryset(board)
@@ -344,18 +372,8 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 }
             )
         board_column_count = len(columns) if columns else 1
-        query_for_board = self.request.GET.copy()
-        query_for_board["view"] = VIEW_BOARD
-        query_for_tree = self.request.GET.copy()
-        query_for_tree["view"] = VIEW_TREE
         context["current_board"] = board
-        context["current_view"] = view_mode
-        context["workorder_status_color_style"] = _workorder_status_color_style()
-        context["view_urls"] = {
-            VIEW_BOARD: f"{self.request.path}?{query_for_board.urlencode()}",
-            VIEW_TREE: f"{self.request.path}?{query_for_tree.urlencode()}",
-        }
-        context["visible_boards"] = visible_boards_queryset(self.request.user)
+        context["current_view"] = VIEW_BOARD
         context["board_columns"] = [
             {
                 "key": code,
@@ -366,26 +384,6 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             for code, data in columns.items()
         ]
         context["board_visible_slots"] = min(max(board_column_count, 1), 5)
-        if view_mode == VIEW_TREE:
-            context["workorder_tree"] = build_workorder_tree(
-                queryset,
-                can_create_workorder=can_create(self.request.user),
-            )
-        context["status_choices"] = WorkOrderStatus.choices
-        context["departments"] = visible_departments_queryset(self.request.user)
-        context["assignees"] = User.objects.order_by("first_name", "username")
-        context["devices"] = visible_devices_queryset(self.request.user)
-        context["filters"] = {
-            "view": view_mode,
-            "q": self.request.GET.get("q", ""),
-            "department_values": _filter_values(self.request, "department"),
-            "status_values": _filter_values(self.request, "status"),
-            "assignee_values": _filter_values(self.request, "assignee"),
-            "device_values": _filter_values(self.request, "device"),
-        }
-        context["can_manage_board_columns"] = can_manage_board_columns(
-            self.request.user
-        )
         return context
 
     def get_template_names(self):
@@ -393,8 +391,6 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             return ["workorders/partials/detail_panel_empty.html"]
         if self.request.htmx and self.request.htmx.target == "board-columns":
             return ["workorders/partials/board_columns.html"]
-        if self.request.htmx and self.request.htmx.target == "workorders-tree":
-            return ["workorders/partials/tree_view.html"]
         if self.request.htmx and self.request.htmx.target == "workorders-view":
             return ["workorders/partials/workorders_view.html"]
         if self.request.htmx:
@@ -442,19 +438,11 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
     def get_success_url(self):
         if self.request.htmx:
             if self.object and self.object.board_id:
-                url = reverse(
+                return reverse(
                     "workorders:board_specific",
                     kwargs={"board_slug": self.object.board.slug},
                 )
-            else:
-                url = reverse("workorders:board")
-            return_view = self.request.POST.get("return_view") or self.request.GET.get(
-                "return_view"
-            )
-            return _with_query(
-                url,
-                {"view": return_view if return_view in VIEW_MODES else ""},
-            )
+            return reverse("workorders:board")
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
     def dispatch(self, request, *args, **kwargs):
@@ -484,8 +472,7 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        return_view = self.request.GET.get("return_view") or self.request.GET.get("view")
-        context["return_view"] = return_view if return_view in VIEW_MODES else VIEW_BOARD
+        context["return_view"] = VIEW_BOARD
         return context
 
 

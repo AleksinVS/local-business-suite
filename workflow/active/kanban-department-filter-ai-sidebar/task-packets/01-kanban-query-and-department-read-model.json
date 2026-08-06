@@ -1,0 +1,51 @@
+{
+  "task_id": "01-kanban-query-and-department-read-model",
+  "title": "Канонический query contract и безопасная проекция подразделений",
+  "type": "implementation",
+  "objective": "Сделать канбан единственным серверным представлением, нормализовать фильтр ветвей и подготовить доступный read model дерева подразделений.",
+  "read_scope": [
+    "apps/core/models.py",
+    "apps/workorders/views.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/tree.py",
+    "apps/workorders/tests.py",
+    "templates/workorders/"
+  ],
+  "write_scope": [
+    "apps/workorders/views.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/department_filter.py",
+    "apps/workorders/tests.py",
+    "apps/workorders/tree.py",
+    "apps/workorders/.desc.json"
+  ],
+  "instructions": [
+    "Перед изменением зафиксировать git status --short и не трогать чужие файлы.",
+    "Удалить VIEW_TREE, VIEW_MODES, VIEW_SESSION_KEY и зависимость board view от сохраненного режима; любой GET рендерит канбан.",
+    "Сохранить compatibility: полный GET с view=tree/board получает временный 302 на URL без view с сохранением повторяемых параметров; старый HTMX-запрос получает канбан и HX-Replace-Url; неизвестное значение безопасно отбрасывается.",
+    "Удалять устаревший workorders:view_mode из сессии и игнорировать return_view=tree без потери выбранной доски и остальных фильтров.",
+    "Выделить разбор department в чистый нормализатор: только целые положительные id из visible_departments_queryset(user), стабильный порядок, удаление повторов и потомков уже выбранного предка.",
+    "Строить вложенный read model только из разрешенного queryset без повторной выборки всех Department. Узлы должны содержать только id, label, parent id, level, has_children, selected и ancestor_of_selected.",
+    "Не добавлять счетчики заявок к узлам и не менять branch access policies/role contract.",
+    "Удалить вызов build_workorder_tree и подготовить удаление apps/workorders/tree.py после подтверждения отсутствия потребителей.",
+    "Обновить apps/workorders/.desc.json: убрать удаленный tree.py и добавить новый модуль проекции фильтра.",
+    "Фильтрация заявок должна применять descendant branch ids только после visible_workorders_queryset(user, board)."
+  ],
+  "acceptance": [
+    "Канбан всегда является current page view; session tree value игнорируется.",
+    "Невалидные, удаленные и недоступные department id не вызывают 500 и не влияют на выдачу.",
+    "Предок плюс потомок нормализуются до предка; две независимые ветви сохраняются.",
+    "Branch-limited пользователь получает только разрешенные узлы и заявки.",
+    "Read model корректен для нескольких корней, глубокой ветки и пустого queryset."
+  ],
+  "verification": [
+    "make check",
+    "make test-fast TEST_SCOPE=apps/workorders/tests.py",
+    "make test-integration TEST_SCOPE=apps/workorders/tests.py"
+  ],
+  "non_goals": [
+    "Не менять Department model или миграции.",
+    "Не менять контракты ролей и область department_branch.",
+    "Не реализовывать шаблоны, CSS или AI UI lifecycle в этом пакете."
+  ]
+}

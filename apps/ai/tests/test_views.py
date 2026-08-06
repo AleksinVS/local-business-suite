@@ -1,6 +1,8 @@
 """Тесты представлений AI-чата, стриминга и прав доступа."""
 import pytest
 
+from django.test import Client
+
 from apps.ai.tests._common import *  # noqa: F401,F403
 
 
@@ -774,6 +776,104 @@ class AIViewsTests(TestCase):
         self.assertEqual(snapshot.resolved_summary["selection"]["object_id"], str(self.customer_workorder.pk))
         self.assertEqual(snapshot.resolved_summary["selection"]["title"], self.customer_workorder.title)
         self.assertIn("transition_targets", snapshot.resolved_summary["capabilities"])
+
+    def test_page_context_update_preserves_bounded_repeated_filters(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("ai:page_context_update"),
+            data=json.dumps(
+                {
+                    "schema_version": "1",
+                    "window_id": "window-ai-filter-arrays",
+                    "page": {"module": "workorders", "view": "board"},
+                    "filters": {
+                        "department": ["10", "20", "20", "x" * 200, {"nested": "rejected"}],
+                        "status": [f"status-{index}" for index in range(25)],
+                        "invalid": {"nested": True},
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        snapshot = AIWindowContextSnapshot.objects.get(
+            window_id="window-ai-filter-arrays"
+        )
+        self.assertEqual(
+            snapshot.sanitized_envelope["filters"]["department"][:2],
+            ["10", "20"],
+        )
+        self.assertEqual(len(snapshot.sanitized_envelope["filters"]["department"][2]), 120)
+        self.assertEqual(
+            len(snapshot.sanitized_envelope["filters"]["status"]),
+            20,
+        )
+        self.assertNotIn("invalid", snapshot.sanitized_envelope["filters"])
+        self.assertEqual(
+            snapshot.resolved_summary["filters"],
+            snapshot.sanitized_envelope["filters"],
+        )
+
+    def test_page_context_update_requires_valid_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.manager)
+        url = reverse("ai:page_context_update")
+        payload = json.dumps(
+            {
+                "schema_version": "1",
+                "window_id": "window-ai-csrf",
+                "page": {"module": "workorders", "view": "board"},
+                "filters": {"department": [str(self.department.pk)]},
+            }
+        )
+
+        rejected = csrf_client.post(url, data=payload, content_type="application/json")
+        self.assertEqual(rejected.status_code, 403)
+
+        page = csrf_client.get(reverse("workorders:board"))
+        self.assertEqual(page.status_code, 200)
+        token = csrf_client.cookies["csrftoken"].value
+        accepted = csrf_client.post(
+            url,
+            data=payload,
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(accepted.status_code, 200)
+
+    def test_ai_ui_post_endpoints_reject_missing_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.manager)
+
+        for url_name in ("ai:ui_session_new", "ai:ui_ag_ui_run"):
+            with self.subTest(url_name=url_name):
+                response = csrf_client.post(
+                    reverse(url_name),
+                    data="{}",
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 403)
+
+    def test_page_context_update_rejects_payload_over_total_limit(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("ai:page_context_update"),
+            data=json.dumps(
+                {
+                    "schema_version": "1",
+                    "window_id": "window-ai-too-large",
+                    "page": {"module": "workorders", "view": "board"},
+                    "filters": {
+                        f"filter-{index}": "x" * 120
+                        for index in range(180)
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_page_context_update_rejects_foreign_workorder(self):
         private_group, _ = Group.objects.get_or_create(name="private-board-group")

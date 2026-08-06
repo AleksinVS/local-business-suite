@@ -1,0 +1,62 @@
+{
+  "task_id": "02-filter-first-sidebar-shell",
+  "title": "Удаление tree-mode и filter-first интерфейс левой панели",
+  "type": "implementation",
+  "objective": "Перенести дерево подразделений в page-scoped sidebar канбана, удалить старую tree-view поверхность и связать sidebar-контролы с единым GET/HTMX фильтром.",
+  "read_scope": [
+    "templates/base.html",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/",
+    "static/src/css/app.css",
+    "static/src/js/filter_overflow.js",
+    "static/src/js/workorder_tree.js",
+    "scripts/e2e/tests/workorder_tree.spec.ts"
+  ],
+  "write_scope": [
+    "templates/workorders/board.html",
+    "templates/workorders/partials/board_sidebar.html",
+    "templates/workorders/partials/department_filter_tree.html",
+    "templates/workorders/partials/department_filter_node.html",
+    "templates/workorders/partials/workorders_view.html",
+    "templates/workorders/partials/workorder_view_switcher.html",
+    "templates/workorders/partials/tree_view.html",
+    "templates/workorders/partials/tree_row.html",
+    "static/src/js/workorder_department_filter.js",
+    "static/src/js/workorder_board.js",
+    "static/src/js/workorder_tree.js",
+    "static/src/css/app.css",
+    "templates/workorders/partials/.desc.json",
+    "static/src/js/.desc.json"
+  ],
+  "instructions": [
+    "Переопределить sidebar_panel и sidebar_panel_label только в board.html; остальные страницы сохраняют текущий sidebar.",
+    "Удалить переключатель вида и шаблоны старого дерева заявок после проверки отсутствия ссылок.",
+    "Перед удалением workorder_tree.js перенести общий обработчик workordersChanged в board-specific модуль; после редактирования, комментария, вложения, перехода, подтверждения и оценки канбан обязан обновляться с текущими фильтрами.",
+    "Сделать единый filter form источником q/status/assignee/device/department. Sidebar checkbox должен быть form-associated control и входить в тот же FormData, хотя находится вне визуальных границ формы.",
+    "Добавить hx-push-url и гарантировать, что каждое изменение отправляет весь набор фильтров, а не только department.",
+    "Отрисовать вложенные списки, toggle buttons, checkboxes, выбранный счетчик, сброс и локальный поиск по названию. Не использовать role=tree без полного ARIA keyboard contract.",
+    "Ввести явные пустые состояния: нет разрешенных подразделений и нет заявок по условиям.",
+    "На ширине <=960px подготовить sidebar как управляемый слой поверх канбана с фоном, Escape и возвратом фокуса; не допускать горизонтального scroll.",
+    "Не смешивать действие создания заявки с checkbox/toggle узла фильтра."
+  ],
+  "acceptance": [
+    "При первой загрузке канбана дерево видно, старого переключателя и treegrid нет.",
+    "Выбор одной/нескольких ветвей обновляет канбан и URL, сохраняя остальные фильтры.",
+    "Reload и copied URL восстанавливают отмеченные узлы и раскрывают их предков.",
+    "Локальный поиск дерева не отправляет серверный запрос и не меняет выбранные значения.",
+    "Фильтр полностью управляется мышью, клавиатурой и touch; цели не меньше 44x44 px.",
+    "Mobile layer не сжимает и не прокручивает канбан по горизонтали."
+  ],
+  "verification": [
+    "make check",
+    "make test-fast TEST_SCOPE=apps/workorders/tests.py",
+    "node --check static/src/js/workorder_department_filter.js",
+    "node --check static/src/js/workorder_board.js",
+    "git diff --check -- ."
+  ],
+  "non_goals": [
+    "Не менять AI driver code в этом пакете.",
+    "Не добавлять серверное хранение раскрытых ветвей.",
+    "Не добавлять inline-create в дерево фильтра."
+  ]
+}

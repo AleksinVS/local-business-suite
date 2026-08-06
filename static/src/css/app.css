@@ -3728,6 +3728,318 @@ textarea:focus {
   margin-top: 1.25rem;
 }
 
+/* Боковая панель фильтра подразделений только для страницы канбана. */
+.workorders-sidebar-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.workorders-filter-panel,
+.workorders-sidebar-chat {
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.workorders-filter-panel {
+  display: flex;
+}
+
+.workorders-sidebar-chat {
+  display: none;
+}
+
+.workorders-sidebar-shell[data-ai-sidebar-mode="chat"] .workorders-filter-panel {
+  display: none;
+}
+
+.workorders-sidebar-shell[data-ai-sidebar-mode="chat"] .workorders-sidebar-chat {
+  display: flex;
+}
+
+.workorders-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workorders-sidebar-header h2,
+.workorders-sidebar-header .eyebrow {
+  margin: 0;
+}
+
+.workorders-sidebar-header h2 {
+  font-size: 1rem;
+}
+
+.workorders-sidebar-header .eyebrow {
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.workorders-sidebar-close,
+.workorders-ai-collapse,
+.department-filter-summary button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.workorders-ai-collapse {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.workorders-sidebar-close {
+  display: none;
+}
+
+.department-filter {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  overflow: auto;
+}
+
+.department-filter-search {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.department-filter-search label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.department-filter-search input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+.department-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.department-filter-tree-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.department-filter-tree,
+.department-filter-tree ul {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.department-filter-tree ul {
+  margin-left: 1.1rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--border);
+}
+
+.department-filter-node-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+}
+
+.department-filter-toggle {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.department-filter-toggle:hover,
+.department-filter-toggle[aria-expanded="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.department-filter-toggle[aria-expanded="true"] span {
+  transform: rotate(90deg);
+}
+
+.department-filter-node-row label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  gap: 0.6rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.department-filter-node-row label:hover {
+  background: var(--bg-color);
+}
+
+.department-filter-node-row input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.department-filter-node-row label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.department-filter-empty,
+.department-filter-no-results {
+  padding: 1rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.department-filter-empty h3 {
+  margin: 0 0 0.35rem;
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.department-filter-empty p {
+  margin: 0;
+}
+
+.workorders-ai-launcher {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 1.5rem);
+  min-height: 44px;
+  margin: auto 0.75rem 0.75rem;
+  gap: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 0.6rem 0.7rem;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workorders-ai-launcher:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.workorders-ai-launcher:focus-visible,
+.workorders-sidebar-close:focus-visible,
+.workorders-ai-collapse:focus-visible,
+.department-filter-toggle:focus-visible,
+.department-filter-node-row label:has(input:focus-visible),
+.department-filter-search input:focus-visible {
+  outline: 3px solid rgba(19, 93, 102, 0.35);
+  outline-offset: 2px;
+}
+
+.workorders-sidebar-backdrop {
+  display: none;
+}
+
+.workorders-filter-empty {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--warning);
+  background: var(--warning-bg);
+  color: #92400e;
+}
+
+@media (max-width: 960px) {
+  .sidebar-nav:has([data-workorders-sidebar-shell]) {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(360px, calc(100vw - 2.5rem));
+    height: 100dvh;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    z-index: 1400;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+  }
+
+  .sidebar-nav:has([data-workorders-sidebar-shell])[data-workorders-sidebar-open="true"] {
+    transform: translateX(0);
+  }
+
+  .sidebar-nav:has([data-workorders-sidebar-shell]) .sidebar-header {
+    display: none;
+  }
+
+  .sidebar-nav:has([data-workorders-sidebar-shell]) .sidebar-ai-panel {
+    height: 100%;
+  }
+
+  .sidebar-nav:has([data-workorders-sidebar-shell]) + .app-main {
+    height: 100vh;
+  }
+
+  .workorders-sidebar-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .workorders-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    background: rgba(15, 23, 42, 0.4);
+  }
+
+  .sidebar-nav:has([data-workorders-sidebar-shell])[data-workorders-sidebar-open="true"] ~ .workorders-sidebar-backdrop,
+  .workorders-sidebar-backdrop:not([hidden]) {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav:has([data-workorders-sidebar-shell]),
+  .department-filter-toggle span {
+    transition: none;
+  }
+}
+
 .access-preview,
 .role-card,
 .capability-descriptions,

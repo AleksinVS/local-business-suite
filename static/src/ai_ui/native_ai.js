@@ -184,10 +184,27 @@
     this.statusNode = this.root.querySelector("[data-native-ai-status]");
     this.renderMessages();
     this.bind();
+    this.focusComposerWhenExpanded();
+  };
+
+  NativeAiSidebar.prototype.isWorkordersChatExpanded = function () {
+    var shell = this.root.closest("[data-workorders-sidebar-shell]");
+    return !shell || shell.dataset.aiSidebarMode === "chat";
+  };
+
+  NativeAiSidebar.prototype.focusComposerWhenExpanded = function () {
+    var self = this;
+    if (!this.root.closest("[data-workorders-sidebar-shell]")) return;
+    window.setTimeout(function () {
+      if (self.input && self.isWorkordersChatExpanded()) self.input.focus();
+    }, 0);
   };
 
   NativeAiSidebar.prototype.bind = function () {
     var self = this;
+    document.addEventListener("workorders:ai-sidebar-open", function () {
+      self.focusComposerWhenExpanded();
+    });
     this.input.addEventListener("input", function () {
       self.resizeInput();
     });
@@ -491,7 +508,13 @@
     this.activeRunId = "";
     this.currentAssistant = null;
     this.setPending(false);
-    this.input.focus();
+    if (this.isWorkordersChatExpanded()) {
+      this.input.focus();
+    } else {
+      document.dispatchEvent(new CustomEvent("workorders:ai-run-finished", {
+        detail: { error: this.runHadError },
+      }));
+    }
   };
 
   NativeAiSidebar.prototype.readStream = function (body, assistantNode, assistantId) {

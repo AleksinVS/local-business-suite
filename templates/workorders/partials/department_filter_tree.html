@@ -1,0 +1,28 @@
+<section class="department-filter" data-department-filter>
+  <div class="department-filter-search">
+    <label for="department-filter-search">Поиск подразделения</label>
+    <input id="department-filter-search" type="search" placeholder="Название подразделения" autocomplete="off" data-department-filter-search>
+  </div>
+
+  <div class="department-filter-summary" aria-live="polite">
+    <span data-department-filter-summary>Все доступные подразделения</span>
+    <button type="button" data-department-filter-reset hidden>Сбросить</button>
+  </div>
+
+  {% if department_filter and not department_filter.is_empty %}
+    <fieldset class="department-filter-tree-fieldset">
+      <legend class="visually-hidden">Выбор подразделений</legend>
+      <ul class="department-filter-tree" data-department-filter-tree>
+        {% for node in department_filter.nodes %}
+          {% include "workorders/partials/department_filter_node.html" with node=node %}
+        {% endfor %}
+      </ul>
+    </fieldset>
+    <p class="department-filter-no-results" data-department-filter-no-results hidden>Ничего не найдено.</p>
+  {% else %}
+    <div class="department-filter-empty">
+      <h3>Нет доступных подразделений</h3>
+      <p>В пределах ваших прав нет подразделений для фильтрации.</p>
+    </div>
+  {% endif %}
+</section>

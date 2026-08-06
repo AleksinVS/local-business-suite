@@ -1,0 +1,72 @@
+{
+  "task_id": "04-e2e-security-docs-and-acceptance",
+  "title": "Сквозная проверка, независимое ревью, документация и приемка",
+  "type": "verification_and_acceptance",
+  "objective": "Независимо подтвердить корректность прав, UX и обоих AI UI драйверов, обновить документацию и закрыть workflow.",
+  "read_scope": [
+    "apps/workorders/",
+    "apps/ai/page_context.py",
+    "templates/workorders/",
+    "static/src/",
+    "scripts/e2e/tests/",
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0023-workorder-tree-view-and-customer-branch-access.md",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/guides/TESTING_POLICY.md"
+  ],
+  "write_scope": [
+    "apps/workorders/tests.py",
+    "apps/ai/tests/test_views.py",
+    "scripts/e2e/tests/workorder_tree.spec.ts",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "scripts/e2e/tests/native_ai_ui.spec.ts",
+    "scripts/e2e/tests/copilotkit_sidebar.spec.ts",
+    "scripts/e2e/tests/.desc.json",
+    "docs/adr/ADR-0019-context-aware-sidebar-ai-chat.md",
+    "docs/adr/ADR-0023-workorder-tree-view-and-customer-branch-access.md",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/guides/AI_UI_PROTOCOL_OPERATIONS.md",
+    "docs/planning/backlog.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/EXECUTOR_REPORT.*.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/TASK_ACCEPTANCE.*.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/RETROSPECTIVE.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "instructions": [
+    "Проверяющий получает матрицу ролей, URL, состояний браузера и драйверов и не меняет implementation code; найденные отклонения воспроизводит основной агент.",
+    "Заменить устаревший workorder_tree e2e на сценарий department filter + канбан. Проверить single/multi branch, ancestor normalization, invalid/foreign id, copied URL и empty states.",
+    "Для native и CopilotKit проверить default filters, open/focus, collapse/focus return, reload, mobile sheet, keyboard, stream-during-collapse и отсутствие повторных UI commands.",
+    "Проверить unauthenticated, branch-limited и full-access роли; CSRF и actor signature не должны измениться.",
+    "Проверить, что старые view=tree links открывают канбан, а старый session key не возвращает tree UI.",
+    "Обновить пользовательские guides только по фактически реализованному поведению. README/AGENTS/deployment/architecture проверить и явно записать, нужны ли изменения.",
+    "Обновить .desc.json, выполнить make gen-struct, подготовить executor reports, acceptance и retrospective.",
+    "Запустить один финальный make test после целевых наборов. Подготовить результат для явной приемки владельцем; архивирование выполняется только отдельным пакетом 05."
+  ],
+  "acceptance": [
+    "Матрица ролей не выявляет disclosure или обхода branch access через sidebar/URL/page context.",
+    "Native и CopilotKit проходят одинаковый основной сценарий desktop и mobile.",
+    "Unit, integration и e2e покрывают фактическую связку, а не только чистые helper-функции.",
+    "Один полный make test выполнен; известные внешние падения отделены от регрессий блока.",
+    "README, AGENTS, PROJECT_STRUCTURE, ADR, architecture/deployment/guides и backlog проверены и отражены в отчете.",
+    "Workflow содержит воспроизводимые команды, счетчики, первое содержательное падение и остаточные риски."
+  ],
+  "verification": [
+    "git status --short",
+    "make check",
+    "make test-fast TEST_SCOPE=apps/workorders/tests.py",
+    "make test-fast TEST_SCOPE=apps/ai/tests",
+    "make test-integration TEST_SCOPE=apps/workorders/tests.py",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"kanban sidebar|department filter|native\"",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"kanban sidebar|department filter|CopilotKit\"",
+    "make test",
+    "make gen-struct",
+    "git diff --check -- ."
+  ],
+  "non_goals": [
+    "Не выполнять production deployment.",
+    "Не обновлять AG-UI/CopilotKit зависимости.",
+    "Не архивировать блок в этом пакете; это делает пакет 05 после явной приемки владельцем."
+  ]
+}

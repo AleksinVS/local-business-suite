@@ -1,0 +1,58 @@
+{
+  "task_id": "05-owner-accepted-archive",
+  "title": "Архивирование после явной приемки владельцем",
+  "type": "post_acceptance_documentation",
+  "objective": "После явной приемки владельцем убрать завершенную задачу из активной очереди и перенести проектный и исполнительный след в архив 2026 года.",
+  "read_scope": [
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/",
+    "docs/planning/backlog.md",
+    "docs/planning/active/.desc.json",
+    "docs/planning/archive/2026/.desc.json",
+    "workflow/active/.desc.json",
+    "workflow/archive/2026/.desc.json"
+  ],
+  "write_scope": [
+    "docs/planning/backlog.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "docs/planning/archive/2026/kanban-department-filter-ai-sidebar.md",
+    "docs/planning/active/.desc.json",
+    "docs/planning/archive/2026/.desc.json",
+    "workflow/active/kanban-department-filter-ai-sidebar/",
+    "workflow/archive/2026/kanban-department-filter-ai-sidebar/",
+    "workflow/active/.desc.json",
+    "workflow/archive/2026/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "preconditions": [
+    "Пакет 04 завершен и имеет техническую приемку.",
+    "Владелец проекта явно принял реализованный пользовательский результат.",
+    "В executor/acceptance reports нет незакрытых блокирующих дефектов."
+  ],
+  "instructions": [
+    "Удалить завершенный блок из Active backlog; историю исполнения в backlog не переносить.",
+    "Перенести active plan в docs/planning/archive/2026/ с итоговым статусом и ссылками на отчеты.",
+    "Перенести весь workflow block в workflow/archive/2026/ без потери task packets, reports, acceptance и retrospective.",
+    "Обновить active/archive .desc.json и выполнить make gen-struct.",
+    "Не менять исполняемый код, тесты, runtime-данные или Git-состояние вне перечисленного scope."
+  ],
+  "acceptance": [
+    "В backlog нет завершенной задачи.",
+    "В active planning/workflow нет завершенного блока.",
+    "Архив содержит полный проектный и исполнительный след.",
+    "PROJECT_STRUCTURE.yaml указывает только на фактические пути."
+  ],
+  "verification": [
+    "git status --short",
+    "make gen-struct",
+    "git diff --check -- .",
+    "test ! -e docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "test -e docs/planning/archive/2026/kanban-department-filter-ai-sidebar.md",
+    "test ! -e workflow/active/kanban-department-filter-ai-sidebar",
+    "test -e workflow/archive/2026/kanban-department-filter-ai-sidebar"
+  ],
+  "non_goals": [
+    "Не выполнять пакет без явной приемки владельцем.",
+    "Не менять реализацию и не повторять полный test suite, уже принятый пакетом 04."
+  ]
+}

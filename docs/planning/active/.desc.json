@@ -9,5 +9,6 @@
   "native-ag-ui-chat-development.md": "Активный план разработки самописного AG-UI ИИ-чата",
   "postgresql-primary-store-migration.md": "Активный план миграции основного хранилища на PostgreSQL",
   "memory-alignment-hardening.md": "Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)",
-  "project-knowledge-system-mvp.md": "Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы"
+  "project-knowledge-system-mvp.md": "Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы",
+  "kanban-department-filter-ai-sidebar.md": "Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата"
 }

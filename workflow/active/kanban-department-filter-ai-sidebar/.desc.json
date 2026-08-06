@@ -1,0 +1,17 @@
+{
+  ".": "Workflow: дерево подразделений в фильтре канбана и сворачиваемый ИИ-чат",
+  "BLOCK_BRIEF.md": "Цель, границы, инварианты и приемка изменения канбан-сайдбара",
+  "ARCHITECT_PLAN.json": "Порядок и зависимости исполнительных пакетов изменения канбан-сайдбара",
+  "task-packets": "Исполнительные пакеты backend, UI, AI-драйверов и приемки",
+  "EXECUTOR_REPORT.documentation.md": "Отчет подготовки проектной и исполнительной документации",
+  "TASK_ACCEPTANCE.documentation.md": "Приемка полноты документационного среза перед реализацией",
+  "EXECUTOR_REPORT.01-kanban-query-and-department-read-model.md": "Отчет реализации серверного фильтра и канонического URL",
+  "TASK_ACCEPTANCE.01-kanban-query-and-department-read-model.md": "Приемка серверного фильтра подразделений",
+  "EXECUTOR_REPORT.02-filter-first-sidebar-shell.md": "Отчет реализации бокового фильтра и канбан-интерфейса",
+  "TASK_ACCEPTANCE.02-filter-first-sidebar-shell.md": "Приемка интерфейса бокового фильтра",
+  "EXECUTOR_REPORT.03-ai-driver-lifecycle-and-page-context.md": "Отчет жизненного цикла ИИ-драйверов и PageContext",
+  "TASK_ACCEPTANCE.03-ai-driver-lifecycle-and-page-context.md": "Приемка ИИ-драйверов и многозначного PageContext",
+  "EXECUTOR_REPORT.04-e2e-security-docs-and-acceptance.md": "Итоговый отчет сквозной проверки, документации и приемки",
+  "TASK_ACCEPTANCE.04-e2e-security-docs-and-acceptance.md": "Техническая приемка реализации перед проверкой владельцем",
+  "RETROSPECTIVE.md": "Ретроспектива реализации и условие архивного пакета"
+}

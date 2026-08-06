@@ -1,0 +1,53 @@
+{
+  "block_id": "kanban-department-filter-ai-sidebar",
+  "title": "Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат",
+  "status": "implementation_complete_pending_owner_acceptance",
+  "decision": "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+  "planning": "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+  "tasks": [
+    "01-kanban-query-and-department-read-model",
+    "02-filter-first-sidebar-shell",
+    "03-ai-driver-lifecycle-and-page-context",
+    "04-e2e-security-docs-and-acceptance",
+    "05-owner-accepted-archive"
+  ],
+  "dependencies": {
+    "02-filter-first-sidebar-shell": [
+      "01-kanban-query-and-department-read-model"
+    ],
+    "03-ai-driver-lifecycle-and-page-context": [
+      "02-filter-first-sidebar-shell"
+    ],
+    "04-e2e-security-docs-and-acceptance": [
+      "01-kanban-query-and-department-read-model",
+      "02-filter-first-sidebar-shell",
+      "03-ai-driver-lifecycle-and-page-context"
+    ],
+    "05-owner-accepted-archive": [
+      "04-e2e-security-docs-and-acceptance",
+      "explicit_project_owner_acceptance"
+    ]
+  },
+  "invariants": [
+    "Visible workorders and departments are resolved by server-side selectors before rendering or filtering.",
+    "The chat visual mode is document-local and defaults to filters after every reload.",
+    "Collapsing the chat never unmounts a running driver or changes its session.",
+    "Native and CopilotKit keep the existing signed actor, CSRF and UI-command security boundaries.",
+    "AG-UI and CopilotKit package versions do not change."
+  ],
+  "verification_order": [
+    "make check",
+    "make test-fast TEST_SCOPE=apps/workorders/tests.py",
+    "make test-fast TEST_SCOPE=apps/ai/tests",
+    "make test-integration TEST_SCOPE=apps/workorders/tests.py",
+    "node --check static/src/js/workorder_department_filter.js",
+    "node --check static/src/js/workorder_department_filter.js",
+    "node --check static/src/ai_ui/native_ai.js",
+    "npm run build:copilotkit",
+    "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep @workorders",
+    "E2E_AI_UI_DRIVER=copilotkit npm run test:e2e -- --project=chromium --grep \"разворачивает и сворачивает\"",
+    "make test"
+  ],
+  "acceptance_owner": "project owner",
+  "archive_target": "workflow/archive/2026/kanban-department-filter-ai-sidebar/"
+}

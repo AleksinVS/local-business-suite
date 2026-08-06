@@ -4,6 +4,21 @@
 
 ## Active
 
+### Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат
+
+Пакеты реализации и технической приемки 01-04 выполнены. Канбан стал единственным
+представлением заявок, дерево доступных подразделений работает как фильтр левой панели,
+а ИИ-чат по умолчанию свернут до компактной строки и раскрывается без потери сессии.
+
+Контекст:
+- ADR: `docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md`;
+- активный план: `docs/planning/active/kanban-department-filter-ai-sidebar.md`;
+- workflow package: `workflow/active/kanban-department-filter-ai-sidebar/`.
+
+Следующее действие:
+- владелец проверяет пользовательский результат;
+- после явной приемки выполнить только архивный пакет 05 и удалить блок из backlog.
+
 ### Миграция основного хранилища на PostgreSQL
 
 Создан проектный и исполнительный контур для перехода основного репозитория с текущего SQLite-разделения на одну PostgreSQL database. Кодовый срез миграции реализован: настройки PostgreSQL, единый `default` alias, восстановление внутренних FK, команды export/import/validate, PostgreSQL full-text backend и database queue backend. Dev-cutover проверен на реальном PostgreSQL: `migrate` строит схему чисто, полный приёмочный набор тестов и e2e зелёные (см. `workflow/active/postgresql-primary-store-migration/EXECUTOR_REPORT.dev-cutover.md`). SQLite baseline-ветка `sqlite-legacy-2026-06-15` выложена на `origin` как линия SQLite-варианта.

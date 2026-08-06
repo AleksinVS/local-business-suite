@@ -172,6 +172,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     ai_skills.py: file # Модульные AI skills заявок для открытия карточек и workflow-инструкций
     apps.py: file # Конфигурация приложения
     contracts.py: file # Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    department_filter.py: file # Нормализация фильтра подразделений и безопасная модель доступного дерева
     forms.py: file # Формы нарядов
     media_policies.py: file # Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки
     models.py: file # Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority
@@ -183,7 +184,6 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     settings_descriptors.py: file # Дескрипторы настроек заявок для центра настроек
     source_adapter.py: file # SourceAdapter заявок для memory source_data search и analytics projection
     tests.py: file # Тесты приложения
-    tree.py: file # Серверная проекция дерева заявок по подразделениям, медизделиям и заявкам
     urls.py: file # URL-маршруты нарядов
     views.py: file # Представления: Kanban-доска, детали наряда, комментарии
 archive: # Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы
@@ -209,7 +209,8 @@ clients: # Пользовательские клиентские приложе�
     package.json: file # npm-скрипты клиента, зависимости Tauri/Vite и команды сборки
 config: # Конфигурация Django и JSON-контракты
   asgi.py: file # ASGI-точка входа
-  settings_test.py: file # Изолированные настройки автоматических тестов с быстрым хешером и артефактами только в .local
+  pytest_plugin.py: file # Pytest-плагин контроля единственного основного маркера unit/integration
+  settings_test.py: file # Изолированные настройки автоматических тестов с быстрым хешером, отдельными static/media и артефактами только в .local
   settings.py: file # Основные настройки Django (INSTALLED_APPS, MIDDLEWARE, AI config)
   urls.py: file # Корневые URL-маршруты (include всех приложений)
   views.py: file # Корневые представления (redirect)
@@ -306,6 +307,7 @@ docs: # Документация проекта
     ADR-0034-predefined-access-groups-and-capability-descriptions.md: file # ADR: Предопределённые группы доступа, комментарии к правам ($capabilities, GroupProfile), лист ожидания только врачам, направление row-level
     ADR-0035-mandatory-user-department.md: file # ADR: Обязательное подразделение пользователя и безопасный карантин для нераспределённых учётных записей
     ADR-0036-iis-sso-csrf-public-assets.md: file # ADR: Изоляция автоматических ресурсов браузера от Windows SSO и ротации CSRF
+    ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md: file # ADR: Дерево подразделений как фильтр канбана и сворачиваемый ИИ-чат
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -383,6 +385,7 @@ docs: # Документация проекта
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
+      kanban-department-filter-ai-sidebar.md: file # Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
@@ -403,15 +406,18 @@ learning: # Учебный модуль владельца проекта по P
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
+    reset-test-database.py: file # Безопасное удаление только локальных файлов повторно используемой тестовой SQLite-базы
   e2e: # Playwright e2e configuration and tests
     tests: # Permanent Playwright e2e scenarios
       copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
-      health.spec.ts: file # Checks that the Django health endpoint is reachable
+      health.spec.ts: file # Checks that the Django health endpoint is reachable without starting a browser
+      kanban_department_filter.spec.ts: file # Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar
       native_ai_ui.spec.ts: file # Checks native AG-UI-compatible sidebar embedding and stream parsing
       notifications.spec.ts: file # Checks PWA manifest, root service worker and authenticated notification center behavior
+      portal_smoke.spec.ts: file # Checks authenticated login and the main portal shell in a real browser
       right_panel_ai_navigation.spec.ts: file # Checks opening module objects in the shared right panel from the AI chat page
-      workorder_tree.spec.ts: file # Checks workorder tree view navigation and right drawer opening
     playwright.config.ts: file # Playwright configuration for project e2e tests with artifacts under .local/playwright
+    run-smoke.sh: file # Self-contained authenticated browser smoke runner with isolated SQLite database and artifacts under .local
   linux: # Linux deployment и обслуживание
     deploy.sh: file # Скрипт деплоя на Linux/VPS
     setup-docker-rights.sh: file # Настройка прав пользователя для Docker на VPS
@@ -517,25 +523,25 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     entry_detail.html: file # Детали записи
     entry_form.html: file # Форма записи
   workorders: # Шаблоны нарядов-заказов (Kanban, детали, формы)
-    partials: # HTMX partials заявок: доска, дерево, детали, формы и действия
+    partials: # HTMX-фрагменты заявок: канбан, фильтр подразделений, детали, формы и действия
       attachments.html: file # Вложения заявки
       board_columns.html: file # Контейнер колонок канбан-доски
+      board_sidebar.html: file # Боковая панель канбана: фильтр подразделений и оболочка ИИ-чата
       column_config_card.html: file # Карточка настройки колонки канбана
       column_config_form.html: file # Форма настройки колонки канбана
       comments.html: file # Комментарии заявки
+      department_filter_node.html: file # Один узел вложенного фильтра подразделений
+      department_filter_tree.html: file # Вложенный фильтр доступных подразделений
       detail_panel_empty.html: file # Пустое состояние правой панели
       detail_panel.html: file # Правая панель деталей заявки
       detail_sections.html: file # Секции детальной информации заявки
       kanban_column.html: file # Одна колонка канбан-доски с карточками заявок
       rating_section.html: file # Оценка закрытой заявки
       status_section.html: file # Блок статуса и переходов заявки
-      tree_row.html: file # Одна строка дерева заявок
-      tree_view.html: file # Сворачиваемое дерево заявок по подразделениям и медизделиям
       workorder_edit_form_partial.html: file # Форма редактирования заявки для правой панели
       workorder_form_partial.html: file # Форма создания заявки для правой панели
-      workorder_view_switcher.html: file # Переключатель режимов просмотра Доска/Дерево
-      workorders_view.html: file # Обертка текущего режима просмотра заявок: доска или дерево
-    board.html: file # Страница заявок с режимами доски и дерева
+      workorders_view.html: file # Обертка единственного канбан-представления заявок
+    board.html: file # Страница единственного канбан-представления с общим GET-фильтром
     workorder_detail.html: file # Детали наряда
     workorder_form.html: file # Форма создания/редактирования наряда
   400.html: file # Страница ошибки 400
@@ -561,6 +567,21 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза уведомлений
       TASK_ACCEPTANCE.implementation.md: file # Техническая приемка реализации этапа 1 PWA/browser notifications
       TASK_ACCEPTANCE.tauri.md: file # Техническая приемка этапа 2 Tauri desktop notifier
+    kanban-department-filter-ai-sidebar: # Workflow: дерево подразделений в фильтре канбана и сворачиваемый ИИ-чат
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок и зависимости исполнительных пакетов изменения канбан-сайдбара
+      BLOCK_BRIEF.md: file # Цель, границы, инварианты и приемка изменения канбан-сайдбара
+      EXECUTOR_REPORT.01-kanban-query-and-department-read-model.md: file # Отчет реализации серверного фильтра и канонического URL
+      EXECUTOR_REPORT.02-filter-first-sidebar-shell.md: file # Отчет реализации бокового фильтра и канбан-интерфейса
+      EXECUTOR_REPORT.03-ai-driver-lifecycle-and-page-context.md: file # Отчет жизненного цикла ИИ-драйверов и PageContext
+      EXECUTOR_REPORT.04-e2e-security-docs-and-acceptance.md: file # Итоговый отчет сквозной проверки, документации и приемки
+      EXECUTOR_REPORT.documentation.md: file # Отчет подготовки проектной и исполнительной документации
+      RETROSPECTIVE.md: file # Ретроспектива реализации и условие архивного пакета
+      TASK_ACCEPTANCE.01-kanban-query-and-department-read-model.md: file # Приемка серверного фильтра подразделений
+      TASK_ACCEPTANCE.02-filter-first-sidebar-shell.md: file # Приемка интерфейса бокового фильтра
+      TASK_ACCEPTANCE.03-ai-driver-lifecycle-and-page-context.md: file # Приемка ИИ-драйверов и многозначного PageContext
+      TASK_ACCEPTANCE.04-e2e-security-docs-and-acceptance.md: file # Техническая приемка реализации перед проверкой владельцем
+      TASK_ACCEPTANCE.documentation.md: file # Приемка полноты документационного среза перед реализацией
     knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
       task-packets: file
       ARCHITECT_PLAN.json: file # Architect execution plan for knowledge-driven business analytics
@@ -630,6 +651,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       role-editor-sensitive-confirmation: file
       settings-center-gui: file
       test-runtime-and-agent-cost-optimization: file
+      test-workflow-simplification-2026-08-06: file
       testing-policy-and-independent-verification: file
       universal-right-drawer-ai-navigation: file
       universal-source-adapters-memory-analytics: file

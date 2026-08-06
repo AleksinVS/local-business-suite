@@ -1,7 +1,6 @@
-<section id="workorders-view" class="workorders-view" data-current-view="{{ current_view }}">
-  {% if current_view == "tree" %}
-    {% include "workorders/partials/tree_view.html" %}
-  {% else %}
-    {% include "workorders/partials/board_columns.html" %}
-  {% endif %}
+<section id="workorders-view" class="workorders-view" aria-live="polite">
+  <p class="workorders-filter-empty" data-workorders-filter-empty hidden>
+    Нет заявок по выбранным условиям. Измените или сбросьте фильтры.
+  </p>
+  {% include "workorders/partials/board_columns.html" %}
 </section>

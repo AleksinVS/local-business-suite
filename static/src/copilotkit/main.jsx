@@ -83,7 +83,20 @@ function CommandBridge({ agentId }) {
   return null;
 }
 
-function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallbackAgentId }) {
+function focusWorkordersComposer(hostNode, attempt = 0) {
+  const shell = hostNode?.closest?.("[data-workorders-sidebar-shell]");
+  if (!shell || shell.dataset.aiSidebarMode !== "chat") return;
+  const textbox = hostNode.querySelector('textarea, [contenteditable="true"], input[type="text"]');
+  if (textbox) {
+    textbox.focus();
+    return;
+  }
+  if (attempt < 20) {
+    window.setTimeout(() => focusWorkordersComposer(hostNode, attempt + 1), 50);
+  }
+}
+
+function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallbackAgentId, hostNode }) {
   const [config, setConfig] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -111,6 +124,15 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  useEffect(() => {
+    function handleSidebarOpen() {
+      focusWorkordersComposer(hostNode);
+    }
+    document.addEventListener("workorders:ai-sidebar-open", handleSidebarOpen);
+    focusWorkordersComposer(hostNode);
+    return () => document.removeEventListener("workorders:ai-sidebar-open", handleSidebarOpen);
+  }, [hostNode, config]);
 
   function startNewChat() {
     if (!newSessionUrl || busy) return;
@@ -208,6 +230,7 @@ function mount(rootNode) {
       newSessionUrl={rootNode.dataset.newSessionUrl || ""}
       fallbackRuntimeUrl={rootNode.dataset.runtimeUrl || "/copilotkit"}
       fallbackAgentId={rootNode.dataset.agentId || "local_business"}
+      hostNode={rootNode}
     />,
   );
 }

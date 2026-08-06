@@ -1,0 +1,31 @@
+<li
+  class="department-filter-node"
+  data-department-filter-node
+  data-department-id="{{ node.id }}"
+  data-parent-id="{{ node.parent_id|default:'' }}"
+>
+  <div class="department-filter-node-row">
+    <button
+      type="button"
+      class="department-filter-toggle"
+      data-department-filter-toggle
+      aria-label="Развернуть подразделение {{ node.label }}"
+      aria-expanded="{% if node.ancestor_of_selected or node.level == 0 %}true{% else %}false{% endif %}"
+      hidden
+    >
+      <span aria-hidden="true">▸</span>
+    </button>
+    <label for="department-filter-{{ node.id }}">
+      <input
+        id="department-filter-{{ node.id }}"
+        type="checkbox"
+        name="department"
+        value="{{ node.id }}"
+        form="workorder-filters"
+        data-department-filter-checkbox
+        {% if node.selected %}checked{% endif %}
+      >
+      <span>{{ node.label }}</span>
+    </label>
+  </div>
+</li>

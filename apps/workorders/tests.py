@@ -3,13 +3,15 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from apps.core.models import Department
@@ -40,6 +42,11 @@ def _override_contract_file(setting_name, filename, payload):
 import apps.core.json_utils as json_utils
 from apps.core.contract_store import get_contract
 
+from .department_filter import (
+    build_department_filter_read_model,
+    normalize_department_ids,
+    resolve_department_selection,
+)
 from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     ROLE_CUSTOMER,
@@ -56,6 +63,60 @@ from .right_panel import WorkOrderRightPanelProvider
 from .services import confirm_closure, create_workorder, transition_workorder
 
 User = get_user_model()
+
+
+@pytest.mark.unit
+class DepartmentFilterReadModelTests(SimpleTestCase):
+    def setUp(self):
+        self.departments = (
+            SimpleNamespace(id=1, parent_id=None, name="Корпус А"),
+            SimpleNamespace(id=2, parent_id=1, name="Отделение А"),
+            SimpleNamespace(id=3, parent_id=2, name="Кабинет А"),
+            SimpleNamespace(id=4, parent_id=None, name="Корпус Б"),
+            SimpleNamespace(id=5, parent_id=4, name="Отделение Б"),
+        )
+
+    def test_normalizer_keeps_visible_positive_ids_and_absorbs_descendant(self):
+        normalized = normalize_department_ids(
+            ["3", "1", "5", "3", "bad", "0", "999"],
+            self.departments,
+        )
+
+        self.assertEqual(normalized, (1, 5))
+
+    def test_selection_expands_only_visible_descendants(self):
+        selection = resolve_department_selection(["2"], self.departments)
+
+        self.assertEqual(selection.selected_ids, (2,))
+        self.assertEqual(selection.branch_ids, frozenset({2, 3}))
+
+    def test_read_model_supports_multiple_roots_and_deep_selection(self):
+        rows = build_department_filter_read_model(
+            self.departments,
+            selected_ids=(3, 4),
+        )
+
+        self.assertEqual([row["id"] for row in rows], [1, 2, 3, 4, 5])
+        self.assertEqual([row["level"] for row in rows], [0, 1, 2, 0, 1])
+        self.assertTrue(rows[0]["ancestor_of_selected"])
+        self.assertTrue(rows[1]["ancestor_of_selected"])
+        self.assertTrue(rows[2]["selected"])
+        self.assertTrue(rows[3]["selected"])
+        self.assertEqual(
+            set(rows[0]),
+            {
+                "id",
+                "label",
+                "parent_id",
+                "level",
+                "has_children",
+                "selected",
+                "ancestor_of_selected",
+            },
+        )
+
+    def test_read_model_is_empty_for_empty_visible_queryset(self):
+        self.assertEqual(build_department_filter_read_model((), ()), ())
 
 
 @pytest.mark.integration
@@ -383,8 +444,17 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f"{self.workorder.number}. Заменить кабель")
         self.assertContains(response, 'name="status"')
-        self.assertContains(response, 'hx-trigger="change"')
+        self.assertContains(response, 'data-workorder-filter-form')
+        self.assertContains(response, 'hx-push-url="true"')
         self.assertContains(response, 'data-column-code="')
+        self.assertContains(response, 'data-workorders-sidebar-shell')
+        self.assertContains(response, 'data-ai-sidebar-mode="filters"')
+        self.assertContains(response, 'data-department-filter-tree')
+        self.assertContains(response, 'form="workorder-filters"')
+        self.assertContains(response, 'data-workorders-ai-launcher')
+        self.assertContains(response, 'data-workorders-ai-collapse')
+        self.assertNotContains(response, 'name="view"')
+        self.assertNotContains(response, 'id="workorders-tree"')
 
     def test_customer_visibility_is_limited_to_department_branch(self):
         sibling_department = Department.objects.create(
@@ -429,29 +499,62 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.workorder.title)
 
-    def test_tree_view_renders_workorders_with_existing_drawer_target(self):
+    def test_legacy_tree_view_redirects_to_canonical_board_url(self):
         self.client.force_login(self.manager)
-        response = self.client.get(reverse("workorders:board"), {"view": "tree"})
+        response = self.client.get(
+            f"{reverse('workorders:board')}?view=tree&status=new"
+            "&status=accepted&q=sensor"
+        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["current_view"], "tree")
-        self.assertContains(response, 'id="workorders-tree"')
-        self.assertContains(response, 'role="treegrid"')
-        self.assertContains(response, 'data-node-type="workorder"')
-        self.assertContains(response, 'data-status="new"')
-        self.assertContains(response, "--workorder-status-new")
-        self.assertContains(response, self.workorder.title)
-        self.assertContains(response, f'hx-get="{reverse("workorders:detail", args=[self.workorder.pk])}"')
-        self.assertContains(response, 'hx-target="#detail-panel-content"')
+        self.assertEqual(response.status_code, 302)
+        location = urlsplit(response["Location"])
+        self.assertEqual(location.path, reverse("workorders:board"))
+        self.assertEqual(
+            parse_qs(location.query),
+            {"status": ["new", "accepted"], "q": ["sensor"]},
+        )
 
-    def test_tree_structure_rows_do_not_render_helper_subtitles(self):
+    def test_unknown_legacy_view_is_safely_removed(self):
         self.client.force_login(self.manager)
-        response = self.client.get(reverse("workorders:board"), {"view": "tree"})
+        response = self.client.get(
+            reverse("workorders:board"),
+            {"view": "unknown", "status": WorkOrderStatus.NEW},
+        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Структура заявок по подразделениям и медизделиям")
-        self.assertNotContains(response, 'tree-node-subtitle">Подразделение')
-        self.assertNotContains(response, 'tree-node-subtitle">Отделение')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            f"{reverse('workorders:board')}?status={WorkOrderStatus.NEW}",
+        )
+
+    def test_canonical_redirect_preserves_all_repeated_board_filters(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "view": "tree",
+                "q": "кабель",
+                "department": [
+                    str(self.sub_department.pk),
+                    str(self.department.pk),
+                ],
+                "status": [WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED],
+                "assignee": [str(self.technician.pk), str(self.manager.pk)],
+                "device": [str(self.device.pk), "999999"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            parse_qs(urlsplit(response["Location"]).query),
+            {
+                "q": ["кабель"],
+                "department": [str(self.department.pk)],
+                "status": [WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED],
+                "assignee": [str(self.technician.pk), str(self.manager.pk)],
+                "device": [str(self.device.pk), "999999"],
+            },
+        )
 
     def test_board_filters_accept_multiple_values(self):
         accepted = WorkOrder.objects.create(
@@ -491,19 +594,61 @@ class WorkOrderViewPermissionTests(TestCase):
             ["new", "in_progress", "done", "archive"],
         )
 
-    def test_tree_view_htmx_renders_workorders_view_partial(self):
+    def test_legacy_htmx_view_renders_board_and_replaces_url(self):
         self.client.force_login(self.manager)
         response = self.client.get(
             reverse("workorders:board"),
-            {"view": "tree"},
+            {"view": "tree", "status": WorkOrderStatus.NEW},
             HTTP_HX_REQUEST="true",
             HTTP_HX_TARGET="workorders-view",
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["current_view"], "board")
         self.assertContains(response, 'id="workorders-view"')
-        self.assertContains(response, 'id="workorders-tree"')
+        self.assertContains(response, 'id="board-columns"')
+        self.assertNotContains(response, 'id="workorders-tree"')
         self.assertContains(response, self.workorder.title)
+        self.assertEqual(
+            response["HX-Replace-Url"],
+            f"{reverse('workorders:board')}?status={WorkOrderStatus.NEW}",
+        )
+
+    def test_stored_tree_view_is_cleared_and_board_is_rendered(self):
+        self.client.force_login(self.manager)
+        session = self.client.session
+        session["workorders:view_mode"] = "tree"
+        session.save()
+
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["current_view"], "board")
+        self.assertNotIn("workorders:view_mode", self.client.session)
+
+    def test_htmx_replaces_url_with_normalized_department_roots(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "department": [
+                    str(self.sub_department.pk),
+                    str(self.department.pk),
+                ]
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="workorders-view",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["HX-Replace-Url"],
+            f"{reverse('workorders:board')}?department={self.department.pk}",
+        )
+        self.assertEqual(
+            response.context["department_filter"]["selected_ids"],
+            (self.department.pk,),
+        )
 
     def test_board_create_drawer_keeps_current_board(self):
         self.client.force_login(self.customer)
@@ -517,7 +662,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, 'name="board"')
         self.assertContains(response, f'value="{self.board.pk}"')
 
-    def test_tree_create_drawer_prefills_allowed_department_and_device(self):
+    def test_legacy_tree_create_prefills_fields_but_returns_to_board(self):
         self.client.force_login(self.customer)
         response = self.client.get(
             (
@@ -530,7 +675,7 @@ class WorkOrderViewPermissionTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["return_view"], "tree")
+        self.assertEqual(response.context["return_view"], "board")
         self.assertEqual(
             str(response.context["form"].initial["department"]),
             str(self.sub_department.pk),
@@ -635,7 +780,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(created.board, self.board)
         self.assertEqual(created.author, self.customer)
 
-    def test_customer_can_create_workorder_from_tree_drawer(self):
+    def test_legacy_tree_return_view_is_ignored_after_create(self):
         self.client.force_login(self.customer)
         response = self.client.post(
             reverse("workorders:create"),
@@ -656,7 +801,10 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 204)
         self.assertEqual(
             response["HX-Redirect"],
-            f"{reverse('workorders:board_specific', kwargs={'board_slug': self.board.slug})}?view=tree",
+            reverse(
+                "workorders:board_specific",
+                kwargs={"board_slug": self.board.slug},
+            ),
         )
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
         self.assertEqual(created.title, "Заявка из дерева")
@@ -848,10 +996,103 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, "Недопустимый тип файла.", status_code=400)
 
     def test_board_department_filter_uses_hierarchy(self):
-        self.client.force_login(self.customer)
-        response = self.client.get(reverse("workorders:board"), {"department": self.department.pk})
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {"department": self.department.pk},
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.workorder.title)
+
+    def test_department_filter_normalizes_ancestor_and_descendant(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "department": [
+                    str(self.sub_department.pk),
+                    str(self.department.pk),
+                ]
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.redirect_chain,
+            [
+                (
+                    f"{reverse('workorders:board')}?department={self.department.pk}",
+                    302,
+                )
+            ],
+        )
+        self.assertEqual(
+            response.context["department_filter"]["selected_ids"],
+            (self.department.pk,),
+        )
+        self.assertEqual(
+            response.context["filters"]["department_values"],
+            [str(self.department.pk)],
+        )
+        self.assertContains(response, self.workorder.title)
+
+    def test_customer_department_filter_ignores_inaccessible_and_invalid_ids(self):
+        sibling_department = Department.objects.create(
+            name="Недоступное отделение",
+            parent=self.department,
+        )
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "department": [
+                    str(sibling_department.pk),
+                    "not-an-id",
+                    "-1",
+                ]
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.redirect_chain,
+            [(reverse("workorders:board"), 302)],
+        )
+        self.assertEqual(response.context["filters"]["department_values"], [])
+        self.assertContains(response, self.workorder.title)
+        nodes = response.context["department_filter"]["nodes"]
+        self.assertEqual([node["id"] for node in nodes], [self.sub_department.pk])
+        self.assertIsNone(nodes[0]["parent_id"])
+
+    def test_department_filter_keeps_two_independent_visible_branches(self):
+        other_department = Department.objects.create(name="Поликлиника")
+        other_workorder = WorkOrder.objects.create(
+            title="Проверить регистратуру",
+            description="Заявка другой независимой ветви.",
+            department=other_department,
+            author=self.manager,
+            board=self.board,
+        )
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "department": [
+                    str(self.sub_department.pk),
+                    str(other_department.pk),
+                ]
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["department_filter"]["selected_ids"],
+            (self.sub_department.pk, other_department.pk),
+        )
+        self.assertContains(response, self.workorder.title)
+        self.assertContains(response, other_workorder.title)
 
     def test_board_search_matches_department_hierarchy(self):
         other_department = Department.objects.create(name="Администрация")
@@ -1116,6 +1357,7 @@ class WorkOrderAttachmentServingTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@pytest.mark.integration
 class CapabilityRegistryTests(TestCase):
     """capability_flags()/superuser_rules() читают справочник "$capabilities"
     контракта ролей (ADR-0034). Тесты работают на изолированной копии

@@ -12,6 +12,7 @@ async function login(page) {
   await page.locator('input[name="username"]').fill(username || "");
   await page.locator('input[name="password"]').fill(password || "");
   await page.locator('button[type="submit"]').click();
+  await expect(page).not.toHaveURL(/\/accounts\/login\//);
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
@@ -27,6 +28,7 @@ test.describe("@ai CopilotKit AG-UI sidebar", () => {
       && response.request().method() === "GET"
     ));
     await page.goto("/workorders/");
+    await page.locator("[data-workorders-ai-launcher]").click();
     const configResponse = await configResponsePromise;
     expect(configResponse.status()).toBe(200);
 

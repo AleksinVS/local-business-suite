@@ -9,6 +9,7 @@
   "js/right_panel.js": "Browser bridge для выполнения безопасных команд открытия объектов в общем правом сайдбаре",
   "js/pwa.js": "Регистрация service worker для PWA-режима портала",
   "js/notifications.js": "Клиент центра уведомлений: polling, browser permission, отметки состояний",
-  "js/workorder_tree.js": "JavaScript для раскрытия дерева заявок, клавиатурной навигации и обновления текущего режима",
+  "js/workorder_department_filter.js": "Клиентский вложенный фильтр подразделений и оболочка боковой панели канбана",
+  "js/workorder_board.js": "Клиентские действия единственного канбан-представления и обновление по workordersChanged",
   "js/input_masks.js": "Маски ввода (форматирование полей)"
 }

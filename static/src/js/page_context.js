@@ -79,8 +79,51 @@
     var filtersForm = document.querySelector("form.filters");
     if (filtersForm) {
       var formData = new FormData(filtersForm);
+      var repeatableFilterNames = new Set();
+      Array.prototype.forEach.call(filtersForm.elements, function (control) {
+        if (control.name && (control.type === "checkbox" || control.multiple)) {
+          repeatableFilterNames.add(control.name);
+        }
+      });
+      if (filtersForm.id) {
+        var externalControls = Array.prototype.slice.call(
+          document.querySelectorAll('[form="' + CSS.escape(filtersForm.id) + '"]')
+        ).filter(function (control) {
+          return control.name && !filtersForm.contains(control) && !control.disabled;
+        });
+        var externalNames = new Set(externalControls.map(function (control) { return control.name; }));
+        externalNames.forEach(function (name) { formData.delete(name); });
+        externalControls.forEach(function (control) {
+          if (control.type === "checkbox" || control.multiple) repeatableFilterNames.add(control.name);
+          if ((control.type === "checkbox" || control.type === "radio") && !control.checked) return;
+          if (control.tagName === "SELECT" && control.multiple) {
+            Array.prototype.forEach.call(control.selectedOptions, function (option) {
+              formData.append(control.name, option.value);
+            });
+            return;
+          }
+          formData.append(control.name, control.value);
+        });
+      }
+      var formFilters = {};
       formData.forEach(function (value, key) {
-        envelope.filters[key] = value;
+        if (!Object.prototype.hasOwnProperty.call(formFilters, key)) {
+          formFilters[key] = value;
+          return;
+        }
+        if (!Array.isArray(formFilters[key])) {
+          formFilters[key] = [formFilters[key]];
+        }
+        formFilters[key].push(value);
+      });
+      repeatableFilterNames.forEach(function (key) {
+        envelope.filters[key] = [];
+        if (Object.prototype.hasOwnProperty.call(formFilters, key) && !Array.isArray(formFilters[key])) {
+          formFilters[key] = [formFilters[key]];
+        }
+      });
+      Object.keys(formFilters).forEach(function (key) {
+        envelope.filters[key] = formFilters[key];
       });
     }
     envelope.window_id = getWindowId();
@@ -105,17 +148,31 @@
         source_code: safeString(selection.source_code, 80),
         display: safeString(selection.display, 160),
       } : {},
-      filters: sanitizeFlatMap(envelope.filters || {}, 120),
+      filters: sanitizeFlatMap(envelope.filters || {}, 120, 20),
       ui_state: sanitizeFlatMap(envelope.ui_state || {}, 80),
       capabilities: {},
     };
   }
 
-  function sanitizeFlatMap(value, maxLength) {
+  function sanitizeFlatMap(value, maxLength, maxArrayItems) {
     var clean = {};
     if (!value || typeof value !== "object") return clean;
     Object.keys(value).forEach(function (key) {
       var item = value[key];
+      if (Array.isArray(item) && maxArrayItems) {
+        var seen = new Set();
+        var items = [];
+        item.slice(0, maxArrayItems).forEach(function (entry) {
+          if (["string", "number", "boolean"].indexOf(typeof entry) === -1) return;
+          var sanitized = typeof entry === "boolean" ? entry : safeString(entry, maxLength);
+          var marker = typeof sanitized + ":" + String(sanitized);
+          if (sanitized === "" || seen.has(marker)) return;
+          seen.add(marker);
+          items.push(sanitized);
+        });
+        if (items.length) clean[safeString(key, 80)] = items;
+        return;
+      }
       if (["string", "number", "boolean"].indexOf(typeof item) === -1) return;
       clean[safeString(key, 80)] = typeof item === "boolean" ? item : safeString(item, maxLength);
     });
@@ -197,9 +254,9 @@
   document.addEventListener("htmx:afterSwap", function () { schedulePublish(100); });
   document.addEventListener("htmx:afterSettle", function () { schedulePublish(150); });
   document.addEventListener("change", function (event) {
-    if (event.target.closest("[data-ai-context], form.filters")) schedulePublish(350);
+    if (event.target.closest("[data-ai-context], form.filters") || event.target.form?.matches("form.filters")) schedulePublish(350);
   });
   document.addEventListener("input", function (event) {
-    if (event.target.closest("form.filters")) schedulePublish(450);
+    if (event.target.closest("form.filters") || event.target.form?.matches("form.filters")) schedulePublish(450);
   });
 })();

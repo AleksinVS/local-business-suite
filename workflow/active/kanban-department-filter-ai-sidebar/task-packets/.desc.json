@@ -1,0 +1,8 @@
+{
+  ".": "Task packets для дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата",
+  "01-kanban-query-and-department-read-model.json": "Канонический query contract и безопасная проекция подразделений",
+  "02-filter-first-sidebar-shell.json": "Удаление tree-mode и интерфейс дерева-фильтра в sidebar",
+  "03-ai-driver-lifecycle-and-page-context.json": "Lifecycle сворачивания native/CopilotKit и многозначный page context",
+  "04-e2e-security-docs-and-acceptance.json": "Сквозная проверка, независимое ревью, документация и техническая приемка",
+  "05-owner-accepted-archive.json": "Архивирование planning/workflow только после явной приемки владельцем"
+}

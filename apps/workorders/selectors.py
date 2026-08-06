@@ -3,6 +3,7 @@ from django.db.models import Q
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
+from .department_filter import resolve_department_selection
 from .models import Board, WorkOrder
 from .policies import allowed_view_scopes, user_department_branch_ids
 
@@ -70,6 +71,15 @@ def visible_departments_queryset(user):
             return queryset.none()
         queryset = queryset.filter(pk__in=branch_ids)
     return queryset
+
+
+def resolve_visible_department_selection(user, raw_values):
+    """Нормализует фильтр строго внутри доступного пользователю дерева."""
+
+    return resolve_department_selection(
+        raw_values,
+        visible_departments_queryset(user),
+    )
 
 
 def visible_devices_queryset(user):

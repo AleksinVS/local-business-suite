@@ -9,6 +9,7 @@ async function login(page) {
   await page.locator('input[name="username"]').fill(username || "");
   await page.locator('input[name="password"]').fill(password || "");
   await page.locator('button[type="submit"]').click();
+  await expect(page).not.toHaveURL(/\/accounts\/login\//);
   await expect(page.getByRole("button", { name: "Все функции" })).toBeVisible();
 }
 
@@ -74,6 +75,7 @@ test.describe("@ai native AG-UI-compatible sidebar", () => {
 
     await login(page);
     await page.goto("/workorders/");
+    await page.locator("[data-workorders-ai-launcher]").click();
 
     const config = await page.evaluate(async () => {
       const response = await fetch("/ai/ui/config/", {
@@ -170,6 +172,7 @@ test.describe("@ai native AG-UI-compatible sidebar", () => {
 
     await login(page);
     await page.goto("/workorders/");
+    await page.locator("[data-workorders-ai-launcher]").click();
 
     const root = page.locator("#native-ai-sidebar-root");
     await expect(root).toBeVisible();

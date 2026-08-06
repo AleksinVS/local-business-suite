@@ -1,4 +1,5 @@
 {
   ".": "Инструменты разработки для сопровождения структуры проекта",
-  "generate-structure.js": "Генератор PROJECT_STRUCTURE.yaml из .desc.json"
+  "generate-structure.js": "Генератор PROJECT_STRUCTURE.yaml из .desc.json",
+  "reset-test-database.py": "Безопасное удаление только локальных файлов повторно используемой тестовой SQLite-базы"
 }

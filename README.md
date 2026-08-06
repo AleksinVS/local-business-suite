@@ -175,12 +175,12 @@ make lock-agent-runtime   # services/agent_runtime/requirements.lock
 
 ```bash
 make install-dev
-make check
-make test-fast TEST_SCOPE=apps.accounts.tests
-make contracts
+make verify-fast TEST_SCOPE=apps/accounts/tests.py
+make verify-profile PROFILE=ai
+make verify-full
 ```
 
-Для повторного запуска падений используйте `make test-failed`, для поиска медленных тестов — `make test-profile TEST_SCOPE=<pytest-path>`. Полный контрольный прогон `make test` нужен перед приемкой крупной или рискованной работы; быстрый цикл переиспользует тестовую базу из `.local/`.
+Для повторного запуска падений используйте `make test-failed`, для поиска медленных тестов — `make test-profile TEST_SCOPE=<pytest-path>`. При несовместимой сохраненной схеме используйте `make test-db-reset`, который удаляет только известную тестовую SQLite-базу. Полный контрольный прогон `make verify-full` нужен перед приемкой крупной или рискованной работы; быстрый цикл переиспользует тестовую базу из `.local/`.
 
 Проверки системы памяти:
 

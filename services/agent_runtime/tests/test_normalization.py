@@ -13,6 +13,11 @@ import time
 import unittest
 from unittest.mock import patch
 
+import pytest
+
+
+pytestmark = pytest.mark.unit
+
 
 class TestNormalizeStatus(unittest.TestCase):
     """Tests for normalize_status()."""

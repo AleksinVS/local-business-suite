@@ -25,6 +25,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+
+pytestmark = pytest.mark.unit
+
 
 ENV_VAR = "LOCAL_BUSINESS_AI_TOOLS_FILE_TEST"
 
@@ -244,6 +249,7 @@ class ContractRereadWithoutRestartTestCase(unittest.TestCase):
         self.assertEqual(second, {"tools": ["runtime-v2-edited-via-settings-center"]})
 
 
+@pytest.mark.slow
 class StartupContractLoggingTestCase(unittest.TestCase):
     """Tests for app._log_contract_sources_at_startup()."""
 

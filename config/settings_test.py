@@ -15,6 +15,10 @@ PASSWORD_HASHERS = [
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 MEDIA_ROOT = BASE_DIR / ".local" / "test-media"  # noqa: F405
+# Не используем локальную/игнорируемую ``staticfiles/``: ее содержимое зависит
+# от того, запускал ли разработчик collectstatic/npm build, и не должно менять
+# ожидаемый HTML в Django-тестах.
+STATIC_ROOT = BASE_DIR / ".local" / "test-staticfiles"  # noqa: F405
 
 # Django по умолчанию использует SQLite in-memory test database, которую
 # невозможно переиспользовать между отдельными pytest-процессами. Локальный

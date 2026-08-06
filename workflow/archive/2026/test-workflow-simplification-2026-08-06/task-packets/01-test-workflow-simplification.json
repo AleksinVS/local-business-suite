@@ -1,0 +1,17 @@
+{
+  "task_id": "01-test-workflow-simplification",
+  "goal": "Реализовать воспроизводимый трехуровневый тестовый workflow без снижения качества",
+  "non_goals": [
+    "production runtime changes",
+    "data contract changes",
+    "business logic changes"
+  ],
+  "acceptance_checks": [
+    "all pytest tests have exactly one unit/integration marker",
+    "serial tests are excluded from parallel workers",
+    "test static root is isolated",
+    "safe test database reset exists",
+    "CI runs a real browser smoke",
+    "full clean test run passes"
+  ]
+}

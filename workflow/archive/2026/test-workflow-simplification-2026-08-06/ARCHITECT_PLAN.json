@@ -1,0 +1,26 @@
+{
+  "block_id": "test-workflow-simplification-2026-08-06",
+  "status": "active",
+  "adr_required": false,
+  "tasks": [
+    {
+      "id": "01-test-workflow-simplification",
+      "goal": "Изолировать тестовую среду, унифицировать команды, классификацию и CI/e2e",
+      "write_scope": [
+        "config/settings_test.py",
+        "pytest.ini",
+        "Makefile",
+        ".github/workflows/tests.yml",
+        "apps/**/tests*",
+        "services/agent_runtime/tests/",
+        "scripts/e2e/",
+        "package.json",
+        "AGENTS.md",
+        "README.md",
+        "docs/guides/",
+        "docs/planning/",
+        "workflow/"
+      ]
+    }
+  ]
+}

@@ -34,6 +34,7 @@ from .services import (
 )
 
 
+@pytest.mark.integration
 class WaitingListModelTests(TestCase):
     """Tests for WaitingListEntry and WaitingListAuditLog models."""
 

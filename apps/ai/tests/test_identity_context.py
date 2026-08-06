@@ -491,6 +491,7 @@ class IdentityContextPropagationTests(TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["meta"]["task_type_report"]["task_type_id"], "memory.update_personal")
 
+    @pytest.mark.slow
     def test_ai_chat_workorder_and_personal_memory_user_journey_tools(self):
         from apps.memory.models import MemoryAccessAudit, MemoryKnowledgeItem
 

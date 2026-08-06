@@ -29,5 +29,6 @@
   "access-management-ux": "Архивный workflow-блок удобного управления ролями и итоговым доступом (implemented, технически принят 2026-08-05)",
   "mandatory-user-department": "Архивный workflow-блок обязательного подразделения пользователя (implemented, технически принят 2026-08-05)",
   "iis-sso-csrf-race": "Архивный workflow-блок устранения гонки Windows SSO/CSRF на автоматических запросах браузера",
-  "role-editor-sensitive-confirmation": "Архивный workflow-блок серверного подтверждения чувствительных изменений ролей"
+  "role-editor-sensitive-confirmation": "Архивный workflow-блок серверного подтверждения чувствительных изменений ролей",
+  "test-workflow-simplification-2026-08-06": "Архивный workflow-блок упрощения и ускорения тестового workflow (implemented)"
 }

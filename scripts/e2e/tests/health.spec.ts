@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("@smoke Django health endpoint is reachable", async ({ request }) => {
+test("@http Django health endpoint is reachable", async ({ request }) => {
   const response = await request.get("/health/");
 
   await expect(response).toBeOK();

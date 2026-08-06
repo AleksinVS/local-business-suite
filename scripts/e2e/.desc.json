@@ -1,5 +1,6 @@
 {
   ".": "Playwright e2e configuration and tests",
   "playwright.config.ts": "Playwright configuration for project e2e tests with artifacts under .local/playwright",
+  "run-smoke.sh": "Self-contained authenticated browser smoke runner with isolated SQLite database and artifacts under .local",
   "tests": "Permanent Playwright e2e tests"
 }

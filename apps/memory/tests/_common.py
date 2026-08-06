@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import pytest
 from django.conf import settings
 from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
@@ -67,6 +68,7 @@ from ..services import (
 
 User = get_user_model()
 RUNTIME_DATABASES = {"default"}
+pytestmark = pytest.mark.integration
 
 
 def _memory_ingestion_profiles_with_acl(*, acl_mode, unresolved_policy):

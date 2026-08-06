@@ -127,6 +127,7 @@ def valid_memory_graph_schema_payload():
     }
 
 
+@pytest.mark.integration
 class DepartmentModelTests(TestCase):
     def test_full_name_and_descendants_follow_hierarchy(self):
         root = Department.objects.create(name="Стационар")
@@ -137,6 +138,7 @@ class DepartmentModelTests(TestCase):
         self.assertEqual(set(root.descendant_ids()), {root.id, child.id, grandchild.id})
 
 
+@pytest.mark.integration
 class DatabaseConfigTests(TestCase):
     def test_database_url_parser_builds_postgresql_config(self):
         config = database_config_from_url(
@@ -797,6 +799,7 @@ class DepartmentViewTests(TestCase):
                 self.assertContains(response, "изменён другим процессом")
 
 
+@pytest.mark.integration
 class ContractStoreTests(TestCase):
     def setUp(self):
         from apps.core.contract_store import _reset_for_tests
@@ -910,6 +913,7 @@ class ContractStoreTests(TestCase):
                 self.assertIn("role_rules", state["contracts"])
 
 
+@pytest.mark.integration
 class RoleRulesCapabilityUiTests(TestCase):
     """Редактор ролей показывает названия/описания из справочника
     "$capabilities" контракта (ADR-0034) и не портит служебные ключи при
@@ -1322,6 +1326,7 @@ class DiagnosticEndpointTests(TestCase):
                 self.assertIn("role_rules", contracts["contracts"])
 
 
+@pytest.mark.integration
 @pytest.mark.serial
 class IisCompatContourTests(TestCase):
     """Пакет 04: PathInfoDebugMiddleware/debug_request изолированы флагом
@@ -1557,6 +1562,46 @@ class WindowsIisFaviconUpdateScriptTests(SimpleTestCase):
         self.assertIn('$windows.SetAttribute("enabled", "false")', self.helper)
 
 
+@pytest.mark.unit
+class PytestMarkerPolicyTests(SimpleTestCase):
+    class FakeMarker:
+        def __init__(self, name):
+            self.name = name
+
+    class FakeItem:
+        def __init__(self, nodeid, markers):
+            self.nodeid = nodeid
+            self._markers = markers
+
+        def iter_markers(self):
+            return [PytestMarkerPolicyTests.FakeMarker(name) for name in self._markers]
+
+    def test_policy_accepts_exactly_one_primary_marker(self):
+        from config.pytest_plugin import primary_marker_errors
+
+        items = [
+            self.FakeItem("test_unit", ["unit", "slow"]),
+            self.FakeItem("test_integration", ["integration", "serial"]),
+        ]
+
+        self.assertEqual(primary_marker_errors(items), [])
+
+    def test_policy_rejects_missing_and_conflicting_primary_markers(self):
+        from config.pytest_plugin import primary_marker_errors
+
+        errors = primary_marker_errors(
+            [
+                self.FakeItem("test_missing", ["slow"]),
+                self.FakeItem("test_conflict", ["unit", "integration"]),
+            ]
+        )
+
+        self.assertEqual(len(errors), 2)
+        self.assertIn("отсутствует", errors[0])
+        self.assertIn("одновременно", errors[1])
+
+
+@pytest.mark.integration
 class ArchitectureContractTests(TestCase):
     def test_validate_architecture_contracts_command_passes(self):
         required_settings = (
@@ -1747,6 +1792,7 @@ class ArchitectureContractTests(TestCase):
             self.assertEqual(payload["status"], "draft")
 
 
+@pytest.mark.integration
 class ContractDriftTests(TestCase):
     """Диагностика дрейфа default (contracts/) <-> runtime (data/contracts/), пакет 08.
 
@@ -1850,6 +1896,7 @@ class ContractDriftTests(TestCase):
         self.assertEqual({entry.name for entry in entries}, expected_names)
 
 
+@pytest.mark.integration
 class MemoryIngestionContractExpectationTests(TestCase):
     def test_memory_ingestion_profiles_accept_expected_bootstrap_shape(self):
         validator = get_optional_json_validator(self, "validate_memory_ingestion_profiles_payload")
@@ -1987,6 +2034,7 @@ class DemoSeedCommandTests(TestCase):
         )
 
 
+@pytest.mark.integration
 class CheckStaticfilesCommandTests(TestCase):
     """Покрывает ``manage.py check_staticfiles`` в режиме ``--source-dir``.
 
@@ -2096,6 +2144,7 @@ class CheckStaticfilesCommandTests(TestCase):
         self.assertIn("синхр", out.lower() + out)
 
 
+@pytest.mark.integration
 class BootstrapRuntimeCommandTests(TestCase):
     """`bootstrap_runtime` — идемпотентная подготовка runtime вместо побочек импорта."""
 
@@ -2144,6 +2193,7 @@ class BootstrapRuntimeCommandTests(TestCase):
             self.assertFalse(data_dir.exists(), "--dry-run не должен создавать каталоги")
 
 
+@pytest.mark.integration
 class SettingsImportSideEffectTests(TestCase):
     """Импорт config.settings не должен писать на диск (ADR-0031)."""
 
@@ -2169,6 +2219,7 @@ class SettingsImportSideEffectTests(TestCase):
             )
 
 
+@pytest.mark.integration
 class ContractSystemCheckTests(TestCase):
     """Валидация контрактов доступна как Django system check (тег `contracts`)."""
 

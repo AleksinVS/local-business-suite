@@ -3960,6 +3960,13 @@ textarea:focus {
   margin-top: 0.7rem;
 }
 
+.sensitive-change-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.25rem;
+}
+
 .access-history-list li {
   display: flex;
   flex-wrap: wrap;

@@ -627,6 +627,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       memory-snapshot-chunk-removal: file
       memory-trusted-sources-claims-retrieval: file
       module-registered-agent-skills-and-mcp-facade: file
+      role-editor-sensitive-confirmation: file
       settings-center-gui: file
       test-runtime-and-agent-cost-optimization: file
       testing-policy-and-independent-verification: file

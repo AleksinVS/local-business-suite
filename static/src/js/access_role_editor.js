@@ -5,7 +5,6 @@
   const summary = document.getElementById("access-preview-summary");
   const list = document.getElementById("access-preview-list");
   const confirmation = document.getElementById("sensitive-confirmation");
-  const confirmInput = document.getElementById("confirm-sensitive-changes");
   const roleMemberIdsElement = document.getElementById("role-member-ids");
   const roleMemberIds = roleMemberIdsElement ? JSON.parse(roleMemberIdsElement.textContent) : {};
   const controls = Array.from(form.querySelectorAll("[data-role-capability]"));
@@ -59,19 +58,11 @@
     }
 
     confirmation.hidden = !hasCriticalChange;
-    if (!hasCriticalChange) confirmInput.checked = false;
   };
 
   controls.concat(descriptions).forEach((element) => {
     element.addEventListener("change", updatePreview);
     element.addEventListener("input", updatePreview);
-  });
-
-  form.addEventListener("submit", (event) => {
-    if (!confirmation.hidden && !confirmInput.checked) {
-      event.preventDefault();
-      confirmInput.focus();
-    }
   });
 
   updatePreview();

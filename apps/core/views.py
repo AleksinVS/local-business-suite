@@ -23,6 +23,7 @@ from apps.workorders.models import WorkOrder, WorkOrderStatus
 
 
 CONFIRMATION_CAPABILITY_RISKS = {"critical"}
+ROLE_RULES_FORM_VERSION = "2"
 FALLBACK_CAPABILITY_SECTION = "Другие права"
 SECTION_LABELS = {
     "workorders": "Работа с заявками",
@@ -115,6 +116,14 @@ def _parse_transition_targets(value):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _format_transition_targets(value):
+    if value == "*":
+        return "*"
+    if isinstance(value, list):
+        return ", ".join(value)
+    return ""
+
+
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
 
@@ -183,8 +192,15 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
         return can_manage_roles(self.request.user)
 
     def get_context_data(self, **kwargs):
+        role_rules = kwargs.pop("role_rules", None)
+        original_role_rules = kwargs.pop("original_role_rules", None)
+        role_rules_base_hash = kwargs.pop("role_rules_base_hash", None)
+        sensitive_changes = kwargs.pop("sensitive_changes", None) or []
         context = super().get_context_data(**kwargs)
-        role_rules = get_contract("role_rules", request=self.request)
+        if role_rules is None:
+            role_rules = get_contract("role_rules", request=self.request)
+        if original_role_rules is None:
+            original_role_rules = role_rules
         definitions = _role_capability_definitions(role_rules)
         sections_by_name = {}
         for definition in definitions:
@@ -208,42 +224,60 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
         role_member_ids = {
             role_name: sorted(member_ids) for role_name, member_ids in role_member_ids.items()
         }
-        context["role_cards"] = [
-            {
-                "name": role_name,
-                "display_name": rules.get("display_name", role_name),
-                "description": rules.get("description", ""),
-                "member_count": len(role_member_ids[role_name]),
-                "sections": [
-                    {
-                        "name": section_name,
-                        "capabilities": [
-                            {
-                                **definition,
-                                "value": rules.get(definition["name"]),
-                                "targets_value": (
-                                    rules.get(definition["name"])
-                                    if rules.get(definition["name"]) == "*"
-                                    else ", ".join(rules.get(definition["name"], []))
-                                )
-                                if definition["type"] == "targets"
-                                else "",
-                                "requires_confirmation": _requires_sensitive_confirmation(definition),
-                            }
-                            for definition in section_definitions
-                        ],
-                    }
-                    for section_name, section_definitions in sections_by_name.items()
-                ],
-            }
-            for role_name, rules in role_rules_by_name.items()
-        ]
+        role_cards = []
+        for role_name, rules in role_rules_by_name.items():
+            original_rules = original_role_rules.get(role_name, {})
+            sections = []
+            for section_name, section_definitions in sections_by_name.items():
+                capabilities = []
+                for definition in section_definitions:
+                    value = rules.get(definition["name"])
+                    original_value = original_rules.get(definition["name"])
+                    capabilities.append(
+                        {
+                            **definition,
+                            "value": value,
+                            "original_value": original_value,
+                            "targets_value": _format_transition_targets(value)
+                            if definition["type"] == "targets"
+                            else "",
+                            "original_targets_value": _format_transition_targets(original_value)
+                            if definition["type"] == "targets"
+                            else "",
+                            "requires_confirmation": _requires_sensitive_confirmation(definition),
+                        }
+                    )
+                sections.append({"name": section_name, "capabilities": capabilities})
+            role_cards.append(
+                {
+                    "name": role_name,
+                    "display_name": rules.get("display_name", role_name),
+                    "description": rules.get("description", ""),
+                    "member_count": len(role_member_ids[role_name]),
+                    "sections": sections,
+                }
+            )
+        context["role_cards"] = role_cards
         context["role_member_ids"] = role_member_ids
-        context["capability_descriptions"] = definitions
+        original_capability_metadata = original_role_rules.get("$capabilities", {})
+        context["capability_descriptions"] = [
+            {
+                **definition,
+                "original_description": (
+                    original_capability_metadata.get(definition["name"], {}).get(
+                        "description", definition["description"]
+                    )
+                ),
+            }
+            for definition in definitions
+        ]
         # Хеш отрисованной версии уходит в форму hidden-полем: защита от
         # потерянного обновления «два администратора открыли форму, второй
         # сохранил позже» — запись со старым хешом будет отклонена.
-        context["role_rules_base_hash"] = normalized_hash(role_rules)
+        context["role_rules_base_hash"] = role_rules_base_hash or normalized_hash(role_rules)
+        context["role_rules_form_version"] = ROLE_RULES_FORM_VERSION
+        context["sensitive_changes"] = sensitive_changes
+        context["confirmation_required"] = bool(sensitive_changes)
 
         context["scope_choices"] = [
             ("all", "Все заявки"),
@@ -277,6 +311,23 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
         base_hash = request.POST.get("base_hash")
         if not base_hash:
             messages.error(request, "Нельзя сохранить форму без версии контракта. Перезагрузите страницу.")
+            return redirect("core:role_rules")
+        if request.POST.get("form_version") != ROLE_RULES_FORM_VERSION:
+            messages.error(
+                request,
+                "Форма ролей устарела после обновления системы. Перезагрузите страницу "
+                "и повторите изменение.",
+            )
+            return redirect("core:role_rules")
+        # Проверяем версию до разбора checkbox-полей. Иначе старая вкладка, в
+        # которой ещё нет новых прав, могла бы представить их отсутствие в POST
+        # как массовый отзыв разрешений и показать ложное предупреждение.
+        if normalized_hash(current_rules) != base_hash:
+            messages.error(
+                request,
+                "Контракт уже изменён другим процессом. Перезагрузите страницу "
+                "и повторите изменение.",
+            )
             return redirect("core:role_rules")
 
         # Обновляем только поля карточного редактора; служебные ключи
@@ -322,7 +373,14 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
                 "Изменение чувствительных прав требует явного подтверждения: "
                 + "; ".join(sensitive_changes),
             )
-            return redirect("core:role_rules")
+            return self.render_to_response(
+                self.get_context_data(
+                    role_rules=current_rules,
+                    original_role_rules=original_rules,
+                    role_rules_base_hash=base_hash,
+                    sensitive_changes=sensitive_changes,
+                )
+            )
 
         # Предпросмотр никогда не записывает рабочий контракт. Основной
         # интерфейс строит diff в браузере, а этот путь защищает прямые POST.

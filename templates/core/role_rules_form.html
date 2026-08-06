@@ -21,6 +21,7 @@
   <form method="post" class="role-rules-form" id="role-rules-form" novalidate>
     {% csrf_token %}
     <input type="hidden" name="base_hash" value="{{ role_rules_base_hash }}">
+    <input type="hidden" name="form_version" value="{{ role_rules_form_version }}">
 
     <section class="access-preview" aria-labelledby="access-preview-title">
       <div>
@@ -69,7 +70,7 @@
                                data-role-label="{{ role.display_name }}"
                                data-capability-label="{{ capability.label }}"
                                data-capability-type="flag"
-                               data-original="{% if capability.value %}true{% else %}false{% endif %}"
+                               data-original="{% if capability.original_value %}true{% else %}false{% endif %}"
                                data-risk="{{ capability.risk }}"
                                data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}"
                                {% if capability.value %}checked{% endif %}>
@@ -80,7 +81,7 @@
                                 data-role-label="{{ role.display_name }}"
                                 data-capability-label="{{ capability.label }}"
                                 data-capability-type="scope"
-                                data-original="{{ capability.value }}"
+                                data-original="{{ capability.original_value }}"
                                 data-risk="{{ capability.risk }}"
                                 data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}">
                           {% for scope_value, scope_label in scope_choices %}
@@ -97,7 +98,7 @@
                                data-role-label="{{ role.display_name }}"
                                data-capability-label="{{ capability.label }}"
                                data-capability-type="targets"
-                               data-original="{{ capability.targets_value }}"
+                               data-original="{{ capability.original_targets_value }}"
                                data-risk="{{ capability.risk }}"
                                data-requires-confirmation="{% if capability.requires_confirmation %}true{% else %}false{% endif %}">
                         <span id="role_{{ role.name }}_{{ capability.name }}_hint" class="field-hint">Статусы через запятую или *</span>
@@ -131,18 +132,27 @@
                       required
                       data-capability-description
                       data-capability-label="{{ capability.label }}"
-                      data-original="{{ capability.description }}">{{ capability.description }}</textarea>
+                      data-original="{{ capability.original_description }}">{{ capability.description }}</textarea>
           </div>
         {% endfor %}
       </div>
     </section>
 
-    <section class="sensitive-confirmation" id="sensitive-confirmation" hidden aria-labelledby="sensitive-confirmation-title">
+    <section class="sensitive-confirmation" id="sensitive-confirmation" {% if not confirmation_required %}hidden{% endif %} aria-labelledby="sensitive-confirmation-title">
       <h2 id="sensitive-confirmation-title">Подтверждение чувствительных изменений</h2>
-      <label>
-        <input type="checkbox" name="confirm_sensitive_changes" value="yes" id="confirm-sensitive-changes">
-        Я проверил(а) изменения чувствительных прав и подтверждаю сохранение.
-      </label>
+      <p>Проверьте изменения перед сохранением. Они могут расширить или ограничить доступ сотрудников.</p>
+      {% if sensitive_changes %}
+        <ul class="sensitive-change-list">
+          {% for change in sensitive_changes %}<li>{{ change }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <button type="submit"
+              class="button"
+              name="confirm_sensitive_changes"
+              value="yes"
+              id="confirm-sensitive-changes">
+        Подтвердить и сохранить чувствительные изменения
+      </button>
     </section>
 
     <div class="table-actions">

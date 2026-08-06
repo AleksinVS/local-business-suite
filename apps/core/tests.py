@@ -64,6 +64,7 @@ from apps.waiting_list.models import WaitingListEntry
 from apps.workorders.models import WorkOrder
 from config.settings import database_config_from_url
 from .models import Department
+from .views import ROLE_RULES_FORM_VERSION
 
 User = get_user_model()
 
@@ -588,11 +589,13 @@ class DepartmentViewTests(TestCase):
                 LOCAL_BUSINESS_ROLE_RULES=initial_payload,
             ):
                 self.client.force_login(self.manager)
-                base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
+                form_response = self.client.get(reverse("core:role_rules"))
+                base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
                     reverse("core:role_rules"),
                     {
                         "base_hash": base_hash,
+                        "form_version": ROLE_RULES_FORM_VERSION,
                         "confirm_sensitive_changes": "yes",
                         "role_manager_create_workorder": "on",
                         "role_manager_manage_inventory": "",
@@ -647,11 +650,14 @@ class DepartmentViewTests(TestCase):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
                 self.client.force_login(self.manager)
-                base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
+                form_response = self.client.get(reverse("core:role_rules"))
+                base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
                     reverse("core:role_rules"),
                     {
                         "base_hash": base_hash,
+                        "form_version": ROLE_RULES_FORM_VERSION,
+                        "confirm_sensitive_changes": "yes",
                         "role_manager_manage_roles": "on",
                         "role_manager_view_scope": "totally_invalid_scope",
                     },
@@ -694,11 +700,13 @@ class DepartmentViewTests(TestCase):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
                 self.client.force_login(self.manager)
-                base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
+                form_response = self.client.get(reverse("core:role_rules"))
+                base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
                     reverse("core:role_rules"),
                     {
                         "base_hash": base_hash,
+                        "form_version": ROLE_RULES_FORM_VERSION,
                         "confirm_sensitive_changes": "yes",
                         "role_manager_manage_roles": "on",
                         "role_manager_create_workorder": "on",
@@ -769,6 +777,7 @@ class DepartmentViewTests(TestCase):
                     reverse("core:role_rules"),
                     {
                         "base_hash": stale_hash,
+                        "form_version": ROLE_RULES_FORM_VERSION,
                         "confirm_sensitive_changes": "yes",
                         "role_manager_manage_roles": "on",
                         "role_manager_create_workorder": "on",
@@ -940,7 +949,10 @@ class RoleRulesCapabilityUiTests(TestCase):
         self.addCleanup(_reset_for_tests)
 
     def _post_data(self, base_hash):
-        post_data = {"base_hash": base_hash}
+        post_data = {
+            "base_hash": base_hash,
+            "form_version": ROLE_RULES_FORM_VERSION,
+        }
         definitions = self.base_role_rules["$capabilities"]
         for role, config in self.base_role_rules.items():
             if role.startswith("$"):
@@ -1028,6 +1040,8 @@ class RoleRulesCapabilityUiTests(TestCase):
         self.assertContains(response, "Технические группы Django")
         self.assertContains(response, "Предпросмотр изменений")
         self.assertContains(response, "Журнал изменений ролей")
+        self.assertContains(response, 'name="form_version"')
+        self.assertContains(response, "Подтвердить и сохранить чувствительные изменения")
         self.assertContains(
             response,
             'name="capability_view_waiting_list_description"',
@@ -1055,7 +1069,11 @@ class RoleRulesCapabilityUiTests(TestCase):
     def test_post_updates_capability_description(self):
         self.client.force_login(self.manager)
         base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
-        post_data = {"base_hash": base_hash, "confirm_sensitive_changes": "yes"}
+        post_data = {
+            "base_hash": base_hash,
+            "form_version": ROLE_RULES_FORM_VERSION,
+            "confirm_sensitive_changes": "yes",
+        }
         for role, config in self.base_role_rules.items():
             if role.startswith("$"):
                 continue
@@ -1090,7 +1108,11 @@ class RoleRulesCapabilityUiTests(TestCase):
         # Полноценная отправка формы: для каждой роли передаём её текущее
         # состояние (как реальный браузер отправляет отмеченные чекбоксы),
         # кроме роли doctor — там все чекбоксы выключены явно.
-        post_data = {"base_hash": base_hash, "confirm_sensitive_changes": "yes"}
+        post_data = {
+            "base_hash": base_hash,
+            "form_version": ROLE_RULES_FORM_VERSION,
+            "confirm_sensitive_changes": "yes",
+        }
         for role, config in self.base_role_rules.items():
             if role.startswith("$"):
                 continue
@@ -1151,12 +1173,55 @@ class RoleRulesCapabilityUiTests(TestCase):
         before = self.role_file.read_text(encoding="utf-8")
         post_data = self._unchanged_post_data()
         post_data.pop("role_manager_manage_roles")
+        post_data["role_manager_view_scope"] = "authored"
+        post_data["role_manager_transition_targets"] = "new, accepted"
+        post_data["capability_manage_roles_description"] = (
+            "Позволяет безопасно настраивать роли сотрудников."
+        )
+
+        response = self.client.post(reverse("core:role_rules"), post_data)
+
+        self.assertEqual(self.role_file.read_text(encoding="utf-8"), before)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "требует явного подтверждения")
+        self.assertContains(response, "Подтвердить и сохранить чувствительные изменения")
+        self.assertContains(response, "manager: Управление ролями")
+        self.assertNotContains(response, 'id="sensitive-confirmation" hidden')
+        self.assertNotContains(response, 'role_manager_manage_roles" checked')
+        self.assertContains(response, '<option value="authored" selected>Только свои</option>', html=True)
+        self.assertContains(response, 'value="new, accepted"')
+        self.assertContains(response, "Позволяет безопасно настраивать роли сотрудников.")
+        self.assertFalse(SettingsChange.objects.filter(setting_id="core.contract.role_rules").exists())
+
+        post_data["confirm_sensitive_changes"] = "yes"
+        confirmed_response = self.client.post(reverse("core:role_rules"), post_data)
+
+        self.assertEqual(confirmed_response.status_code, 302)
+        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
+        self.assertFalse(saved["manager"]["manage_roles"])
+        self.assertEqual(saved["manager"]["view_scope"], "authored")
+        self.assertEqual(saved["manager"]["transition_targets"], ["new", "accepted"])
+        self.assertEqual(
+            saved["$capabilities"]["manage_roles"]["description"],
+            "Позволяет безопасно настраивать роли сотрудников.",
+        )
+        self.assertEqual(
+            SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
+            1,
+        )
+
+    def test_outdated_role_form_is_rejected_before_permissions_are_parsed(self):
+        self.client.force_login(self.manager)
+        before = self.role_file.read_text(encoding="utf-8")
+        post_data = self._unchanged_post_data()
+        post_data.pop("form_version")
+        post_data.pop("role_manager_manage_roles")
 
         response = self.client.post(reverse("core:role_rules"), post_data, follow=True)
 
         self.assertEqual(self.role_file.read_text(encoding="utf-8"), before)
-        self.assertContains(response, "требует явного подтверждения")
-        self.assertFalse(SettingsChange.objects.filter(setting_id="core.contract.role_rules").exists())
+        self.assertContains(response, "Форма ролей устарела")
+        self.assertNotContains(response, "Изменение чувствительных прав требует")
 
     def test_preview_action_does_not_write_contract(self):
         self.client.force_login(self.manager)

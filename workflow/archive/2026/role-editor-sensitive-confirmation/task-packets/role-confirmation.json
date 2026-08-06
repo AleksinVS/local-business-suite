@@ -1,0 +1,26 @@
+{
+  "task_id": "role-confirmation",
+  "goal": "Показать явное подтверждение чувствительных прав и исключить массовое снятие прав устаревшей формой.",
+  "read_scope": [
+    "apps/core/views.py",
+    "templates/core/role_rules_form.html",
+    "static/src/js/access_role_editor.js",
+    "apps/settings_center/contract_services.py"
+  ],
+  "write_scope": [
+    "apps/core/tests.py",
+    "apps/core/views.py",
+    "templates/core/role_rules_form.html",
+    "static/src/css/app.css",
+    "static/src/js/access_role_editor.js",
+    "docs/adr/ADR-0034-predefined-access-groups-and-capability-descriptions.md",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md"
+  ],
+  "acceptance_checks": [
+    "Первый POST без подтверждения не пишет контракт и возвращает заполненную форму с кнопкой.",
+    "Повторный POST с подтверждением сохраняет тот же набор изменений.",
+    "Отсутствующая версия формы и устаревший base_hash отклоняются до разбора прав.",
+    "Независимая проверка не выявляет обхода подтверждения или CSRF/XSS/IDOR-регрессии."
+  ]
+}

@@ -89,6 +89,8 @@ function Write-Utf8NoBom([string]$path, [string]$content) {
     [System.IO.File]::WriteAllText($path, $content, $enc)
 }
 
+. (Join-Path $PSScriptRoot "iis_web_config.ps1")
+
 # --- Pre-flight: проверка бандла ---------------------------------------------
 Write-Step "Проверка бандла"
 
@@ -496,6 +498,11 @@ if ($SkipIIS) {
                 foreach ($b in ($bad | Select-Object -Unique)) { Write-Host "      $b" -ForegroundColor Yellow }
             } else {
                 Write-Ok "пути в web.config существуют"
+            }
+            if (Test-IisFaviconFastCgiBypass -WebConfigPath $wc) {
+                Write-Ok "favicon.ico исключён из FastCGI (защита SSO/CSRF)"
+            } else {
+                Write-Warn "web.config не исключает favicon.ico из FastCGI; добавьте location из docs/deployment/IIS_SSO.md"
             }
         } catch { Write-Warn "не удалось проверить web.config: $($_.Exception.Message)" }
     }

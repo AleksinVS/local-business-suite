@@ -52,6 +52,8 @@ function Write-Ok($msg)    { Write-Host "  OK  $msg" -ForegroundColor Green }
 function Write-Warn($msg)  { Write-Host "  !   $msg" -ForegroundColor Yellow }
 function Write-Fail($msg)  { Write-Host "  X   $msg" -ForegroundColor Red }
 
+. (Join-Path $PSScriptRoot "iis_web_config.ps1")
+
 Write-Host "=== Configure wfastcgi for Django ===" -ForegroundColor Cyan
 Write-Host ""
 
@@ -88,6 +90,13 @@ Write-Ok "PortalRoot exists"
 # Check manage.py
 if (-not (Test-Path (Join-Path $PortalRoot "manage.py"))) {
     Write-Warn "manage.py not found - may not be a Django project"
+}
+
+$webConfigPath = Join-Path $PortalRoot "web.config"
+if (Test-IisFaviconFastCgiBypass -WebConfigPath $webConfigPath) {
+    Write-Ok "favicon.ico исключён из FastCGI (защита SSO/CSRF)"
+} else {
+    Write-Warn "web.config не исключает favicon.ico из FastCGI; добавьте location из docs/deployment/IIS_SSO.md"
 }
 
 # --- Check only mode ---------------------------------------------------------

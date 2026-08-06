@@ -27,5 +27,6 @@
   "context-aware-sidebar-ai-chat": "Архивный workflow-блок контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09; концепции перешли в native)",
   "test-runtime-and-agent-cost-optimization": "Архивный workflow-блок оптимизации времени и стоимости тестирования (implemented)",
   "access-management-ux": "Архивный workflow-блок удобного управления ролями и итоговым доступом (implemented, технически принят 2026-08-05)",
-  "mandatory-user-department": "Архивный workflow-блок обязательного подразделения пользователя (implemented, технически принят 2026-08-05)"
+  "mandatory-user-department": "Архивный workflow-блок обязательного подразделения пользователя (implemented, технически принят 2026-08-05)",
+  "iis-sso-csrf-race": "Архивный workflow-блок устранения гонки Windows SSO/CSRF на автоматических запросах браузера"
 }

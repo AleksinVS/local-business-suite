@@ -1,0 +1,24 @@
+{
+  "task_id": "01-iis-sso-csrf-race",
+  "goal": "Устранить конкурирующий Remote User вход автоматических ресурсов и закрепить IIS-защиту.",
+  "write_scope": [
+    "apps/accounts/middleware.py",
+    "apps/core/middleware.py",
+    "apps/accounts/tests.py",
+    "apps/core/tests.py",
+    "templates/base.html",
+    "scripts/windows/",
+    "docs/deployment/IIS_SSO.md",
+    "deployments/DEPLOY_PRIVATE.md",
+    "docs/adr/",
+    "docs/planning/",
+    "workflow/"
+  ],
+  "acceptance": [
+    "favicon is excluded from FastCGI in canonical IIS configuration",
+    "automatic public resources do not initiate Remote User SSO",
+    "service-worker.js remains available as a root public route",
+    "role editor POST passes enforced CSRF after first Remote User GET",
+    "Windows scripts warn about an unsafe legacy web.config"
+  ]
+}

@@ -6,6 +6,7 @@ import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from django.conf import settings
@@ -938,8 +939,7 @@ class RoleRulesCapabilityUiTests(TestCase):
         _reset_for_tests()
         self.addCleanup(_reset_for_tests)
 
-    def _unchanged_post_data(self):
-        base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
+    def _post_data(self, base_hash):
         post_data = {"base_hash": base_hash}
         definitions = self.base_role_rules["$capabilities"]
         for role, config in self.base_role_rules.items():
@@ -957,6 +957,65 @@ class RoleRulesCapabilityUiTests(TestCase):
         for capability_name, metadata in definitions.items():
             post_data[f"capability_{capability_name}_description"] = metadata["description"]
         return post_data
+
+    def _unchanged_post_data(self):
+        base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
+        return self._post_data(base_hash)
+
+    @patch("apps.accounts.ldap_backend.sync_remote_user")
+    def test_first_remote_user_role_post_survives_parallel_favicon(self, _sync_remote_user):
+        """Сквозная регрессия: favicon не перезаписывает cookie первой SSO-формы."""
+        import re
+
+        from config.settings import build_middleware
+
+        middleware = build_middleware(False)
+        middleware.insert(
+            middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
+            "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware",
+        )
+        with override_settings(
+            AUTHENTICATION_BACKENDS=["apps.accounts.ldap_backend.RemoteUserLDAPBackend"],
+            MIDDLEWARE=middleware,
+        ):
+            csrf_client = self.client_class(enforce_csrf_checks=True)
+            get_response = csrf_client.get(
+                reverse("core:role_rules"),
+                REMOTE_USER="DOMAIN\\rr-capability-manager",
+            )
+            self.assertEqual(get_response.status_code, 200)
+            token_match = re.search(
+                r'name="csrfmiddlewaretoken" value="([^"]+)"',
+                get_response.content.decode(),
+            )
+            self.assertIsNotNone(token_match)
+
+            parallel_client = self.client_class(enforce_csrf_checks=True)
+            favicon_response = parallel_client.get(
+                "/",
+                REMOTE_USER="DOMAIN\\rr-capability-manager",
+                REQUEST_URI="/favicon.ico",
+            )
+            self.assertNotIn("sessionid", favicon_response.cookies)
+            self.assertNotIn("csrftoken", favicon_response.cookies)
+
+            post_data = self._post_data(get_response.context["role_rules_base_hash"])
+            updated_description = "Проверочное описание права после первого Windows SSO-входа."
+            post_data["capability_view_waiting_list_description"] = updated_description
+            post_data["csrfmiddlewaretoken"] = token_match.group(1)
+
+            post_response = csrf_client.post(
+                reverse("core:role_rules"),
+                post_data,
+                REMOTE_USER="DOMAIN\\rr-capability-manager",
+            )
+
+            self.assertEqual(post_response.status_code, 302)
+            saved = json.loads(self.role_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                saved["$capabilities"]["view_waiting_list"]["description"],
+                updated_description,
+            )
 
     def test_page_shows_editable_capability_descriptions(self):
         self.client.force_login(self.manager)
@@ -1284,24 +1343,46 @@ class IisCompatContourTests(TestCase):
         self.assertEqual(request.path, "/workorders/")
         self.assertEqual(request.path_info, "/workorders/")
 
-    def test_path_info_fix_skips_favicon_when_enabled(self):
-        """favicon не переписывается (остаётся на IIS/404). Раньше здесь же
-        пропускался и /static/, но после перевода раздачи статики на WhiteNoise
-        PATH_INFO для /static/ нужно чинить — см. test_path_info_fix_rewrites_static."""
+    def test_path_info_fix_skips_automatic_browser_icons_when_enabled(self):
+        """Автоматические значки остаются на IIS/404 и не становятся главной."""
+        from apps.core.middleware import PathInfoDebugMiddleware
+
+        def get_response(inner_request):
+            return HttpResponse("ok")
+
+        for browser_path in (
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+            "/apple-touch-icon-precomposed.png",
+            "/browserconfig.xml",
+        ):
+            with self.subTest(browser_path=browser_path):
+                request = RequestFactory().get("/")
+                request.META["REQUEST_URI"] = browser_path
+                request.META["PATH_INFO"] = "/"
+
+                PathInfoDebugMiddleware(get_response)(request)
+
+                self.assertEqual(request.META["PATH_INFO"], "/")
+                self.assertEqual(request.path, "/")
+                self.assertEqual(request.path_info, "/")
+
+    def test_path_info_fix_rewrites_service_worker_for_public_view(self):
+        """Service worker остаётся корневым URL, но не должен запускать SSO."""
         from apps.core.middleware import PathInfoDebugMiddleware
 
         def get_response(inner_request):
             return HttpResponse("ok")
 
         request = RequestFactory().get("/")
-        request.META["REQUEST_URI"] = "/favicon.ico"
+        request.META["REQUEST_URI"] = "/service-worker.js"
         request.META["PATH_INFO"] = "/"
 
         PathInfoDebugMiddleware(get_response)(request)
 
-        self.assertEqual(request.META["PATH_INFO"], "/")
-        self.assertEqual(request.path, "/")
-        self.assertEqual(request.path_info, "/")
+        self.assertEqual(request.META["PATH_INFO"], "/service-worker.js")
+        self.assertEqual(request.path, "/service-worker.js")
+        self.assertEqual(request.path_info, "/service-worker.js")
 
     def test_path_info_fix_rewrites_static(self):
         """/static/ теперь переписывается по REQUEST_URI, чтобы WhiteNoise мог

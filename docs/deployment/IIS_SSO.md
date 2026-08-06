@@ -221,24 +221,42 @@ http://local-business-suite/
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-  <system.webServer>
-    <handlers>
-      <add name="Python FastCGI"
-           path="*"
-           verb="*"
-           modules="FastCgiModule"
-           scriptProcessor="C:\inetpub\local-business-suite\.venv\Scripts\python.exe|C:\inetpub\local-business-suite\.venv\Lib\site-packages\wfastcgi.py"
-           resourceType="Unspecified"
-           requireAccess="Script" />
-    </handlers>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="Python FastCGI"
+             path="*"
+             verb="*"
+             modules="FastCgiModule"
+             scriptProcessor="C:\inetpub\local-business-suite\.venv\Scripts\python.exe|C:\inetpub\local-business-suite\.venv\Lib\site-packages\wfastcgi.py"
+             resourceType="Unspecified"
+             requireAccess="Script" />
+      </handlers>
 
-    <security>
-      <authentication>
-        <anonymousAuthentication enabled="false" />
-        <windowsAuthentication enabled="true" />
-      </authentication>
-    </security>
-  </system.webServer>
+      <security>
+        <authentication>
+          <anonymousAuthentication enabled="false" />
+          <windowsAuthentication enabled="true" />
+        </authentication>
+      </security>
+    </system.webServer>
+  </location>
+
+  <!-- Браузер может запросить favicon параллельно с первым HTML-документом.
+       Запрос не должен входить через REMOTE_USER и менять session/CSRF cookie. -->
+  <location path="favicon.ico" inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <clear />
+      </handlers>
+      <security>
+        <authentication>
+          <anonymousAuthentication enabled="true" />
+          <windowsAuthentication enabled="false" />
+        </authentication>
+      </security>
+    </system.webServer>
+  </location>
 
   <appSettings>
     <add key="DJANGO_SETTINGS_MODULE" value="config.settings" />
@@ -268,6 +286,39 @@ http://local-business-suite/
   </appSettings>
 </configuration>
 ```
+
+### Первый POST после SSO падает с `CSRF token from POST incorrect`
+
+Причина на IIS/wfastcgi может быть не в форме. Если `PATH_INFO` запроса
+`/favicon.ico` искажён до `/`, запрос попадает на главную и параллельно с первым
+HTML-документом выполняет ещё один вход через `REMOTE_USER`. Два входа создают
+разные session/CSRF cookie; последний ответ перезаписывает cookie, и токен уже
+отрисованной формы становится неверным.
+
+Обязательная защита — показанный выше отдельный `location path="favicon.ico"`:
+IIS возвращает для отсутствующего файла 404 без FastCGI и Django. После изменения
+выполните recycle пула приложений и проверьте, что `/favicon.ico` не возвращает
+HTML главной страницы и не содержит `Set-Cookie`.
+
+Если страница 403 показывает подробный англоязычный блок `Help`, на хосте также
+ошибочно включён Django debug. Это отдельная утечка диагностической информации:
+для рабочего хоста задайте `DJANGO_ENV=production` и `DJANGO_DEBUG=0`, затем
+перезапустите пул приложений. Production-проверка настроек не позволяет сочетать
+`DJANGO_ENV=production` с включённым debug.
+
+В приложении также есть резервная защита для старых конфигураций: Remote User SSO
+не запускается для favicon, PWA service worker, стандартных browser icons и
+`/static/`; в `<head>` явно указаны favicon и apple-touch-icon из `/static/`.
+Это не отменяет исключение на уровне IIS. Скрипты `setup_wfastcgi.ps1 -CheckOnly`
+и `import_portal.ps1` предупреждают, если исключение отсутствует.
+
+Проверены соседние автоматические запросы:
+
+- `/static/...` обслуживает WhiteNoise до middleware аутентификации, а отсутствующие
+  статические файлы дополнительно не запускают SSO;
+- `/static/manifest.webmanifest` загружается после HTML и обслуживается как статика;
+- `/service-worker.js` остаётся корневым публичным URL, но не создаёт SSO-сессию;
+- `apple-touch-icon*` и `browserconfig.xml` не запускают SSO даже на старом IIS-конфиге.
 
 Для fallback-формы через `/accounts/login/` настройте IIS так, чтобы этот путь мог открываться anonymous. Иначе IIS перехватит запрос раньше Django.
 

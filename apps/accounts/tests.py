@@ -110,6 +110,62 @@ class LDAPAuthConfigTests(TestCase):
 
 @pytest.mark.integration
 class PortalAuthViewTests(TestCase):
+    @staticmethod
+    def _remote_user_middleware():
+        from config.settings import build_middleware
+
+        middleware = build_middleware(False)
+        middleware.insert(
+            middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
+            "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware",
+        )
+        return middleware
+
+    @patch("apps.accounts.ldap_backend.sync_remote_user")
+    def test_automatic_public_requests_do_not_start_remote_user_session(self, _sync_remote_user):
+        """Параллельные служебные запросы не создают competing session/CSRF cookie."""
+        with override_settings(
+            AUTHENTICATION_BACKENDS=["apps.accounts.ldap_backend.RemoteUserLDAPBackend"],
+            MIDDLEWARE=self._remote_user_middleware(),
+        ):
+            for path, request_uri in (
+                ("/", "/favicon.ico"),
+                ("/service-worker.js", "/service-worker.js"),
+            ):
+                with self.subTest(path=path):
+                    isolated_client = self.client_class(enforce_csrf_checks=True)
+                    response = isolated_client.get(
+                        path,
+                        REMOTE_USER="DOMAIN\\parallel-asset-user",
+                        REQUEST_URI=request_uri,
+                    )
+
+                    self.assertNotIn("sessionid", response.cookies)
+                    self.assertNotIn("csrftoken", response.cookies)
+                    self.assertNotIn("_auth_user_id", isolated_client.session)
+                    self.assertFalse(
+                        get_user_model().objects.filter(username="parallel-asset-user").exists()
+                    )
+
+    @patch("apps.accounts.ldap_backend.sync_remote_user")
+    def test_missing_static_file_does_not_start_remote_user_session(self, _sync_remote_user):
+        with override_settings(
+            AUTHENTICATION_BACKENDS=["apps.accounts.ldap_backend.RemoteUserLDAPBackend"],
+            MIDDLEWARE=self._remote_user_middleware(),
+        ):
+            isolated_client = self.client_class(enforce_csrf_checks=True)
+
+            isolated_client.get(
+                "/static/missing-preload.js",
+                REMOTE_USER="DOMAIN\\missing-static-user",
+                REQUEST_URI="/static/missing-preload.js",
+            )
+
+            self.assertNotIn("_auth_user_id", isolated_client.session)
+            self.assertFalse(
+                get_user_model().objects.filter(username="missing-static-user").exists()
+            )
+
     def test_logout_keeps_remote_user_from_immediate_relogin(self):
         User = get_user_model()
         remote_user = User.objects.create_user(username="remote-user")

@@ -34,5 +34,6 @@
   "ADR-0032-retire-legacy-ai-ui-driver.md": "ADR: Вывод legacy-драйвера AI UI",
   "ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md": "ADR: Авто-версии ассетов AI UI и проверка синхронности статики (принят в ветке 2026-06-29 под номером 0029, перенумерован при слиянии)",
   "ADR-0034-predefined-access-groups-and-capability-descriptions.md": "ADR: Предопределённые группы доступа, комментарии к правам ($capabilities, GroupProfile), лист ожидания только врачам, направление row-level",
-  "ADR-0035-mandatory-user-department.md": "ADR: Обязательное подразделение пользователя и безопасный карантин для нераспределённых учётных записей"
+  "ADR-0035-mandatory-user-department.md": "ADR: Обязательное подразделение пользователя и безопасный карантин для нераспределённых учётных записей",
+  "ADR-0036-iis-sso-csrf-public-assets.md": "ADR: Изоляция автоматических ресурсов браузера от Windows SSO и ротации CSRF"
 }

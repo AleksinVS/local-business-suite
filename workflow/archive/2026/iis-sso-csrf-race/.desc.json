@@ -1,0 +1,8 @@
+{
+  ".": "Workflow: устранение гонки Windows SSO/CSRF на IIS",
+  "BLOCK_BRIEF.md": "Цель, границы, риски и критерии приёмки",
+  "task-packets": "Пакет реализации защиты и проверок",
+  "EXECUTOR_REPORT.01-iis-sso-csrf-race.md": "Отчёт о реализации и выполненных проверках",
+  "TASK_ACCEPTANCE.01-iis-sso-csrf-race.md": "Техническая приёмка исправления",
+  "RETROSPECTIVE.md": "Ретроспектива и остаточные риски"
+}

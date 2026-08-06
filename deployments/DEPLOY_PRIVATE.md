@@ -26,6 +26,12 @@ git clone https://github.com/AleksinVS/vob3-deployment.git deployments/vob3
 cd deployments/vob3 && git pull && cd ../..
 ```
 
+После обновления основного проекта перенесите в приватный `web.config.template`
+исключение `location path="favicon.ico"` из `docs/deployment/IIS_SSO.md`. Оно не
+даёт автоматическому запросу браузера попасть в wfastcgi/Django и создать
+конкурирующие session/CSRF cookie при первом Windows SSO-входе. Проверка:
+`scripts/windows/setup_wfastcgi.ps1 -CheckOnly`.
+
 ## Замечания
 
 - Не коммитьте файлы из `deployments/` в основной репозиторий.

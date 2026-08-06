@@ -29,5 +29,6 @@
   "context-aware-sidebar-ai-chat.md": "Архивный план контекстного HTMX ИИ-чата в левой панели (superseded: HTMX-чат снят, ADR-0032/п.09)",
   "test-runtime-and-agent-cost-optimization.md": "Архивный план оптимизации времени и стоимости тестирования (implemented)",
   "access-management-ux.md": "Архивный план удобного управления ролями и итоговым доступом (implemented, технически принят 2026-08-05)",
-  "mandatory-user-department.md": "Архивный план обязательного подразделения пользователя (implemented, технически принят 2026-08-05)"
+  "mandatory-user-department.md": "Архивный план обязательного подразделения пользователя (implemented, технически принят 2026-08-05)",
+  "iis-sso-csrf-race.md": "Архивный план устранения гонки Windows SSO/CSRF на автоматических запросах браузера"
 }

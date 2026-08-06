@@ -1,6 +1,36 @@
 import logging
+from urllib.parse import urlsplit
 
 logger = logging.getLogger("apps.core.iis_path_debug")
+
+
+# Эти адреса браузер может запросить сам, до завершения первого HTML-запроса.
+# В IIS они должны обслуживаться без Django (см. docs/deployment/IIS_SSO.md).
+# Список также используется RemoteUser middleware как резервная защита старых
+# web.config: служебный запрос не должен запускать SSO и менять session/CSRF cookie.
+IIS_DISCARDED_BROWSER_PATHS = frozenset(
+    {
+        "/apple-touch-icon-precomposed.png",
+        "/apple-touch-icon.png",
+        "/browserconfig.xml",
+        "/favicon.ico",
+    }
+)
+IIS_AUTOMATIC_PUBLIC_PATHS = IIS_DISCARDED_BROWSER_PATHS | {"/service-worker.js"}
+
+
+def original_request_path(request):
+    """Возвращает исходный URL-путь, даже если wfastcgi исказил PATH_INFO."""
+
+    request_uri = request.META.get("REQUEST_URI", "")
+    if request_uri:
+        return urlsplit(request_uri).path.lower()
+    return (request.path_info or request.path or "").lower()
+
+
+def is_automatic_public_request(request):
+    path = original_request_path(request)
+    return path in IIS_AUTOMATIC_PUBLIC_PATHS or path.startswith("/static/")
 
 
 class PathInfoDebugMiddleware:
@@ -32,7 +62,7 @@ class PathInfoDebugMiddleware:
         # 1. PATH_INFO is just '/'
         # 2. REQUEST_URI has a different path (not '/')
         # 3. REQUEST_URI is not empty
-        # 4. We're not dealing with favicon (favicon остаётся на IIS/404)
+        # 4. Это не служебный значок браузера (такие пути остаются на IIS/404)
         #
         # /static/ намеренно НЕ исключаем: при раздаче статики через
         # WhiteNoise (FastCGI-хендлер в web.config для /static/) PATH_INFO для
@@ -43,7 +73,7 @@ class PathInfoDebugMiddleware:
             path_info == "/"
             and request_uri != "/"
             and request_uri
-            and not request_uri.startswith("/favicon.")
+            and original_request_path(request) not in IIS_DISCARDED_BROWSER_PATHS
         ):
             # Extract path from REQUEST_URI (remove query string)
             path = request_uri.split("?")[0]

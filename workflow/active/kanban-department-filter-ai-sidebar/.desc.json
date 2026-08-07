@@ -13,5 +13,13 @@
   "TASK_ACCEPTANCE.03-ai-driver-lifecycle-and-page-context.md": "Приемка ИИ-драйверов и многозначного PageContext",
   "EXECUTOR_REPORT.04-e2e-security-docs-and-acceptance.md": "Итоговый отчет сквозной проверки, документации и приемки",
   "TASK_ACCEPTANCE.04-e2e-security-docs-and-acceptance.md": "Техническая приемка реализации перед проверкой владельцем",
+  "EXECUTOR_REPORT.06-device-tree-server-contract.md": "Отчет серверного контракта дерева подразделений и медизделий",
+  "TASK_ACCEPTANCE.06-device-tree-server-contract.md": "Приемка серверного контракта дерева и фильтра изделий",
+  "EXECUTOR_REPORT.07-row-selection-and-resizable-sidebar.md": "Отчет выбора строк и изменяемой ширины боковой панели",
+  "TASK_ACCEPTANCE.07-row-selection-and-resizable-sidebar.md": "Приемка интерфейса выбора и изменения ширины",
+  "EXECUTOR_REPORT.08-followup-integration-and-acceptance.md": "Итоговый отчет интеграции уточненного дерева и проверок",
+  "TASK_ACCEPTANCE.08-followup-integration-and-acceptance.md": "Техническая приемка уточненного дерева перед проверкой владельцем",
+  "EXECUTOR_REPORT.10-visual-sidebar-remediation.md": "Отчет визуальной доработки дерева и надежности боковой панели",
+  "TASK_ACCEPTANCE.10-visual-sidebar-remediation.md": "Приемка визуальной доработки дерева и боковой панели",
   "RETROSPECTIVE.md": "Ретроспектива реализации и условие архивного пакета"
 }

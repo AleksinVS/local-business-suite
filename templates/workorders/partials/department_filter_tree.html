@@ -1,23 +1,22 @@
 <section class="department-filter" data-department-filter>
   <div class="department-filter-search">
-    <label for="department-filter-search">Поиск подразделения</label>
-    <input id="department-filter-search" type="search" placeholder="Название подразделения" autocomplete="off" data-department-filter-search>
+    <label for="department-filter-search">Поиск подразделения или изделия</label>
+    <input id="department-filter-search" type="search" placeholder="Название подразделения или изделия" autocomplete="off" data-department-filter-search>
   </div>
 
   <div class="department-filter-summary" aria-live="polite">
-    <span data-department-filter-summary>Все доступные подразделения</span>
+    <span data-department-filter-summary>Все доступные подразделения и изделия</span>
     <button type="button" data-department-filter-reset hidden>Сбросить</button>
   </div>
 
   {% if department_filter and not department_filter.is_empty %}
-    <fieldset class="department-filter-tree-fieldset">
-      <legend class="visually-hidden">Выбор подразделений</legend>
-      <ul class="department-filter-tree" data-department-filter-tree>
+    <div class="department-filter-tree-fieldset">
+      <ul class="department-filter-tree" data-department-filter-tree role="tree" aria-label="Подразделения и медицинские изделия">
         {% for node in department_filter.nodes %}
           {% include "workorders/partials/department_filter_node.html" with node=node %}
         {% endfor %}
       </ul>
-    </fieldset>
+    </div>
     <p class="department-filter-no-results" data-department-filter-no-results hidden>Ничего не найдено.</p>
   {% else %}
     <div class="department-filter-empty">

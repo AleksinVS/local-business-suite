@@ -1,0 +1,55 @@
+{
+  "task_id": "10-visual-sidebar-remediation",
+  "title": "Визуальная доработка дерева и надежное изменение ширины",
+  "type": "implementation_and_acceptance",
+  "executor": {
+    "kind": "main_agent",
+    "review": "read-only subagent gpt-5.6-luna, medium"
+  },
+  "objective": "Устранить визуальные и поведенческие дефекты дерева после проверки владельцем без изменения серверного контракта фильтрации.",
+  "read_scope": [
+    "templates/base.html",
+    "templates/workorders/",
+    "static/src/css/app.css",
+    "static/src/js/workorder_department_filter.js",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md"
+  ],
+  "write_scope": [
+    "templates/base.html",
+    "templates/workorders/board.html",
+    "templates/workorders/partials/department_filter_node.html",
+    "templates/workorders/partials/department_filter_tree.html",
+    "static/src/css/app.css",
+    "static/src/js/workorder_department_filter.js",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "docs/planning/backlog.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/"
+  ],
+  "instructions": [
+    "Сделать дерево однострочным компактным списком без карточного вида и сохранить полное имя через title.",
+    "Оставить отдельную маленькую стрелку раскрытия и стабильную колонку для листовых узлов.",
+    "Рендерить контекстное создание непосредственно в выбранной строке каждого изделия.",
+    "Считать drag относительно левой границы sidebar и отслеживать pointer на window.",
+    "Разделить пользовательскую expanded-ширину и общее collapsed-состояние без :has.",
+    "Проверить фактические размеры DOM, pointer drag, reload, collapse и узкую/широкую компоновку в Chromium."
+  ],
+  "acceptance": [
+    "Текст изделия имеет ненулевую доступную ширину и не превращается в один значок.",
+    "Высота обычной строки дерева не превышает 32 px на desktop.",
+    "Действие создания находится в той же строке, что выбранное изделие.",
+    "Ширина меняется pointer и клавиатурой, сохраняется после reload и восстанавливается после collapse.",
+    "Collapsed sidebar имеет фактическую ширину 68 px."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/workorders/tests.py",
+    "node --check static/src/js/workorder_department_filter.js",
+    "make verify-profile PROFILE=ui",
+    "Playwright: фильтр, контекстное действие, resize/collapse",
+    "make verify-full",
+    "git diff --check"
+  ]
+}

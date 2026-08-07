@@ -1,0 +1,48 @@
+{
+  "task_id": "06-device-tree-server-contract",
+  "title": "Серверный контракт дерева подразделений и медизделий",
+  "type": "implementation",
+  "executor": {
+    "kind": "subagent",
+    "model": "gpt-5.6-sol",
+    "reasoning": "high"
+  },
+  "objective": "Добавить безопасные листовые узлы медизделий, нормализованный device-фильтр и проверенное предзаполнение формы заявки.",
+  "read_scope": [
+    "apps/workorders/department_filter.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/forms.py",
+    "apps/workorders/views.py",
+    "apps/workorders/tests.py",
+    "apps/inventory/models.py"
+  ],
+  "write_scope": [
+    "apps/workorders/department_filter.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/forms.py",
+    "apps/workorders/views.py",
+    "apps/workorders/tests.py"
+  ],
+  "instructions": [
+    "Нормализовать department и device только внутри разрешенных queryset.",
+    "Не включать архивные изделия в дерево и создание, но сохранить текущее архивное изделие при редактировании существующей заявки.",
+    "Вернуть единый плоский read model с kind, key, parent_key, label, selected и has_children.",
+    "Объединять выбранные ветви и изделия через OR внутри дерева; остальные фильтры применять через AND.",
+    "Считать браузерные идентификаторы подсказкой и повторно проверять их при открытии формы создания."
+  ],
+  "acceptance": [
+    "Недоступные, архивные и невалидные device id удаляются из URL и контекста.",
+    "Узлы изделий являются листьями разрешенного подразделения.",
+    "Доступное изделие предзаполняет device и department; чужое не предзаполняет форму.",
+    "Целевые Django-тесты проходят."
+  ],
+  "verification": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE=apps/workorders/tests.py"
+  ],
+  "non_goals": [
+    "Не менять модели и миграции.",
+    "Не менять шаблоны, CSS и JavaScript.",
+    "Не менять role contract."
+  ]
+}

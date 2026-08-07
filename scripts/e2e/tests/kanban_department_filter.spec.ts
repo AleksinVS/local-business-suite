@@ -14,9 +14,10 @@ async function login(page) {
 }
 
 test.describe("@workorders канбан и фильтр подразделений", () => {
+  test.setTimeout(60_000);
   test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated UI checks.");
 
-  test("показывает только канбан и хранит выбранные фильтры в URL", async ({ page }) => {
+  test("показывает только канбан и фильтрует деревом подразделений и изделий", async ({ page }) => {
     await login(page);
     await page.goto("/workorders/?view=tree");
 
@@ -26,6 +27,13 @@ test.describe("@workorders канбан и фильтр подразделени
     await expect(page.locator("#workorders-tree")).toHaveCount(0);
     await expect(page.locator("[data-workorders-filter-panel]")).toBeVisible();
     await expect(page.locator("[data-workorders-ai-panel]")).toBeHidden();
+    await expect(page.getByText("Обычный клик выбирает один элемент.", { exact: false })).toHaveCount(0);
+
+    const visibleLabels = page.locator("[data-department-filter-select]:visible .department-filter-node-label");
+    expect(await visibleLabels.count()).toBeGreaterThan(0);
+    for (const label of await visibleLabels.all()) {
+      await expect.poll(async () => Math.round((await label.boundingBox())?.width || 0)).toBeGreaterThan(8);
+    }
 
     let filterRequests = 0;
     page.on("request", (request) => {
@@ -37,16 +45,20 @@ test.describe("@workorders канбан и фильтр подразделени
     expect(filterRequests).toBe(0);
     await page.locator("[data-department-filter-search]").fill("");
 
-    const department = page.locator("[data-department-filter-checkbox]").first();
-    test.skip((await department.count()) === 0, "У пользователя нет доступных подразделений для фильтра.");
-    const departmentId = await department.getAttribute("value");
-    await expect(department).toHaveAttribute("form", "workorder-filters");
+    const departmentNode = page.locator('[data-department-filter-node][data-node-kind="department"]').first();
+    test.skip((await departmentNode.count()) === 0, "У пользователя нет доступных подразделений для фильтра.");
+    const department = departmentNode.locator(":scope > .department-filter-node-row > [data-department-filter-select]");
+    const departmentValue = departmentNode.locator(":scope > .department-filter-node-row > [data-department-filter-value]");
+    const departmentId = await departmentValue.getAttribute("value");
+    await expect(department).toHaveAttribute("role", "treeitem");
+    await expect(departmentValue).toHaveAttribute("form", "workorder-filters");
     const contextUpdate = page.waitForRequest((request) => {
       if (!request.url().includes("/ai/context/window/") || request.method() !== "POST") return false;
       const body = request.postDataJSON();
       return Array.isArray(body?.filters?.department) && body.filters.department.includes(departmentId);
     });
-    await department.check();
+    await department.click();
+    await expect(department).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => new URL(page.url()).searchParams.getAll("department")).toContain(departmentId);
     await contextUpdate;
 
@@ -56,8 +68,88 @@ test.describe("@workorders канбан и фильтр подразделени
     expect(new URL(page.url()).searchParams.getAll("department")).toContain(departmentId);
 
     await page.reload();
-    await expect(page.locator(`[data-department-filter-checkbox][value="${departmentId}"]`)).toBeChecked();
+    await expect(page.locator(`[data-department-filter-value][name="department"][value="${departmentId}"]`)).not.toBeDisabled();
     await expect(page.locator("#boardStatus_new")).toBeChecked();
+  });
+
+  test("поддерживает множественный выбор и контекстное действие изделия", async ({ page }) => {
+    await login(page);
+    await page.goto("/workorders/");
+
+    const rootDepartments = page.locator(
+      '[data-department-filter-node][data-node-kind="department"][data-parent-key=""] > .department-filter-node-row > [data-department-filter-select]',
+    );
+    if ((await rootDepartments.count()) >= 2) {
+      const firstDepartmentId = await rootDepartments.nth(0)
+        .locator("xpath=../input[@data-department-filter-value]")
+        .getAttribute("value");
+      await rootDepartments.nth(0).click();
+      await expect(rootDepartments.nth(0)).toHaveAttribute("aria-selected", "true");
+      await expect.poll(() => new URL(page.url()).searchParams.getAll("department")).toContain(firstDepartmentId);
+      await rootDepartments.nth(1).click({ modifiers: ["Control"] });
+      await expect(rootDepartments.nth(0)).toHaveAttribute("aria-selected", "true");
+      await expect(rootDepartments.nth(1)).toHaveAttribute("aria-selected", "true");
+    }
+
+    const deviceNode = page.locator('[data-department-filter-node][data-node-kind="device"]').first();
+    const device = deviceNode.locator(":scope > .department-filter-node-row > [data-department-filter-select]");
+    if (await deviceNode.count()) {
+      const deviceLabel = device.locator(".department-filter-node-label");
+      await expect.poll(async () => Math.round((await deviceLabel.boundingBox())?.width || 0)).toBeGreaterThan(40);
+      await device.click();
+      await expect(device).toHaveAttribute("aria-selected", "true");
+      const create = deviceNode.locator(":scope > .department-filter-node-row > [data-department-filter-create-workorder]");
+      await expect(create).toBeVisible();
+      await expect(create).toHaveAttribute("title", "Создать заявку");
+      const request = page.waitForRequest((candidate) => candidate.url().includes("/workorders/new/") && candidate.url().includes("device="));
+      await create.click();
+      await request;
+      await expect(page.locator("#detail-panel")).toHaveClass(/active/);
+    }
+  });
+
+  test("стабильно изменяет ширину и действительно сворачивает панель", async ({ page }) => {
+    await login(page);
+    await page.evaluate(() => {
+      localStorage.removeItem("sidebarCollapsed");
+      localStorage.removeItem("workorders_sidebar_width");
+    });
+    await page.goto("/workorders/");
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const sidebar = page.locator("#sidebar");
+    const handle = page.locator("[data-workorders-sidebar-resize]");
+    await expect(handle).toHaveAttribute("role", "separator");
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(320);
+
+    await handle.focus();
+    const initial = Number(await handle.getAttribute("aria-valuenow"));
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => Number(await handle.getAttribute("aria-valuenow"))).toBe(initial + 16);
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(initial + 16);
+
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    await page.mouse.move((handleBox?.x || 0) + (handleBox?.width || 0) / 2, (handleBox?.y || 0) + 100);
+    await page.mouse.down();
+    await page.mouse.move(420, (handleBox?.y || 0) + 100, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(420);
+
+    await page.reload();
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(420);
+
+    const toggle = page.locator(".sidebar-toggle");
+    await toggle.click();
+    await expect(sidebar).toHaveClass(/collapsed/);
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(68);
+    await expect(handle).toBeHidden();
+
+    await toggle.click();
+    await expect(sidebar).not.toHaveClass(/collapsed/);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(420);
   });
 
   test("разворачивает и сворачивает ИИ-чат без пересоздания клиента", async ({ page }) => {

@@ -39,7 +39,12 @@
 2. `02-filter-first-sidebar-shell` после пакета 01.
 3. `03-ai-driver-lifecycle-and-page-context` после пакета 02.
 4. `04-e2e-security-docs-and-acceptance` после пакетов 01-03.
-5. `05-owner-accepted-archive` только после пакета 04 и явной приемки владельцем.
+5. После уточнения владельца от 2026-08-07 пакеты
+   `06-device-tree-server-contract` и `07-row-selection-and-resizable-sidebar`
+   выполнены параллельно по согласованному read-model контракту.
+6. `08-followup-integration-and-acceptance` выполнен после 06/07.
+7. `10-visual-sidebar-remediation` выполнен после визуальной проверки владельца.
+8. `09-owner-accepted-archive` только после пакета 10 и явной приемки владельцем.
 
 Пакеты 01-03 меняют связанные пользовательские контракты и выполняются последовательно,
 чтобы не создавать конфликтов в `board.html`, `app.css` и e2e. Независимый проверяющий не
@@ -49,6 +54,8 @@
 
 - любой queryset заявок начинается с `visible_workorders_queryset(user, board)`;
 - дерево содержит только `visible_departments_queryset(user)`;
+- листья изделий содержат только неархивные объекты из `visible_devices_queryset(user)`;
+- browser-выбор и кнопка создания не заменяют серверные `can_create` и валидацию queryset;
 - browser state не предоставляет прав;
 - `filters/chat` не сохраняется между загрузками и не меняет ChatSession;
 - чат не размонтируется при сворачивании;
@@ -63,13 +70,13 @@
 - URL, UI, queryset и PageContextEnvelope согласованы для повторяемых фильтров;
 - проверены роли с полным и branch-limited доступом, подмена URL и пустые состояния;
 - проверены native/CopilotKit, reload, stream-during-collapse, mobile и keyboard;
-- выполнен один финальный полный `make test`;
+- выполнен финальный полный `make verify-full`;
 - документация актуализирована, блок содержит executor/acceptance reports;
-- пакет 05 архивировал planning/workflow только после явной приемки владельцем.
+- пакет 10 устранил визуальные дефекты и конфликт resize/collapse;
+- пакет 09 архивировал planning/workflow только после явной приемки владельцем.
 
-## Остаточные риски до реализации
+## Остаточные риски после технической приемки
 
-- текущий общий sidebar на ширине до 960 px не является полноценным мобильным слоем;
-- `page_context.js` и серверный санитайзер не поддерживают массивы фильтров;
-- старые закладки `view=tree` и session key требуют явного compatibility-теста;
-- CopilotKit field focus нельзя реализовывать generic DOM scraping.
+- production-развертывание в этом пакете не выполнялось;
+- полный CopilotKit runtime локально не запускался, версии и wire contract не менялись;
+- архивирование планов и workflow ожидает явной приемки владельцем.

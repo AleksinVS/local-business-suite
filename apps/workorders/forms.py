@@ -81,7 +81,15 @@ class WorkOrderUpdateForm(forms.ModelForm):
         if user:
             self.fields["board"].queryset = visible_boards_queryset(user)
             self.fields["department"].queryset = visible_departments_queryset(user)
-            self.fields["device"].queryset = visible_devices_queryset(user)
+            preserved_device_ids = (
+                (self.instance.device_id,)
+                if self.instance and self.instance.pk and self.instance.device_id
+                else ()
+            )
+            self.fields["device"].queryset = visible_devices_queryset(
+                user,
+                include_archived_ids=preserved_device_ids,
+            )
 
 
 class WorkOrderCommentForm(forms.ModelForm):

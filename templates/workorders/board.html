@@ -2,6 +2,7 @@
 {% load static %}
 
 {% block sidebar_panel_label %}Фильтры заявок и ИИ-чат{% endblock %}
+{% block sidebar_extra_class %} sidebar-nav--workorders{% endblock %}
 
 {% block sidebar_panel %}
   {% include "workorders/partials/board_sidebar.html" %}
@@ -87,22 +88,6 @@
         </details>
       </div>
 
-      <div class="input-group input-group--dropdown">
-        <label for="boardDevice">Изделие</label>
-        <details id="boardDevice" class="multi-filter-dropdown">
-          <summary><span>Все</span>{% if filters.device_values %}<strong>{{ filters.device_values|length }}</strong>{% endif %}</summary>
-          <div class="multi-filter-menu">
-            {% for device in devices %}
-              <label class="multi-filter-option" for="boardDevice_{{ device.id }}">
-                <input type="checkbox" id="boardDevice_{{ device.id }}" name="device" value="{{ device.id }}" {% if device.id|stringformat:"s" in filters.device_values %}checked{% endif %}>
-                <span>{{ device.name }}</span>
-              </label>
-            {% empty %}
-              <span class="multi-filter-empty">Нет доступных изделий</span>
-            {% endfor %}
-          </div>
-        </details>
-      </div>
     </form>
 
     {% if current_board %}

@@ -575,12 +575,20 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.02-filter-first-sidebar-shell.md: file # Отчет реализации бокового фильтра и канбан-интерфейса
       EXECUTOR_REPORT.03-ai-driver-lifecycle-and-page-context.md: file # Отчет жизненного цикла ИИ-драйверов и PageContext
       EXECUTOR_REPORT.04-e2e-security-docs-and-acceptance.md: file # Итоговый отчет сквозной проверки, документации и приемки
+      EXECUTOR_REPORT.06-device-tree-server-contract.md: file # Отчет серверного контракта дерева подразделений и медизделий
+      EXECUTOR_REPORT.07-row-selection-and-resizable-sidebar.md: file # Отчет выбора строк и изменяемой ширины боковой панели
+      EXECUTOR_REPORT.08-followup-integration-and-acceptance.md: file # Итоговый отчет интеграции уточненного дерева и проверок
+      EXECUTOR_REPORT.10-visual-sidebar-remediation.md: file # Отчет визуальной доработки дерева и надежности боковой панели
       EXECUTOR_REPORT.documentation.md: file # Отчет подготовки проектной и исполнительной документации
       RETROSPECTIVE.md: file # Ретроспектива реализации и условие архивного пакета
       TASK_ACCEPTANCE.01-kanban-query-and-department-read-model.md: file # Приемка серверного фильтра подразделений
       TASK_ACCEPTANCE.02-filter-first-sidebar-shell.md: file # Приемка интерфейса бокового фильтра
       TASK_ACCEPTANCE.03-ai-driver-lifecycle-and-page-context.md: file # Приемка ИИ-драйверов и многозначного PageContext
       TASK_ACCEPTANCE.04-e2e-security-docs-and-acceptance.md: file # Техническая приемка реализации перед проверкой владельцем
+      TASK_ACCEPTANCE.06-device-tree-server-contract.md: file # Приемка серверного контракта дерева и фильтра изделий
+      TASK_ACCEPTANCE.07-row-selection-and-resizable-sidebar.md: file # Приемка интерфейса выбора и изменения ширины
+      TASK_ACCEPTANCE.08-followup-integration-and-acceptance.md: file # Техническая приемка уточненного дерева перед проверкой владельцем
+      TASK_ACCEPTANCE.10-visual-sidebar-remediation.md: file # Приемка визуальной доработки дерева и боковой панели
       TASK_ACCEPTANCE.documentation.md: file # Приемка полноты документационного среза перед реализацией
     knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
       task-packets: file

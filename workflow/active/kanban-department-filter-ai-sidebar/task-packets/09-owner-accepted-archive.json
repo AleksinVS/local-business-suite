@@ -1,0 +1,32 @@
+{
+  "task_id": "09-owner-accepted-archive",
+  "title": "Архивирование после приемки уточненного дерева",
+  "type": "documentation_and_move",
+  "objective": "После явной приемки владельцем закрыть backlog и перенести planning/workflow в архив 2026 года.",
+  "preconditions": [
+    "08-followup-integration-and-acceptance accepted",
+    "explicit_project_owner_acceptance"
+  ],
+  "write_scope": [
+    "docs/planning/backlog.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "docs/planning/archive/2026/",
+    "workflow/active/kanban-department-filter-ai-sidebar/",
+    "workflow/archive/2026/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance": [
+    "Завершенная задача удалена из Active backlog.",
+    "План и workflow перенесены без потери отчетов.",
+    "Описание каталогов и PROJECT_STRUCTURE обновлены."
+  ],
+  "verification": [
+    "git status --short",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "non_goals": [
+    "Не выполнять пакет до явной приемки владельцем.",
+    "Не менять исполняемый код."
+  ]
+}

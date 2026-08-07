@@ -81,7 +81,11 @@
       var formData = new FormData(filtersForm);
       var repeatableFilterNames = new Set();
       Array.prototype.forEach.call(filtersForm.elements, function (control) {
-        if (control.name && (control.type === "checkbox" || control.multiple)) {
+        if (control.name && (
+          control.type === "checkbox"
+          || control.multiple
+          || control.hasAttribute("data-ai-repeatable-filter")
+        )) {
           repeatableFilterNames.add(control.name);
         }
       });
@@ -94,7 +98,11 @@
         var externalNames = new Set(externalControls.map(function (control) { return control.name; }));
         externalNames.forEach(function (name) { formData.delete(name); });
         externalControls.forEach(function (control) {
-          if (control.type === "checkbox" || control.multiple) repeatableFilterNames.add(control.name);
+          if (
+            control.type === "checkbox"
+            || control.multiple
+            || control.hasAttribute("data-ai-repeatable-filter")
+          ) repeatableFilterNames.add(control.name);
           if ((control.type === "checkbox" || control.type === "radio") && !control.checked) return;
           if (control.tagName === "SELECT" && control.multiple) {
             Array.prototype.forEach.call(control.selectedOptions, function (option) {

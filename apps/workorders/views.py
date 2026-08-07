@@ -46,7 +46,7 @@ from .policies import (
     can_upload_attachment,
 )
 from .selectors import (
-    resolve_visible_department_selection,
+    resolve_visible_department_device_selection,
     visible_boards_queryset,
     visible_departments_queryset,
     visible_devices_queryset,
@@ -108,6 +108,14 @@ def _filter_values(request, key):
     return [value for value in request.GET.getlist(key) if value]
 
 
+def _positive_id(raw_value):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def _workorder_status_color_style():
     from apps.core.contract_store import get_contract
 
@@ -148,7 +156,12 @@ def _related_user_search_q(relation_name, query):
     return search_query
 
 
-def workorders_board_page_context(request, board, department_values=()):
+def workorders_board_page_context(
+    request,
+    board,
+    department_values=(),
+    device_values=(),
+):
     return {
         "schema_version": "1",
         "page": {
@@ -164,7 +177,7 @@ def workorders_board_page_context(request, board, department_values=()):
             "department": [str(value) for value in department_values],
             "status": _filter_values(request, "status"),
             "assignee": _filter_values(request, "assignee"),
-            "device": _filter_values(request, "device"),
+            "device": [str(value) for value in device_values],
         },
         "ui_state": {"focused_region": "board"},
     }
@@ -198,12 +211,16 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         department_selection = self.get_department_selection()
         canonical_url = self._canonical_filter_url(department_selection)
         normalized_department_values = [
-            str(value) for value in department_selection.selected_ids
+            str(value) for value in department_selection.selected_department_ids
+        ]
+        normalized_device_values = [
+            str(value) for value in department_selection.selected_device_ids
         ]
         needs_canonical_url = (
             "view" in request.GET
             or request.GET.getlist("department")
             != normalized_department_values
+            or request.GET.getlist("device") != normalized_device_values
         )
         if needs_canonical_url and not request.htmx:
             return redirect(canonical_url)
@@ -216,13 +233,23 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
     def _canonical_filter_url(self, department_selection):
         query = self.request.GET.copy()
         query.pop("view", None)
-        if department_selection.selected_ids:
+        if department_selection.selected_department_ids:
             query.setlist(
                 "department",
-                [str(value) for value in department_selection.selected_ids],
+                [
+                    str(value)
+                    for value in department_selection.selected_department_ids
+                ],
             )
         else:
             query.pop("department", None)
+        if department_selection.selected_device_ids:
+            query.setlist(
+                "device",
+                [str(value) for value in department_selection.selected_device_ids],
+            )
+        else:
+            query.pop("device", None)
         encoded_query = query.urlencode()
         if encoded_query:
             return f"{self.request.path}?{encoded_query}"
@@ -230,9 +257,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_department_selection(self):
         if not hasattr(self, "_department_selection"):
-            self._department_selection = resolve_visible_department_selection(
+            self._department_selection = resolve_visible_department_device_selection(
                 self.request.user,
                 self.request.GET.getlist("department"),
+                self.request.GET.getlist("device"),
             )
         return self._department_selection
 
@@ -261,7 +289,6 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
         department_selection = self.get_department_selection()
         status_values = _filter_values(self.request, "status")
         assignees = _filter_values(self.request, "assignee")
-        devices = _filter_values(self.request, "device")
 
         if q:
             matched_department_ids = department_search_ids(
@@ -281,16 +308,24 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             if matched_department_ids:
                 search_filter |= Q(department_id__in=matched_department_ids)
             queryset = queryset.filter(search_filter)
-        if department_selection.selected_ids:
-            queryset = queryset.filter(
-                department_id__in=department_selection.branch_ids
-            )
+        if (
+            department_selection.selected_department_ids
+            or department_selection.selected_device_ids
+        ):
+            tree_filter = Q()
+            if department_selection.selected_department_ids:
+                tree_filter |= Q(
+                    department_id__in=department_selection.branch_ids
+                )
+            if department_selection.selected_device_ids:
+                tree_filter |= Q(
+                    device_id__in=department_selection.selected_device_ids
+                )
+            queryset = queryset.filter(tree_filter)
         if status_values:
             queryset = queryset.filter(status__in=status_values)
         if assignees:
             queryset = queryset.filter(assignee__id__in=assignees)
-        if devices:
-            queryset = queryset.filter(device__id__in=devices)
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -301,25 +336,30 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             workorders_board_page_context(
                 self.request,
                 board,
-                department_values=department_selection.selected_ids,
+                department_values=department_selection.selected_department_ids,
+                device_values=department_selection.selected_device_ids,
             )
         )
         department_nodes = build_department_filter_read_model(
             department_selection.visible_departments,
-            department_selection.selected_ids,
+            department_selection.selected_department_ids,
+            department_selection.visible_devices,
+            department_selection.selected_device_ids,
         )
         context["departments"] = department_selection.visible_departments
         context["department_filter"] = {
             "nodes": department_nodes,
-            "selected_ids": department_selection.selected_ids,
-            "selected_count": len(department_selection.selected_ids),
+            "selected_ids": department_selection.selected_department_ids,
+            "selected_department_ids": department_selection.selected_department_ids,
+            "selected_device_ids": department_selection.selected_device_ids,
+            "selected_count": department_selection.selected_count,
+            "can_create_workorder": can_create(self.request.user),
             "is_empty": not department_nodes,
         }
         context["visible_boards"] = self.get_visible_boards()
         context["workorder_status_color_style"] = _workorder_status_color_style()
         context["status_choices"] = WorkOrderStatus.choices
         context["assignees"] = User.objects.order_by("first_name", "username")
-        context["devices"] = visible_devices_queryset(self.request.user)
         context["filters"] = {
             "view": VIEW_BOARD,
             "q": self.request.GET.get("q", ""),
@@ -328,8 +368,11 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             ],
             "status_values": _filter_values(self.request, "status"),
             "assignee_values": _filter_values(self.request, "assignee"),
-            "device_values": _filter_values(self.request, "device"),
+            "device_values": [
+                str(value) for value in department_selection.selected_device_ids
+            ],
         }
+        context["can_create_workorder"] = can_create(self.request.user)
         context["can_manage_board_columns"] = can_manage_board_columns(
             self.request.user
         )
@@ -408,12 +451,12 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         board_id = self.request.GET.get("board")
         if board_id:
             initial["board"] = board_id
-        department_id = self.request.GET.get("department")
+        department_id = _positive_id(self.request.GET.get("department"))
         if department_id and visible_departments_queryset(self.request.user).filter(
             pk=department_id
         ).exists():
             initial["department"] = department_id
-        device_id = self.request.GET.get("device")
+        device_id = _positive_id(self.request.GET.get("device"))
         if device_id:
             device = (
                 visible_devices_queryset(self.request.user)
@@ -422,7 +465,7 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
             )
             if device:
                 initial["device"] = device.pk
-                initial.setdefault("department", device.department_id)
+                initial["department"] = device.department_id
         return initial
 
     def get_form_kwargs(self):

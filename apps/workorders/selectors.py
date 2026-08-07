@@ -3,7 +3,10 @@ from django.db.models import Q
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
-from .department_filter import resolve_department_selection
+from .department_filter import (
+    resolve_department_device_selection,
+    resolve_department_selection,
+)
 from .models import Board, WorkOrder
 from .policies import allowed_view_scopes, user_department_branch_ids
 
@@ -82,8 +85,12 @@ def resolve_visible_department_selection(user, raw_values):
     )
 
 
-def visible_devices_queryset(user):
-    queryset = MedicalDevice.objects.select_related("department").order_by("name")
+def visible_devices_queryset(user, include_archived_ids=()):
+    """Доступные изделия; архив скрыт, кроме явно сохраняемых текущих значений."""
+
+    queryset = MedicalDevice.objects.select_related("department").order_by(
+        "department_id", "name", "inventory_number", "id"
+    )
     if not getattr(user, "is_authenticated", False):
         return queryset.none()
     if _is_department_branch_limited(user):
@@ -91,4 +98,26 @@ def visible_devices_queryset(user):
         if not branch_ids:
             return queryset.none()
         queryset = queryset.filter(department_id__in=branch_ids)
-    return queryset
+    preserved_ids = [
+        device_id
+        for device_id in include_archived_ids
+        if isinstance(device_id, int) and device_id > 0
+    ]
+    if preserved_ids:
+        return queryset.filter(Q(is_archived=False) | Q(pk__in=preserved_ids))
+    return queryset.filter(is_archived=False)
+
+
+def resolve_visible_department_device_selection(
+    user,
+    raw_department_values,
+    raw_device_values,
+):
+    """Строит выбор дерева только из доступных активных объектов."""
+
+    return resolve_department_device_selection(
+        raw_department_values,
+        raw_device_values,
+        visible_departments_queryset(user),
+        visible_devices_queryset(user),
+    )

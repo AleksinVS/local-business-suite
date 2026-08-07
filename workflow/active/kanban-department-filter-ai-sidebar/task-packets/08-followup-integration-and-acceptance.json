@@ -1,0 +1,58 @@
+{
+  "task_id": "08-followup-integration-and-acceptance",
+  "title": "Интеграция и приемка уточненного дерева",
+  "type": "verification_and_acceptance",
+  "executor": {
+    "kind": "primary_agent",
+    "reasoning": "high_control"
+  },
+  "objective": "Свести серверный и клиентский контракты, обновить документацию и проверить основной пользовательский сценарий.",
+  "read_scope": [
+    "apps/workorders/",
+    "templates/workorders/",
+    "static/src/",
+    "scripts/e2e/tests/",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md"
+  ],
+  "write_scope": [
+    "apps/workorders/tests.py",
+    "templates/workorders/",
+    "static/src/js/workorder_department_filter.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "docs/guides/AI_SIDEBAR_CHAT.md",
+    "docs/planning/backlog.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "instructions": [
+    "Проверить точное совпадение read-model полей, DOM data-атрибутов и GET-параметров.",
+    "Проверить full-access и branch-limited роли, чужие/архивные идентификаторы и право создания.",
+    "Проверить mouse, Ctrl/Meta, keyboard, search, reset, drawer и desktop resize.",
+    "Обновить ADR, план, guide, backlog, workflow-отчеты, .desc.json и PROJECT_STRUCTURE.",
+    "Выполнить ступени verify-fast, verify-profile ui и один verify-full."
+  ],
+  "acceptance": [
+    "URL, PageContext, подсветка строк и queryset описывают один выбор.",
+    "Ни фильтр, ни предзаполнение не раскрывают недоступное изделие.",
+    "Постоянный e2e покрывает основной браузерный сценарий.",
+    "Документация и workflow воспроизводят фактическую реализацию."
+  ],
+  "verification": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE=apps/workorders/tests.py",
+    "node --check static/src/js/workorder_department_filter.js",
+    "make verify-profile PROFILE=ui",
+    "make verify-full",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "non_goals": [
+    "Не обновлять AG-UI/CopilotKit.",
+    "Не выполнять production deployment.",
+    "Не архивировать блок до явной приемки владельцем."
+  ]
+}

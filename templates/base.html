@@ -19,7 +19,7 @@
   </head>
   <body hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
     <div class="app-layout">
-      <aside class="sidebar-nav" id="sidebar">
+      <aside class="sidebar-nav{% block sidebar_extra_class %}{% endblock %}" id="sidebar">
         <div class="sidebar-header">
           <div class="all-functions-menu">
             <button
@@ -157,7 +157,14 @@
       <div class="app-main">
         <header class="site-header">
           <div class="site-header-main">
-            <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+            <button
+              type="button"
+              class="sidebar-toggle"
+              aria-controls="sidebar"
+              aria-expanded="true"
+              aria-label="Свернуть боковую панель"
+              onclick="toggleSidebar(this)"
+            >☰</button>
             <a href="{% url 'core:dashboard' %}" class="brand">
               <h1>{{ app_display_name }}</h1>
             </a>
@@ -215,16 +222,27 @@
     </aside>
 
     <script>
-      function toggleSidebar() {
+      function syncSidebarToggle(toggle) {
+        const sidebar = document.getElementById('sidebar');
+        const button = toggle || document.querySelector('.sidebar-toggle');
+        if (!sidebar || !button) return;
+        const expanded = !sidebar.classList.contains('collapsed');
+        button.setAttribute('aria-expanded', String(expanded));
+        button.setAttribute('aria-label', expanded ? 'Свернуть боковую панель' : 'Развернуть боковую панель');
+      }
+
+      function toggleSidebar(toggle) {
         const sidebar = document.getElementById('sidebar');
         sidebar.classList.toggle('collapsed');
         localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+        syncSidebarToggle(toggle);
       }
 
       // Initialize sidebar state
       if (localStorage.getItem('sidebarCollapsed') === 'true') {
         document.getElementById('sidebar').classList.add('collapsed');
       }
+      syncSidebarToggle();
 
       function toggleFavorite(event, id, label, icon, url) {
         event.preventDefault();

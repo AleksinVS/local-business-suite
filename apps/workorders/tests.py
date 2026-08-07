@@ -45,6 +45,8 @@ from apps.core.contract_store import get_contract
 from .department_filter import (
     build_department_filter_read_model,
     normalize_department_ids,
+    normalize_device_ids,
+    resolve_department_device_selection,
     resolve_department_selection,
 )
 from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
@@ -105,6 +107,10 @@ class DepartmentFilterReadModelTests(SimpleTestCase):
         self.assertEqual(
             set(rows[0]),
             {
+                "kind",
+                "key",
+                "parent_key",
+                "department_id",
                 "id",
                 "label",
                 "parent_id",
@@ -114,6 +120,63 @@ class DepartmentFilterReadModelTests(SimpleTestCase):
                 "ancestor_of_selected",
             },
         )
+
+    def test_unified_read_model_appends_device_leaves_and_marks_ancestors(self):
+        devices = (
+            SimpleNamespace(
+                id=11,
+                department_id=3,
+                name="Монитор",
+                inventory_number="INV-11",
+                __str__=lambda self: "Монитор · инв. INV-11",
+            ),
+            SimpleNamespace(
+                id=12,
+                department_id=999,
+                name="Недоступный аппарат",
+                inventory_number=None,
+            ),
+        )
+
+        rows = build_department_filter_read_model(
+            self.departments,
+            selected_ids=(),
+            visible_devices=devices,
+            selected_device_ids=(11, 12, 999),
+        )
+
+        device_rows = [row for row in rows if row["kind"] == "device"]
+        self.assertEqual([row["device_id"] for row in device_rows], [11])
+        self.assertEqual(device_rows[0]["parent_key"], "department:3")
+        self.assertTrue(device_rows[0]["selected"])
+        self.assertFalse(device_rows[0]["has_children"])
+        self.assertTrue(
+            all(
+                row["ancestor_of_selected"]
+                for row in rows
+                if row.get("department_id") in {1, 2, 3}
+            )
+        )
+
+    def test_device_normalizer_and_selection_ignore_unknown_values(self):
+        devices = (
+            SimpleNamespace(id=10),
+            SimpleNamespace(id=20),
+        )
+
+        self.assertEqual(
+            normalize_device_ids(["20", "bad", "10", "20", "0", "999"], devices),
+            (20, 10),
+        )
+        selection = resolve_department_device_selection(
+            ["2"],
+            ["20", "999"],
+            self.departments,
+            devices,
+        )
+        self.assertEqual(selection.selected_department_ids, (2,))
+        self.assertEqual(selection.selected_device_ids, (20,))
+        self.assertEqual(selection.selected_count, 2)
 
     def test_read_model_is_empty_for_empty_visible_queryset(self):
         self.assertEqual(build_department_filter_read_model((), ()), ())
@@ -552,7 +615,7 @@ class WorkOrderViewPermissionTests(TestCase):
                 "department": [str(self.department.pk)],
                 "status": [WorkOrderStatus.NEW, WorkOrderStatus.ACCEPTED],
                 "assignee": [str(self.technician.pk), str(self.manager.pk)],
-                "device": [str(self.device.pk), "999999"],
+                "device": [str(self.device.pk)],
             },
         )
 
@@ -681,6 +744,85 @@ class WorkOrderViewPermissionTests(TestCase):
             str(self.sub_department.pk),
         )
         self.assertEqual(str(response.context["form"].initial["device"]), str(self.device.pk))
+
+    def test_create_prefill_uses_accessible_device_department_as_source_of_truth(self):
+        self.client.force_login(self.customer)
+        response = self.client.get(
+            reverse("workorders:create"),
+            {
+                "board": self.board.pk,
+                "department": self.department.pk,
+                "device": self.device.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"].initial["device"], self.device.pk)
+        self.assertEqual(
+            response.context["form"].initial["department"],
+            self.device.department_id,
+        )
+
+    def test_create_prefill_ignores_invalid_inaccessible_and_archived_devices(self):
+        sibling_department = Department.objects.create(
+            name="Неврология",
+            parent=self.department,
+        )
+        inaccessible_device = MedicalDevice.objects.create(
+            name="Чужой аппарат",
+            serial_number="SN-PREFILL-FOREIGN",
+            department=sibling_department,
+        )
+        archived_device = MedicalDevice.objects.create(
+            name="Архивный аппарат",
+            serial_number="SN-PREFILL-ARCHIVE",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.client.force_login(self.customer)
+
+        for device_value in (
+            "not-an-id",
+            inaccessible_device.pk,
+            archived_device.pk,
+        ):
+            with self.subTest(device=device_value):
+                response = self.client.get(
+                    reverse("workorders:create"),
+                    {"board": self.board.pk, "device": device_value},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.context["form"].initial.get("device"))
+                self.assertIsNone(response.context["form"].initial.get("department"))
+
+    def test_edit_preserves_existing_archived_device(self):
+        archived_device = MedicalDevice.objects.create(
+            name="Архивный монитор",
+            serial_number="SN-EDIT-ARCHIVE",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.workorder.device = archived_device
+        self.workorder.save(update_fields=["device", "updated_at"])
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("workorders:edit", args=[self.workorder.pk]),
+            {
+                "board": self.board.pk,
+                "title": "Заявка с архивным изделием",
+                "description": self.workorder.description,
+                "department": self.sub_department.pk,
+                "priority": self.workorder.priority,
+                "device": archived_device.pk,
+                "assignee": self.technician.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.workorder.refresh_from_db()
+        self.assertEqual(self.workorder.device, archived_device)
+        self.assertEqual(self.workorder.title, "Заявка с архивным изделием")
 
     def test_customer_create_form_rejects_foreign_department_branch(self):
         sibling_department = Department.objects.create(
@@ -1063,8 +1205,12 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.context["filters"]["department_values"], [])
         self.assertContains(response, self.workorder.title)
         nodes = response.context["department_filter"]["nodes"]
-        self.assertEqual([node["id"] for node in nodes], [self.sub_department.pk])
-        self.assertIsNone(nodes[0]["parent_id"])
+        department_nodes = [node for node in nodes if node["kind"] == "department"]
+        self.assertEqual(
+            [node["department_id"] for node in department_nodes],
+            [self.sub_department.pk],
+        )
+        self.assertIsNone(department_nodes[0]["parent_id"])
 
     def test_department_filter_keeps_two_independent_visible_branches(self):
         other_department = Department.objects.create(name="Поликлиника")
@@ -1093,6 +1239,135 @@ class WorkOrderViewPermissionTests(TestCase):
         )
         self.assertContains(response, self.workorder.title)
         self.assertContains(response, other_workorder.title)
+
+    def test_tree_contains_active_device_leaves_and_excludes_archived_devices(self):
+        archived_device = MedicalDevice.objects.create(
+            name="Старый монитор",
+            serial_number="SN-TREE-ARCHIVE",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        nodes = response.context["department_filter"]["nodes"]
+        device_nodes = [node for node in nodes if node["kind"] == "device"]
+        self.assertIn(self.device.pk, [node["device_id"] for node in device_nodes])
+        self.assertNotIn(
+            archived_device.pk,
+            [node["device_id"] for node in device_nodes],
+        )
+        active_node = next(
+            node for node in device_nodes if node["device_id"] == self.device.pk
+        )
+        self.assertEqual(
+            active_node["parent_key"],
+            f"department:{self.sub_department.pk}",
+        )
+        self.assertFalse(active_node["has_children"])
+
+    def test_tree_filter_combines_department_branches_and_devices_with_or(self):
+        other_department = Department.objects.create(name="Поликлиника для OR")
+        selected_device = MedicalDevice.objects.create(
+            name="Выбранный аппарат",
+            serial_number="SN-OR-SELECTED",
+            department=other_department,
+        )
+        other_device = MedicalDevice.objects.create(
+            name="Другой аппарат",
+            serial_number="SN-OR-OTHER",
+            department=other_department,
+        )
+        selected_device_workorder = WorkOrder.objects.create(
+            title="Заявка выбранного аппарата",
+            description="Попадает по выбранному изделию.",
+            department=other_department,
+            author=self.manager,
+            board=self.board,
+            device=selected_device,
+        )
+        excluded_workorder = WorkOrder.objects.create(
+            title="Заявка другого аппарата",
+            description="Не входит ни в одну выбранную ветвь.",
+            department=other_department,
+            author=self.manager,
+            board=self.board,
+            device=other_device,
+        )
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "department": self.sub_department.pk,
+                "device": selected_device.pk,
+                "status": WorkOrderStatus.NEW,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertContains(response, selected_device_workorder.title)
+        self.assertNotContains(response, excluded_workorder.title)
+        tree_context = response.context["department_filter"]
+        self.assertEqual(
+            tree_context["selected_department_ids"],
+            (self.sub_department.pk,),
+        )
+        self.assertEqual(
+            tree_context["selected_device_ids"],
+            (selected_device.pk,),
+        )
+        self.assertEqual(tree_context["selected_count"], 2)
+        self.assertTrue(tree_context["can_create_workorder"])
+
+    def test_tree_device_filter_is_normalized_inside_customer_access(self):
+        sibling_department = Department.objects.create(
+            name="Недоступная ветка изделий",
+            parent=self.department,
+        )
+        inaccessible_device = MedicalDevice.objects.create(
+            name="Недоступное изделие",
+            serial_number="SN-TREE-FOREIGN",
+            department=sibling_department,
+        )
+        archived_device = MedicalDevice.objects.create(
+            name="Архивное изделие",
+            serial_number="SN-TREE-ARCHIVED",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.client.force_login(self.customer)
+
+        response = self.client.get(
+            reverse("workorders:board"),
+            {
+                "device": [
+                    str(self.device.pk),
+                    str(inaccessible_device.pk),
+                    str(archived_device.pk),
+                    "bad",
+                ]
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.redirect_chain,
+            [
+                (
+                    f"{reverse('workorders:board')}?device={self.device.pk}",
+                    302,
+                )
+            ],
+        )
+        self.assertEqual(
+            response.context["department_filter"]["selected_device_ids"],
+            (self.device.pk,),
+        )
 
     def test_board_search_matches_department_hierarchy(self):
         other_department = Department.objects.create(name="Администрация")

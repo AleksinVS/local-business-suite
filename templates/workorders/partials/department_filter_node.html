@@ -1,31 +1,58 @@
 <li
   class="department-filter-node"
   data-department-filter-node
-  data-department-id="{{ node.id }}"
-  data-parent-id="{{ node.parent_id|default:'' }}"
+  data-node-key="{{ node.key }}"
+  data-node-kind="{{ node.kind }}"
+  data-parent-key="{{ node.parent_key|default:'' }}"
+  data-device-id="{{ node.device_id|default:'' }}"
+  data-has-children="{{ node.has_children|yesno:'true,false' }}"
+  role="none"
 >
   <div class="department-filter-node-row">
     <button
       type="button"
       class="department-filter-toggle"
       data-department-filter-toggle
-      aria-label="Развернуть подразделение {{ node.label }}"
+      aria-label="Развернуть {{ node.label }}"
       aria-expanded="{% if node.ancestor_of_selected or node.level == 0 %}true{% else %}false{% endif %}"
-      hidden
+      {% if not node.has_children %}aria-hidden="true" tabindex="-1" disabled{% endif %}
     >
       <span aria-hidden="true">▸</span>
     </button>
-    <label for="department-filter-{{ node.id }}">
-      <input
-        id="department-filter-{{ node.id }}"
-        type="checkbox"
-        name="department"
-        value="{{ node.id }}"
-        form="workorder-filters"
-        data-department-filter-checkbox
-        {% if node.selected %}checked{% endif %}
-      >
-      <span>{{ node.label }}</span>
-    </label>
+    <button
+      type="button"
+      class="department-filter-node-select"
+      data-department-filter-select
+      role="treeitem"
+      aria-level="{{ node.level|add:'1' }}"
+      aria-selected="{{ node.selected|yesno:'true,false' }}"
+      title="{{ node.label }}"
+    >
+      <span class="department-filter-node-icon" aria-hidden="true">{% if node.kind == "device" %}▣{% else %}▤{% endif %}</span>
+      <span class="department-filter-node-label">{{ node.label }}</span>
+    </button>
+    {% if node.kind == "device" and can_create_workorder and current_board %}
+      <button
+        type="button"
+        class="department-filter-create-workorder"
+        data-department-filter-create-workorder
+        aria-label="Создать заявку по медизделию {{ node.label }}"
+        title="Создать заявку"
+        hx-get="{% url 'workorders:create' %}?board={{ current_board.id }}&device={{ node.device_id }}"
+        hx-target="#detail-panel-content"
+        hx-swap="innerHTML"
+        onclick="openWorkorderDrawer()"
+        {% if not node.selected %}hidden{% endif %}
+      ><span aria-hidden="true">+</span><span class="department-filter-create-workorder-label">Заявка</span></button>
+    {% endif %}
+    <input
+      type="hidden"
+      name="{% if node.kind == 'device' %}device{% else %}department{% endif %}"
+      value="{% if node.kind == 'device' %}{{ node.device_id }}{% else %}{{ node.department_id }}{% endif %}"
+      form="workorder-filters"
+      data-department-filter-value
+      data-ai-repeatable-filter
+      {% if not node.selected %}disabled{% endif %}
+    >
   </div>
 </li>

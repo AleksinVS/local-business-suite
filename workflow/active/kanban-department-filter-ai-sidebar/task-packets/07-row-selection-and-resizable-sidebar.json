@@ -1,0 +1,50 @@
+{
+  "task_id": "07-row-selection-and-resizable-sidebar",
+  "title": "Выбор строк дерева и изменяемая ширина sidebar",
+  "type": "implementation",
+  "executor": {
+    "kind": "subagent",
+    "model": "gpt-5.6-terra",
+    "reasoning": "medium"
+  },
+  "objective": "Заменить checkbox на доступный выбор строк, добавить Ctrl/Meta-мультивыбор, контекстное создание и изменение ширины панели.",
+  "read_scope": [
+    "templates/workorders/",
+    "static/src/js/workorder_department_filter.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts"
+  ],
+  "write_scope": [
+    "templates/workorders/board.html",
+    "templates/workorders/partials/board_sidebar.html",
+    "templates/workorders/partials/department_filter_tree.html",
+    "templates/workorders/partials/department_filter_node.html",
+    "static/src/js/workorder_department_filter.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts"
+  ],
+  "instructions": [
+    "Обычный клик оставляет один узел; Ctrl/Meta переключает узел в множестве.",
+    "Синхронно обновлять фон строки, aria-selected, скрытые GET-input и HTMX-submit.",
+    "Сделать стрелку компактной и без фона, не смешивать ее действие с выбором строки.",
+    "Показывать создание только при ровно одном выбранном изделии и разрешенном can_create_workorder.",
+    "Ограничить desktop-ширину 280–560 px, поддержать pointer и клавиатуру, безопасно использовать localStorage.",
+    "Удалить дублирующий верхний фильтр изделий."
+  ],
+  "acceptance": [
+    "Поиск работает для подразделений и изделий и раскрывает путь к совпадению.",
+    "Выбор восстанавливается из URL и не расходится с серверной нормализацией.",
+    "Контекстная кнопка открывает существующую drawer-форму с board и device.",
+    "Resize недоступен на mobile и не ломает общий collapse sidebar."
+  ],
+  "verification": [
+    "git status --short",
+    "node --check static/src/js/workorder_department_filter.js",
+    "git diff --check"
+  ],
+  "non_goals": [
+    "Не менять Python.",
+    "Не создавать новый API.",
+    "Не менять AI UI runtime."
+  ]
+}

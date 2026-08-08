@@ -14,7 +14,7 @@
       class="department-filter-toggle"
       data-department-filter-toggle
       aria-label="Развернуть {{ node.label }}"
-      aria-expanded="{% if node.ancestor_of_selected or node.level == 0 %}true{% else %}false{% endif %}"
+      aria-expanded="false"
       {% if not node.has_children %}aria-hidden="true" tabindex="-1" disabled{% endif %}
     >
       <span aria-hidden="true">▸</span>

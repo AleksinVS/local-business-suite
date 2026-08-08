@@ -2,6 +2,7 @@
   "use strict";
 
   const MOBILE_BREAKPOINT = 960;
+  const DEPARTMENT_TREE_EXPANDED_KEY = "workorders_department_tree_expanded_v1";
   const SIDEBAR_WIDTH_KEY = "workorders_sidebar_width";
   const SIDEBAR_MIN_WIDTH = 280;
   const SIDEBAR_MAX_WIDTH = 560;
@@ -33,6 +34,18 @@
     const children = new Map(nodes.map((node) => [node, []]));
     const selectButton = (node) => node.querySelector("[data-department-filter-select]");
     const valueInput = (node) => node.querySelector("[data-department-filter-value]");
+
+    function readExpandedNodeKeys() {
+      try {
+        const value = JSON.parse(localStorage.getItem(DEPARTMENT_TREE_EXPANDED_KEY) || "[]");
+        if (!Array.isArray(value)) return new Set();
+        return new Set(value.filter((key) => typeof key === "string"));
+      } catch (_error) {
+        return new Set();
+      }
+    }
+
+    let expandedNodeKeys = readExpandedNodeKeys();
 
     nodes.forEach((node) => {
       const parent = byKey.get(node.dataset.parentKey);
@@ -80,6 +93,32 @@
       node.dataset.expanded = String(expanded);
     }
 
+    function saveExpandedNodeKeys() {
+      try {
+        localStorage.setItem(DEPARTMENT_TREE_EXPANDED_KEY, JSON.stringify([...expandedNodeKeys]));
+      } catch (_error) {
+        // Дерево продолжает работать в текущем документе при недоступном localStorage.
+      }
+    }
+
+    function expandNodes(targets) {
+      targets.forEach((node) => {
+        if (!childList(node)) return;
+        expandedNodeKeys.add(node.dataset.nodeKey);
+        setExpanded(node, true);
+      });
+      saveExpandedNodeKeys();
+    }
+
+    function collapseBranch(node) {
+      [node, ...descendants(node)].forEach((item) => {
+        if (!childList(item)) return;
+        expandedNodeKeys.delete(item.dataset.nodeKey);
+        setExpanded(item, false);
+      });
+      saveExpandedNodeKeys();
+    }
+
     function isSelected(node) {
       return !valueInput(node).disabled;
     }
@@ -92,18 +131,12 @@
       if (createWorkorder) createWorkorder.hidden = !selected;
     }
 
-    nodes.forEach((node) => {
-      const hasChildren = children.get(node).length > 0;
-      if (!hasChildren) return;
-      const toggle = node.querySelector("[data-department-filter-toggle]");
-      const isRoot = !byKey.has(node.dataset.parentKey);
-      const wasExpanded = toggle?.getAttribute("aria-expanded") === "true";
-      const selectedPath = isSelected(node) || descendants(node).some(isSelected);
-      setExpanded(node, isRoot || wasExpanded || selectedPath);
-    });
+    const expandableNodes = nodes.filter((node) => children.get(node).length > 0);
+    const expandableKeys = new Set(expandableNodes.map((node) => node.dataset.nodeKey));
+    expandedNodeKeys = new Set([...expandedNodeKeys].filter((key) => expandableKeys.has(key)));
+    expandableNodes.forEach((node) => setExpanded(node, expandedNodeKeys.has(node.dataset.nodeKey)));
     nodes.filter(isSelected).forEach((node) => {
       node.classList.add("is-selected");
-      ancestors(node).forEach((ancestor) => setExpanded(ancestor, true));
     });
 
     function descendants(node) {
@@ -143,7 +176,10 @@
       nodes.forEach((node) => {
         const visible = !query || node.dataset.searchMatch === "true" || descendants(node).some((child) => child.dataset.searchMatch === "true");
         node.hidden = !visible;
-        if (query && visible && children.get(node).length) setExpanded(node, true);
+      });
+      expandableNodes.forEach((node) => {
+        const hasMatchingDescendant = descendants(node).some((child) => child.dataset.searchMatch === "true");
+        setExpanded(node, query ? !node.hidden && hasMatchingDescendant : expandedNodeKeys.has(node.dataset.nodeKey));
       });
       if (noResults) noResults.hidden = !query || matches > 0;
     }
@@ -160,7 +196,7 @@
         }
         setSelected(node, shouldSelect);
       }
-      ancestors(node).forEach((ancestor) => setExpanded(ancestor, true));
+      expandNodes(ancestors(node));
       updateSummary();
       submitFilters();
     }
@@ -169,7 +205,8 @@
       const toggle = event.target.closest("[data-department-filter-toggle]");
       if (toggle) {
         const node = toggle.closest("[data-department-filter-node]");
-        setExpanded(node, node.dataset.expanded !== "true");
+        if (node.dataset.expanded === "true") collapseBranch(node);
+        else expandNodes([node]);
         return;
       }
       const button = event.target.closest("[data-department-filter-select]");
@@ -215,11 +252,19 @@
     if (!handle || !sidebar || handle.dataset.ready === "true") return;
     handle.dataset.ready = "true";
     const clamp = (width) => Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width));
+    const syncRightPanelConstraint = () => {
+      const occupiedWidth = window.innerWidth <= MOBILE_BREAKPOINT
+        ? 0
+        : Math.round(sidebar.getBoundingClientRect().width);
+      document.body.classList.add("workorders-sidebar-layout");
+      document.body.style.setProperty("--workorders-sidebar-occupied-width", `${occupiedWidth}px`);
+    };
     const setWidth = (width, persist = true) => {
       if (window.innerWidth <= MOBILE_BREAKPOINT) return;
       const value = clamp(width);
       sidebar.style.setProperty("--workorders-sidebar-width", `${value}px`);
       handle.setAttribute("aria-valuenow", String(value));
+      syncRightPanelConstraint();
       if (persist) {
         try {
           localStorage.setItem(SIDEBAR_WIDTH_KEY, String(value));
@@ -236,6 +281,12 @@
     }
     const storedWidth = Number.parseInt(storedValue, 10);
     setWidth(Number.isFinite(storedWidth) ? storedWidth : 320, false);
+    syncRightPanelConstraint();
+    new MutationObserver(syncRightPanelConstraint).observe(sidebar, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    window.addEventListener("resize", syncRightPanelConstraint);
     handle.addEventListener("pointerdown", (event) => {
       if (window.innerWidth <= MOBILE_BREAKPOINT || sidebar.classList.contains("collapsed") || event.button !== 0) return;
       event.preventDefault();

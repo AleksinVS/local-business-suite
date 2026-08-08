@@ -95,6 +95,9 @@ test.describe("@workorders канбан и фильтр подразделени
     const device = deviceNode.locator(":scope > .department-filter-node-row > [data-department-filter-select]");
     if (await deviceNode.count()) {
       const deviceLabel = device.locator(".department-filter-node-label");
+      const deviceName = (await deviceLabel.textContent())?.trim() || "";
+      await page.locator("[data-department-filter-search]").fill(deviceName);
+      await expect(device).toBeVisible();
       await expect.poll(async () => Math.round((await deviceLabel.boundingBox())?.width || 0)).toBeGreaterThan(40);
       await device.click();
       await expect(device).toHaveAttribute("aria-selected", "true");
@@ -108,6 +111,69 @@ test.describe("@workorders канбан и фильтр подразделени
     }
   });
 
+  test("сворачивает ветви рекурсивно и помнит раскрытые узлы", async ({ page, context }) => {
+    await login(page);
+    await page.evaluate(() => localStorage.removeItem("workorders_department_tree_expanded_v1"));
+    await page.goto("/workorders/");
+
+    const root = page.locator(
+      '[data-department-filter-node][data-parent-key=""][data-has-children="true"]',
+    ).first();
+    test.skip((await root.count()) === 0, "У пользователя нет ветвей с вложенными узлами.");
+
+    const rootToggle = root.locator(":scope > .department-filter-node-row > [data-department-filter-toggle]");
+    const rootChildren = root.locator(":scope > ul");
+    await expect(rootToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(rootChildren).toBeHidden();
+
+    const descendantLabel = root.locator(
+      '[data-department-filter-node] .department-filter-node-label',
+    ).first();
+    if (await descendantLabel.count()) {
+      const descendantName = (await descendantLabel.textContent())?.trim() || "";
+      await page.locator("[data-department-filter-search]").fill(descendantName);
+      await expect(rootToggle).toHaveAttribute("aria-expanded", "true");
+      await page.locator("[data-department-filter-search]").fill("");
+      await expect(rootToggle).toHaveAttribute("aria-expanded", "false");
+      await expect(rootChildren).toBeHidden();
+    }
+
+    await rootToggle.click();
+    await expect(rootToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(rootChildren).toBeVisible();
+
+    const nested = root.locator(
+      '[data-department-filter-node][data-has-children="true"]',
+    ).first();
+    if (await nested.count()) {
+      const nestedToggle = nested.locator(":scope > .department-filter-node-row > [data-department-filter-toggle]");
+      await nestedToggle.click();
+      await expect(nestedToggle).toHaveAttribute("aria-expanded", "true");
+
+      await rootToggle.click();
+      await expect(rootToggle).toHaveAttribute("aria-expanded", "false");
+      await expect(nestedToggle).toHaveAttribute("aria-expanded", "false");
+      await expect(rootChildren).toBeHidden();
+
+      await rootToggle.click();
+      await expect(nestedToggle).toHaveAttribute("aria-expanded", "false");
+    }
+
+    await page.reload();
+    await expect(rootToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(rootChildren).toBeVisible();
+
+    await page.close();
+    const reopenedPage = await context.newPage();
+    await reopenedPage.goto("/workorders/");
+    const reopenedRoot = reopenedPage.locator(
+      '[data-department-filter-node][data-parent-key=""][data-has-children="true"]',
+    ).first();
+    await expect(
+      reopenedRoot.locator(":scope > .department-filter-node-row > [data-department-filter-toggle]"),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   test("стабильно изменяет ширину и действительно сворачивает панель", async ({ page }) => {
     await login(page);
     await page.evaluate(() => {
@@ -119,14 +185,28 @@ test.describe("@workorders канбан и фильтр подразделени
     await page.setViewportSize({ width: 1280, height: 900 });
     const sidebar = page.locator("#sidebar");
     const handle = page.locator("[data-workorders-sidebar-resize]");
+    const rightPanel = page.locator("#detail-panel");
     await expect(handle).toHaveAttribute("role", "separator");
     await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(320);
+
+    await page.evaluate(() => (window as typeof window & { openWorkorderDrawer: () => void }).openWorkorderDrawer());
+    await expect(rightPanel).toHaveClass(/active/);
+    await expect(rightPanel).toBeVisible();
+    await expect.poll(async () => {
+      const box = await rightPanel.boundingBox();
+      return Math.round((box?.x || 0) + (box?.width || 0));
+    }).toBe(1280);
+    const initialRightPanelWidth = Math.round((await rightPanel.boundingBox())?.width || 0);
 
     await handle.focus();
     const initial = Number(await handle.getAttribute("aria-valuenow"));
     await page.keyboard.press("ArrowRight");
     await expect.poll(async () => Number(await handle.getAttribute("aria-valuenow"))).toBe(initial + 16);
     await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(initial + 16);
+    await expect.poll(async () => Math.round((await rightPanel.boundingBox())?.width || 0)).toBe(
+      initialRightPanelWidth - 16,
+    );
+    await page.evaluate(() => (window as typeof window & { closeWorkorderDrawer: () => void }).closeWorkorderDrawer());
 
     const handleBox = await handle.boundingBox();
     expect(handleBox).not.toBeNull();
@@ -138,6 +218,22 @@ test.describe("@workorders канбан и фильтр подразделени
 
     await page.reload();
     await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width || 0)).toBe(420);
+
+    await page.evaluate(() => (window as typeof window & { openWorkorderDrawer: () => void }).openWorkorderDrawer());
+    await expect.poll(async () => {
+      const box = await rightPanel.boundingBox();
+      return Math.round((box?.x || 0) + (box?.width || 0));
+    }).toBe(1280);
+    const sidebarBox = await sidebar.boundingBox();
+    const constrainedRightPanelBox = await rightPanel.boundingBox();
+    expect(constrainedRightPanelBox).not.toBeNull();
+    expect(sidebarBox).not.toBeNull();
+    expect(Math.round(constrainedRightPanelBox?.x || 0)).toBeGreaterThanOrEqual(
+      Math.round((sidebarBox?.x || 0) + (sidebarBox?.width || 0)),
+    );
+    expect(Math.round(constrainedRightPanelBox?.width || 0)).toBeLessThan(initialRightPanelWidth);
+    expect(Math.round((constrainedRightPanelBox?.x || 0) + (constrainedRightPanelBox?.width || 0))).toBe(1280);
+    await page.evaluate(() => (window as typeof window & { closeWorkorderDrawer: () => void }).closeWorkorderDrawer());
 
     const toggle = page.locator(".sidebar-toggle");
     await toggle.click();

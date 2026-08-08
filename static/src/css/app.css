@@ -3750,6 +3750,45 @@ textarea:focus {
   display: none;
 }
 
+@media (min-width: 961px) {
+  body.workorders-sidebar-layout .drawer.drawer-large {
+    --workorders-right-panel-available-width: calc(
+      100vw - var(--workorders-sidebar-occupied-width, 320px) - 56px
+    );
+    width: min(80vw, var(--workorders-right-panel-available-width));
+    max-width: var(--workorders-right-panel-available-width);
+    container-type: inline-size;
+  }
+
+  body.workorders-sidebar-layout .drawer.drawer-large.active {
+    right: 0;
+  }
+}
+
+@container (max-width: 720px) {
+  .drawer-layout {
+    grid-template-columns: 1fr;
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .drawer-main {
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .drawer-chat {
+    height: 420px;
+    flex: none;
+  }
+
+  .close-btn-global {
+    left: auto;
+    right: 1rem;
+  }
+}
+
 .workorders-sidebar-resize-handle {
   position: absolute;
   top: 0;
@@ -3916,6 +3955,10 @@ body.is-resizing-sidebar .sidebar-nav {
   margin-left: 0.7rem;
   padding-left: 0.25rem;
   border-left: 1px solid var(--border);
+}
+
+.department-filter-tree ul[hidden] {
+  display: none;
 }
 
 .department-filter-node-row {

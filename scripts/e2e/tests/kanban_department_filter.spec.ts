@@ -301,11 +301,17 @@ test.describe("@workorders канбан и фильтр подразделени
     await expect(shell).toHaveAttribute("data-ai-sidebar-mode", "chat");
     await expect(launcher).toHaveAttribute("aria-expanded", "true");
     await expect(panel).toBeVisible();
+    await expect(panel.locator(":scope > .workorders-sidebar-header")).toHaveCount(0);
+
+    const collapseButton = panel.locator("[data-workorders-ai-collapse]");
+    await expect(collapseButton).toBeVisible();
+    await expect(collapseButton).toHaveText("Свернуть");
+    await expect(collapseButton.locator("xpath=parent::*")).toHaveClass(/native-ai-ui-actions|copilotkit-toolbar|workorders-ai-unavailable-header/);
 
     const textbox = panel.getByRole("textbox").last();
     if (await textbox.count()) await expect(textbox).toBeFocused();
 
-    await page.locator("[data-workorders-ai-collapse]").click();
+    await collapseButton.click();
     await expect(shell).toHaveAttribute("data-ai-sidebar-mode", "filters");
     await expect(launcher).toBeFocused();
     await expect(panel).toBeHidden();

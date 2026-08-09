@@ -37,12 +37,6 @@
   </section>
 
   <section id="workorders-sidebar-chat" class="workorders-sidebar-chat" data-workorders-ai-panel aria-label="ИИ-чат" aria-hidden="true">
-    <header class="workorders-sidebar-header">
-      <h2>ИИ-чат</h2>
-      <button type="button" class="workorders-ai-collapse" data-workorders-ai-collapse aria-label="Свернуть ИИ-чат">
-        Свернуть
-      </button>
-    </header>
     {% if copilotkit_enabled %}
       <div
         id="copilotkit-sidebar-root"
@@ -64,6 +58,12 @@
         <div class="sidebar-chat-loading">Загрузка чата...</div>
       </div>
     {% else %}
+      <div class="workorders-ai-unavailable-header">
+        <h2>ИИ-чат</h2>
+        <button type="button" class="workorders-ai-collapse" data-workorders-ai-collapse aria-label="Свернуть ИИ-чат">
+          Свернуть
+        </button>
+      </div>
       <div class="sidebar-chat-loading">Войдите, чтобы открыть ИИ-чат.</div>
     {% endif %}
   </section>

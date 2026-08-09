@@ -333,7 +333,6 @@
     const launcherText = shell.querySelector("[data-workorders-ai-launcher-text]");
     const launcherStatus = shell.querySelector("[data-workorders-ai-launcher-status]");
     const chatPanel = shell.querySelector("[data-workorders-ai-panel]");
-    const collapse = shell.querySelector("[data-workorders-ai-collapse]");
     const close = shell.querySelector("[data-workorders-sidebar-close]");
     const backdrop = document.querySelector("[data-workorders-sidebar-backdrop]");
     let mobileInvoker = null;
@@ -356,7 +355,11 @@
       if (!sidebar) return; delete sidebar.dataset.workordersSidebarOpen; sidebar.removeAttribute("role"); sidebar.removeAttribute("aria-modal"); sidebar.removeAttribute("aria-label"); backdrop.hidden = true; mobileInvoker?.focus?.();
     }
     launcher?.addEventListener("click", () => setChatMode("chat"));
-    collapse?.addEventListener("click", () => { setChatMode("filters"); launcher?.focus(); });
+    shell.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-workorders-ai-collapse]")) return;
+      setChatMode("filters");
+      launcher?.focus();
+    });
     close?.addEventListener("click", closeMobile); backdrop?.addEventListener("click", closeMobile);
     document.addEventListener("workorders:ai-run-finished", (event) => { if (shell.dataset.aiSidebarMode !== "filters") return; const message = event.detail?.error ? "Ответ ИИ завершился с ошибкой" : "Ответ ИИ готов"; if (launcherText) launcherText.textContent = message; if (launcherStatus) launcherStatus.textContent = message; });
     document.addEventListener("keydown", (event) => {

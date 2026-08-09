@@ -162,6 +162,9 @@
       fullChatLink,
       '        <button type="button" class="native-ai-ui-icon-button" data-native-ai-clear-chat aria-label="' + escapeHtml(this.label("clear_chat", "Очистить чат")) + '" title="' + escapeHtml(this.label("clear_chat", "Очистить чат")) + '">×</button>',
       '        <button type="button" class="native-ai-ui-icon-button" data-native-ai-new-chat aria-label="' + escapeHtml(this.label("new_chat", "Новый чат")) + '" title="' + escapeHtml(this.label("new_chat", "Новый чат")) + '">+</button>',
+      this.root.closest("[data-workorders-sidebar-shell]")
+        ? '        <button type="button" class="workorders-ai-collapse" data-workorders-ai-collapse aria-label="Свернуть ИИ-чат">Свернуть</button>'
+        : "",
       "      </div>",
       "    </div>",
       modelSelect,

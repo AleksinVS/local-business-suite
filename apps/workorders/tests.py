@@ -515,7 +515,7 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, 'data-department-filter-tree')
         self.assertContains(response, 'form="workorder-filters"')
         self.assertContains(response, 'data-workorders-ai-launcher')
-        self.assertContains(response, 'data-workorders-ai-collapse')
+        self.assertContains(response, 'data-workorders-ai-panel')
         self.assertNotContains(response, 'name="view"')
         self.assertNotContains(response, 'id="workorders-tree"')
 

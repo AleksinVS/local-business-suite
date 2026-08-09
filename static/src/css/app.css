@@ -3888,8 +3888,24 @@ body.is-resizing-sidebar .sidebar-nav {
 }
 
 .workorders-ai-collapse {
-  min-width: 44px;
   min-height: 44px;
+  padding: 0 0.45rem;
+  white-space: nowrap;
+}
+
+.workorders-ai-unavailable-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workorders-ai-unavailable-header h2 {
+  margin: 0;
+  font-size: 0.92rem;
 }
 
 .workorders-sidebar-close {

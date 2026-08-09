@@ -180,6 +180,16 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
   return (
     <div className="copilotkit-embed">
       <div className="copilotkit-toolbar">
+        {hostNode.closest("[data-workorders-sidebar-shell]") ? (
+          <button
+            type="button"
+            className="workorders-ai-collapse"
+            data-workorders-ai-collapse
+            aria-label="Свернуть ИИ-чат"
+          >
+            Свернуть
+          </button>
+        ) : null}
         <button
           type="button"
           className="copilotkit-new-chat"

@@ -17,6 +17,10 @@
   background: #ffffff;
 }
 
+.copilotkit-toolbar .workorders-ai-collapse {
+  margin-right: auto;
+}
+
 .copilotkit-new-chat {
   width: 1.9rem;
   height: 1.9rem;

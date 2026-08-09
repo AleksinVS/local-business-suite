@@ -41,6 +41,26 @@ test.describe("@workorders канбан и фильтр подразделени
       const url = new URL(request.url());
       if (url.pathname.startsWith("/workorders/") && request.method() === "GET") filterRequests += 1;
     });
+    const searchableBranch = page.locator(
+      '[data-department-filter-node][data-node-kind="department"][data-has-children="true"]',
+    ).first();
+    if (await searchableBranch.count()) {
+      const branchName = (await searchableBranch.locator(
+        ":scope > .department-filter-node-row > [data-department-filter-select] .department-filter-node-label",
+      ).textContent())?.trim() || "";
+      const branchDescendants = searchableBranch.locator("[data-department-filter-node]");
+      const branchToggle = searchableBranch.locator(
+        ":scope > .department-filter-node-row > [data-department-filter-toggle]",
+      );
+      expect(await branchDescendants.count()).toBeGreaterThan(0);
+      await page.locator("[data-department-filter-search]").fill(branchName);
+      await expect(searchableBranch).toBeVisible();
+      await expect(branchToggle).toHaveAttribute("aria-expanded", "true");
+      await expect(branchDescendants.first()).toBeVisible();
+      await expect(branchDescendants.last()).toBeVisible();
+      await page.locator("[data-department-filter-search]").fill("");
+      await expect(branchToggle).toHaveAttribute("aria-expanded", "false");
+    }
     await page.locator("[data-department-filter-search]").fill("несуществующее подразделение");
     await page.waitForTimeout(350);
     expect(filterRequests).toBe(0);
@@ -60,6 +80,16 @@ test.describe("@workorders канбан и фильтр подразделени
     });
     await department.click();
     await expect(department).toHaveAttribute("aria-selected", "true");
+    const resetButton = page.locator("[data-department-filter-reset]");
+    const selectedSummary = page.locator("[data-department-filter-summary]");
+    await expect(resetButton).toBeVisible();
+    const resetBox = await resetButton.boundingBox();
+    const summaryBox = await selectedSummary.boundingBox();
+    expect(resetBox).not.toBeNull();
+    expect(summaryBox).not.toBeNull();
+    expect(Math.round((resetBox?.x || 0) + (resetBox?.width || 0))).toBeLessThan(
+      Math.round(summaryBox?.x || 0),
+    );
     await expect.poll(() => new URL(page.url()).searchParams.getAll("department")).toContain(departmentId);
     await contextUpdate;
 

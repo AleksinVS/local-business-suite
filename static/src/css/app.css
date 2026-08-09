@@ -3935,6 +3935,11 @@ body.is-resizing-sidebar .sidebar-nav {
   font-size: 0.82rem;
 }
 
+.department-filter-summary [data-department-filter-summary] {
+  margin-left: auto;
+  text-align: right;
+}
+
 .department-filter-tree-fieldset {
   min-width: 0;
   margin: 0;

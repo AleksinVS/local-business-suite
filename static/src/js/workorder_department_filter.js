@@ -166,22 +166,27 @@
 
     function applySearch() {
       const query = (search?.value || "").trim().toLocaleLowerCase();
-      let matches = 0;
+      const matchedNodes = [];
       nodes.forEach((node) => {
         const label = selectButton(node).textContent.toLocaleLowerCase();
         const matched = !query || label.includes(query);
         node.dataset.searchMatch = String(matched);
-        if (matched) matches += 1;
+        if (matched) matchedNodes.push(node);
+      });
+
+      const visibleNodes = new Set();
+      matchedNodes.forEach((node) => {
+        visibleNodes.add(node);
+        ancestors(node).forEach((ancestor) => visibleNodes.add(ancestor));
+        descendants(node).forEach((descendant) => visibleNodes.add(descendant));
       });
       nodes.forEach((node) => {
-        const visible = !query || node.dataset.searchMatch === "true" || descendants(node).some((child) => child.dataset.searchMatch === "true");
-        node.hidden = !visible;
+        node.hidden = Boolean(query) && !visibleNodes.has(node);
       });
       expandableNodes.forEach((node) => {
-        const hasMatchingDescendant = descendants(node).some((child) => child.dataset.searchMatch === "true");
-        setExpanded(node, query ? !node.hidden && hasMatchingDescendant : expandedNodeKeys.has(node.dataset.nodeKey));
+        setExpanded(node, query ? visibleNodes.has(node) : expandedNodeKeys.has(node.dataset.nodeKey));
       });
-      if (noResults) noResults.hidden = !query || matches > 0;
+      if (noResults) noResults.hidden = !query || matchedNodes.length > 0;
     }
 
     function chooseNode(node, additive) {

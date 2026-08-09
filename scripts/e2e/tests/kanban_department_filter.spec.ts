@@ -27,6 +27,7 @@ test.describe("@workorders канбан и фильтр подразделени
     await expect(page.locator("#workorders-tree")).toHaveCount(0);
     await expect(page.locator("[data-workorders-filter-panel]")).toBeVisible();
     await expect(page.locator("[data-workorders-ai-panel]")).toBeHidden();
+    await expect(page.locator('script[src*="workorder_department_filter.js"][src*="v=pwa-v4"]')).toHaveCount(1);
     await expect(page.getByText("Обычный клик выбирает один элемент.", { exact: false })).toHaveCount(0);
 
     const visibleLabels = page.locator("[data-department-filter-select]:visible .department-filter-node-label");
@@ -162,6 +163,11 @@ test.describe("@workorders канбан и фильтр подразделени
     await page.reload();
     await expect(rootToggle).toHaveAttribute("aria-expanded", "true");
     await expect(rootChildren).toBeVisible();
+    await rootToggle.click();
+    await expect(rootToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(rootChildren).toBeHidden();
+    await rootToggle.click();
+    await expect(rootToggle).toHaveAttribute("aria-expanded", "true");
 
     await page.close();
     const reopenedPage = await context.newPage();

@@ -56,6 +56,8 @@ Workflow-блок: `workflow/active/desktop-notifications-pwa-tauri/`.
 - центр уведомлений в общей шапке портала;
 - `manifest.webmanifest`;
 - service worker с корневым URL `/service-worker.js`;
+- network-first кэш статических CSS/JS с офлайн-резервом и изолированной очисткой
+  только кэшей с префиксом `local-business-suite-pwa-`;
 - клиентский polling с cursor на основе `NotificationRecipient.id`;
 - browser permission prompt только по явному нажатию пользователя;
 - безопасные события заявок в `apps.workorders.notification_events`;
@@ -339,6 +341,8 @@ apps/workorders/notification_events.py
 - `localhost` допускается только для разработки;
 - PWA manifest и service worker должны обслуживаться с корректным content type;
 - на IIS и Linux проверить cache headers для service worker;
+- после обновления service worker убедиться, что активна версия `pwa-v4`, старый
+  cache-first кэш удален, а ключевые CSS/JS запрашиваются с `?v=pwa-v4`;
 - корпоративные политики браузера могут запретить уведомления;
 - для Linux поведение зависит от desktop notification service.
 

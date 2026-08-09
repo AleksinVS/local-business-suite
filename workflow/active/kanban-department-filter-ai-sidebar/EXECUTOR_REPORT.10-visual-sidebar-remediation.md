@@ -66,6 +66,27 @@
   420 px после перезагрузки и синхронное уменьшение открытой правой панели;
 - `node --check`, `git diff --check` и `/health/` — успешно.
 
+## Дополнение 2026-08-09: stale PWA-кэш на localhost
+
+- ошибка воспроизведена только как различие постоянного origin: чистые профили
+  `127.0.0.1` и `localhost` получали актуальные файлы, а ранее установленный PWA мог
+  бессрочно возвращать старые CSS/JS из cache-first кэша;
+- service worker переведен с `pwa-v3` на `pwa-v4` и network-first для `/static/`;
+- при сетевой ошибке сохранен офлайн-fallback, очистка ограничена собственным префиксом кэша;
+- ключевые общие и канбан-ресурсы получили `?v=pwa-v4`, поэтому старый worker не может
+  подменить их прежней записью при первой загрузке после deployment;
+- добавлены integration и Playwright-проверки версии и порядка network/cache.
+
+Проверка дополнения:
+
+- `make verify-fast TEST_SCOPE=apps/notifications/tests.py` — 11 passed;
+- `notifications.spec.ts` через `http://localhost:8000` — 3 passed, включая удаление
+  искусственно созданного кэша `pwa-v3`;
+- полный `kanban_department_filter.spec.ts` через `http://localhost:8000` — 7 passed;
+- `make verify-profile PROFILE=deployment` — 29 passed, 68 deselected, 8 subtests passed;
+- сценарий дерева теперь явно сворачивает восстановленную ветвь после `page.reload()`;
+- пересобранный `web` и `/health/` — успешно.
+
 ## Проверка
 
 - `make verify-fast TEST_SCOPE=apps/workorders/tests.py` — 92 passed, 3 subtests passed;

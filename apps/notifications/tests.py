@@ -24,6 +24,19 @@ User = get_user_model()
 pytestmark = pytest.mark.integration
 
 
+class ServiceWorkerTests(TestCase):
+    def test_worker_uses_versioned_network_first_static_cache(self):
+        response = self.client.get(reverse("service_worker"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response.headers["Cache-Control"])
+        source = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn('CACHE_PREFIX = "local-business-suite-pwa-"', source)
+        self.assertIn('`${CACHE_PREFIX}v4`', source)
+        self.assertIn("networkFirstStatic(request)", source)
+        self.assertLess(source.index("fetch(request)"), source.index("caches.match(request)"))
+
+
 class NotificationApiTests(TestCase):
     @classmethod
     def setUpTestData(cls):

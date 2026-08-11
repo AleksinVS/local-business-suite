@@ -5,12 +5,14 @@
 # Использование:
 #   .\deploy_update.ps1
 #   .\deploy_update.ps1 -SkipIISRestart
+#   .\deploy_update.ps1 -AppPoolName "DefaultAppPool"
 #   .\deploy_update.ps1 -VenvPath "C:\inetpub\portal\.venv\Scripts\python.exe"
 #
 # Что делает:
 #   1. Выполняет collectstatic (собирает статику в staticfiles/)
 #   2. Копирует критические пакеты (htmx) из staticfiles/ в static/ для IIS
-#   3. Мягко перезапускает AppPool (без сброса соединений)
+#   3. Определяет пул по сайту IIS с путём PortalRoot (или берёт -AppPoolName)
+#      и мягко перезапускает его (без сброса соединений)
 #   4. Проверяет доступность /health
 #
 # Предупреждение: перед запуском убедитесь, что код обновлён (git pull или бандл).
@@ -18,7 +20,7 @@
 [CmdletBinding()]
 param(
     [string]$PortalRoot = "C:\inetpub\portal",
-    [string]$AppPoolName = "portal",
+    [string]$AppPoolName = "",  # пусто → автоопределение по сайту IIS (шаг 3)
     [string]$VenvPath = "",  # пусто → автопоиск в .venv\Scripts\python.exe
     [switch]$SkipIISRestart,
     [switch]$SkipHealthCheck
@@ -125,6 +127,24 @@ if (-not $SkipIISRestart) {
     Write-Step "Перезапуск AppPool"
     try {
         Import-Module WebAdministration
+
+        # Имя пула не задано — определяем его по сайту IIS, чей корневой путь
+        # совпадает с PortalRoot. На текущем хосте портал работает в
+        # "Default Web Site" на пуле DefaultAppPool; отдельного пула "portal"
+        # может не существовать.
+        if (-not $AppPoolName) {
+            $site = Get-WebSite | Where-Object {
+                $_.physicalPath -and ($_.physicalPath.TrimEnd('\') -ieq $PortalRoot)
+            } | Select-Object -First 1
+            if ($site) {
+                $AppPoolName = $site.applicationPool
+                Write-Ok "Пул определён по сайту '$($site.name)': $AppPoolName"
+            } else {
+                $AppPoolName = "DefaultAppPool"
+                Write-Warn "Сайт с путём '$PortalRoot' не найден — использую '$AppPoolName'"
+            }
+        }
+
         Restart-WebAppPool -Name $AppPoolName -ErrorAction Stop
         Write-Ok "AppPool '$AppPoolName' перезапущен"
 
@@ -149,7 +169,9 @@ if (-not $SkipHealthCheck) {
     while (-not $success -and $tries -lt $maxTries) {
         $tries++
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost/health" -UseBasicParsing -TimeoutSec 5
+            # -UseDefaultCredentials: на хосте включена Windows-аутентификация,
+            # анонимный запрос к /health вернёт 401 ещё до Django.
+            $response = Invoke-WebRequest -Uri "http://localhost/health" -UseBasicParsing -UseDefaultCredentials -TimeoutSec 5
             if ($response.StatusCode -eq 200) {
                 Write-Ok "Health-check OK (код 200)"
                 $success = $true

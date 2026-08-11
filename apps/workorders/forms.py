@@ -23,21 +23,34 @@ class DepartmentChoiceField(forms.ModelChoiceField):
         return obj.indented_name
 
 
+def department_choice_label(department):
+    return department.full_name
+
+
+def device_choice_label(device):
+    inventory_number = device.inventory_number or "не указан"
+    return f"{device.name} · инв. № {inventory_number}"
+
+
+class DeviceChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return device_choice_label(obj)
+
+
 class WorkOrderForm(forms.ModelForm):
     department = DepartmentChoiceField(
         queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id")
     )
+    device = DeviceChoiceField(queryset=visible_devices_queryset(None), required=False)
 
     class Meta:
         model = WorkOrder
         fields = [
             "board",
-            "title",
             "description",
             "department",
             "priority",
             "device",
-            "assignee",
         ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 5}),
@@ -53,6 +66,17 @@ class WorkOrderForm(forms.ModelForm):
             # If only one board is visible, set it as initial
             if self.fields["board"].queryset.count() == 1:
                 self.fields["board"].initial = self.fields["board"].queryset.first()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        department = cleaned_data.get("department")
+        device = cleaned_data.get("device")
+        if device and department and device.department_id != department.id:
+            self.add_error(
+                "department",
+                "Выберите подразделение, к которому относится медицинское изделие.",
+            )
+        return cleaned_data
 
 
 class WorkOrderUpdateForm(forms.ModelForm):

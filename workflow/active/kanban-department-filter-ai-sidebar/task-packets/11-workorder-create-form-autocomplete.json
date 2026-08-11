@@ -1,0 +1,56 @@
+{
+  "task_id": "11-workorder-create-form-autocomplete",
+  "title": "Упростить создание заявки и добавить безопасное автодополнение",
+  "type": "implementation_and_acceptance",
+  "executor": {
+    "kind": "main_agent"
+  },
+  "objective": "Сократить форму новой заявки, надежно предзаполнять ее из дерева или учетной записи и обеспечить поиск доступных справочных значений без ослабления серверной проверки.",
+  "read_scope": [
+    "apps/workorders/",
+    "apps/inventory/models.py",
+    "apps/accounts/models.py",
+    "templates/workorders/",
+    "static/src/js/workorder_board.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md"
+  ],
+  "write_scope": [
+    "apps/workorders/",
+    "templates/workorders/",
+    "static/src/js/workorder_board.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/kanban_department_filter.spec.ts",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
+    "docs/planning/active/kanban-department-filter-ai-sidebar.md",
+    "docs/planning/backlog.md",
+    "workflow/active/kanban-department-filter-ai-sidebar/",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "instructions": [
+    "Убрать из формы создания поля заголовка и исполнителя; сервер всегда сохраняет новую заявку без исполнителя.",
+    "Сделать WorkOrder.title необязательным обратимой миграцией без переписывания существующих данных.",
+    "Добавить автодополнение подразделения и изделия только из разрешенных пользователю queryset.",
+    "Искать изделие по названию, инвентарному и серийному номеру, но показывать в подписи инвентарный номер.",
+    "При выборе изделия синхронизировать подразделение и повторно проверять согласованность сервером.",
+    "При создании из дерева предзаполнить изделие, подразделение и описание; иначе использовать подразделение пользователя.",
+    "Добавить инвентарный номер в общий поиск канбана и корректное отображение заявки без заголовка."
+  ],
+  "acceptance": [
+    "Форма создания не содержит полей title и assignee.",
+    "Новая заявка имеет пустой title и assignee=NULL даже при подмене POST.",
+    "Автодополнение не возвращает недоступные или архивные объекты.",
+    "Изделие находится по трем поисковым ключам и отображается с инвентарным номером.",
+    "Кнопка дерева предзаполняет device, department и description.",
+    "Общий поиск канбана находит заявки по inventory_number и serial_number."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/workorders/tests.py",
+    "node --check static/src/js/workorder_board.js",
+    "make verify-profile PROFILE=ui",
+    "Playwright: создание из дерева и автодополнение",
+    "make verify-full",
+    "git diff --check"
+  ]
+}

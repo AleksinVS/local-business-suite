@@ -17,18 +17,47 @@
     {{ form.board.errors }}
     <div class="form-grid">
       <div class="input-group full-width">
-        <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
-        {{ form.title }}
-        {{ form.title.errors }}
-      </div>
-      <div class="input-group full-width">
         <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
         {{ form.description }}
         {{ form.description.errors }}
       </div>
-      <div class="input-group">
-        <label for="{{ form.department.id_for_label }}">{{ form.department.label }}</label>
-        {{ form.department }}
+      <div class="input-group full-width">
+        <label for="id_department_search">{{ form.department.label }}</label>
+        <div
+          class="workorder-autocomplete"
+          data-workorder-autocomplete
+          data-autocomplete-kind="department"
+          data-autocomplete-url="{% url 'workorders:create_department_options' %}"
+          data-autocomplete-required="true"
+        >
+          <input
+            type="hidden"
+            id="{{ form.department.id_for_label }}"
+            name="{{ form.department.html_name }}"
+            value="{{ form.department.value|default_if_none:'' }}"
+            data-autocomplete-value
+          >
+          <input
+            type="search"
+            id="id_department_search"
+            value="{{ selected_department_label }}"
+            placeholder="Начните вводить название подразделения"
+            autocomplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="department-autocomplete-options"
+            data-autocomplete-input
+            required
+          >
+          <div
+            id="department-autocomplete-options"
+            class="workorder-autocomplete-options"
+            role="listbox"
+            data-autocomplete-options
+            hidden
+          ></div>
+        </div>
         {{ form.department.errors }}
       </div>
       <div class="input-group">
@@ -37,14 +66,42 @@
         {{ form.priority.errors }}
       </div>
       <div class="input-group full-width">
-        <label for="{{ form.device.id_for_label }}">{{ form.device.label }}</label>
-        {{ form.device }}
+        <label for="id_device_search">{{ form.device.label }}</label>
+        <div
+          class="workorder-autocomplete"
+          data-workorder-autocomplete
+          data-autocomplete-kind="device"
+          data-autocomplete-url="{% url 'workorders:create_device_options' %}"
+        >
+          <input
+            type="hidden"
+            id="{{ form.device.id_for_label }}"
+            name="{{ form.device.html_name }}"
+            value="{{ form.device.value|default_if_none:'' }}"
+            data-selected-department-id="{{ selected_device_department_id }}"
+            data-autocomplete-value
+          >
+          <input
+            type="search"
+            id="id_device_search"
+            value="{{ selected_device_label }}"
+            placeholder="Название, инвентарный или серийный номер"
+            autocomplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="device-autocomplete-options"
+            data-autocomplete-input
+          >
+          <div
+            id="device-autocomplete-options"
+            class="workorder-autocomplete-options"
+            role="listbox"
+            data-autocomplete-options
+            hidden
+          ></div>
+        </div>
         {{ form.device.errors }}
-      </div>
-      <div class="input-group full-width">
-        <label for="{{ form.assignee.id_for_label }}">{{ form.assignee.label }}</label>
-        {{ form.assignee }}
-        {{ form.assignee.errors }}
       </div>
     </div>
   </form>

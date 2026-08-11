@@ -9,5 +9,6 @@
   "07-row-selection-and-resizable-sidebar.json": "Выбор строк, контекстное создание и изменяемая ширина sidebar",
   "08-followup-integration-and-acceptance.json": "Интеграция, матрица прав, e2e и техническая приемка",
   "09-owner-accepted-archive.json": "Архивирование только после явной приемки уточненного UX",
-  "10-visual-sidebar-remediation.json": "Компактное дерево, контекстное действие и надежная ширина sidebar"
+  "10-visual-sidebar-remediation.json": "Компактное дерево, контекстное действие и надежная ширина sidebar",
+  "11-workorder-create-form-autocomplete.json": "Упрощенная форма создания, безопасное автодополнение и поиск по номерам изделия"
 }

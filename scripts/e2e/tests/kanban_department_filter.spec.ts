@@ -139,6 +139,31 @@ test.describe("@workorders канбан и фильтр подразделени
       await create.click();
       await request;
       await expect(page.locator("#detail-panel")).toHaveClass(/active/);
+      const createForm = page.locator("#workorder-create-form");
+      const deviceId = await deviceNode.getAttribute("data-device-id");
+      const deviceNameOnly = deviceName.split(" · ")[0];
+      await expect(createForm.locator('input[name="device"]')).toHaveValue(deviceId || "");
+      await expect(createForm.locator('input[name="department"]')).not.toHaveValue("");
+      const deviceDisplay = await createForm.locator(
+        '[data-autocomplete-kind="device"] [data-autocomplete-input]',
+      ).inputValue();
+      expect(deviceDisplay).toContain("инв. №");
+      await expect(createForm.locator('textarea[name="description"]')).toHaveValue(deviceNameOnly);
+      await expect(createForm.locator('input[name="title"]')).toHaveCount(0);
+      await expect(createForm.locator('[name="assignee"]')).toHaveCount(0);
+
+      const deviceSearch = createForm.locator(
+        '[data-autocomplete-kind="device"] [data-autocomplete-input]',
+      );
+      await deviceSearch.fill(deviceNameOnly);
+      const deviceOption = createForm.locator(
+        '[data-autocomplete-kind="device"] [data-autocomplete-option]',
+      ).first();
+      await expect(deviceOption).toBeVisible();
+      await deviceOption.click();
+      await expect(createForm.locator('input[name="device"]')).not.toHaveValue("");
+      await expect(createForm.locator('input[name="department"]')).not.toHaveValue("");
+      expect(await deviceSearch.inputValue()).toContain("инв. №");
     }
   });
 

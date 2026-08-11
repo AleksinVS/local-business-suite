@@ -1,7 +1,7 @@
 {
   "block_id": "kanban-department-filter-ai-sidebar",
   "title": "Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат",
-  "status": "visual_remediation_technically_accepted_owner_pending",
+  "status": "create_form_followup_technically_accepted_owner_pending",
   "decision": "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md",
   "planning": "docs/planning/active/kanban-department-filter-ai-sidebar.md",
   "tasks": [
@@ -14,6 +14,7 @@
     "07-row-selection-and-resizable-sidebar",
     "08-followup-integration-and-acceptance",
     "10-visual-sidebar-remediation",
+    "11-workorder-create-form-autocomplete",
     "09-owner-accepted-archive"
   ],
   "dependencies": {
@@ -41,14 +42,20 @@
     "10-visual-sidebar-remediation": [
       "08-followup-integration-and-acceptance"
     ],
+    "11-workorder-create-form-autocomplete": [
+      "10-visual-sidebar-remediation"
+    ],
     "09-owner-accepted-archive": [
       "10-visual-sidebar-remediation",
+      "11-workorder-create-form-autocomplete",
       "explicit_project_owner_acceptance"
     ]
   },
   "invariants": [
     "Visible workorders and departments are resolved by server-side selectors before rendering or filtering.",
     "Device tree leaves and create-form prefill are resolved only from visible non-archived devices.",
+    "Create-form autocomplete uses the same visible department/device querysets and server-side ModelChoice validation.",
+    "A newly created workorder never receives an assignee from the creation request.",
     "Department and device selections form OR inside the tree; other board filters remain AND.",
     "The chat visual mode is document-local and defaults to filters after every reload.",
     "Collapsing the chat never unmounts a running driver or changes its session.",

@@ -21,5 +21,7 @@
   "TASK_ACCEPTANCE.08-followup-integration-and-acceptance.md": "Техническая приемка уточненного дерева перед проверкой владельцем",
   "EXECUTOR_REPORT.10-visual-sidebar-remediation.md": "Отчет визуальной доработки дерева и надежности боковой панели",
   "TASK_ACCEPTANCE.10-visual-sidebar-remediation.md": "Приемка визуальной доработки дерева и боковой панели",
+  "EXECUTOR_REPORT.11-workorder-create-form-autocomplete.md": "Отчет упрощения формы создания, автодополнения и поиска по номерам изделия",
+  "TASK_ACCEPTANCE.11-workorder-create-form-autocomplete.md": "Приемка формы создания, автодополнения и необязательного заголовка",
   "RETROSPECTIVE.md": "Ретроспектива реализации и условие архивного пакета"
 }

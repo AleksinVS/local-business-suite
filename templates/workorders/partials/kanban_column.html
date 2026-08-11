@@ -39,7 +39,7 @@
           title="{{ workorder.description }}"
           onclick="event.preventDefault()"
         >
-          {{ workorder.number }}. {{ workorder.title }}
+          {% if workorder.title %}{{ workorder.number }}. {{ workorder.title }}{% else %}Заявка №{{ workorder.number }}{% endif %}
         </a>
         <p class="work-card-desc" title="{{ workorder.description }}">{{ workorder.description|truncatechars:100 }}</p>
         <p class="work-card-device">{{ workorder.device|default:"Без привязки к медизделию" }}</p>

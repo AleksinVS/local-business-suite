@@ -51,7 +51,15 @@ class BoardAdmin(admin.ModelAdmin):
 class WorkOrderAdmin(admin.ModelAdmin):
     list_display = ("number", "title", "board", "department", "status", "priority", "assignee")
     list_filter = ("board", "status", "priority", "department")
-    search_fields = ("number", "title", "description", "device__name", "device__serial_number", "department__name")
+    search_fields = (
+        "number",
+        "title",
+        "description",
+        "device__name",
+        "device__inventory_number",
+        "device__serial_number",
+        "department__name",
+    )
     inlines = [WorkOrderCommentInline, WorkOrderAttachmentInline, WorkOrderTransitionLogInline]
 
 

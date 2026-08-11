@@ -7,10 +7,12 @@ from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
 
 User = get_user_model()
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.cache import never_cache
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
 from . import notification_events
@@ -25,6 +27,8 @@ from .forms import (
     WorkOrderForm,
     WorkOrderRatingForm,
     WorkOrderUpdateForm,
+    department_choice_label,
+    device_choice_label,
 )
 from .models import (
     Board,
@@ -116,6 +120,30 @@ def _positive_id(raw_value):
     return value if value > 0 else None
 
 
+def _department_option_labels(departments):
+    department_by_id = {department.id: department for department in departments}
+    labels = {}
+
+    def build_label(department_id, visited=()):
+        if department_id in labels:
+            return labels[department_id]
+        department = department_by_id[department_id]
+        if department_id in visited or department.parent_id not in department_by_id:
+            label = department.name
+        else:
+            parent_label = build_label(
+                department.parent_id,
+                (*visited, department_id),
+            )
+            label = f"{parent_label} / {department.name}"
+        labels[department_id] = label
+        return label
+
+    for department_id in department_by_id:
+        build_label(department_id)
+    return labels
+
+
 def _workorder_status_color_style():
     from apps.core.contract_store import get_contract
 
@@ -196,7 +224,7 @@ def workorder_detail_page_context(request, workorder):
             "object_type": "workorder",
             "object_id": str(workorder.pk),
             "source_code": "workorders",
-            "display": f"{workorder.number}. {workorder.title}",
+            "display": workorder.display_name,
         },
         "filters": {},
         "ui_state": {"right_drawer": "open", "focused_region": "detail_panel"},
@@ -302,6 +330,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 | Q(device__name__icontains=q)
                 | Q(device__model__icontains=q)
                 | Q(device__serial_number__icontains=q)
+                | Q(device__inventory_number__icontains=q)
                 | _related_user_search_q("author", q)
                 | _related_user_search_q("assignee", q)
             )
@@ -451,6 +480,11 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         board_id = self.request.GET.get("board")
         if board_id:
             initial["board"] = board_id
+        user_department_id = self.request.user.department_id
+        if user_department_id and visible_departments_queryset(self.request.user).filter(
+            pk=user_department_id
+        ).exists():
+            initial["department"] = user_department_id
         department_id = _positive_id(self.request.GET.get("department"))
         if department_id and visible_departments_queryset(self.request.user).filter(
             pk=department_id
@@ -466,6 +500,7 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
             if device:
                 initial["device"] = device.pk
                 initial["department"] = device.department_id
+                initial["description"] = device.name
         return initial
 
     def get_form_kwargs(self):
@@ -495,8 +530,7 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.author = self.request.user
-        if not can_manage_assignments(self.request.user):
-            form.instance.assignee = None
+        form.instance.assignee = None
         self.object = form.save()
         notification_events.notify_workorder_created(self.object, actor=self.request.user)
         if self.request.htmx:
@@ -506,17 +540,85 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         messages.success(self.request, "Заявка создана.")
         return redirect(self.get_success_url())
 
-    def get_form(self, form_class=None):
-        form = super().get_form(form_class)
-        if not can_manage_assignments(self.request.user):
-            form.fields["assignee"].disabled = True
-            form.fields["assignee"].required = False
-        return form
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["return_view"] = VIEW_BOARD
+        form = context["form"]
+        department_id = _positive_id(form["department"].value())
+        device_id = _positive_id(form["device"].value())
+        department = None
+        device = None
+        if department_id:
+            department = visible_departments_queryset(self.request.user).filter(
+                pk=department_id
+            ).first()
+        if device_id:
+            device = visible_devices_queryset(self.request.user).filter(
+                pk=device_id
+            ).first()
+        context["selected_department_label"] = (
+            department_choice_label(department) if department else ""
+        )
+        context["selected_device_label"] = (
+            device_choice_label(device) if device else ""
+        )
+        context["selected_device_department_id"] = (
+            device.department_id if device else ""
+        )
         return context
+
+
+@method_decorator(never_cache, name="dispatch")
+class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
+    kind = ""
+    result_limit = 20
+
+    def dispatch(self, request, *args, **kwargs):
+        if not can_create(request.user):
+            return HttpResponseForbidden("Создание заявок запрещено")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        query = request.GET.get("q", "").strip()[:100]
+        normalized_query = query.casefold()
+        if self.kind == "department":
+            departments = tuple(visible_departments_queryset(request.user))
+            labels = _department_option_labels(departments)
+            results = [
+                {"id": department.id, "label": labels[department.id]}
+                for department in departments
+                if not normalized_query
+                or normalized_query in department.name.casefold()
+                or normalized_query in labels[department.id].casefold()
+            ][: self.result_limit]
+        elif self.kind == "device":
+            devices = visible_devices_queryset(request.user)
+            if query:
+                devices = devices.filter(
+                    Q(name__icontains=query)
+                    | Q(inventory_number__icontains=query)
+                    | Q(serial_number__icontains=query)
+                )
+            devices = list(devices[: self.result_limit])
+            department_labels = _department_option_labels(
+                tuple(visible_departments_queryset(request.user))
+            )
+            results = [
+                {
+                    "id": device.id,
+                    "label": device_choice_label(device),
+                    "name": device.name,
+                    "department_id": device.department_id,
+                    "department_label": department_labels.get(
+                        device.department_id,
+                        device.department.name,
+                    ),
+                }
+                for device in devices
+            ]
+        else:
+            return JsonResponse({"error": "Неизвестный справочник."}, status=404)
+        return JsonResponse({"results": results})
 
 
 class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):

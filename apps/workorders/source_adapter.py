@@ -60,7 +60,7 @@ class WorkOrdersSourceAdapter:
             object_type="workorder",
             object_id=str(source_object.pk),
             operation=operation,
-            title=f"Заявка {source_object.number}: {source_object.title}",
+            title=source_object.display_name,
             text=text,
             payload=payload,
             relations=self._relations(source_object),
@@ -183,7 +183,7 @@ class WorkOrdersSourceAdapter:
 
     def _render_text(self, workorder: WorkOrder) -> str:
         lines = [
-            f"Заявка {workorder.number}: {workorder.title}",
+            workorder.display_name,
             f"Описание: {workorder.description}",
             f"Подразделение: {workorder.department}",
             f"Доска: {workorder.board.title if workorder.board_id else ''}",

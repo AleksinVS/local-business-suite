@@ -403,6 +403,7 @@ class WorkOrderViewPermissionTests(TestCase):
         cls.device = MedicalDevice.objects.create(
             name="Монитор пациента",
             serial_number="SN-002",
+            inventory_number="INV-002",
             department=cls.sub_department,
         )
         cls.customer = User.objects.create_user(
@@ -724,6 +725,14 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="board"')
         self.assertContains(response, f'value="{self.board.pk}"')
+        self.assertContains(response, 'data-autocomplete-kind="department"')
+        self.assertContains(response, 'data-autocomplete-kind="device"')
+        self.assertNotContains(response, 'name="title"')
+        self.assertNotContains(response, 'name="assignee"')
+        self.assertEqual(
+            response.context["form"].initial["department"],
+            self.customer.department_id,
+        )
 
     def test_legacy_tree_create_prefills_fields_but_returns_to_board(self):
         self.client.force_login(self.customer)
@@ -744,6 +753,12 @@ class WorkOrderViewPermissionTests(TestCase):
             str(self.sub_department.pk),
         )
         self.assertEqual(str(response.context["form"].initial["device"]), str(self.device.pk))
+        self.assertEqual(
+            response.context["form"].initial["description"],
+            self.device.name,
+        )
+        self.assertContains(response, self.device.inventory_number)
+        self.assertNotContains(response, self.device.serial_number)
 
     def test_create_prefill_uses_accessible_device_department_as_source_of_truth(self):
         self.client.force_login(self.customer)
@@ -793,7 +808,87 @@ class WorkOrderViewPermissionTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertIsNone(response.context["form"].initial.get("device"))
-                self.assertIsNone(response.context["form"].initial.get("department"))
+                self.assertEqual(
+                    response.context["form"].initial.get("department"),
+                    self.customer.department_id,
+                )
+
+    def test_create_autocomplete_searches_device_by_name_inventory_and_serial(self):
+        self.client.force_login(self.customer)
+
+        for query in (self.device.name, self.device.inventory_number, self.device.serial_number):
+            with self.subTest(query=query):
+                response = self.client.get(
+                    reverse("workorders:create_device_options"),
+                    {"q": query},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("no-store", response["Cache-Control"])
+                result = response.json()["results"][0]
+                self.assertEqual(result["id"], self.device.pk)
+                self.assertIn(self.device.inventory_number, result["label"])
+                self.assertNotIn(self.device.serial_number, result["label"])
+                self.assertEqual(result["department_id"], self.sub_department.pk)
+
+    def test_create_autocomplete_limits_departments_to_visible_branch(self):
+        hidden_department = Department.objects.create(
+            name="Скрытая лаборатория",
+            parent=self.department,
+        )
+        self.client.force_login(self.customer)
+
+        visible_response = self.client.get(
+            reverse("workorders:create_department_options"),
+            {"q": self.sub_department.name},
+        )
+        hidden_response = self.client.get(
+            reverse("workorders:create_department_options"),
+            {"q": hidden_department.name},
+        )
+
+        self.assertEqual(visible_response.status_code, 200)
+        self.assertEqual(
+            visible_response.json()["results"][0]["id"],
+            self.sub_department.pk,
+        )
+        self.assertEqual(hidden_response.json()["results"], [])
+
+    def test_create_autocomplete_excludes_inaccessible_and_archived_devices(self):
+        hidden_department = Department.objects.create(
+            name="Скрытое отделение автопоиска",
+            parent=self.department,
+        )
+        MedicalDevice.objects.create(
+            name="Недоступное изделие автопоиска",
+            inventory_number="AUTO-HIDDEN",
+            department=hidden_department,
+        )
+        archived_device = MedicalDevice.objects.create(
+            name="Архивное изделие автопоиска",
+            inventory_number="AUTO-ARCHIVED",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.client.force_login(self.customer)
+
+        hidden_response = self.client.get(
+            reverse("workorders:create_device_options"),
+            {"q": "AUTO-HIDDEN"},
+        )
+        archived_response = self.client.get(
+            reverse("workorders:create_device_options"),
+            {"q": "AUTO-ARCHIVED"},
+        )
+
+        self.assertEqual(hidden_response.json()["results"], [])
+        self.assertEqual(archived_response.json()["results"], [])
+
+    def test_create_autocomplete_requires_create_permission(self):
+        self.client.force_login(self.outsider)
+
+        response = self.client.get(reverse("workorders:create_device_options"))
+
+        self.assertEqual(response.status_code, 403)
 
     def test_edit_preserves_existing_archived_device(self):
         archived_device = MedicalDevice.objects.create(
@@ -850,7 +945,7 @@ class WorkOrderViewPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(
-            WorkOrder.objects.filter(title="Чужая ветка").exists()
+            WorkOrder.objects.filter(description="Попытка создать вне своей ветки.").exists()
         )
         self.assertIn("department", response.context["form"].errors)
 
@@ -894,6 +989,7 @@ class WorkOrderViewPermissionTests(TestCase):
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
         self.assertIsNone(created.assignee)
         self.assertEqual(created.author, self.customer)
+        self.assertEqual(created.title, "")
 
     def test_customer_can_create_workorder_from_board_drawer(self):
         self.client.force_login(self.customer)
@@ -918,7 +1014,7 @@ class WorkOrderViewPermissionTests(TestCase):
             reverse("workorders:board_specific", kwargs={"board_slug": self.board.slug}),
         )
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
-        self.assertEqual(created.title, "Заявка из канбана")
+        self.assertEqual(created.title, "")
         self.assertEqual(created.board, self.board)
         self.assertEqual(created.author, self.customer)
 
@@ -949,7 +1045,7 @@ class WorkOrderViewPermissionTests(TestCase):
             ),
         )
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
-        self.assertEqual(created.title, "Заявка из дерева")
+        self.assertEqual(created.title, "")
         self.assertEqual(created.device, self.device)
 
     def test_customer_can_create_workorder_without_device(self):
@@ -969,6 +1065,48 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         created = WorkOrder.objects.exclude(pk=self.workorder.pk).order_by("-pk").first()
         self.assertIsNone(created.device)
+        self.assertEqual(created.title, "")
+
+    def test_manager_cannot_assign_executor_during_creation(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "description": "Исполнитель определяется после регистрации заявки.",
+                "department": self.sub_department.pk,
+                "priority": "medium",
+                "device": self.device.pk,
+                "assignee": self.technician.pk,
+                "board": self.board.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = WorkOrder.objects.exclude(pk=self.workorder.pk).get()
+        self.assertEqual(created.title, "")
+        self.assertIsNone(created.assignee)
+
+    def test_create_rejects_device_from_another_department(self):
+        another_department = Department.objects.create(name="Диагностика")
+        self.client.force_login(self.manager)
+
+        response = self.client.post(
+            reverse("workorders:create"),
+            {
+                "description": "Несогласованные данные формы.",
+                "department": another_department.pk,
+                "priority": "medium",
+                "device": self.device.pk,
+                "board": self.board.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("department", response.context["form"].errors)
+        self.assertFalse(
+            WorkOrder.objects.filter(description="Несогласованные данные формы.").exists()
+        )
 
     def test_outsider_cannot_create_workorder(self):
         self.client.force_login(self.outsider)
@@ -1387,6 +1525,15 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.workorder.title)
         self.assertNotContains(response, "Проверить сетевой принтер")
+
+    def test_board_search_matches_device_inventory_and_serial_numbers(self):
+        self.client.force_login(self.manager)
+
+        for query in (self.device.inventory_number, self.device.serial_number):
+            with self.subTest(query=query):
+                response = self.client.get(reverse("workorders:board"), {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, self.workorder.title)
 
     def test_board_search_matches_author(self):
         WorkOrder.objects.create(

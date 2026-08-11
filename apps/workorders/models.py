@@ -115,7 +115,7 @@ class WorkOrder(models.Model):
         verbose_name="Доска",
     )
     number = models.CharField("Номер", max_length=32, unique=True, editable=False)
-    title = models.CharField("Заголовок", max_length=255)
+    title = models.CharField("Заголовок", max_length=255, blank=True)
     description = models.TextField("Описание")
     department = models.ForeignKey(
         Department,
@@ -238,7 +238,13 @@ class WorkOrder(models.Model):
             super().save(update_fields=["number"])
 
     def __str__(self):
-        return f"{self.number}: {self.title}"
+        return self.display_name
+
+    @property
+    def display_name(self):
+        if self.title:
+            return f"{self.number}: {self.title}"
+        return f"Заявка №{self.number}"
 
 
 class WorkOrderComment(models.Model):

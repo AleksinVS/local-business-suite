@@ -173,7 +173,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     apps.py: file # Конфигурация приложения
     contracts.py: file # Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     department_filter.py: file # Нормализация фильтра подразделений и безопасная модель доступного дерева
-    forms.py: file # Формы нарядов
+    forms.py: file # Формы нарядов, подписи справочников и проверка согласованности изделия с подразделением
     media_policies.py: file # Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки
     models.py: file # Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority
     notification_events.py: file # Производители безопасных уведомлений по событиям заявок
@@ -185,7 +185,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     source_adapter.py: file # SourceAdapter заявок для memory source_data search и analytics projection
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты нарядов
-    views.py: file # Представления: Kanban-доска, детали наряда, комментарии
+    views.py: file # Представления: Kanban-доска, детали наряда, комментарии и безопасное автодополнение формы создания
 archive: # Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы
   AGENT_RUNTIME_SETUP.md: file # Настройка agent runtime (устарело)
   AI_FIRST_CODE_FIRST_REMEDIATION_PLAN.md: file # План remediation AI-first
@@ -579,6 +579,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.07-row-selection-and-resizable-sidebar.md: file # Отчет выбора строк и изменяемой ширины боковой панели
       EXECUTOR_REPORT.08-followup-integration-and-acceptance.md: file # Итоговый отчет интеграции уточненного дерева и проверок
       EXECUTOR_REPORT.10-visual-sidebar-remediation.md: file # Отчет визуальной доработки дерева и надежности боковой панели
+      EXECUTOR_REPORT.11-workorder-create-form-autocomplete.md: file # Отчет упрощения формы создания, автодополнения и поиска по номерам изделия
       EXECUTOR_REPORT.documentation.md: file # Отчет подготовки проектной и исполнительной документации
       RETROSPECTIVE.md: file # Ретроспектива реализации и условие архивного пакета
       TASK_ACCEPTANCE.01-kanban-query-and-department-read-model.md: file # Приемка серверного фильтра подразделений
@@ -589,6 +590,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.07-row-selection-and-resizable-sidebar.md: file # Приемка интерфейса выбора и изменения ширины
       TASK_ACCEPTANCE.08-followup-integration-and-acceptance.md: file # Техническая приемка уточненного дерева перед проверкой владельцем
       TASK_ACCEPTANCE.10-visual-sidebar-remediation.md: file # Приемка визуальной доработки дерева и боковой панели
+      TASK_ACCEPTANCE.11-workorder-create-form-autocomplete.md: file # Приемка формы создания, автодополнения и необязательного заголовка
       TASK_ACCEPTANCE.documentation.md: file # Приемка полноты документационного среза перед реализацией
     knowledge-driven-business-analytics: # Workflow: knowledge-driven business analytics
       task-packets: file

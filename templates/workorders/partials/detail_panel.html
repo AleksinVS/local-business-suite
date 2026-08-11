@@ -3,7 +3,7 @@
   <div class="drawer-main">
     <div class="drawer-header-left">
       <div class="header-main-info">
-        <h2><span class="text-muted">{{ workorder.number }}.</span> {{ workorder.title }}</h2>
+        <h2>{% if workorder.title %}<span class="text-muted">{{ workorder.number }}.</span> {{ workorder.title }}{% else %}Заявка №{{ workorder.number }}{% endif %}</h2>
       </div>
       {% include "workorders/partials/status_section.html" %}
     </div>

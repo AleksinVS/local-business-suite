@@ -1,0 +1,6 @@
+{
+  "id": "03-acceptance",
+  "goal": "Провести целевую, профильную, полную и браузерную приемку",
+  "write_scope": ["tests", "docs", "workflow"],
+  "acceptance": ["целевые тесты", "ui/contracts profiles", "verify-full", "e2e"]
+}

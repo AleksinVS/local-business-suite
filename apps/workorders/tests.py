@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
@@ -54,11 +55,15 @@ from .policies import (
     ROLE_CUSTOMER,
     ROLE_MANAGER,
     ROLE_TECHNICIAN,
+    can_comment,
     can_confirm_closure,
+    can_create,
+    can_edit,
     can_rate,
     can_transition,
     can_view,
     capability_flags,
+    default_board_access_applies,
     superuser_rules,
 )
 from .right_panel import WorkOrderRightPanelProvider
@@ -198,6 +203,11 @@ class WorkOrderRoleMatrixTests(TestCase):
         cls.technician = User.objects.create_user(username="tech", password="pass")
         cls.manager = User.objects.create_user(username="manager", password="pass")
         cls.outsider = User.objects.create_user(username="outsider", password="pass")
+        cls.default_viewer = User.objects.create_user(
+            username="default-viewer",
+            password="pass",
+            department=cls.department,
+        )
 
         tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
@@ -222,6 +232,29 @@ class WorkOrderRoleMatrixTests(TestCase):
     def test_customer_and_manager_can_view_workorder(self):
         self.assertTrue(can_view(self.customer, self.workorder))
         self.assertTrue(can_view(self.manager, self.workorder))
+
+    def test_user_without_role_gets_only_default_department_board_view(self):
+        self.assertTrue(default_board_access_applies(self.default_viewer))
+        self.assertTrue(can_view(self.default_viewer, self.workorder))
+        self.assertFalse(can_create(self.default_viewer))
+        self.assertFalse(can_edit(self.default_viewer, self.workorder))
+        self.assertFalse(can_comment(self.default_viewer, self.workorder))
+        self.assertFalse(
+            can_transition(
+                self.default_viewer,
+                self.workorder,
+                WorkOrderStatus.ACCEPTED,
+            )
+        )
+
+    def test_default_board_access_management_command_runs_and_rolls_back(self):
+        call_command("default_board_access_e2e")
+
+        self.assertFalse(
+            User.objects.filter(
+                username__startswith="__default_board_access_e2e_"
+            ).exists()
+        )
 
     def test_assigned_technician_can_view_workorder(self):
         self.assertTrue(can_view(self.technician, self.workorder))
@@ -412,6 +445,11 @@ class WorkOrderViewPermissionTests(TestCase):
         cls.technician = User.objects.create_user(username="tech2", password="pass")
         cls.manager = User.objects.create_user(username="manager2", password="pass")
         cls.outsider = User.objects.create_user(username="outsider2", password="pass")
+        cls.default_viewer = User.objects.create_user(
+            username="default-viewer2",
+            password="pass",
+            department=cls.sub_department,
+        )
 
         tech_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
@@ -446,6 +484,66 @@ class WorkOrderViewPermissionTests(TestCase):
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("workorders:board"))
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.workorder.title)
+
+    def test_default_viewer_can_open_customer_board_but_cannot_write(self):
+        self.client.force_login(self.default_viewer)
+
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.workorder.title)
+        self.assertNotContains(response, "Создать заявку")
+        self.assertEqual(
+            self.client.get(reverse("workorders:create")).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("workorders:edit", args=[self.workorder.pk]),
+                {
+                    "title": "Недопустимое изменение",
+                    "description": self.workorder.description,
+                    "department": self.sub_department.pk,
+                    "priority": self.workorder.priority,
+                    "board": self.board.pk,
+                },
+            ).status_code,
+            403,
+        )
+
+    def test_default_viewer_cannot_open_board_without_customer_group(self):
+        private_group, _ = Group.objects.get_or_create(name="private-default-view")
+        private_board = Board.objects.create(
+            title="Закрытая доска",
+            slug="private-default-view",
+        )
+        private_board.allowed_groups.add(private_group)
+        self.client.force_login(self.default_viewer)
+
+        response = self.client.get(
+            reverse(
+                "workorders:board_specific",
+                kwargs={"board_slug": private_board.slug},
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_explicit_role_replaces_default_board_profile(self):
+        doctor_group, _ = Group.objects.get_or_create(name="doctor")
+        explicit_doctor = User.objects.create_user(
+            username="explicit-doctor-board",
+            password="pass",
+            department=self.sub_department,
+        )
+        explicit_doctor.groups.add(doctor_group)
+        self.client.force_login(explicit_doctor)
+
+        response = self.client.get(reverse("workorders:board"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Нет доступных досок")
         self.assertNotContains(response, self.workorder.title)
 
     def test_board_detail_panel_renders_partial_for_htmx(self):
@@ -1853,3 +1951,6 @@ class CapabilityRegistryTests(TestCase):
             self.assertTrue(description.strip(), f"{role}: пустой description")
 
         self.assertGreater(roles_checked, 0)
+    can_comment,
+    can_create,
+    can_edit,

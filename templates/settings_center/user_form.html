@@ -37,6 +37,14 @@
         {{ form.roles }}
         <p class="muted">{{ form.roles.help_text }}</p>
       </fieldset>
+      <fieldset>
+        <legend>Технические флаги</legend>
+        <label class="access-flag-option">{{ form.is_superuser }} <span><strong>{{ form.is_superuser.label }}</strong><small>{{ form.is_superuser.help_text }}</small></span></label>
+        {{ form.is_superuser.errors }}
+        <label class="access-flag-option">{{ form.is_staff }} <span><strong>{{ form.is_staff.label }}</strong><small>{{ form.is_staff.help_text }}</small></span></label>
+        {{ form.is_staff.errors }}
+        {% if not form.can_manage_privileged_flags %}<p class="muted">Изменение технических флагов доступно только супер-пользователю.</p>{% endif %}
+      </fieldset>
       <div class="table-actions">
         <button type="submit" name="action" value="preview" class="button-link">Предпросмотр изменений</button>
       </div>
@@ -46,6 +54,9 @@
           <h2>Предпросмотр</h2>
           <p><strong>Добавятся роли:</strong> {{ preview.added|join:", "|default:"нет" }}</p>
           <p><strong>Удалятся роли:</strong> {{ preview.removed|join:", "|default:"нет" }}</p>
+          <p><strong>Изменятся технические флаги:</strong>
+            {% for change in preview.flags_changed %}{{ change.label }}: {% if change.before %}включён{% else %}выключен{% endif %} → {% if change.after %}включён{% else %}выключен{% endif %}{% if not forloop.last %}; {% endif %}{% empty %}нет{% endfor %}
+          </p>
           <p><strong>Новые возможности:</strong> {{ preview.consequences.added|join:", "|default:"нет" }}</p>
           <p><strong>Утраченные возможности:</strong> {{ preview.consequences.removed|join:", "|default:"нет" }}</p>
           <p><strong>Изменённые области доступа:</strong> {{ preview.consequences.changed|join:", "|default:"нет" }}</p>
@@ -114,15 +125,15 @@
     </section>
 
     <details>
-      <summary>Последние изменения ролей</summary>
+      <summary>Последние изменения доступа</summary>
       <ul>
         {% for audit in access_audits %}
-          <li>#{{ audit.pk }}, {{ audit.created_at }}: {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}; администратор ID {{ audit.actor_id }}</li>
+          <li>#{{ audit.pk }}, {{ audit.created_at }}: роли {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}{% if audit.flags_changed %}; флаги: {% for change in audit.flags_changed %}{{ change.label }} ({% if change.before %}вкл.{% else %}выкл.{% endif %} → {% if change.after %}вкл.{% else %}выкл.{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}; администратор ID {{ audit.actor_id }}</li>
         {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
       </ul>
     </details>
   {% elif profile_user %}
-    <p class="muted">Здесь изменяются профиль и технические флаги. Роли доступа назначаются в отдельной карточке доступа.</p>
+    <p class="muted">Здесь изменяются данные учётной записи. Роли и технические флаги назначаются в отдельной карточке доступа.</p>
     <form method="post" class="settings-small-form">
       {% csrf_token %}
       {{ form.as_p }}
@@ -145,5 +156,9 @@
   .effective-access dt { margin-top: 0.75rem; font-weight: 600; }
   .effective-access dd { margin: 0.2rem 0 0 1rem; }
   .message.warning { padding: 0.75rem; border: 1px solid #d97706; border-radius: 6px; }
+  .access-flag-option { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0.75rem 0; }
+  .access-flag-option input { margin-top: 0.2rem; }
+  .access-flag-option span { display: flex; flex-direction: column; gap: 0.15rem; }
+  .access-flag-option small { color: var(--text-muted); }
 </style>
 {% endblock %}

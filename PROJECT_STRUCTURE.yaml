@@ -308,6 +308,8 @@ docs: # Документация проекта
     ADR-0035-mandatory-user-department.md: file # ADR: Обязательное подразделение пользователя и безопасный карантин для нераспределённых учётных записей
     ADR-0036-iis-sso-csrf-public-assets.md: file # ADR: Изоляция автоматических ресурсов браузера от Windows SSO и ротации CSRF
     ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md: file # ADR: Дерево подразделений как фильтр канбана и сворачиваемый ИИ-чат
+    ADR-0038-privileged-flags-access-assignment.md: file # ADR: Технические флаги в управляемом назначении доступа
+    ADR-0039-default-board-view-access.md: file # ADR: Базовый просмотр канбан-доски без назначенной роли
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -356,7 +358,7 @@ docs: # Документация проекта
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
-    ACCESS_MANAGEMENT_USER_GUIDE.md: file # Руководство администратора по ролям доступа, техническим группам, предпросмотру и журналу
+    ACCESS_MANAGEMENT_USER_GUIDE.md: file # Руководство администратора по ролям, техническим флагам, группам, предпросмотру и журналу
     AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     AI_UI_PROTOCOL_OPERATIONS.md: file # Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native
@@ -643,6 +645,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       context-aware-sidebar-ai-chat: file
       copilotkit-ag-ui-integration: file
       copilotkit-ai-ui-chat-development: file
+      default-board-view-and-sso-diagnostics: file
       iis-sso-csrf-race: file
       interface-russification: file
       mandatory-user-department: file
@@ -665,6 +668,8 @@ workflow: # Исполнительные workflow-пакеты для сложн
       testing-policy-and-independent-verification: file
       universal-right-drawer-ai-navigation: file
       universal-source-adapters-memory-analytics: file
+      waiting-list-cards-and-access-flags: file
+      waiting-list-inline-editing: file
       workorder-tree-view: file
     README.md: file # Правила и описание архива workflow-блоков
   templates: directory... # Шаблоны workflow-артефактов

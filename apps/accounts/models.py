@@ -91,7 +91,7 @@ class GroupProfile(models.Model):
 
 
 class AccessAssignmentAudit(models.Model):
-    """Журнал изменения контрактных ролей пользователя без профильных данных."""
+    """Журнал атомарного изменения ролей и технических флагов доступа."""
 
     actor = models.ForeignKey(
         "accounts.User",
@@ -109,6 +109,9 @@ class AccessAssignmentAudit(models.Model):
     roles_after = models.JSONField("Роли после изменения", default=list)
     roles_added = models.JSONField("Добавленные роли", default=list)
     roles_removed = models.JSONField("Удалённые роли", default=list)
+    flags_before = models.JSONField("Технические флаги до изменения", default=dict)
+    flags_after = models.JSONField("Технические флаги после изменения", default=dict)
+    flags_changed = models.JSONField("Изменённые технические флаги", default=list)
     risk_markers = models.JSONField("Маркеры риска", default=list)
     risk_confirmed = models.BooleanField("Риск подтверждён", default=False)
     created_at = models.DateTimeField("Создано", auto_now_add=True, db_index=True)

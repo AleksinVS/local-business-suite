@@ -1,0 +1,84 @@
+{% if form.non_field_errors %}
+  <div class="form-errors full-width" role="alert">
+    {{ form.non_field_errors }}
+  </div>
+{% endif %}
+
+<div class="form-grid waiting-list-entry-fields">
+  <div class="input-group full-width">
+    <label for="{{ form.patient_name.id_for_label }}">{{ form.patient_name.label }}</label>
+    {{ form.patient_name }}
+    {{ form.patient_name.errors }}
+  </div>
+  <div class="input-group">
+    <label for="{{ form.patient_dob.id_for_label }}">{{ form.patient_dob.label }}</label>
+    {{ form.patient_dob }}
+    {{ form.patient_dob.errors }}
+  </div>
+  <div class="input-group">
+    <label for="{{ form.patient_phone.id_for_label }}">{{ form.patient_phone.label }}</label>
+    {{ form.patient_phone }}
+    {{ form.patient_phone.errors }}
+  </div>
+  <div class="input-group full-width">
+    <label for="{{ form.service_id.id_for_label }}">{{ form.service_id.label }}</label>
+    {{ form.service_id }}
+    {{ form.service_id.errors }}
+  </div>
+  <div class="input-group">
+    <label for="{{ form.date_tag.id_for_label }}">{{ form.date_tag.label }}</label>
+    {{ form.date_tag }}
+    {{ form.date_tag.errors }}
+  </div>
+  <div class="input-group">
+    <label for="{{ form.date_end.id_for_label }}">{{ form.date_end.label }}</label>
+    {{ form.date_end }}
+    {{ form.date_end.errors }}
+  </div>
+  <div class="input-group full-width checkbox-group">
+    {{ form.priority_cito }}
+    <label for="{{ form.priority_cito.id_for_label }}">{{ form.priority_cito.label }}</label>
+    {{ form.priority_cito.errors }}
+  </div>
+  <div class="input-group full-width">
+    <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+    {{ form.comment }}
+    {{ form.comment.errors }}
+  </div>
+</div>
+
+<script>
+  (function() {
+    const script = document.currentScript;
+    const form = script && script.closest('form');
+    if (!form) return;
+
+    function bindMask(input, formatter) {
+      if (!input || input.dataset.maskReady === 'true') return;
+      input.dataset.maskReady = 'true';
+      input.addEventListener('input', function() { formatter(input); });
+    }
+
+    bindMask(form.querySelector('input[name="patient_phone"]'), function(input) {
+      const value = input.value.replace(/\D/g, '').slice(0, 11);
+      if (!value.length) return;
+      let formatted = '+7';
+      if (value.length > 1) formatted += ' (' + value.substring(1, 4);
+      if (value.length > 4) formatted += ') ' + value.substring(4, 7);
+      if (value.length > 7) formatted += '-' + value.substring(7, 9);
+      if (value.length > 9) formatted += '-' + value.substring(9, 11);
+      input.value = formatted;
+    });
+
+    bindMask(form.querySelector('input[name="patient_dob"]'), function(input) {
+      const value = input.value.replace(/\D/g, '').slice(0, 8);
+      if (value.length >= 5) {
+        input.value = value.slice(0, 2) + '.' + value.slice(2, 4) + '.' + value.slice(4);
+      } else if (value.length >= 3) {
+        input.value = value.slice(0, 2) + '.' + value.slice(2);
+      } else {
+        input.value = value;
+      }
+    });
+  })();
+</script>

@@ -1,0 +1,10 @@
+{
+  "block_id": "waiting-list-cards-and-access-flags",
+  "status": "accepted",
+  "tasks": [
+    "01-waiting-list-cards",
+    "02-access-technical-flags",
+    "03-acceptance"
+  ],
+  "adr": "docs/adr/ADR-0038-privileged-flags-access-assignment.md"
+}

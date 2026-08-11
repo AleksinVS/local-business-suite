@@ -49,6 +49,25 @@ def waiting_list_detail_page_context(request, entry):
     }
 
 
+def waiting_list_detail_context(request, entry, *, form=None, error=None):
+    """Build one context contract for full-page and HTMX detail rendering."""
+    if form is None:
+        form = WaitingListEntryForm(instance=entry)
+    return {
+        "entry": entry,
+        "form": form,
+        "status_form": WaitingListStatusForm(instance=entry),
+        "status_choices": WaitingListStatus.choices,
+        "can_edit": can_edit_waiting_list_entry(request.user, entry),
+        "can_transition": can_transition_waiting_list_entry(request.user, entry),
+        "detail_ai_context_json": page_context_json(
+            waiting_list_detail_page_context(request, entry)
+        ),
+        "is_standalone_detail": not request.htmx,
+        "error": error,
+    }
+
+
 class WaitingListAccessMixin(LoginRequiredMixin):
     """Mixin ensuring only users with the view_waiting_list capability get access."""
 
@@ -178,22 +197,16 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["status_form"] = WaitingListStatusForm(instance=self.object)
-        context["status_choices"] = WaitingListStatus.choices
-        context["can_edit"] = can_edit_waiting_list_entry(self.request.user, self.object)
-        context["can_transition"] = can_transition_waiting_list_entry(self.request.user, self.object)
-        context["detail_ai_context_json"] = page_context_json(
-            waiting_list_detail_page_context(self.request, self.object)
-        )
+        context.update(waiting_list_detail_context(self.request, self.object))
         return context
 
 
 class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
-    """Update an existing waiting list entry."""
+    """Validate inline edits and return the same detail surface."""
 
     model = WaitingListEntry
     form_class = WaitingListEntryForm
-    template_name = "waiting_list/entry_form.html"
+    template_name = "waiting_list/entry_detail.html"
     context_object_name = "entry"
 
     def dispatch(self, request, *args, **kwargs):
@@ -207,13 +220,22 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
 
     def get_template_names(self):
         if self.request.htmx:
-            return ["waiting_list/partials/entry_form_partial.html"]
+            return ["waiting_list/partials/entry_detail_panel.html"]
         return [self.template_name]
 
     def get_success_url(self):
-        if self.request.htmx:
-            return reverse("waiting_list:detail", kwargs={"pk": self.object.pk})
         return reverse("waiting_list:detail", kwargs={"pk": self.object.pk})
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            waiting_list_detail_context(
+                self.request,
+                self.object,
+                form=context["form"],
+            )
+        )
+        return context
 
     def form_valid(self, form):
         try:
@@ -230,17 +252,13 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
                 comment=form.cleaned_data.get("comment", ""),
             )
             if self.request.htmx:
-                # After successful update in htmx, return the detail view of that entry
-                detail_view = WaitingListEntryDetailView()
-                detail_view.request = self.request
-                detail_view.args = self.args
-                detail_view.kwargs = self.kwargs
-                detail_view.object = entry
-                return render(
+                response = render(
                     self.request,
                     "waiting_list/partials/entry_detail_panel.html",
-                    detail_view.get_context_data(object=entry),
+                    waiting_list_detail_context(self.request, entry),
                 )
+                response["HX-Trigger"] = "waitingListEntryUpdated"
+                return response
             messages.success(self.request, "Запись обновлена.")
             return redirect("waiting_list:detail", pk=self.object.pk)
         except WaitingListValidationError as e:
@@ -269,16 +287,7 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                 return render(
                     request,
                     "waiting_list/partials/entry_detail_panel.html",
-                    {
-                        "entry": entry,
-                        "status_form": WaitingListStatusForm(instance=entry),
-                        "status_choices": WaitingListStatus.choices,
-                        "can_edit": can_edit_waiting_list_entry(request.user, entry),
-                        "can_transition": can_transition_waiting_list_entry(request.user, entry),
-                        "detail_ai_context_json": page_context_json(
-                            waiting_list_detail_page_context(request, entry)
-                        ),
-                    },
+                    waiting_list_detail_context(request, entry),
                 )
             messages.success(request, "Статус обновлен.")
             return redirect("waiting_list:dashboard")
@@ -287,17 +296,7 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
                 return render(
                     request,
                     "waiting_list/partials/entry_detail_panel.html",
-                    {
-                        "entry": entry,
-                        "status_form": WaitingListStatusForm(instance=entry),
-                        "status_choices": WaitingListStatus.choices,
-                        "can_edit": can_edit_waiting_list_entry(request.user, entry),
-                        "can_transition": can_transition_waiting_list_entry(request.user, entry),
-                        "detail_ai_context_json": page_context_json(
-                            waiting_list_detail_page_context(request, entry)
-                        ),
-                        "error": str(e),
-                    },
+                    waiting_list_detail_context(request, entry, error=str(e)),
                     status=400,
                 )
             messages.error(request, f"Ошибка: {e}")

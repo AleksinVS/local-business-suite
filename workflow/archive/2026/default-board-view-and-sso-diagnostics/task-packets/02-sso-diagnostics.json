@@ -1,0 +1,7 @@
+{
+  "id": "02-sso-diagnostics",
+  "goal": "Зафиксировать различимые причины fallback-формы вместо SSO",
+  "read_scope": ["apps/accounts", "config/settings.py", "docs/deployment/IIS_SSO.md"],
+  "write_scope": ["docs/deployment/IIS_SSO.md", "workflow/active/default-board-view-and-sso-diagnostics"],
+  "acceptance": ["REMOTE_USER", "manual-auth marker", "inactive user", "IIS/Kerberos/browser checks"]
+}

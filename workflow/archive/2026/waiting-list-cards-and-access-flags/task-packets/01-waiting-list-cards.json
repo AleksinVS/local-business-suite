@@ -1,0 +1,6 @@
+{
+  "id": "01-waiting-list-cards",
+  "goal": "Показывать четыре карточки и включать редактор выбранной карточки",
+  "write_scope": ["templates/waiting_list", "static/src/css/app.css", "scripts/e2e/tests"],
+  "acceptance": ["четыре карточки видимы", "редактор включается мышью и клавиатурой", "сохранение и audit сохранены"]
+}

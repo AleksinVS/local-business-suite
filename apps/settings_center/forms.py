@@ -44,7 +44,7 @@ class PortalUserCreateForm(forms.ModelForm):
 
     class Meta:
         model = get_user_model()
-        fields = ["username", "first_name", "last_name", "email", "department", "is_active", "is_staff", "is_superuser"]
+        fields = ["username", "first_name", "last_name", "email", "department", "is_active"]
 
     department = forms.ModelChoiceField(
         label="Подразделение",
@@ -61,8 +61,6 @@ class PortalUserCreateForm(forms.ModelForm):
             "last_name": "Фамилия",
             "email": "Email",
             "is_active": "Активен",
-            "is_staff": "Доступ к администрированию",
-            "is_superuser": "Суперпользователь",
         }
         for field_name, label in labels.items():
             if field_name in self.fields:
@@ -70,7 +68,7 @@ class PortalUserCreateForm(forms.ModelForm):
 
 
 class PortalUserProfileUpdateForm(PortalUserCreateForm):
-    """Профиль и технические флаги без ролей и групп доступа."""
+    """Профиль пользователя без ролей и технических флагов доступа."""
 
 
 class PortalUserUpdateForm(forms.Form):
@@ -81,18 +79,44 @@ class PortalUserUpdateForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         help_text="Можно назначать только роли из контракта. Технические группы сохраняются без изменений.",
     )
+    is_superuser = forms.BooleanField(
+        label="Супер-пользователь",
+        required=False,
+        help_text="Неограниченные права в портале. Доступно для изменения только суперпользователю.",
+    )
+    is_staff = forms.BooleanField(
+        label="Доступ к администрированию",
+        required=False,
+        help_text="Разрешает вход в раздел администрирования Django при наличии нужных прав.",
+    )
     preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
     confirm_risk = forms.BooleanField(
         label="Подтверждаю выдачу рискованного доступа",
         required=False,
     )
 
-    def __init__(self, *args, portal_user=None, **kwargs):
+    def __init__(self, *args, portal_user=None, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
         role_names = contract_role_names()
         self.fields["roles"].queryset = Group.objects.filter(name__in=role_names).select_related("profile").order_by("name")
         if portal_user is not None and not self.is_bound:
             self.initial["roles"] = list(portal_user.groups.filter(name__in=role_names).values_list("pk", flat=True))
+        if portal_user is not None:
+            self.initial["is_staff"] = portal_user.is_staff
+            self.initial["is_superuser"] = portal_user.is_superuser
+        self.can_manage_privileged_flags = bool(actor and actor.is_superuser)
+        if not self.can_manage_privileged_flags:
+            self.fields["is_staff"].disabled = True
+            self.fields["is_superuser"].disabled = True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("is_superuser") and not cleaned_data.get("is_staff"):
+            self.add_error(
+                "is_staff",
+                "Для супер-пользователя необходимо включить доступ к администрированию.",
+            )
+        return cleaned_data
 
 
 class ExternalIdentityForm(forms.ModelForm):

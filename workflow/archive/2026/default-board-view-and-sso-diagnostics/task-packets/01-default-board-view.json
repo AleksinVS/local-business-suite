@@ -1,0 +1,6 @@
+{
+  "id": "01-default-board-view",
+  "goal": "Дать пользователю без контрактных ролей только чтение разрешенного канбана",
+  "write_scope": ["apps/workorders", "apps/accounts/selectors.py", "templates/workorders", "tests"],
+  "acceptance": ["department_branch", "только customer-доски", "все записи запрещены", "явная роль заменяет профиль"]
+}

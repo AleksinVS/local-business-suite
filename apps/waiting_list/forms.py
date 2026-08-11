@@ -22,8 +22,9 @@ class WaitingListEntryForm(forms.ModelForm):
             "comment",
         ]
         widgets = {
-            "patient_dob": forms.TextInput(
-                attrs={"placeholder": "ДД.ММ.ГГГГ", "maxlength": "10"}
+            "patient_dob": forms.DateInput(
+                attrs={"placeholder": "ДД.ММ.ГГГГ", "maxlength": "10"},
+                format="%d.%m.%Y",
             ),
             "patient_phone": forms.TextInput(
                 attrs={"placeholder": "+7 (___) ___-__-__", "maxlength": "20"}
@@ -42,6 +43,7 @@ class WaitingListEntryForm(forms.ModelForm):
         self.fields["date_tag"].required = False
         self.fields["date_end"].required = False
         self.fields["comment"].required = False
+        self.fields["patient_dob"].input_formats = ["%d.%m.%Y", "%Y-%m-%d"]
 
     def clean_patient_name(self):
         patient_name = self.cleaned_data.get("patient_name", "").strip()

@@ -8,6 +8,8 @@
   {% include "workorders/partials/board_sidebar.html" %}
 {% endblock %}
 
+{% block page_container_extra_class %} page-container--flush-toolbar{% endblock %}
+
 {% block header_context %}
 <nav class="breadcrumbs header-breadcrumbs">
   <span>/</span>
@@ -90,7 +92,7 @@
 
     </form>
 
-    {% if current_board %}
+    {% if current_board and can_create_workorder %}
       <button
         class="btn btn-primary"
         type="button"

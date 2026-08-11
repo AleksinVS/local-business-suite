@@ -1,0 +1,6 @@
+{
+  "id": "02-access-technical-flags",
+  "goal": "Добавить защищенное изменение is_staff и is_superuser в карточку доступа",
+  "write_scope": ["apps/accounts", "apps/settings_center", "templates/settings_center"],
+  "acceptance": ["только суперпользователь меняет флаги", "предпросмотр подписан", "риск подтверждается", "единый транзакционный audit"]
+}

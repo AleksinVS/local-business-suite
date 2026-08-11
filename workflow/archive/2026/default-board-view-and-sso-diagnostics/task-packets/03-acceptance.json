@@ -1,0 +1,6 @@
+{
+  "id": "03-acceptance",
+  "goal": "Провести ступенчатую приемку",
+  "write_scope": ["tests", "docs", "workflow"],
+  "acceptance": ["targeted", "ui/deployment profiles", "verify-full", "health"]
+}

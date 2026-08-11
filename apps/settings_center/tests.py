@@ -372,7 +372,7 @@ class SettingsCenterUserViewsTests(TestCase):
             403,
         )
 
-    def test_superuser_profile_update_preserves_roles_and_technical_groups(self):
+    def test_superuser_profile_update_preserves_roles_groups_and_technical_flags(self):
         from apps.core.models import Department
 
         actor = User.objects.create_superuser(username="profile-root", password="pass")
@@ -401,7 +401,7 @@ class SettingsCenterUserViewsTests(TestCase):
         target.refresh_from_db()
         self.assertEqual(target.first_name, "После")
         self.assertEqual(target.department_id, department.pk)
-        self.assertTrue(target.is_staff)
+        self.assertFalse(target.is_staff)
         self.assertEqual(
             set(target.groups.values_list("name", flat=True)),
             {"customer", "memory_observer"},
@@ -447,6 +447,65 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertFalse(target.is_superuser)
         self.assertEqual(set(target.groups.values_list("name", flat=True)), {"manager", "memory_observer"})
         self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
+
+    def test_superuser_access_card_changes_technical_flags_with_preview(self):
+        actor = User.objects.create_superuser(username="assignment-root")
+        target = User.objects.create_user(username="assignment-flags-target")
+        self.client.force_login(actor)
+        url = reverse("settings_center:user_edit", kwargs={"pk": target.pk})
+
+        page = self.client.get(url)
+        self.assertContains(page, "Супер-пользователь")
+        self.assertContains(page, "Доступ к администрированию")
+
+        preview_response = self.client.post(
+            url,
+            {
+                "action": "preview",
+                "is_staff": "on",
+                "is_superuser": "on",
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+        preview = preview_response.context["preview"]
+        self.assertTrue(preview["requires_confirmation"])
+
+        apply_response = self.client.post(
+            url,
+            {
+                "action": "apply",
+                "is_staff": "on",
+                "is_superuser": "on",
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        target.refresh_from_db()
+        self.assertTrue(target.is_staff)
+        self.assertTrue(target.is_superuser)
+        audit = AccessAssignmentAudit.objects.get(target_user=target)
+        self.assertEqual({item["code"] for item in audit.flags_changed}, {"is_staff", "is_superuser"})
+
+    def test_role_manager_sees_read_only_technical_flags(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        actor = User.objects.create_user(username="flags-role-manager")
+        actor.groups.add(manager_group)
+        target = User.objects.create_user(username="flags-readonly-target", is_staff=True)
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="is_staff"', html=False)
+        self.assertContains(response, "disabled", html=False)
+        self.assertContains(response, "только супер-пользователю")
+
+    def test_profile_form_does_not_expose_privileged_flags(self):
+        form = PortalUserProfileUpdateForm()
+
+        self.assertNotIn("is_staff", form.fields)
+        self.assertNotIn("is_superuser", form.fields)
 
 
 class SettingsCenterGroupProfileTests(TestCase):

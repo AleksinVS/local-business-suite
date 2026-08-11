@@ -1276,6 +1276,12 @@ table { width: 100%; border-collapse: collapse; }
 .page-container:has(> .workorders-board-context) {
   min-width: 0;
 }
+
+/* На страницах с основным блоком фильтров он примыкает к шапке: это освобождает
+   вертикальное пространство для данных, не меняя отступы остальных страниц. */
+.page-container--flush-toolbar {
+  padding-top: 0;
+}
 .checkline { display: inline-flex; align-items: center; gap: 0.4rem; }
 .stack { display: grid; gap: 0.5rem; }
 .status-inline { margin: 0.5rem 0; }
@@ -2867,6 +2873,181 @@ textarea:focus {
   flex: 1;
   min-height: 0;
   flex-direction: column;
+}
+
+.waiting-list-standalone-detail {
+  width: min(760px, 100%);
+  min-height: 0;
+  padding: 0;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.waiting-list-status-editor {
+  margin-bottom: 0.75rem;
+}
+
+.waiting-list-inline-form {
+  min-width: 0;
+}
+
+.waiting-list-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.waiting-list-edit-card,
+.waiting-list-read-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.waiting-list-card-summary,
+.waiting-list-read-card {
+  display: flex;
+  width: 100%;
+  min-height: 94px;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+  color: inherit;
+  text-align: left;
+}
+
+.waiting-list-card-summary {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.waiting-list-card-summary:hover,
+.waiting-list-card-summary:focus-visible {
+  background: #f1f5f9;
+  outline: 2px solid transparent;
+}
+
+.waiting-list-card-title {
+  color: var(--brand);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.waiting-list-card-value {
+  max-width: 100%;
+  color: var(--text-main);
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.waiting-list-card-meta,
+.waiting-list-card-edit-hint {
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.waiting-list-card-edit-hint {
+  margin-top: auto;
+  color: var(--brand);
+}
+
+.waiting-list-card-editor {
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding: 0 0.85rem 0.85rem;
+}
+
+.waiting-list-edit-card.is-editing {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent);
+  background: #fff;
+}
+
+.waiting-list-edit-card.is-editing .waiting-list-card-summary {
+  min-height: 0;
+  padding-bottom: 0.55rem;
+}
+
+.waiting-list-edit-card.is-editing .waiting-list-card-meta,
+.waiting-list-edit-card.is-editing .waiting-list-card-edit-hint {
+  display: none;
+}
+
+.waiting-list-edit-card.is-editing .waiting-list-card-editor {
+  display: grid;
+}
+
+.waiting-list-card-editor input:not([type="checkbox"]),
+.waiting-list-card-editor select,
+.waiting-list-card-editor textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .waiting-list-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waiting-list-edit-card.is-editing {
+    grid-column: auto;
+  }
+
+  .waiting-list-card-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.waiting-list-entry-fields input:not([type="checkbox"]),
+.waiting-list-entry-fields select,
+.waiting-list-entry-fields textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.waiting-list-entry-fields textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.waiting-list-entry-fields .checkbox-group {
+  flex-direction: row;
+  align-items: center;
+}
+
+.waiting-list-entry-fields .errorlist,
+.waiting-list-detail-panel .form-errors {
+  padding: 0;
+  margin: 0.2rem 0 0;
+  color: var(--danger, #b91c1c);
+  font-size: 0.8rem;
+  list-style: none;
+}
+
+.waiting-list-detail-panel .form-errors {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(185, 28, 28, 0.25);
+  border-radius: 8px;
+  background: rgba(254, 226, 226, 0.65);
+}
+
+.waiting-list-audit-block {
+  margin-top: 1rem;
 }
 
 .drawer-layout {

@@ -1,4 +1,5 @@
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Group
@@ -148,6 +149,81 @@ class WaitingListValidationTests(TestCase):
                 patient_dob="invalid",
             )
 
+    def test_update_entry_logs_only_actual_fields_and_can_clear_dates(self):
+        entry = create_entry(
+            author=self.user,
+            patient_name="Исходный Пациент",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+            date_tag=date(2026, 9, 1),
+            comment="Старый комментарий",
+        )
+
+        updated = update_entry(
+            entry=entry,
+            user=self.user,
+            patient_name="Исходный Пациент",
+            date_tag=None,
+            comment="Новый комментарий",
+        )
+
+        self.assertIsNone(updated.date_tag)
+        self.assertEqual(updated.comment, "Новый комментарий")
+        self.assertEqual(updated.audit_logs.count(), 2)
+        action = updated.audit_logs.first().action
+        self.assertEqual(action, "Изменены поля: целевая дата, комментарий")
+        self.assertNotIn("Старый комментарий", action)
+        self.assertNotIn("Новый комментарий", action)
+
+    def test_update_entry_without_changes_does_not_create_false_audit(self):
+        entry = create_entry(
+            author=self.user,
+            patient_name="Неизменный Пациент",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+        )
+
+        update_entry(
+            entry=entry,
+            user=self.user,
+            patient_name=entry.patient_name,
+            patient_dob=entry.patient_dob,
+            patient_phone=entry.patient_phone,
+            service_id=entry.service_id,
+            date_tag=entry.date_tag,
+            date_end=entry.date_end,
+            priority_cito=entry.priority_cito,
+            comment=entry.comment,
+        )
+
+        self.assertEqual(entry.audit_logs.count(), 1)
+
+    def test_update_entry_rolls_back_data_when_audit_write_fails(self):
+        entry = create_entry(
+            author=self.user,
+            patient_name="Атомарный Пациент",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+        )
+
+        with patch(
+            "apps.waiting_list.services._create_audit_log",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                update_entry(
+                    entry=entry,
+                    user=self.user,
+                    patient_phone="+7 (900) 999-88-77",
+                )
+
+        entry.refresh_from_db()
+        self.assertEqual(entry.patient_phone, "+7 (900) 111-22-33")
+        self.assertEqual(entry.audit_logs.count(), 1)
+
 
 @pytest.mark.integration
 class WaitingListPolicyTests(TestCase):
@@ -229,6 +305,7 @@ class WaitingListRouteTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("waiting_list:dashboard"))
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "page-container--flush-toolbar")
 
     def test_dashboard_forbidden_without_doctor_role(self):
         non_doctor = User.objects.create_user(username="nondoctor", password="pass")
@@ -274,6 +351,96 @@ class WaitingListRouteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-ai-context="')
         self.assertContains(response, "waiting_list_entry")
+        self.assertContains(response, 'data-waiting-list-inline-form')
+        self.assertContains(response, 'value="15.04.1985"')
+        self.assertContains(response, 'class="waiting-list-edit-card"', count=4)
+        self.assertContains(response, "Пациент")
+        self.assertContains(response, "Контакты")
+        self.assertContains(response, "Услуга и сроки")
+        self.assertContains(response, "Комментарий и приоритет")
+        self.assertNotContains(response, ">Редактировать<")
+
+    def test_inline_update_returns_same_panel_and_audits_changed_fields(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:update", kwargs={"pk": self.entry.pk}),
+            {
+                "patient_name": self.entry.patient_name,
+                "patient_dob": "15.04.1985",
+                "patient_phone": "+7 (903) 765-43-21",
+                "service_id": self.entry.service_id,
+                "date_tag": "",
+                "date_end": "",
+                "priority_cito": "on",
+                "comment": "Уточнение из окна просмотра",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="waiting-list-inline-form",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["HX-Trigger"], "waitingListEntryUpdated")
+        self.assertContains(response, 'data-waiting-list-inline-form')
+        self.assertContains(response, "Изменены поля: телефон, приоритет CITO, комментарий")
+        self.assertNotContains(response, ">Редактировать<")
+        self.entry.refresh_from_db()
+        self.assertEqual(self.entry.patient_phone, "+7 (903) 765-43-21")
+        self.assertTrue(self.entry.priority_cito)
+        self.assertEqual(self.entry.audit_logs.count(), 2)
+
+    def test_inline_update_validation_error_stays_in_detail_panel(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:update", kwargs={"pk": self.entry.pk}),
+            {
+                "patient_name": self.entry.patient_name,
+                "patient_dob": "15.04.1985",
+                "patient_phone": "123",
+                "service_id": self.entry.service_id,
+                "date_tag": "",
+                "date_end": "",
+                "comment": "",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="waiting-list-inline-form",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-waiting-list-detail')
+        self.assertContains(response, 'data-waiting-list-inline-form')
+        self.assertContains(response, "Неверный формат телефона")
+        self.assertContains(response, 'waiting-list-edit-card is-editing')
+        self.entry.refresh_from_db()
+        self.assertEqual(self.entry.patient_phone, "+7 (903) 123-45-67")
+        self.assertEqual(self.entry.audit_logs.count(), 1)
+
+    def test_view_only_user_sees_read_only_panel_and_cannot_post_update(self):
+        viewer = User.objects.create_user(username="waiting-viewer", password="pass")
+        grant_doctor_role(viewer)
+        self.client.force_login(viewer)
+
+        detail_response = self.client.get(
+            reverse("waiting_list:detail", kwargs={"pk": self.entry.pk}),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotContains(detail_response, 'data-waiting-list-inline-form')
+        self.assertContains(detail_response, self.entry.patient_phone)
+
+        update_response = self.client.post(
+            reverse("waiting_list:update", kwargs={"pk": self.entry.pk}),
+            {
+                "patient_name": "Попытка изменения",
+                "patient_dob": "15.04.1985",
+                "patient_phone": "+7 (903) 999-99-99",
+                "service_id": "s1",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(update_response.status_code, 403)
+        self.entry.refresh_from_db()
+        self.assertEqual(self.entry.patient_name, "Маршрутный Пациент")
+        self.assertEqual(self.entry.audit_logs.count(), 1)
 
     def test_right_panel_provider_returns_descriptor_for_visible_entry(self):
         provider = WaitingListRightPanelProvider()

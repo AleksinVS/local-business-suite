@@ -1,0 +1,14 @@
+{
+  "block_id": "waiting-list-inline-editing",
+  "status": "complete",
+  "architecture": {
+    "ui": "Django templates + HTMX in the existing detail drawer",
+    "authorization": "existing waiting_list policies enforced server-side",
+    "write_path": "validated ModelForm -> domain service -> atomic model and audit write",
+    "audit": "field names only; no before/after PII values"
+  },
+  "tasks": [
+    "inline-edit-and-audit"
+  ],
+  "adr_required": false
+}

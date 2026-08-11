@@ -104,6 +104,9 @@
     if (window.htmx && typeof window.htmx.process === "function") {
       window.htmx.process(root);
     }
+    if (window.LocalBusinessWaitingListCards && typeof window.LocalBusinessWaitingListCards.init === "function") {
+      window.LocalBusinessWaitingListCards.init(root);
+    }
     refreshContext();
   }
 

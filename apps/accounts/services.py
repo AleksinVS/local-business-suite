@@ -29,16 +29,40 @@ SAFE_AD_ATTRIBUTE_KEYS = {
     "userPrincipalName",
 }
 
-ACCESS_PREVIEW_SIGNING_SALT = "accounts.access-assignment-preview.v1"
+ACCESS_PREVIEW_SIGNING_SALT = "accounts.access-assignment-preview.v2"
 ACCESS_PREVIEW_MAX_AGE_SECONDS = 600
 
+PRIVILEGED_FLAG_LABELS = {
+    "is_staff": "Доступ к администрированию",
+    "is_superuser": "Супер-пользователь",
+}
 
-def preview_role_assignment(*, actor, target_user, selected_role_names):
+
+def preview_role_assignment(
+    *,
+    actor,
+    target_user,
+    selected_role_names,
+    is_staff=None,
+    is_superuser=None,
+):
     """Строит канонический diff и подписывает его для последующего применения."""
 
     _require_role_manager(actor)
     after = _validate_role_names(selected_role_names)
     before = selected_role_names_for_user(target_user)
+    flags_before = _technical_flags_for_user(target_user)
+    flags_after = _requested_technical_flags(
+        target_user,
+        is_staff=is_staff,
+        is_superuser=is_superuser,
+    )
+    _validate_technical_flag_change(
+        actor=actor,
+        target_user=target_user,
+        before=flags_before,
+        after=flags_after,
+    )
     configs = contract_role_configs()
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
@@ -47,17 +71,24 @@ def preview_role_assignment(*, actor, target_user, selected_role_names):
         for role_name in added
         for marker in role_risk_markers(role_name, configs[role_name])
     ]
+    risk_markers.extend(_technical_flag_risk_markers(flags_before, flags_after))
+    flags_changed = _technical_flag_changes(flags_before, flags_after)
     payload = {
         "actor_id": actor.pk,
         "target_id": target_user.pk,
         "before": before,
         "after": after,
+        "flags_before": flags_before,
+        "flags_after": flags_after,
     }
     return {
         "before": before,
         "after": after,
         "added": added,
         "removed": removed,
+        "flags_before": flags_before,
+        "flags_after": flags_after,
+        "flags_changed": flags_changed,
         "risk_markers": risk_markers,
         "requires_confirmation": bool(risk_markers),
         "consequences": access_assignment_consequences(before, after),
@@ -73,22 +104,40 @@ def apply_role_assignment(
     selected_role_names,
     preview_token,
     risk_confirmed=False,
+    is_staff=None,
+    is_superuser=None,
 ):
-    """Меняет только контрактные роли и пишет audit в той же транзакции."""
+    """Меняет контрактные роли и технические флаги в одной транзакции."""
 
     _require_role_manager(actor)
     after = _validate_role_names(selected_role_names)
     signed_preview = _load_preview_token(preview_token)
+    flags_after = _requested_technical_flags(
+        target_user,
+        is_staff=is_staff,
+        is_superuser=is_superuser,
+    )
     if signed_preview.get("actor_id") != actor.pk or signed_preview.get("target_id") != target_user.pk:
         raise ValidationError("Предпросмотр относится к другому пользователю или администратору.")
     if signed_preview.get("after") != after:
         raise ValidationError("Выбранные роли изменились после предпросмотра. Выполните предпросмотр снова.")
+    if signed_preview.get("flags_after") != flags_after:
+        raise ValidationError("Технические флаги изменились после предпросмотра. Выполните предпросмотр снова.")
 
     User = get_user_model()
     locked_target = User.objects.select_for_update().get(pk=target_user.pk)
     before = selected_role_names_for_user(locked_target)
+    flags_before = _technical_flags_for_user(locked_target)
     if signed_preview.get("before") != before:
         raise ValidationError("Роли пользователя уже изменены. Выполните предпросмотр снова.")
+    if signed_preview.get("flags_before") != flags_before:
+        raise ValidationError("Технические флаги пользователя уже изменены. Выполните предпросмотр снова.")
+    _validate_technical_flag_change(
+        actor=actor,
+        target_user=locked_target,
+        before=flags_before,
+        after=flags_after,
+    )
 
     configs = contract_role_configs()
     added = sorted(set(after) - set(before))
@@ -98,8 +147,9 @@ def apply_role_assignment(
         for role_name in added
         for marker in role_risk_markers(role_name, configs[role_name])
     ]
+    risk_markers.extend(_technical_flag_risk_markers(flags_before, flags_after))
     if risk_markers and not risk_confirmed:
-        raise ValidationError("Добавление рискованной роли требует явного подтверждения.")
+        raise ValidationError("Изменение чувствительного доступа требует явного подтверждения.")
 
     selected_groups = list(Group.objects.filter(name__in=after).order_by("name"))
     selected_group_names = {group.name for group in selected_groups}
@@ -114,6 +164,11 @@ def apply_role_assignment(
         locked_target.groups.remove(*current_role_groups)
     if selected_groups:
         locked_target.groups.add(*selected_groups)
+    flags_changed = _technical_flag_changes(flags_before, flags_after)
+    if flags_changed:
+        locked_target.is_staff = flags_after["is_staff"]
+        locked_target.is_superuser = flags_after["is_superuser"]
+        locked_target.save(update_fields=[item["code"] for item in flags_changed])
 
     audit = AccessAssignmentAudit.objects.create(
         actor=actor,
@@ -122,10 +177,79 @@ def apply_role_assignment(
         roles_after=after,
         roles_added=added,
         roles_removed=removed,
+        flags_before=flags_before,
+        flags_after=flags_after,
+        flags_changed=flags_changed,
         risk_markers=risk_markers,
         risk_confirmed=bool(risk_markers and risk_confirmed),
     )
     return locked_target, audit
+
+
+def _technical_flags_for_user(user):
+    return {
+        "is_staff": bool(user.is_staff),
+        "is_superuser": bool(user.is_superuser),
+    }
+
+
+def _requested_technical_flags(user, *, is_staff=None, is_superuser=None):
+    for name, value in (("is_staff", is_staff), ("is_superuser", is_superuser)):
+        if value is not None and not isinstance(value, bool):
+            raise ValidationError(f"Флаг {name} должен быть логическим значением.")
+    current = _technical_flags_for_user(user)
+    return {
+        "is_staff": current["is_staff"] if is_staff is None else is_staff,
+        "is_superuser": current["is_superuser"] if is_superuser is None else is_superuser,
+    }
+
+
+def _technical_flag_changes(before, after):
+    return [
+        {
+            "code": code,
+            "label": PRIVILEGED_FLAG_LABELS[code],
+            "before": before[code],
+            "after": after[code],
+        }
+        for code in PRIVILEGED_FLAG_LABELS
+        if before[code] != after[code]
+    ]
+
+
+def _technical_flag_risk_markers(before, after):
+    return [
+        f"{PRIVILEGED_FLAG_LABELS[code]}: выдаётся чувствительный доступ"
+        for code in PRIVILEGED_FLAG_LABELS
+        if not before[code] and after[code]
+    ]
+
+
+def _validate_technical_flag_change(*, actor, target_user, before, after):
+    changed = _technical_flag_changes(before, after)
+    if after["is_superuser"] and not after["is_staff"]:
+        raise ValidationError("Супер-пользователь должен иметь доступ к администрированию.")
+    if not changed:
+        return
+    actor_is_current_superuser = bool(
+        getattr(actor, "is_authenticated", False)
+        and get_user_model().objects.filter(
+            pk=getattr(actor, "pk", None),
+            is_active=True,
+            is_superuser=True,
+        ).exists()
+    )
+    if not actor_is_current_superuser:
+        raise PermissionDenied("Технические флаги может изменять только суперпользователь.")
+    if target_user.pk == getattr(actor, "pk", None) and before["is_superuser"] and not after["is_superuser"]:
+        raise ValidationError("Нельзя снять права супер-пользователя у собственной учетной записи.")
+    if before["is_superuser"] and not after["is_superuser"]:
+        other_superuser_exists = get_user_model().objects.filter(
+            is_active=True,
+            is_superuser=True,
+        ).exclude(pk=target_user.pk).exists()
+        if not other_superuser_exists:
+            raise ValidationError("Нельзя снять права у последнего активного супер-пользователя.")
 
 
 def create_local_user(*, actor, cleaned_data):

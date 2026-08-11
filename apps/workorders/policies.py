@@ -5,6 +5,8 @@ from .models import WorkOrder, WorkOrderStatus
 ROLE_CUSTOMER = "customer"
 ROLE_TECHNICIAN = "technician"
 ROLE_MANAGER = "manager"
+DEFAULT_BOARD_VIEW_ROLE = "default_board_viewer"
+DEFAULT_BOARD_VISIBILITY_GROUP = ROLE_CUSTOMER
 
 # Запасной список булевых прав на случай, если рабочая копия контракта ещё не
 # содержит блок $capabilities (например, деградация store на старый снимок).
@@ -84,7 +86,48 @@ def active_role_rules(user):
     if getattr(user, "is_superuser", False):
         return [{"name": "superuser", **superuser_rules()}]
     rules = role_rules()
-    return [{"name": role, **rules[role]} for role in user_roles(user) if role in rules]
+    explicit_rules = [
+        {"name": role, **rules[role]}
+        for role in user_roles(user)
+        if role in rules
+    ]
+    if explicit_rules:
+        return explicit_rules
+    if default_board_access_applies(user):
+        return [{"name": DEFAULT_BOARD_VIEW_ROLE, **default_board_view_rules()}]
+    return []
+
+
+def default_board_access_applies(user):
+    """Базовый read-only профиль только для активного пользователя без ролей."""
+
+    if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
+        return False
+    explicit_role_names = set(role_rules()) & user_roles(user)
+    return not explicit_role_names
+
+
+def default_board_view_rules():
+    """Минимальный профиль: просмотр своей ветки без единого write-права."""
+
+    rules = {
+        "display_name": "Базовый просмотр канбана",
+        "description": (
+            "Доступ по умолчанию для пользователя без назначенной роли: "
+            "только просмотр заявок ветки своего подразделения."
+        ),
+        "view_scope": "department_branch",
+        "edit_scope": "none",
+        "comment_scope": "none",
+        "upload_attachment_scope": "none",
+        "confirm_closure_scope": "none",
+        "rate_scope": "none",
+        "transition_scope": "none",
+        "transition_targets": [],
+    }
+    for key, _label, _description in capability_flags():
+        rules[key] = False
+    return rules
 
 
 def superuser_rules():

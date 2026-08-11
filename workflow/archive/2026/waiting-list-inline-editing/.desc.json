@@ -1,0 +1,9 @@
+{
+  ".": "Workflow встроенного редактирования и атомарного аудита листа ожидания",
+  "BLOCK_BRIEF.md": "Цель, границы, риски и проверки",
+  "ARCHITECT_PLAN.json": "Технический план реализации",
+  "task-packets": "Пакет реализации встроенного редактирования",
+  "EXECUTOR_REPORT.inline-edit-and-audit.md": "Отчёт о реализации и проверках",
+  "TASK_ACCEPTANCE.inline-edit-and-audit.md": "Техническая приёмка",
+  "RETROSPECTIVE.md": "Ретроспектива и остаточный риск"
+}

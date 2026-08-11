@@ -32,5 +32,8 @@
   "mandatory-user-department.md": "Архивный план обязательного подразделения пользователя (implemented, технически принят 2026-08-05)",
   "iis-sso-csrf-race.md": "Архивный план устранения гонки Windows SSO/CSRF на автоматических запросах браузера",
   "role-editor-sensitive-confirmation.md": "Архивный план серверного подтверждения чувствительных изменений ролей",
-  "test-workflow-simplification-2026-08-06.md": "Архивный план упрощения и ускорения тестового workflow (implemented)"
+  "test-workflow-simplification-2026-08-06.md": "Архивный план упрощения и ускорения тестового workflow (implemented)",
+  "waiting-list-inline-editing.md": "Архивный план встроенного редактирования и атомарного аудита листа ожидания",
+  "waiting-list-cards-and-access-flags.md": "Архивный план карточек пациента и технических флагов доступа",
+  "default-board-view-and-sso-diagnostics.md": "Архивный план базового просмотра канбана и диагностики SSO"
 }

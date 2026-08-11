@@ -106,6 +106,88 @@ LOCAL_BUSINESS_IIS_PATH_DEBUG_LOG_LEVEL=INFO
 4. Если `REMOTE_USER` нет, пользователь может войти через `/accounts/login/`.
 5. Форма логина проверяет пароль через LDAP и также синхронизирует профиль.
 
+## Почему доменный пользователь увидел форму логина
+
+Форма означает, что к моменту проверки `LoginRequiredMixin` у запроса не было
+действующей Django-сессии и Remote User middleware не выполнил автоматический
+вход. Причины проверяются в следующем порядке.
+
+### 1. В браузере осталась сессия ручного входа или выхода
+
+После успешного входа через форму и после нажатия «Выйти» приложение записывает
+в сессию `local_business_manual_auth`. Пока действует эта сессия, SSO намеренно
+не перехватывает запрос: иначе выход немедленно завершался бы повторным доменным
+входом, а ручная учетная запись заменялась бы доменной.
+
+Проверка: открыть корневой URL портала в приватном окне браузера. Если там SSO
+сработал, удалите cookie `sessionid` только для портала или закройте старую
+сессию. Обычное новое окно браузера часто использует те же cookie и не является
+достоверной проверкой.
+
+### 2. Django запущен без Remote User режима
+
+Для SSO значение `DJANGO_AUTH_MODE` должно быть `remote_user` или `hybrid`.
+Проверка выполняется в том же окружении и тем же Python, которыми запущен IIS:
+
+```powershell
+cd C:\inetpub\local-business-suite
+.\.venv\Scripts\python.exe manage.py shell -c "from django.conf import settings; print(settings.DJANGO_AUTH_MODE); print([x for x in settings.MIDDLEWARE if 'RemoteUser' in x]); print(settings.AUTHENTICATION_BACKENDS)"
+```
+
+Ожидаются `hybrid`/`remote_user`,
+`apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware` и
+`apps.accounts.ldap_backend.RemoteUserLDAPBackend`. После изменения
+`web.config` нужен recycle пула приложений: старый процесс не перечитает
+`appSettings` самостоятельно.
+
+### 3. IIS пропустил основной запрос анонимно
+
+На корне сайта должны действовать `Windows Authentication = Enabled` и
+`Anonymous Authentication = Disabled`. Anonymous разрешается только для явно
+выбранных fallback-путей, например `/accounts/login/`, и для изолированных
+служебных ресурсов из этого руководства. Ошибка наследования `location` или
+публикация портала как вложенного application может сделать анонимным весь сайт;
+тогда Django не получает `REMOTE_USER` и перенаправляет на форму.
+
+В IIS log включите поле имени пользователя (`cs-username`) и проверьте именно
+первый запрос к `/` или `/workorders/`, а не последующий запрос
+`/accounts/login/`. Пустое имя на рабочем URL означает, что проблема находится
+до Django: в IIS, браузере или промежуточном proxy.
+
+### 4. Браузер не отправил Windows credentials
+
+Используйте DNS-имя из IIS binding, а не IP-адрес, `localhost` или случайный
+алиас. Имя должно входить в зону Local intranet либо быть разрешено корпоративной
+политикой автоматического входа Edge/Chrome. Машина и пользователь должны быть в
+доверенном доменном контуре. Приватное окно проверяет cookie приложения, но
+корпоративная политика браузера может отдельно запрещать автоматическую
+передачу учетных данных.
+
+### 5. Не согласованы DNS, binding, SPN или providers
+
+Для Windows Authentication порядок providers: `Negotiate`, затем `NTLM`.
+Новое DNS-имя требует корректного HTTP SPN на учетной записи пула или компьютера
+IIS; дублированный SPN также ломает Kerberos. Если NTLM удален, ошибка Kerberos
+не имеет запасного пути. Сопоставьте URL браузера, DNS, host binding, identity
+пула и результат `setspn -Q HTTP/<имя-хоста>`.
+
+### 6. `REMOTE_USER` дошёл, но локальная учетная запись отключена
+
+`RemoteUserLDAPBackend` не аутентифицирует пользователя с `is_active=False`.
+Проверьте нормализованный логин без домена в «Пользователи и доступ». Ошибка
+LDAP-поиска атрибутов сама по себе обычно не отменяет SSO: приложение журналирует
+ошибку синхронизации и сохраняет вход по уже переданному `REMOTE_USER`.
+
+### Короткая развилка диагностики
+
+1. SSO работает в приватном окне — очистить старую ручную Django-сессию.
+2. В IIS log пустой `cs-username` на `/workorders/` — проверять Windows Auth,
+   anonymous inheritance, browser zone, DNS/SPN и providers.
+3. `cs-username` заполнен, но форма всё равно показана — проверить фактический
+   `DJANGO_AUTH_MODE`, передачу `REMOTE_USER` из FastCGI и `is_active` пользователя.
+4. Форма принимает доменный пароль, но SSO не работает — LDAP fallback исправен;
+   проблема почти наверняка находится в Windows Authentication до Django.
+
 На Linux SSO без ввода логина и пароля тоже возможно, но только если перед Django стоит сервер, который выполняет Kerberos/Negotiate и передает `REMOTE_USER`, например Apache с `mod_auth_gssapi`. Один только Django на Linux не делает Kerberos SSO автоматически.
 
 ## Быстрая настройка без сертификатов

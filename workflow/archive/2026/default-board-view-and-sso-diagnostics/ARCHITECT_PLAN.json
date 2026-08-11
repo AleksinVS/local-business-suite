@@ -1,0 +1,6 @@
+{
+  "block_id": "default-board-view-and-sso-diagnostics",
+  "status": "accepted",
+  "tasks": ["01-default-board-view", "02-sso-diagnostics", "03-acceptance"],
+  "adr": "docs/adr/ADR-0039-default-board-view-access.md"
+}

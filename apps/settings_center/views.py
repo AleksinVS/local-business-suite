@@ -410,6 +410,7 @@ class UserUpdateView(UserManagementMixin, FormView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["portal_user"] = self.portal_user
+        kwargs["actor"] = self.request.user
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -435,6 +436,8 @@ class UserUpdateView(UserManagementMixin, FormView):
                     actor=self.request.user,
                     target_user=self.portal_user,
                     selected_role_names=selected_role_names,
+                    is_staff=form.cleaned_data["is_staff"],
+                    is_superuser=form.cleaned_data["is_superuser"],
                 )
             except (PermissionDenied, ValidationError) as exc:
                 form.add_error(None, exc)
@@ -451,11 +454,13 @@ class UserUpdateView(UserManagementMixin, FormView):
                 selected_role_names=selected_role_names,
                 preview_token=form.cleaned_data["preview_token"],
                 risk_confirmed=form.cleaned_data["confirm_risk"],
+                is_staff=form.cleaned_data["is_staff"],
+                is_superuser=form.cleaned_data["is_superuser"],
             )
         except (PermissionDenied, ValidationError) as exc:
             form.add_error(None, exc)
             return self.form_invalid(form)
-        messages.success(self.request, f"Роли доступа сохранены. Аудит #{audit.pk}.")
+        messages.success(self.request, f"Доступ сохранён. Аудит #{audit.pk}.")
         return redirect("settings_center:user_edit", pk=self.portal_user.pk)
 
 
@@ -470,8 +475,6 @@ class UserProfileUpdateView(SuperuserUserManagementMixin, UpdateView):
         before = {
             "user_id": self.object.id,
             "username": self.object.username,
-            "is_staff": self.object.is_staff,
-            "is_superuser": self.object.is_superuser,
             "is_active": self.object.is_active,
         }
         user = update_local_user(
@@ -489,8 +492,6 @@ class UserProfileUpdateView(SuperuserUserManagementMixin, UpdateView):
             after={
                 "user_id": user.id,
                 "username": user.username,
-                "is_staff": user.is_staff,
-                "is_superuser": user.is_superuser,
                 "is_active": user.is_active,
             },
             validation_result={"valid": True},

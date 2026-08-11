@@ -19,5 +19,6 @@
   "signals.py": "Сигналы Django",
   "tests.py": "Тесты приложения",
   "management/": "Django management-команды приложения (например, сидинг канбан-доски)",
+  "management/commands/default_board_access_e2e.py": "Сквозная HTTP-проверка базового read-only доступа к канбану с откатом тестовых данных",
   "media_policies.py": "Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки"
 }

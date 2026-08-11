@@ -1,25 +1,34 @@
-<div class="waiting-list-detail-panel" data-ai-context="{{ detail_ai_context_json }}">
-<button type="button" class="close-btn close-btn-global" onclick="closeWaitingListDrawer()">&times;</button>
+<div class="waiting-list-detail-panel" data-ai-context="{{ detail_ai_context_json }}" data-waiting-list-detail>
+{% if not is_standalone_detail %}
+  <button type="button" class="close-btn close-btn-global" onclick="closeWaitingListDrawer()" aria-label="Закрыть">&times;</button>
+{% endif %}
 
 <div class="drawer-header">
   <div class="header-main-info">
+    <span class="eyebrow">Лист ожидания</span>
     <h2>{{ entry.patient_name }}</h2>
   </div>
 </div>
 
 <div class="drawer-content">
-  <div class="status-stepper-container" style="margin-bottom: 2rem;">
+  {% if error %}<div class="form-errors" role="alert">{{ error }}</div>{% endif %}
+
+  <div class="status-stepper-container waiting-list-status-editor">
     <div class="status-stepper">
       <div class="stepper-track">
         {% for status_val, status_label in status_choices %}
-          {% if status_val == entry.status %}
-            <div class="step-item active" data-status="{{ status_val }}">
+          {% if status_val == entry.status or not can_transition %}
+            <div class="step-item{% if status_val == entry.status %} active{% endif %}" data-status="{{ status_val }}">
               <span class="step-label">{{ status_label }}</span>
             </div>
           {% else %}
-            <form hx-post="{% url 'waiting_list:transition' entry.pk %}"
-                  hx-target="#entry-detail-panel-content"
-                  hx-swap="innerHTML"
+            <form method="post"
+                  action="{% url 'waiting_list:transition' entry.pk %}"
+                  {% if not is_standalone_detail %}
+                    hx-post="{% url 'waiting_list:transition' entry.pk %}"
+                    hx-target="closest .waiting-list-detail-panel"
+                    hx-swap="outerHTML"
+                  {% endif %}
                   class="step-form">
               {% csrf_token %}
               <input type="hidden" name="status" value="{{ status_val }}">
@@ -33,53 +42,117 @@
     </div>
   </div>
 
-  <div class="detail-grid">
-    <div class="info-item">
-      <span class="info-label">ФИО пациента</span>
-      <span class="info-value">{{ entry.patient_name }}</span>
-    </div>
-    <div class="info-item">
-      <span class="info-label">Дата рождения</span>
-      <span class="info-value">{{ entry.patient_dob }}</span>
-    </div>
-    <div class="info-item">
-      <span class="info-label">Телефон</span>
-      <span class="info-value">{{ entry.patient_phone }}</span>
-    </div>
-    <div class="info-item">
-      <span class="info-label">Услуга</span>
-      <span class="info-value">{{ entry.get_service_id_display }}</span>
-    </div>
-    <div class="info-item">
-      <span class="info-label">Целевая дата</span>
-      <span class="info-value">{% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %}</span>
-    </div>
-    <div class="info-item">
-      <span class="info-label">Крайняя дата</span>
-      <span class="info-value">{% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</span>
-    </div>
-    <div class="info-item full-width">
-      <span class="info-label">Приоритет</span>
-      <span class="info-value">{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный{% endif %}</span>
-    </div>
-  </div>
+  {% if can_edit %}
+    <form
+      id="waiting-list-inline-form"
+      class="waiting-list-inline-form"
+      method="post"
+      action="{% url 'waiting_list:update' entry.pk %}"
+      {% if not is_standalone_detail %}
+        hx-post="{% url 'waiting_list:update' entry.pk %}"
+        hx-target="closest .waiting-list-detail-panel"
+        hx-swap="outerHTML"
+      {% endif %}
+      data-waiting-list-inline-form
+    >
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="form-errors full-width" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <div class="waiting-list-card-grid" data-waiting-list-card-grid>
+        <section class="waiting-list-edit-card{% if form.patient_name.errors or form.patient_dob.errors %} is-editing{% endif %}" data-edit-card>
+          <button type="button" class="waiting-list-card-summary" data-edit-card-toggle aria-expanded="{% if form.patient_name.errors or form.patient_dob.errors %}true{% else %}false{% endif %}" aria-controls="waiting-list-card-patient-{{ entry.pk }}">
+            <span class="waiting-list-card-title">Пациент</span>
+            <span class="waiting-list-card-value">{{ entry.patient_name }}</span>
+            <span class="waiting-list-card-meta">{{ entry.patient_dob|date:"d.m.Y" }}</span>
+            <span class="waiting-list-card-edit-hint">Нажмите, чтобы изменить</span>
+          </button>
+          <div id="waiting-list-card-patient-{{ entry.pk }}" class="waiting-list-card-editor">
+            <div class="input-group">
+              <label for="{{ form.patient_name.id_for_label }}">{{ form.patient_name.label }}</label>
+              {{ form.patient_name }}{{ form.patient_name.errors }}
+            </div>
+            <div class="input-group">
+              <label for="{{ form.patient_dob.id_for_label }}">{{ form.patient_dob.label }}</label>
+              {{ form.patient_dob }}{{ form.patient_dob.errors }}
+            </div>
+          </div>
+        </section>
 
-  {% if entry.comment %}
-  <div class="content-block">
-    <div class="block-header">
-      <span class="detail-label">Комментарий</span>
+        <section class="waiting-list-edit-card{% if form.patient_phone.errors %} is-editing{% endif %}" data-edit-card>
+          <button type="button" class="waiting-list-card-summary" data-edit-card-toggle aria-expanded="{% if form.patient_phone.errors %}true{% else %}false{% endif %}" aria-controls="waiting-list-card-contact-{{ entry.pk }}">
+            <span class="waiting-list-card-title">Контакты</span>
+            <span class="waiting-list-card-value">{{ entry.patient_phone }}</span>
+            <span class="waiting-list-card-meta">Телефон пациента</span>
+            <span class="waiting-list-card-edit-hint">Нажмите, чтобы изменить</span>
+          </button>
+          <div id="waiting-list-card-contact-{{ entry.pk }}" class="waiting-list-card-editor">
+            <div class="input-group">
+              <label for="{{ form.patient_phone.id_for_label }}">{{ form.patient_phone.label }}</label>
+              {{ form.patient_phone }}{{ form.patient_phone.errors }}
+            </div>
+          </div>
+        </section>
+
+        <section class="waiting-list-edit-card{% if form.service_id.errors or form.date_tag.errors or form.date_end.errors %} is-editing{% endif %}" data-edit-card>
+          <button type="button" class="waiting-list-card-summary" data-edit-card-toggle aria-expanded="{% if form.service_id.errors or form.date_tag.errors or form.date_end.errors %}true{% else %}false{% endif %}" aria-controls="waiting-list-card-service-{{ entry.pk }}">
+            <span class="waiting-list-card-title">Услуга и сроки</span>
+            <span class="waiting-list-card-value">{{ entry.get_service_id_display }}</span>
+            <span class="waiting-list-card-meta">Целевая: {% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %} · крайняя: {% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</span>
+            <span class="waiting-list-card-edit-hint">Нажмите, чтобы изменить</span>
+          </button>
+          <div id="waiting-list-card-service-{{ entry.pk }}" class="waiting-list-card-editor">
+            <div class="input-group full-width">
+              <label for="{{ form.service_id.id_for_label }}">{{ form.service_id.label }}</label>
+              {{ form.service_id }}{{ form.service_id.errors }}
+            </div>
+            <div class="input-group">
+              <label for="{{ form.date_tag.id_for_label }}">{{ form.date_tag.label }}</label>
+              {{ form.date_tag }}{{ form.date_tag.errors }}
+            </div>
+            <div class="input-group">
+              <label for="{{ form.date_end.id_for_label }}">{{ form.date_end.label }}</label>
+              {{ form.date_end }}{{ form.date_end.errors }}
+            </div>
+          </div>
+        </section>
+
+        <section class="waiting-list-edit-card{% if form.priority_cito.errors or form.comment.errors or form.non_field_errors %} is-editing{% endif %}" data-edit-card>
+          <button type="button" class="waiting-list-card-summary" data-edit-card-toggle aria-expanded="{% if form.priority_cito.errors or form.comment.errors or form.non_field_errors %}true{% else %}false{% endif %}" aria-controls="waiting-list-card-note-{{ entry.pk }}">
+            <span class="waiting-list-card-title">Комментарий и приоритет</span>
+            <span class="waiting-list-card-value">{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный приоритет{% endif %}</span>
+            <span class="waiting-list-card-meta">{{ entry.comment|default:"Комментарий не указан"|truncatechars:90 }}</span>
+            <span class="waiting-list-card-edit-hint">Нажмите, чтобы изменить</span>
+          </button>
+          <div id="waiting-list-card-note-{{ entry.pk }}" class="waiting-list-card-editor">
+            <div class="input-group full-width checkbox-group">
+              {{ form.priority_cito }}
+              <label for="{{ form.priority_cito.id_for_label }}">{{ form.priority_cito.label }}</label>
+              {{ form.priority_cito.errors }}
+            </div>
+            <div class="input-group full-width">
+              <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+              {{ form.comment }}{{ form.comment.errors }}
+            </div>
+          </div>
+        </section>
+      </div>
+    </form>
+  {% else %}
+    <div class="waiting-list-card-grid waiting-list-card-grid-readonly">
+      <section class="waiting-list-read-card"><span class="waiting-list-card-title">Пациент</span><span class="waiting-list-card-value">{{ entry.patient_name }}</span><span class="waiting-list-card-meta">{{ entry.patient_dob|date:"d.m.Y" }}</span></section>
+      <section class="waiting-list-read-card"><span class="waiting-list-card-title">Контакты</span><span class="waiting-list-card-value">{{ entry.patient_phone }}</span><span class="waiting-list-card-meta">Телефон пациента</span></section>
+      <section class="waiting-list-read-card"><span class="waiting-list-card-title">Услуга и сроки</span><span class="waiting-list-card-value">{{ entry.get_service_id_display }}</span><span class="waiting-list-card-meta">Целевая: {% if entry.date_tag %}{{ entry.date_tag|date:"d.m.Y" }}{% else %}—{% endif %} · крайняя: {% if entry.date_end %}{{ entry.date_end|date:"d.m.Y" }}{% else %}—{% endif %}</span></section>
+      <section class="waiting-list-read-card"><span class="waiting-list-card-title">Комментарий и приоритет</span><span class="waiting-list-card-value">{% if entry.priority_cito %}<span class="cito-indicator">CITO!</span>{% else %}Обычный приоритет{% endif %}</span><span class="waiting-list-card-meta">{{ entry.comment|default:"Комментарий не указан"|linebreaksbr }}</span></section>
     </div>
-    <div class="description-text">{{ entry.comment|linebreaks }}</div>
-  </div>
   {% endif %}
 
-  <div class="content-block" style="margin-top: 2rem;">
+  <div class="content-block waiting-list-audit-block">
     <div class="block-header">
       <span class="detail-label">История изменений</span>
     </div>
     <div class="timeline" id="audit-timeline">
-      {% if entry.audit_logs.all %}
-        {% for log in entry.audit_logs.all reversed %}
+      {% for log in entry.audit_logs.all reversed %}
         <div class="timeline-item">
           <div class="timeline-time">{{ log.created_at|date:"d.m.Y H:i" }}</div>
           <div class="timeline-text">
@@ -87,21 +160,23 @@
             {{ log.action }}
           </div>
         </div>
-        {% endfor %}
-      {% else %}
+      {% empty %}
         <div class="timeline-item">
-          <div class="timeline-text" style="color: var(--text-muted)">Нет истории</div>
+          <div class="timeline-text text-muted">Нет истории</div>
         </div>
-      {% endif %}
+      {% endfor %}
     </div>
   </div>
 </div>
 
 <div class="drawer-footer">
-  <button class="btn btn-outline"
-          hx-get="{% url 'waiting_list:update' entry.pk %}"
-          hx-target="#entry-detail-panel-content"
-          hx-swap="innerHTML">Редактировать</button>
-  <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Закрыть</button>
+  {% if can_edit %}
+    <button type="submit" form="waiting-list-inline-form" class="btn btn-primary" data-waiting-list-save hidden>Сохранить изменения</button>
+  {% endif %}
+  {% if is_standalone_detail %}
+    <a href="{% url 'waiting_list:dashboard' %}" class="btn btn-ghost">Назад к списку</a>
+  {% else %}
+    <button type="button" class="btn btn-ghost" onclick="closeWaitingListDrawer()">Закрыть</button>
+  {% endif %}
 </div>
 </div>

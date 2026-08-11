@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.db.models.deletion import ProtectedError
@@ -412,6 +412,69 @@ class AccessAssignmentServiceTests(TestCase):
             )
         self.assertFalse(AccessAssignmentAudit.objects.exists())
 
+    def test_only_superuser_can_change_technical_flags_even_with_valid_role_permission(self):
+        with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
+            preview_role_assignment(
+                actor=self.actor,
+                target_user=self.target,
+                selected_role_names=["customer"],
+                is_staff=True,
+                is_superuser=False,
+            )
+
+    def test_superuser_grants_technical_flags_through_confirmed_preview_and_audit(self):
+        root = get_user_model().objects.create_superuser(username="access-root-grant")
+        preview = preview_role_assignment(
+            actor=root,
+            target_user=self.target,
+            selected_role_names=["customer"],
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        self.assertTrue(preview["requires_confirmation"])
+        self.assertEqual(
+            {item["code"] for item in preview["flags_changed"]},
+            {"is_staff", "is_superuser"},
+        )
+        with self.assertRaisesMessage(ValidationError, "явного подтверждения"):
+            apply_role_assignment(
+                actor=root,
+                target_user=self.target,
+                selected_role_names=["customer"],
+                is_staff=True,
+                is_superuser=True,
+                preview_token=preview["preview_token"],
+            )
+
+        target, audit = apply_role_assignment(
+            actor=root,
+            target_user=self.target,
+            selected_role_names=["customer"],
+            is_staff=True,
+            is_superuser=True,
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+        )
+
+        self.assertTrue(target.is_staff)
+        self.assertTrue(target.is_superuser)
+        self.assertEqual(audit.flags_before, {"is_staff": False, "is_superuser": False})
+        self.assertEqual(audit.flags_after, {"is_staff": True, "is_superuser": True})
+        self.assertEqual({item["code"] for item in audit.flags_changed}, {"is_staff", "is_superuser"})
+
+    def test_superuser_cannot_remove_own_superuser_flag(self):
+        root = get_user_model().objects.create_superuser(username="access-root-self")
+
+        with self.assertRaisesMessage(ValidationError, "собственной учетной записи"):
+            preview_role_assignment(
+                actor=root,
+                target_user=root,
+                selected_role_names=[],
+                is_staff=False,
+                is_superuser=False,
+            )
+
     def test_effective_access_explains_all_supported_sources(self):
         permission = Permission.objects.select_related("content_type").first()
         self.target.user_permissions.add(permission)
@@ -428,6 +491,21 @@ class AccessAssignmentServiceTests(TestCase):
             {item["code"] for item in access["django_permissions"]},
         )
         self.assertTrue(any(source["type"] == "role" for item in access["capabilities"] for source in item["sources"]))
+
+    def test_effective_access_explains_default_board_view_for_roleless_user(self):
+        roleless = get_user_model().objects.create_user(username="access-default-viewer")
+
+        access = effective_access_for_user(roleless)
+
+        self.assertEqual(access["roles"][0]["code"], "default_board_viewer")
+        self.assertEqual(access["roles"][0]["source"], "default_policy")
+        view_scope = next(
+            item for item in access["capabilities"] if item["code"] == "view_scope"
+        )
+        self.assertEqual(view_scope["sources"][0]["value"], "department_branch")
+        self.assertFalse(
+            any(item["code"] == "create_workorder" for item in access["capabilities"])
+        )
 
     def test_superuser_access_explains_capabilities_without_role_groups(self):
         superuser = get_user_model().objects.create_superuser(username="access-root")

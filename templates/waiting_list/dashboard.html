@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static django_htmx %}
 
+{% block page_container_extra_class %} page-container--flush-toolbar{% endblock %}
+
 {% block header_context %}
 <nav class="breadcrumbs header-breadcrumbs">
   <a href="{% url 'core:dashboard' %}">{{ app_display_name }}</a>
@@ -208,6 +210,15 @@
     if (panel) panel.classList.remove('active');
     if (overlay) overlay.classList.remove('active');
   }
+
+  document.body.addEventListener('waitingListEntryUpdated', function() {
+    const tableBody = document.getElementById('entry-table');
+    if (!tableBody || !window.htmx) return;
+    window.htmx.ajax('GET', window.location.pathname + window.location.search, {
+      target: '#entry-table',
+      swap: 'outerHTML'
+    });
+  });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', function(e) {

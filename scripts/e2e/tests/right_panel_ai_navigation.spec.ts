@@ -77,6 +77,20 @@ test.describe("@ai AI right panel navigation", () => {
 
     await expect(page.locator("#global-right-panel.active")).toBeVisible();
     await expect(page.locator("#global-right-panel-content [data-ai-context]")).toBeVisible();
+    const inlineForm = page.locator("#global-right-panel-content [data-waiting-list-inline-form]");
+    await expect(inlineForm).toBeVisible();
+    await expect(page.locator("#global-right-panel-content").getByRole("button", { name: "Редактировать" })).toHaveCount(0);
+    await expect(inlineForm.locator("[data-edit-card]")).toHaveCount(4);
+    const commentCard = inlineForm.getByRole("button", { name: /Комментарий и приоритет/ });
+    await commentCard.focus();
+    await commentCard.press("Enter");
+    const auditText = `E2E встроенное редактирование ${Date.now()}`;
+    await inlineForm.locator('textarea[name="comment"]').fill(auditText);
+    await page.locator("#global-right-panel-content [data-waiting-list-save]").click();
+    await expect(page.locator('#global-right-panel-content [data-waiting-list-inline-form] textarea[name="comment"]'))
+      .toHaveValue(auditText);
+    await expect(page.locator("#global-right-panel-content #audit-timeline"))
+      .toContainText("Изменены поля: комментарий");
     const context = await page.evaluate(() => window.LocalBusinessPageContext?.getCurrent());
     expect(context?.envelope?.selection?.object_type).toBe("waiting_list_entry");
   });

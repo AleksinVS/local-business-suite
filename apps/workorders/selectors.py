@@ -8,7 +8,12 @@ from .department_filter import (
     resolve_department_selection,
 )
 from .models import Board, WorkOrder
-from .policies import allowed_view_scopes, user_department_branch_ids
+from .policies import (
+    DEFAULT_BOARD_VISIBILITY_GROUP,
+    allowed_view_scopes,
+    default_board_access_applies,
+    user_department_branch_ids,
+)
 
 
 def visible_boards_queryset(user):
@@ -16,6 +21,10 @@ def visible_boards_queryset(user):
         return Board.objects.none()
     if user.is_superuser:
         return Board.objects.all()
+    if default_board_access_applies(user):
+        return Board.objects.filter(
+            allowed_groups__name=DEFAULT_BOARD_VISIBILITY_GROUP
+        ).distinct()
     return Board.objects.filter(allowed_groups__in=user.groups.all()).distinct()
 
 

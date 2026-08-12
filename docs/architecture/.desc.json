@@ -4,7 +4,7 @@
   "blueprint.md": "Blueprint — детальный план системы",
   "DOMAIN_MODEL.md": "Доменная модель (сущности, инварианты)",
   "INTEGRATIONS.md": "Интеграции с внешними системами",
-  "POLICY_MODEL.md": "Модель политик доступа",
+  "POLICY_MODEL.md": "Модель политик доступа и read-model единого окна администрирования",
   "DESIGN_PATTERNS_REVIEW_2026-06-01.md": "Анализ полезных паттернов проектирования для текущей архитектуры",
   "PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md": "Обзор моделей-кандидатов глубокого слоя обезличивания (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) и оценка применимости",
   "ANALYTICS_MODEL.md": "Модель аналитики (экспорт данных)",

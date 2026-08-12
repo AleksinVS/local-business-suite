@@ -145,6 +145,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     views.py: file # JSON API уведомлений, страница центра уведомлений и корневой service worker
   settings_center: # Reusable Settings Center: descriptors, registry, UI, audit, runtime contract apply, env proposals and contextual help
     access_filters.py: file # Server-side search, role, department branch and attention filters for access administration
+    access_workspace.py: file # Prefetched read model for the canonical unified access workspace
     admin.py: file # Django Admin registration for Settings Center audit models
     apps.py: file # Django AppConfig for Settings Center
     contract_services.py: file # Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback
@@ -345,7 +346,7 @@ docs: # Документация проекта
     MEMORY_TRUSTED_SOURCES_CLAIMS_AND_RETRIEVAL_PLAN.md: file # План trusted sources, claim/belief layer и lightweight retrieval orchestration
     NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md: file # План разработки основного самописного AG-UI ИИ-чата
     OBSERVABILITY_BASELINE.md: file # Базовая наблюдаемость: p50/p95, latency-события и отчет performance_report
-    POLICY_MODEL.md: file # Модель политик доступа
+    POLICY_MODEL.md: file # Модель политик доступа и read-model единого окна администрирования
     POSTGRESQL_PRIMARY_STORE_PLAN.md: file # План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта
     PRIVACY_DEEP_LAYER_MODELS_REVIEW_2026-07-13.md: file # Обзор моделей-кандидатов глубокого слоя обезличивания (openai/privacy-filter, GLiNER2-PII, Piiranha, Presidio+RU NER) и оценка применимости
     project-knowledge-system-v0.1.md: file # Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)
@@ -364,7 +365,7 @@ docs: # Документация проекта
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
-    ACCESS_MANAGEMENT_USER_GUIDE.md: file # Руководство администратора по ролям, техническим флагам, группам, предпросмотру и журналу
+    ACCESS_MANAGEMENT_USER_GUIDE.md: file # Руководство администратора по единому окну доступа, derived-полям, preview/apply и резервному Admin
     AI_SIDEBAR_CHAT.md: file # Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings
     AI_SKILLS_OPERATIONS.md: file # Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources
     AI_UI_PROTOCOL_OPERATIONS.md: file # Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native
@@ -418,7 +419,7 @@ scripts: # Скрипты и инструменты разработки
     reset-test-database.py: file # Безопасное удаление только локальных файлов повторно используемой тестовой SQLite-базы
   e2e: # Playwright e2e configuration and tests
     tests: # Permanent Playwright e2e scenarios
-      access_administration.spec.ts: file # Checks the compact access list, user card, reserve Django Admin route and narrow viewport
+      access_administration.spec.ts: file # Checks six access tabs, master-detail editors, memory context, reserve Django Admin and 320px dialog behavior
       copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
       health.spec.ts: file # Checks that the Django health endpoint is reachable without starting a browser
       kanban_department_filter.spec.ts: file # Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar
@@ -476,6 +477,8 @@ static: # Исходные статические ресурсы (CSS, JS)
     copilotkit: # Исходники React-острова CopilotKit для основной Django-оболочки
       copilotkit.css: file # Локальные стили встраивания CopilotKit в левую панель портала
       main.jsx: file # Точка входа React-острова CopilotKit
+    js: # Клиентские модули интерфейса
+      access_workspace.js: file # Доступное управление состоянием инспектора единого окна доступа: Escape, фокус и безопасные URL
   manifest.webmanifest: file # PWA manifest портала
   service-worker.js: file # Service worker PWA без кэширования защищенных HTML/API, CopilotKit dist bundle и native AI UI bundle
 templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
@@ -518,6 +521,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     partials: # HTMX partials for Settings Center contextual help
       help_answer.html: file # Частичный ответ миничата
       help_panel.html: file # Плавающее окно справки и миничата по конкретному setting_id
+    access_workspace.html: file # Каноническое единое окно с six access tabs, таблицами и master-detail инспектором
     ad_link_form.html: file # Форма явной привязки локального пользователя к AD identity
     admin_access_assignment.html: file # Резервный Django Admin preview/apply для контрактных ролей и технических флагов
     board_access_form.html: file # Основной и резервный preview/apply-сценарий доступа к доске
@@ -530,7 +534,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     role_definition_form.html: file # Точечный редактор одной роли с серверным diff и оценкой влияния
     setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
     user_form.html: file # Создание пользователя, отдельное изменение учётной записи и карточка доступа
-    user_list.html: file # Локальное управление пользователями портала
+    user_list.html: file # Совместимый standalone-список пользователей портала
     workflow_transitions.html: file # Матрица настройки переходов статусов заявок через workflow_rules contract
     workorder_status_colors.html: file # Форма настройки цветов статусов заявок через runtime contract
   waiting_list: # Шаблоны листа ожидания
@@ -572,8 +576,10 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
       EXECUTOR_REPORT.contract-board-role-memory-slice.md: file # Отчёт реализации пакетов 00c, 00d и 03
       EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
+      EXECUTOR_REPORT.workspace-ux-critique-cycle.md: file # Отчёт цикла критики и исправлений единого окна workspace
       TASK_ACCEPTANCE.contract-board-role-memory-slice.md: file # Техническая приёмка пакетов 00c, 00d и 03
       TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
+      TASK_ACCEPTANCE.workspace-ux-critique-cycle.md: file # Техническая приёмка пакетов 06–08 единого окна доступа
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

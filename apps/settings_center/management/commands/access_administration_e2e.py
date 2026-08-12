@@ -147,13 +147,20 @@ class Command(BaseCommand):
                         raise CommandError("Участник technician+manager потерял доступ manager.")
 
                     client.force_login(actor)
-                    role_url = reverse("settings_center:role_definition", args=[role_code])
-                    page = client.get(role_url)
+                    role_url = reverse("settings_center:access_workspace")
+                    role_query = {
+                        "view": "roles",
+                        "object": role_code,
+                        "field": "definition",
+                        "panel": "field",
+                    }
+                    page = client.get(role_url, role_query)
                     page_context = self._response_context(page, label="страница роли")
-                    form = page_context["form"]
+                    form = page_context["field_form"]
                     role_post = {
                         "action": "preview",
-                        "base_hash": page_context["role"]["base_hash"],
+                        **role_query,
+                        "base_hash": form.initial.get("base_hash") or form["base_hash"].value(),
                     }
                     for field_name in form.fields:
                         if not field_name.startswith("capability__"):
@@ -171,9 +178,7 @@ class Command(BaseCommand):
                         elif value is not False and value is not None:
                             role_post[field_name] = value
                     preview_response = client.post(role_url, role_post)
-                    preview = self._response_context(
-                        preview_response, label="предпросмотр роли"
-                    ).get("preview")
+                    preview = self._response_context(preview_response, label="предпросмотр роли").get("field_preview")
                     if not preview or preview["impact"]["role_member_count"] != 2:
                         raise CommandError("Role preview не показал двух уникальных участников роли.")
                     if preview["impact"]["effective_change_count"] != 1:
@@ -196,16 +201,21 @@ class Command(BaseCommand):
                         raise CommandError("Совмещённая роль technician+manager потеряла доступ.")
 
                     client.force_login(actor)
-                    board_url = reverse("settings_center:board_access", args=[board.pk])
+                    board_url = reverse("settings_center:access_workspace")
+                    board_query = {
+                        "view": "boards",
+                        "object": board.pk,
+                        "field": "groups",
+                        "panel": "field",
+                    }
                     board_data = {
                         "action": "preview",
+                        **board_query,
                         "group_names": [role_code, control_role_code],
                         "reason": "Сквозная проверка доступа к доске.",
                     }
                     board_preview_response = client.post(board_url, board_data)
-                    board_preview = self._response_context(
-                        board_preview_response, label="предпросмотр доски"
-                    ).get("preview")
+                    board_preview = self._response_context(board_preview_response, label="предпросмотр доски").get("field_preview")
                     if not board_preview:
                         raise CommandError("Board preview не сформирован.")
                     board_data.update(
@@ -216,18 +226,21 @@ class Command(BaseCommand):
                     if client.post(board_url, board_data).status_code != 302:
                         raise CommandError("Доступ к доске не применился через HTTP.")
 
-                    memory_url = reverse(
-                        "settings_center:memory_group_membership", args=[member.pk]
-                    )
+                    memory_url = reverse("settings_center:access_workspace")
+                    memory_query = {
+                        "view": "users",
+                        "object": member.pk,
+                        "field": "memory-groups",
+                        "panel": "field",
+                    }
                     memory_data = {
                         "action": "preview",
+                        **memory_query,
                         "group_names": ["memory_observer"],
                         "reason": "Сквозная проверка экспертного назначения.",
                     }
                     memory_preview_response = client.post(memory_url, memory_data)
-                    memory_preview = self._response_context(
-                        memory_preview_response, label="предпросмотр технической группы"
-                    ).get("preview")
+                    memory_preview = self._response_context(memory_preview_response, label="предпросмотр технической группы").get("field_preview")
                     if not memory_preview:
                         raise CommandError("Memory membership preview не сформирован.")
                     memory_data.update(

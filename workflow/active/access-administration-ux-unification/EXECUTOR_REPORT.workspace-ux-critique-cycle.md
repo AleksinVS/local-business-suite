@@ -1,0 +1,44 @@
+# Executor report: workspace UX critique cycle
+
+## Scope
+
+Исправлены read-model и пользовательская оболочка единого окна доступа в рамках
+пакета 08. Доменные сервисы и параллельные изменения `apps/accounts/**` не
+изменялись.
+
+## Result
+
+- фильтры применяются только к таблице пользователей; роли и составы строятся
+  по полному набору пользователей;
+- глубокие пути подразделений строятся единым запросом справочника и в памяти;
+- `default_board_viewer` отображается как read-only источник;
+- field links имеют `panel=field`, object links — `panel=inspector`;
+- read-only поля получают левую объясняющую панель;
+- карточка пользователя показывает профиль, AD, синхронизацию и все группы;
+- добавлены sticky first column, единый mobile dialog, focus trap, Escape,
+  dirty-form guard и восстановление фокуса;
+- основной navigation и dashboard ведут на `/settings/access/`;
+- management e2e переведён на workspace HTTP preview/apply;
+- обновлены Playwright сценарии и пользовательская/архитектурная документация.
+
+## Verification
+
+`make verify-fast TEST_SCOPE=apps/settings_center/tests.py` — 56 passed,
+1 deselected, 9 subtests passed.
+
+`node --check static/src/js/access_workspace.js` — passed.
+
+Playwright TypeScript static check skipped: зависимости отсутствуют в
+`scripts/e2e/node_modules`.
+
+После отчёта исполнителя основной агент установил фактическую доступность
+Playwright из корневого окружения и расширил browser-сценарии проверками 320/1024 px,
+несохранённых данных и пакетного состава роли. Также добавлен подписанный preview/stale-контур
+профиля и AD identity, редактор описания роли и проведена отдельная техническая
+приёмка в `TASK_ACCEPTANCE.workspace-ux-critique-cycle.md`.
+
+## Residual risk
+
+Визуальный Playwright прогон требует установленного e2e окружения. Изменения
+параллельного слоя `apps/accounts/**` находятся в общем рабочем дереве и не
+входят в этот отчёт.

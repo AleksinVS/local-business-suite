@@ -246,12 +246,19 @@ def _normalize_proposed_role(*, role_code, before, proposed):
     if not isinstance(before, dict) or not isinstance(proposed, dict):
         raise ValidationError("Некорректное определение роли.")
     catalog = capability_catalog()
-    unknown = sorted(set(proposed) - set(catalog))
+    metadata_fields = {"display_name", "description"}
+    unknown = sorted(set(proposed) - set(catalog) - metadata_fields)
     if unknown:
         raise ValidationError(
             "Переданы неизвестные права роли: " + ", ".join(unknown) + "."
         )
     after = copy.deepcopy(before)
+    for field in metadata_fields:
+        if field in proposed:
+            value = str(proposed[field] or "").strip()
+            if field == "display_name" and not value:
+                raise ValidationError("Название роли не может быть пустым.")
+            after[field] = value
     for capability in catalog:
         if capability not in proposed:
             raise ValidationError(f"Не передано право '{capability}' роли '{role_code}'.")
@@ -262,6 +269,22 @@ def _normalize_proposed_role(*, role_code, before, proposed):
 def _role_definition_changes(*, before, after):
     catalog = capability_catalog()
     changes = []
+    for code, label in (("display_name", "Название роли"), ("description", "Описание роли")):
+        if before.get(code, "") == after.get(code, ""):
+            continue
+        changes.append(
+            {
+                "code": code,
+                "label": label,
+                "section": "Основные сведения",
+                "type": "text",
+                "risk": "normal",
+                "direction": "metadata",
+                "risk_label": "обычный риск",
+                "before": str(before.get(code, "")),
+                "after": str(after.get(code, "")),
+            }
+        )
     for capability, metadata in catalog.items():
         if before.get(capability) == after.get(capability):
             continue

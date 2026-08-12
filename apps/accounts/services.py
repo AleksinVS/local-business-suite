@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 
 from django.conf import settings
@@ -45,6 +46,11 @@ SAFE_AD_ATTRIBUTE_KEYS = {
 
 ACCESS_PREVIEW_SIGNING_SALT = "accounts.access-assignment-preview.v2"
 ACCESS_PREVIEW_MAX_AGE_SECONDS = 600
+ROLE_MEMBERSHIP_PREVIEW_SIGNING_SALT = "accounts.role-membership-preview.v1"
+ROLE_MEMBERSHIP_PREVIEW_MAX_AGE_SECONDS = 600
+USER_PROFILE_PREVIEW_SIGNING_SALT = "accounts.user-profile-preview.v1"
+EXTERNAL_IDENTITY_PREVIEW_SIGNING_SALT = "accounts.external-identity-preview.v1"
+ACCOUNT_DATA_PREVIEW_MAX_AGE_SECONDS = 600
 
 PRIVILEGED_FLAG_LABELS = {
     "is_staff": "Доступ к администрированию",
@@ -56,6 +62,25 @@ SELF_ASSIGNMENT_RISK_MARKER = (
     "технического флага суперпользователя"
 )
 BREAK_GLASS_RISK_MARKER = "Резервное изменение доступа через Django Admin"
+
+USER_PROFILE_EDITABLE_FIELDS = {
+    "username",
+    "first_name",
+    "last_name",
+    "email",
+    "department",
+    "is_active",
+    "password",
+}
+EXTERNAL_IDENTITY_EDITABLE_FIELDS = {
+    "provider",
+    "subject_id",
+    "username",
+    "upn",
+    "distinguished_name",
+    "domain",
+    "sync_status",
+}
 
 
 def assignable_role_names_for_actor(*, actor, target_user):
@@ -193,6 +218,453 @@ def apply_role_assignment(
             )
     except FileLockTimeoutError as exc:
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+def preview_role_membership_change(
+    *,
+    actor,
+    role_name,
+    selected_user_ids,
+    reason="",
+):
+    """Подписать пакетное изменение участников одной контрактной роли.
+
+    Проекция роли не владеет отдельным M2M write-path: операция раскладывается на
+    обычные назначения пользователям и заранее проверяет полномочия для каждой
+    изменяемой учётной записи.
+    """
+
+    actor = _current_access_actor(actor)
+    _require_role_manager(actor)
+    role_name = _single_role_name(role_name)
+    reason = _normalize_membership_reason(reason)
+    selected_ids = _validate_membership_user_ids(selected_user_ids)
+    User = get_user_model()
+    selected_users = list(
+        User.objects.filter(pk__in=selected_ids)
+        .prefetch_related("groups")
+        .order_by("pk")
+    )
+    found_ids = {user.pk for user in selected_users}
+    missing_ids = sorted(set(selected_ids) - found_ids)
+    if missing_ids:
+        raise ValidationError(
+            "Пользователи не найдены: " + ", ".join(str(value) for value in missing_ids)
+        )
+    current_member_ids = sorted(
+        User.objects.filter(groups__name=role_name)
+        .distinct()
+        .values_list("pk", flat=True)
+    )
+    changed_ids = sorted(set(current_member_ids) ^ set(selected_ids))
+    if not changed_ids:
+        raise ValidationError("Состав роли не изменился.")
+    changed_users = {
+        user.pk: user
+        for user in User.objects.filter(pk__in=changed_ids)
+        .prefetch_related("groups")
+        .order_by("pk")
+    }
+    target_states = []
+    preview_rows = []
+    requires_confirmation = False
+    configs = contract_role_configs()
+    for user_id in changed_ids:
+        target = changed_users[user_id]
+        before = _selected_role_names_from_loaded_user(target, configs)
+        after = sorted(
+            (set(before) | {role_name})
+            if user_id in selected_ids
+            else (set(before) - {role_name})
+        )
+        _validate_role_assignment_authority(
+            actor=actor,
+            target_user=target,
+            before=before,
+            after=after,
+        )
+        flags = _technical_flags_for_user(target)
+        risk_markers = _role_membership_risk_markers(
+            actor=actor,
+            target_user=target,
+            role_name=role_name,
+            before=before,
+            after=after,
+            configs=configs,
+        )
+        requires_confirmation = requires_confirmation or bool(risk_markers)
+        target_states.append(
+            {
+                "target_id": user_id,
+                "before": before,
+                "after": after,
+                "flags": flags,
+            }
+        )
+        preview_rows.append(
+            {
+                "user_id": user_id,
+                "label": target.get_full_name() or target.username,
+                "username": target.username,
+                "action": "add" if user_id in selected_ids else "remove",
+                "risk_markers": risk_markers,
+            }
+        )
+    payload = {
+        "actor_id": actor.pk,
+        "actor_state": _actor_access_state(actor),
+        "role_name": role_name,
+        "member_ids_before": current_member_ids,
+        "member_ids_after": selected_ids,
+        "target_states": target_states,
+        "role_contract_hash": current_contract_hash("role_rules"),
+        "reason": reason,
+        "nonce": str(uuid.uuid4()),
+    }
+    return {
+        "role_name": role_name,
+        "member_ids_before": current_member_ids,
+        "member_ids_after": selected_ids,
+        "added": [row for row in preview_rows if row["action"] == "add"],
+        "removed": [row for row in preview_rows if row["action"] == "remove"],
+        "changed_count": len(preview_rows),
+        "requires_confirmation": requires_confirmation,
+        "preview_token": signing.dumps(
+            payload,
+            salt=ROLE_MEMBERSHIP_PREVIEW_SIGNING_SALT,
+            compress=True,
+        ),
+    }
+
+
+def apply_role_membership_change(
+    *,
+    actor,
+    role_name,
+    selected_user_ids,
+    preview_token,
+    risk_confirmed=False,
+    reason="",
+):
+    """Атомарно применить состав роли с отдельным аудитом каждой цели."""
+
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _apply_role_membership_change_locked(
+                actor=actor,
+                role_name=role_name,
+                selected_user_ids=selected_user_ids,
+                preview_token=preview_token,
+                risk_confirmed=risk_confirmed,
+                reason=reason,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _apply_role_membership_change_locked(
+    *,
+    actor,
+    role_name,
+    selected_user_ids,
+    preview_token,
+    risk_confirmed=False,
+    reason="",
+):
+    role_name = _single_role_name(role_name)
+    selected_ids = _validate_membership_user_ids(selected_user_ids)
+    reason = _normalize_membership_reason(reason)
+    signed = _load_role_membership_preview_token(preview_token)
+    if signed.get("actor_id") != getattr(actor, "pk", None):
+        raise ValidationError("Предпросмотр относится к другому администратору.")
+    if signed.get("role_name") != role_name:
+        raise ValidationError("Предпросмотр относится к другой роли.")
+    if signed.get("member_ids_after") != selected_ids:
+        raise ValidationError("Состав роли изменён после предпросмотра.")
+    if signed.get("reason") != reason:
+        raise ValidationError("Причина изменена после предпросмотра.")
+
+    User = get_user_model()
+    locked_actor = User.objects.select_for_update().get(pk=actor.pk)
+    _require_role_manager(locked_actor)
+    if signed.get("actor_state") != _actor_access_state(locked_actor):
+        raise ValidationError("Права администратора изменились после предпросмотра.")
+    if signed.get("role_contract_hash") != current_contract_hash("role_rules"):
+        raise ValidationError("Контракт ролей изменился после предпросмотра.")
+
+    current_member_ids = sorted(
+        User.objects.filter(groups__name=role_name)
+        .distinct()
+        .values_list("pk", flat=True)
+    )
+    if signed.get("member_ids_before") != current_member_ids:
+        raise ValidationError("Состав роли уже изменился. Выполните предпросмотр снова.")
+    changed_ids = sorted(set(current_member_ids) ^ set(selected_ids))
+    signed_states = signed.get("target_states")
+    if (
+        not isinstance(signed_states, list)
+        or len(signed_states) != len(changed_ids)
+        or any(
+            not isinstance(state, dict)
+            or isinstance(state.get("target_id"), bool)
+            or not isinstance(state.get("target_id"), int)
+            for state in signed_states
+        )
+        or sorted(state["target_id"] for state in signed_states) != changed_ids
+    ):
+        raise ValidationError("Предпросмотр состава роли имеет неверный формат.")
+
+    locked_targets = {
+        user.pk: user
+        for user in User.objects.select_for_update()
+        .filter(pk__in=changed_ids)
+        .prefetch_related("groups")
+        .order_by("pk")
+    }
+    if set(locked_targets) != set(changed_ids):
+        raise ValidationError("Один из пользователей больше не существует.")
+
+    configs = contract_role_configs()
+    changes = []
+    any_risk = False
+    for signed_state in signed_states:
+        target_id = signed_state["target_id"]
+        target = locked_targets[target_id]
+        before = _selected_role_names_from_loaded_user(target, configs)
+        after = sorted(
+            (set(before) | {role_name})
+            if target_id in selected_ids
+            else (set(before) - {role_name})
+        )
+        flags = _technical_flags_for_user(target)
+        if (
+            signed_state.get("before") != before
+            or signed_state.get("after") != after
+            or signed_state.get("flags") != flags
+        ):
+            raise ValidationError(
+                "Доступ одного из пользователей изменился. Выполните предпросмотр снова."
+            )
+        _validate_role_assignment_authority(
+            actor=locked_actor,
+            target_user=target,
+            before=before,
+            after=after,
+        )
+        risk_markers = _role_membership_risk_markers(
+            actor=locked_actor,
+            target_user=target,
+            role_name=role_name,
+            before=before,
+            after=after,
+            configs=configs,
+        )
+        any_risk = any_risk or bool(risk_markers)
+        fingerprint = hashlib.sha256(
+            f"{preview_token}:{target_id}".encode("utf-8")
+        ).hexdigest()
+        changes.append(
+            {
+                "target": target,
+                "before": before,
+                "after": after,
+                "flags": flags,
+                "risk_markers": risk_markers,
+                "fingerprint": fingerprint,
+            }
+        )
+    if any_risk and not risk_confirmed:
+        raise ValidationError("Изменение чувствительного доступа требует подтверждения.")
+    fingerprints = [change["fingerprint"] for change in changes]
+    if AccessAssignmentAudit.objects.filter(preview_fingerprint__in=fingerprints).exists():
+        raise ValidationError("Этот предпросмотр уже был применён.")
+
+    role_group = Group.objects.filter(name=role_name).first()
+    if role_group is None:
+        raise ValidationError(
+            f"Группа роли '{role_name}' не создана. Выполните seed_roles."
+        )
+    audits = []
+    try:
+        for change in changes:
+            target = change["target"]
+            if role_name in change["after"]:
+                target.groups.add(role_group)
+            else:
+                target.groups.remove(role_group)
+            added = sorted(set(change["after"]) - set(change["before"]))
+            removed = sorted(set(change["before"]) - set(change["after"]))
+            audits.append(
+                AccessAssignmentAudit.objects.create(
+                    actor=locked_actor,
+                    target_user=target,
+                    roles_before=change["before"],
+                    roles_after=change["after"],
+                    roles_added=added,
+                    roles_removed=removed,
+                    flags_before=change["flags"],
+                    flags_after=change["flags"],
+                    flags_changed=[],
+                    risk_markers=change["risk_markers"],
+                    risk_confirmed=bool(change["risk_markers"] and risk_confirmed),
+                    source=AccessAssignmentAudit.Source.SETTINGS_CENTER,
+                    is_break_glass=False,
+                    reason=reason,
+                    preview_fingerprint=change["fingerprint"],
+                )
+            )
+    except IntegrityError as exc:
+        raise ValidationError("Этот предпросмотр уже был применён.") from exc
+    return audits
+
+
+def preview_user_profile_change(*, actor, target_user, cleaned_data, reason=""):
+    """Подписать изменение локального профиля без помещения PII в токен."""
+
+    current_actor = _current_access_actor(actor)
+    _require_superuser(current_actor)
+    target = get_user_model().objects.get(pk=target_user.pk)
+    proposed = _normalized_profile_change(cleaned_data)
+    reason = _normalize_account_data_reason(reason)
+    before = _user_profile_version_state(target)
+    after = _profile_state_after_change(before, proposed)
+    changes = _profile_change_labels(before, after, proposed)
+    if not changes:
+        raise ValidationError("Данные пользователя не изменились.")
+    payload = {
+        "actor_id": current_actor.pk,
+        "actor_state": _actor_access_state(current_actor),
+        "target_id": target.pk,
+        "before_hash": _private_state_hash("user-profile-before", before),
+        "proposed_hash": _private_state_hash("user-profile-after", proposed),
+        "reason_hash": _private_state_hash("user-profile-reason", reason),
+        "nonce": str(uuid.uuid4()),
+    }
+    return {
+        "changes": changes,
+        "reason": reason,
+        "preview_token": signing.dumps(
+            payload,
+            salt=USER_PROFILE_PREVIEW_SIGNING_SALT,
+            compress=True,
+        ),
+    }
+
+
+def apply_user_profile_change(
+    *, actor, target_user, cleaned_data, preview_token, reason="", audit_callback=None
+):
+    """Применить профиль только к версии, показанной в подписанном preview."""
+
+    signed = _load_account_data_preview(
+        preview_token,
+        salt=USER_PROFILE_PREVIEW_SIGNING_SALT,
+        label="данных пользователя",
+    )
+    proposed = _normalized_profile_change(cleaned_data)
+    reason = _normalize_account_data_reason(reason)
+    if signed.get("actor_id") != getattr(actor, "pk", None) or signed.get(
+        "target_id"
+    ) != getattr(target_user, "pk", None):
+        raise ValidationError("Предпросмотр относится к другому пользователю или администратору.")
+    if signed.get("proposed_hash") != _private_state_hash("user-profile-after", proposed):
+        raise ValidationError("Данные пользователя изменились после предпросмотра.")
+    if signed.get("reason_hash") != _private_state_hash("user-profile-reason", reason):
+        raise ValidationError("Причина изменена после предпросмотра.")
+
+    def locked_precondition(locked_actor, locked_user, _before_access):
+        if signed.get("actor_state") != _actor_access_state(locked_actor):
+            raise ValidationError("Права администратора изменились после предпросмотра.")
+        if signed.get("before_hash") != _private_state_hash(
+            "user-profile-before", _user_profile_version_state(locked_user)
+        ):
+            raise ValidationError("Данные пользователя уже изменились. Выполните предпросмотр снова.")
+
+    return update_local_user(
+        actor=actor,
+        user=target_user,
+        cleaned_data=dict(cleaned_data),
+        locked_precondition=locked_precondition,
+        audit_callback=audit_callback,
+    )
+
+
+def preview_external_identity_change(*, actor, target_user, cleaned_data, reason=""):
+    """Подписать изменение связи с AD с защитой от потерянного обновления."""
+
+    current_actor = _current_access_actor(actor)
+    _require_superuser(current_actor)
+    target = get_user_model().objects.get(pk=target_user.pk)
+    proposed = _normalized_external_identity_change(cleaned_data)
+    reason = _normalize_account_data_reason(reason)
+    identity = ExternalIdentity.objects.filter(
+        user=target,
+        provider=proposed.get("provider") or ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+    ).first()
+    before = _external_identity_state(identity)
+    after = {**before, **proposed, "identity_exists": True, "user_id": target.pk}
+    changes = _external_identity_change_labels(before, after)
+    if not changes:
+        raise ValidationError("Данные связи с AD не изменились.")
+    payload = {
+        "actor_id": current_actor.pk,
+        "actor_state": _actor_access_state(current_actor),
+        "target_id": target.pk,
+        "before_hash": _private_state_hash("external-identity-before", before),
+        "proposed_hash": _private_state_hash("external-identity-after", proposed),
+        "reason_hash": _private_state_hash("external-identity-reason", reason),
+        "nonce": str(uuid.uuid4()),
+    }
+    return {
+        "changes": changes,
+        "reason": reason,
+        "preview_token": signing.dumps(
+            payload,
+            salt=EXTERNAL_IDENTITY_PREVIEW_SIGNING_SALT,
+            compress=True,
+        ),
+    }
+
+
+def apply_external_identity_change(
+    *, actor, target_user, cleaned_data, preview_token, reason="", audit_callback=None
+):
+    """Применить AD identity только после свежего подписанного preview."""
+
+    signed = _load_account_data_preview(
+        preview_token,
+        salt=EXTERNAL_IDENTITY_PREVIEW_SIGNING_SALT,
+        label="связи с AD",
+    )
+    proposed = _normalized_external_identity_change(cleaned_data)
+    reason = _normalize_account_data_reason(reason)
+    if signed.get("actor_id") != getattr(actor, "pk", None) or signed.get(
+        "target_id"
+    ) != getattr(target_user, "pk", None):
+        raise ValidationError("Предпросмотр относится к другому пользователю или администратору.")
+    if signed.get("proposed_hash") != _private_state_hash(
+        "external-identity-after", proposed
+    ):
+        raise ValidationError("Данные связи с AD изменились после предпросмотра.")
+    if signed.get("reason_hash") != _private_state_hash("external-identity-reason", reason):
+        raise ValidationError("Причина изменена после предпросмотра.")
+
+    def locked_precondition(locked_actor, locked_user, identity):
+        if signed.get("actor_state") != _actor_access_state(locked_actor):
+            raise ValidationError("Права администратора изменились после предпросмотра.")
+        if signed.get("before_hash") != _private_state_hash(
+            "external-identity-before", _external_identity_state(identity)
+        ):
+            raise ValidationError("Связь с AD уже изменена. Выполните предпросмотр снова.")
+
+    return link_ad_identity(
+        actor=actor,
+        user=target_user,
+        cleaned_data=proposed,
+        locked_precondition=locked_precondition,
+        audit_callback=audit_callback,
+    )
 
 
 @transaction.atomic
@@ -745,7 +1217,9 @@ def _validate_managed_department(cleaned_data, *, required=False):
         raise ValidationError("Выберите рабочее подразделение из доступного справочника.")
 
 
-def link_ad_identity(*, actor, user, cleaned_data, audit_callback=None):
+def link_ad_identity(
+    *, actor, user, cleaned_data, locked_precondition=None, audit_callback=None
+):
     """Привязать внешний субъект под общей блокировкой и с атомарным аудитом."""
     try:
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
@@ -753,6 +1227,7 @@ def link_ad_identity(*, actor, user, cleaned_data, audit_callback=None):
                 actor=actor,
                 user=user,
                 cleaned_data=dict(cleaned_data),
+                locked_precondition=locked_precondition,
                 audit_callback=audit_callback,
             )
     except FileLockTimeoutError as exc:
@@ -760,7 +1235,9 @@ def link_ad_identity(*, actor, user, cleaned_data, audit_callback=None):
 
 
 @transaction.atomic
-def _link_ad_identity_locked(*, actor, user, cleaned_data, audit_callback=None):
+def _link_ad_identity_locked(
+    *, actor, user, cleaned_data, locked_precondition=None, audit_callback=None
+):
     User = get_user_model()
     locked_actor = User.objects.select_for_update().get(pk=actor.pk)
     _require_superuser(locked_actor)
@@ -780,6 +1257,8 @@ def _link_ad_identity_locked(*, actor, user, cleaned_data, audit_callback=None):
         .filter(user=locked_user, provider=provider)
         .first()
     )
+    if locked_precondition is not None:
+        locked_precondition(locked_actor, locked_user, identity)
     before = _external_identity_state(identity)
     if identity is None:
         identity = ExternalIdentity(user=locked_user, provider=provider)
@@ -1098,6 +1577,197 @@ def _load_preview_token(preview_token):
     if not isinstance(payload, dict):
         raise ValidationError("Предпросмотр имеет неверный формат.")
     return payload
+
+
+def _load_role_membership_preview_token(preview_token):
+    if not preview_token:
+        raise ValidationError("Сначала выполните предпросмотр состава роли.")
+    try:
+        payload = signing.loads(
+            preview_token,
+            salt=ROLE_MEMBERSHIP_PREVIEW_SIGNING_SALT,
+            max_age=ROLE_MEMBERSHIP_PREVIEW_MAX_AGE_SECONDS,
+        )
+    except signing.SignatureExpired as exc:
+        raise ValidationError("Предпросмотр устарел. Выполните его снова.") from exc
+    except signing.BadSignature as exc:
+        raise ValidationError("Подпись предпросмотра недействительна.") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError("Предпросмотр состава роли имеет неверный формат.")
+    return payload
+
+
+def _single_role_name(role_name):
+    roles = _validate_role_names([role_name])
+    if len(roles) != 1:
+        raise ValidationError("Нужно выбрать одну контрактную роль.")
+    return roles[0]
+
+
+def _validate_membership_user_ids(values):
+    normalized = []
+    for value in values or []:
+        if isinstance(value, bool):
+            raise ValidationError("Передан недопустимый идентификатор пользователя.")
+        try:
+            user_id = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(
+                "Передан недопустимый идентификатор пользователя."
+            ) from exc
+        if user_id <= 0:
+            raise ValidationError("Передан недопустимый идентификатор пользователя.")
+        normalized.append(user_id)
+    return sorted(set(normalized))
+
+
+def _normalize_membership_reason(reason):
+    normalized = str(reason or "").strip()
+    if len(normalized) > 1000:
+        raise ValidationError("Причина изменения доступа не должна превышать 1000 символов.")
+    return normalized
+
+
+def _selected_role_names_from_loaded_user(user, configs=None):
+    """Получить роли из prefetch-кэша, не создавая запрос на каждого пользователя."""
+
+    role_names = set(configs or contract_role_configs())
+    prefetched = getattr(user, "_prefetched_objects_cache", {}).get("groups")
+    if prefetched is None:
+        return selected_role_names_for_user(user)
+    return sorted(group.name for group in prefetched if group.name in role_names)
+
+
+def _normalize_account_data_reason(reason):
+    normalized = str(reason or "").strip()
+    if not normalized:
+        raise ValidationError("Укажите причину изменения.")
+    if len(normalized) > 1000:
+        raise ValidationError("Причина изменения не должна превышать 1000 символов.")
+    return normalized
+
+
+def _normalized_profile_change(cleaned_data):
+    raw = dict(cleaned_data or {})
+    unknown = sorted(set(raw) - USER_PROFILE_EDITABLE_FIELDS)
+    if unknown:
+        raise ValidationError("Переданы недопустимые поля профиля: " + ", ".join(unknown))
+    result = {}
+    for field, value in raw.items():
+        if field == "department":
+            result[field] = getattr(value, "pk", value)
+        elif field == "password":
+            result[field] = _private_state_hash("user-profile-password", str(value or ""))
+        elif field == "is_active":
+            result[field] = bool(value)
+        else:
+            result[field] = str(value or "")
+    return result
+
+
+def _profile_state_after_change(before, proposed):
+    after = dict(before)
+    for field, value in proposed.items():
+        if field == "department":
+            after["department_id"] = value
+        elif field == "password":
+            if value != _private_state_hash("user-profile-password", ""):
+                after["password"] = value
+        else:
+            after[field] = value
+    return after
+
+
+def _profile_change_labels(before, after, proposed):
+    labels = {
+        "username": "Логин",
+        "first_name": "Имя",
+        "last_name": "Фамилия",
+        "email": "Email",
+        "department_id": "Подразделение",
+        "is_active": "Статус учетной записи",
+        "password": "Пароль",
+    }
+    changed = []
+    for field, label in labels.items():
+        if field == "password":
+            empty_hash = _private_state_hash("user-profile-password", "")
+            if proposed.get("password", empty_hash) != empty_hash:
+                changed.append(label)
+        elif before.get(field) != after.get(field):
+            changed.append(label)
+    return changed
+
+
+def _normalized_external_identity_change(cleaned_data):
+    raw = dict(cleaned_data or {})
+    unknown = sorted(set(raw) - EXTERNAL_IDENTITY_EDITABLE_FIELDS)
+    if unknown:
+        raise ValidationError("Переданы недопустимые поля связи с AD: " + ", ".join(unknown))
+    return {field: str(value or "") for field, value in raw.items()}
+
+
+def _external_identity_change_labels(before, after):
+    labels = {
+        "provider": "Поставщик",
+        "subject_id": "Идентификатор субъекта",
+        "username": "Логин AD",
+        "upn": "UPN",
+        "distinguished_name": "Distinguished name",
+        "domain": "Домен",
+        "sync_status": "Статус синхронизации",
+    }
+    return [label for field, label in labels.items() if before.get(field, "") != after.get(field, "")]
+
+
+def _private_state_hash(purpose, value):
+    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return salted_hmac(
+        f"accounts.preview-state.{purpose}",
+        serialized,
+        secret=settings.SECRET_KEY,
+        algorithm="sha256",
+    ).hexdigest()
+
+
+def _user_profile_version_state(user):
+    return {**_user_profile_state(user), "password": user.password}
+
+
+def _load_account_data_preview(preview_token, *, salt, label):
+    if not preview_token:
+        raise ValidationError(f"Сначала выполните предпросмотр {label}.")
+    try:
+        payload = signing.loads(
+            preview_token,
+            salt=salt,
+            max_age=ACCOUNT_DATA_PREVIEW_MAX_AGE_SECONDS,
+        )
+    except signing.SignatureExpired as exc:
+        raise ValidationError("Предпросмотр устарел. Выполните его снова.") from exc
+    except signing.BadSignature as exc:
+        raise ValidationError("Подпись предпросмотра недействительна.") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError("Предпросмотр имеет неверный формат.")
+    return payload
+
+
+def _role_membership_risk_markers(
+    *, actor, target_user, role_name, before, after, configs
+):
+    markers = []
+    if role_name not in before and role_name in after:
+        markers.extend(role_risk_markers(role_name, configs[role_name]))
+    markers.extend(
+        _assignment_context_risk_markers(
+            actor=actor,
+            target_user=target_user,
+            before=before,
+            after=after,
+            is_break_glass=False,
+        )
+    )
+    return markers
 
 
 def _require_role_manager(actor):

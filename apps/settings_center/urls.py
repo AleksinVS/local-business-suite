@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.SettingsDashboardView.as_view(), name="dashboard"),
     path("workflow/transitions/", views.WorkflowTransitionMatrixView.as_view(), name="workflow_transitions"),
     path("workorders/status-colors/", views.WorkOrderStatusColorSettingsView.as_view(), name="workorder_status_colors"),
+    path("access/", views.AccessWorkspaceView.as_view(), name="access_workspace"),
     path("boards/", views.BoardAccessListView.as_view(), name="board_access_list"),
     path("boards/<int:pk>/access/", views.BoardAccessView.as_view(), name="board_access"),
     path("access/roles/", views.RoleCatalogView.as_view(), name="role_catalog"),

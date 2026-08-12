@@ -37,6 +37,9 @@ service layer, а не прямым ORM-путём; AD ownership и раздел
 7. `03-role-catalog-impact-editor`.
 8. `04-audit-troubleshooter-and-sources`.
 9. `05-e2e-usability-docs-acceptance`.
+10. `06-workspace-read-model-and-shell`.
+11. `07-context-editors-and-role-membership`.
+12. `08-responsive-e2e-and-acceptance`.
 
 ## Приемка
 
@@ -48,6 +51,14 @@ service layer, а не прямым ORM-путём; AD ownership и раздел
 - назначение и изменение определений разделены privilege ceiling;
 - unit/integration/e2e, матрица путей и usability-проверка выполнены;
 - документация и структура актуальны.
+
+Дополнительная UX-приемка 2026-08-13:
+
+- все предметные разрезы доступны в одном окне `/settings/access/`;
+- имя открывает правый инспектор, значение — левый редактор;
+- выбранный объект и поле всегда явно подписаны;
+- мобильный стек не теряет фильтры, выбранную строку и фокус;
+- состав роли изменяется без прямой M2M-записи и с аудитом каждого пользователя.
 
 Пакеты 02/03 выполняются последовательно: они используют общий effective-access
 read model, Settings Center views/tests и CSS.

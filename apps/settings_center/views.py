@@ -26,12 +26,16 @@ from apps.accounts.selectors import (
     user_access_overview,
 )
 from apps.accounts.services import (
+    apply_external_identity_change,
     apply_role_assignment,
+    apply_user_profile_change,
     create_local_user,
     disable_local_user,
     external_identity_audit_snapshot,
     link_ad_identity,
+    preview_external_identity_change,
     preview_role_assignment,
+    preview_user_profile_change,
     update_local_user,
     user_profile_audit_snapshot,
 )
@@ -45,21 +49,28 @@ from apps.workorders.services import apply_board_access, preview_board_access
 from .contract_services import apply_contract_payload, preview_contract_payload, read_contract_value
 from .env_services import create_env_proposal, env_status_rows
 from .forms import (
+    AccessExternalIdentityForm,
     ContractPayloadForm,
     EnvProposalForm,
     ExternalIdentityForm,
     HelpQuestionForm,
     MemoryGroupMembershipForm,
+    AccessRoleMembershipForm,
+    AccessUserDepartmentForm,
+    AccessUserProfileForm,
+    AccessUserStatusForm,
     PortalUserCreateForm,
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
     RoleDefinitionForm,
+    RoleDescriptionForm,
 )
 from .help_services import answer_help_question, initial_help_text
 from .models import SettingsChange
 from .policies import can_manage_settings
 from .registry import get_registry
 from .services import record_settings_change
+from .access_workspace import workspace_context
 
 
 class SettingsManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -105,6 +116,299 @@ class SettingsDashboardView(SettingsManagementMixin, TemplateView):
         context["can_manage_roles"] = can_manage_roles(self.request.user)
         context["can_manage_board_access"] = can_manage_board_access(self.request.user)
         return context
+
+
+class AccessWorkspaceView(UserManagementMixin, TemplateView):
+    """Canonical master-detail access administration shell.
+
+    Existing standalone editors remain the write adapters for now.  The
+    workspace owns navigation and read projections; package 07 can attach
+    context editors without changing this URL contract.
+    """
+
+    template_name = "settings_center/access_workspace.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(workspace_context(query_params=self.request.GET))
+        context["field_form"] = self._build_editor_form(self.request, context)
+        context["can_manage_board_access"] = can_manage_board_access(self.request.user)
+        context["can_manage_roles"] = can_manage_roles(self.request.user)
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Dispatch one context editor while preserving the signed service flow."""
+        state = workspace_context(query_params=request.POST)
+        try:
+            selected = state["selected"]
+            if not selected:
+                raise ValidationError("Выберите объект доступа.")
+            field = state["selected_field"]
+            action = request.POST.get("action", "preview")
+            if action not in {"preview", "apply"}:
+                raise ValidationError("Неизвестное действие редактора.")
+            if selected["kind"] == "user":
+                response = self._post_user(request, selected, field, action)
+            elif selected["kind"] == "role":
+                response = self._post_role(request, selected, field, action)
+            elif selected["kind"] == "board" and field == "groups":
+                response = self._post_board(request, selected, action)
+            else:
+                raise ValidationError("Этот источник доступа доступен только для просмотра.")
+            return response
+        except (PermissionDenied, ValidationError) as exc:
+            state["editor_error"] = str(exc)
+            state["field_form"] = self._build_editor_form(request, state)
+            return self.render_to_response(state)
+
+    def _post_user(self, request, selected, field, action):
+        user = selected["user"]
+        reason = request.POST.get("reason", "")
+        if field in {"profile", "department", "status"}:
+            if field == "profile":
+                form = AccessUserProfileForm(request.POST, instance=user)
+                if not form.is_valid():
+                    return self._editor_response(request, form, selected)
+                cleaned = form.cleaned_data.copy()
+            elif field == "department":
+                form = AccessUserDepartmentForm(request.POST)
+                if not form.is_valid():
+                    return self._editor_response(request, form, selected)
+                cleaned = form.cleaned_data.copy()
+            else:
+                form = AccessUserStatusForm(request.POST)
+                if not form.is_valid():
+                    return self._editor_response(request, form, selected)
+                cleaned = form.cleaned_data.copy()
+            reason = cleaned.pop("reason")
+            preview_token = cleaned.pop("preview_token", "")
+            if action == "preview":
+                preview = preview_user_profile_change(
+                    actor=request.user,
+                    target_user=user,
+                    cleaned_data=cleaned,
+                    reason=reason,
+                )
+                self._set_form_value(form, "preview_token", preview["preview_token"])
+                return self._editor_response(request, form, selected, preview=preview)
+            descriptor = get_registry().get("accounts.users.local_management")
+
+            def audit_callback(before, after):
+                record_settings_change(
+                    actor=request.user,
+                    descriptor=descriptor,
+                    action=SettingsChange.Action.USER_UPDATE,
+                    status=SettingsChange.Status.APPLIED,
+                    before=user_profile_audit_snapshot(before),
+                    after=user_profile_audit_snapshot(after),
+                    validation_result={"valid": True, "field": field, "reason": reason},
+                )
+
+            apply_user_profile_change(
+                actor=request.user,
+                target_user=user,
+                cleaned_data=cleaned,
+                preview_token=preview_token,
+                reason=reason,
+                audit_callback=audit_callback,
+            )
+            messages.success(request, "Данные пользователя обновлены.")
+            return redirect(self._workspace_url("users", user.pk, field, request=request))
+        if field == "ad":
+            form = AccessExternalIdentityForm(request.POST, instance=selected["ad_identity"])
+            if not form.is_valid():
+                return self._editor_response(request, form, selected)
+            cleaned = form.cleaned_data.copy()
+            reason = cleaned.pop("reason")
+            preview_token = cleaned.pop("preview_token", "")
+            if action == "preview":
+                preview = preview_external_identity_change(
+                    actor=request.user,
+                    target_user=user,
+                    cleaned_data=cleaned,
+                    reason=reason,
+                )
+                self._set_form_value(form, "preview_token", preview["preview_token"])
+                return self._editor_response(request, form, selected, preview=preview)
+            descriptor = get_registry().get("accounts.user.ad_identity_link")
+
+            def audit_callback(before, after):
+                record_settings_change(
+                    actor=request.user,
+                    descriptor=descriptor,
+                    action=SettingsChange.Action.AD_LINK,
+                    status=SettingsChange.Status.APPLIED,
+                    before=external_identity_audit_snapshot(before),
+                    after=external_identity_audit_snapshot(after),
+                    validation_result={"valid": True, "field": "ad", "reason": reason},
+                )
+
+            apply_external_identity_change(
+                actor=request.user,
+                target_user=user,
+                cleaned_data=cleaned,
+                preview_token=preview_token,
+                reason=reason,
+                audit_callback=audit_callback,
+            )
+            messages.success(request, "Связь с AD обновлена.")
+            return redirect(self._workspace_url("users", user.pk, field, request=request))
+        if field == "roles":
+            form = PortalUserUpdateForm(request.POST, portal_user=user, actor=request.user)
+            return self._post_role_assignment(request, selected, form, action)
+        if field == "memory-groups":
+            form = MemoryGroupMembershipForm(request.POST)
+            if not form.is_valid():
+                return self._editor_response(request, form, selected)
+            from apps.memory.access_services import apply_memory_group_membership, preview_memory_group_membership
+            if action == "preview":
+                preview = preview_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
+                self._set_form_value(form, "preview_token", preview["preview_token"])
+                return self._editor_response(request, form, selected, preview=preview)
+            target, audit = apply_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"], preview_token=form.cleaned_data["preview_token"], confirmed=form.cleaned_data["confirmed"])
+            messages.success(request, f"Группы памяти пользователя изменены. Аудит #{audit.pk}.")
+            return redirect(self._workspace_url("users", target.pk, field, request=request))
+        raise ValidationError("Это поле доступно только для просмотра.")
+
+    def _post_role_assignment(self, request, selected, form, action):
+        if not form.is_valid():
+            return self._editor_response(request, form, selected)
+        user = selected["user"]
+        selected_role_names = [group.name for group in form.cleaned_data["roles"]]
+        if action == "preview":
+            preview = preview_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
+            self._set_form_value(form, "preview_token", preview["preview_token"])
+            return self._editor_response(request, form, selected, preview=preview)
+        updated, audit = apply_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["confirm_risk"], is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
+        messages.success(request, f"Доступ пользователя сохранён. Аудит #{audit.pk}.")
+        return redirect(self._workspace_url("users", updated.pk, "roles", request=request))
+
+    def _post_role(self, request, selected, field, action):
+        if field in {"definition", "description"}:
+            role_model = role_definition_read_model(selected["code"])
+            form_class = RoleDescriptionForm if field == "description" else RoleDefinitionForm
+            form = form_class(request.POST, role_read_model=role_model)
+            if not form.is_valid():
+                return self._editor_response(request, form, selected)
+            proposed = form.proposed_config()
+            if action == "preview":
+                preview = preview_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"])
+                self._set_form_value(form, "base_hash", preview["base_hash"])
+                self._set_form_value(form, "preview_token", preview["preview_token"])
+                return self._editor_response(request, form, selected, preview=preview)
+            change = apply_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"])
+            messages.success(request, f"Роль изменена. Аудит #{change.pk}.")
+            return redirect(self._workspace_url("roles", selected["code"], field, request=request))
+        if field == "users":
+            form = AccessRoleMembershipForm(request.POST, role_name=selected["code"])
+            if not form.is_valid():
+                return self._editor_response(request, form, selected)
+            from apps.accounts.services import apply_role_membership_change, preview_role_membership_change
+            ids = form.cleaned_data["selected_user_ids"]
+            if action == "preview":
+                preview = preview_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, reason=form.cleaned_data["reason"])
+                self._set_form_value(form, "preview_token", preview["preview_token"])
+                return self._editor_response(request, form, selected, preview=preview)
+            audits = apply_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
+            messages.success(request, f"Состав роли изменён. Аудитов: {len(audits)}.")
+            return redirect(self._workspace_url("roles", selected["code"], "users", request=request))
+        raise ValidationError("Это поле доступно только для просмотра.")
+
+    def _post_board(self, request, selected, action):
+        form = BoardAccessForm(request.POST)
+        if not form.is_valid():
+            return self._editor_response(request, form, selected)
+        if action == "preview":
+            preview = preview_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
+            self._set_form_value(form, "preview_token", preview["preview_token"])
+            return self._editor_response(request, form, selected, preview=preview)
+        board, audit = apply_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
+        messages.success(request, f"Доступ к доске изменён. Аудит #{audit.pk}.")
+        return redirect(self._workspace_url("boards", board.pk, "groups", request=request))
+
+    def _editor_response(self, request, form, selected, preview=None):
+        state = workspace_context(query_params=request.POST)
+        state.update({"selected": selected, "selected_field": request.POST.get("field", state["selected_field"]), "selected_panel": self._requested_panel(request), "field_form": form, "field_preview": preview})
+        return self.render_to_response(state)
+
+    @staticmethod
+    def _set_form_value(form, name, value):
+        if form.is_bound:
+            data = form.data.copy()
+            data[name] = value
+            form.data = data
+        else:
+            form.initial[name] = value
+
+    def _build_editor_form(self, request, state):
+        selected = state.get("selected")
+        if not selected:
+            return None
+        field = state.get("selected_field", "")
+        if not self._can_edit_field(request, selected, field):
+            return None
+        bound_data = request.POST if request.method == "POST" else None
+        if selected["kind"] == "user":
+            user = selected["user"]
+            if field == "profile":
+                return AccessUserProfileForm(bound_data, instance=user)
+            if field == "status":
+                return AccessUserStatusForm(bound_data, initial={"is_active": user.is_active})
+            if field == "department":
+                return AccessUserDepartmentForm(bound_data, initial={"department": user.department_id})
+            if field == "ad":
+                return AccessExternalIdentityForm(bound_data, instance=selected["ad_identity"])
+            if field == "roles":
+                return PortalUserUpdateForm(bound_data, portal_user=user, actor=request.user)
+            if field == "memory-groups":
+                current = [group["code"] for group in selected["memory_groups"]]
+                return MemoryGroupMembershipForm(bound_data, initial={"group_names": current})
+        if selected["kind"] == "role":
+            if field == "definition":
+                model = role_definition_read_model(selected["code"])
+                return RoleDefinitionForm(bound_data, role_read_model=model, initial={"base_hash": model["base_hash"]})
+            if field == "description":
+                model = role_definition_read_model(selected["code"])
+                return RoleDescriptionForm(bound_data, role_read_model=model, initial={"base_hash": model["base_hash"]})
+            if field == "users":
+                current = [user.pk for user in selected.get("user_objects", [])]
+                return AccessRoleMembershipForm(bound_data, role_name=selected["code"], initial={"selected_user_ids": current})
+        if selected["kind"] == "board" and field == "groups":
+            return BoardAccessForm(bound_data, initial={"group_names": selected["group_codes"]})
+        return None
+
+    @staticmethod
+    def _requested_panel(request):
+        return "inspector" if request.POST.get("panel") == "inspector" else "field"
+
+    @staticmethod
+    def _can_edit_field(request, selected, field):
+        if selected["kind"] == "user" and field in {"profile", "status", "department", "ad", "memory-groups"}:
+            return bool(request.user.is_active and request.user.is_superuser)
+        if selected["kind"] == "role" and field in {"definition", "description"}:
+            return bool(request.user.is_active and request.user.is_superuser)
+        if selected["kind"] == "board" and field == "groups":
+            return can_manage_board_access(request.user)
+        if selected["kind"] == "user" and field == "roles":
+            return can_manage_roles(request.user)
+        if selected["kind"] == "role" and field == "users":
+            return can_manage_roles(request.user)
+        return False
+
+    @classmethod
+    def _workspace_url(cls, view, object_id, field, *, request=None):
+        from urllib.parse import urlencode
+
+        params = {"view": view, "object": object_id, "field": field}
+        if request is not None:
+            params["panel"] = cls._requested_panel(request)
+            for name in ("q", "role", "department", "attention"):
+                value = request.POST.get(name)
+                if value:
+                    params[name] = value
+        else:
+            params["panel"] = "field"
+        return f"{reverse('settings_center:access_workspace')}?{urlencode(params)}"
 
 
 class BoardAccessListView(BoardAccessManagementMixin, ListView):
@@ -757,6 +1061,7 @@ class UserUpdateView(UserManagementMixin, FormView):
                     selected_role_names=selected_role_names,
                     is_staff=form.cleaned_data["is_staff"],
                     is_superuser=form.cleaned_data["is_superuser"],
+                    reason=form.cleaned_data.get("reason", ""),
                 )
             except (PermissionDenied, ValidationError) as exc:
                 form.add_error(None, exc)
@@ -775,6 +1080,7 @@ class UserUpdateView(UserManagementMixin, FormView):
                 risk_confirmed=form.cleaned_data["confirm_risk"],
                 is_staff=form.cleaned_data["is_staff"],
                 is_superuser=form.cleaned_data["is_superuser"],
+                reason=form.cleaned_data.get("reason", ""),
             )
         except (PermissionDenied, ValidationError) as exc:
             form.add_error(None, exc)

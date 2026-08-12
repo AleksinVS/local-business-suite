@@ -13,6 +13,7 @@
   "forms.py": "Forms for contracts, env proposals, help and user workflows",
   "access_filters.py": "Server-side search, role, department branch and attention filters for access administration",
   "views.py": "Django template/HTMX views for Settings Center",
+  "access_workspace.py": "Prefetched read model for the canonical unified access workspace",
   "urls.py": "URL routes for Settings Center",
   "tests.py": "Settings Center tests",
   "migrations/": "Settings Center database migrations"

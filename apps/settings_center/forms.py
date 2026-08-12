@@ -18,6 +18,13 @@ class ContractPayloadForm(forms.Form):
 
 
 class RoleDefinitionForm(forms.Form):
+    display_name = forms.CharField(label="Название роли", max_length=150, required=False)
+    description = forms.CharField(
+        label="Описание роли",
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
     base_hash = forms.CharField(widget=forms.HiddenInput)
     preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
     risk_confirmed = forms.BooleanField(
@@ -28,6 +35,8 @@ class RoleDefinitionForm(forms.Form):
     def __init__(self, *args, role_read_model, **kwargs):
         super().__init__(*args, **kwargs)
         self.role_read_model = role_read_model
+        self.fields["display_name"].initial = role_read_model["label"]
+        self.fields["description"].initial = role_read_model["description"]
         for section in role_read_model["sections"]:
             for capability in section["capabilities"]:
                 code = capability["code"]
@@ -79,7 +88,20 @@ class RoleDefinitionForm(forms.Form):
                 self.fields[field_name] = field
 
     def proposed_config(self):
-        proposed = {}
+        display_name = (
+            self.cleaned_data.get("display_name", "")
+            if self.is_bound and "display_name" in self.data
+            else self.role_read_model["label"]
+        )
+        description = (
+            self.cleaned_data.get("description", "")
+            if self.is_bound and "description" in self.data
+            else self.role_read_model["description"]
+        )
+        proposed = {
+            "display_name": display_name,
+            "description": description,
+        }
         for section in self.role_read_model["sections"]:
             for capability in section["capabilities"]:
                 code = capability["code"]
@@ -90,6 +112,28 @@ class RoleDefinitionForm(forms.Form):
                 if capability["type"] == "targets":
                     value = "*" if "*" in value else list(value)
                 proposed[code] = value
+        return proposed
+
+
+class RoleDescriptionForm(forms.Form):
+    description = forms.CharField(
+        label="Описание роли",
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+    )
+    base_hash = forms.CharField(widget=forms.HiddenInput)
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    risk_confirmed = forms.BooleanField(widget=forms.HiddenInput, required=False)
+
+    def __init__(self, *args, role_read_model, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.role_read_model = role_read_model
+        self.fields["description"].initial = role_read_model["description"]
+
+    def proposed_config(self):
+        proposed = dict(self.role_read_model["config"])
+        proposed["description"] = self.cleaned_data["description"]
         return proposed
 
 
@@ -176,6 +220,15 @@ class PortalUserProfileUpdateForm(PortalUserCreateForm):
     """Профиль пользователя без ролей и технических флагов доступа."""
 
 
+class AccessUserProfileForm(PortalUserProfileUpdateForm):
+    reason = forms.CharField(
+        label="Причина изменения",
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+
+
 class PortalUserUpdateForm(forms.Form):
     roles = GroupWithProfileChoiceField(
         label="Роли доступа",
@@ -195,6 +248,12 @@ class PortalUserUpdateForm(forms.Form):
         help_text="Разрешает вход в раздел администрирования Django при наличии нужных прав.",
     )
     preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    reason = forms.CharField(
+        label="Причина изменения доступа",
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
     confirm_risk = forms.BooleanField(
         label="Подтверждаю выдачу рискованного доступа",
         required=False,
@@ -272,3 +331,52 @@ class ExternalIdentityForm(forms.ModelForm):
         for field_name, label in labels.items():
             if field_name in self.fields:
                 self.fields[field_name].label = label
+
+
+class AccessUserStatusForm(forms.Form):
+    """Small context editor; lifecycle rules remain in ``update_local_user``."""
+
+    is_active = forms.BooleanField(label="Активная учетная запись", required=False)
+    reason = forms.CharField(label="Причина", max_length=1000)
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+
+
+class AccessUserDepartmentForm(forms.Form):
+    department = forms.ModelChoiceField(
+        label="Подразделение",
+        queryset=available_user_departments(),
+        required=True,
+    )
+    reason = forms.CharField(label="Причина", max_length=1000)
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+
+
+class AccessExternalIdentityForm(ExternalIdentityForm):
+    reason = forms.CharField(
+        label="Причина изменения",
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+
+
+class AccessRoleMembershipForm(forms.Form):
+    selected_user_ids = forms.MultipleChoiceField(
+        label="Пользователи роли",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    reason = forms.CharField(label="Причина изменения состава", max_length=1000)
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    risk_confirmed = forms.BooleanField(
+        label="Подтверждаю риск изменения состава роли",
+        required=False,
+    )
+
+    def __init__(self, *args, role_name=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        users = get_user_model().objects.order_by("username", "pk")
+        self.fields["selected_user_ids"].choices = [
+            (str(user.pk), user.get_full_name() or user.username) for user in users
+        ]
+        self.role_name = role_name or ""

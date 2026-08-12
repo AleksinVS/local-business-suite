@@ -27,10 +27,16 @@ from .department_policy import (
 )
 from .selectors import effective_access_for_user, role_risk_markers, selected_role_names_for_user
 from .services import (
+    apply_external_identity_change,
     apply_role_assignment,
+    apply_role_membership_change,
+    apply_user_profile_change,
     create_local_user,
     disable_local_user,
     preview_role_assignment,
+    preview_role_membership_change,
+    preview_external_identity_change,
+    preview_user_profile_change,
     scope_tokens_for_principal,
     update_local_user,
     upsert_ad_identity_from_attributes,
@@ -424,6 +430,155 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertEqual(audit.roles_after, ["manager"])
         self.assertTrue(audit.risk_confirmed)
         self.assertNotIn("access-target", str(audit.roles_after))
+
+    def test_role_membership_change_is_atomic_preserves_other_groups_and_audits_each_user(self):
+        root = get_user_model().objects.create_superuser(username="membership-root")
+        incoming = get_user_model().objects.create_user(username="membership-incoming")
+        other_role, _ = Group.objects.get_or_create(name="technician")
+        incoming.groups.add(other_role)
+        preview = preview_role_membership_change(
+            actor=root,
+            role_name="customer",
+            selected_user_ids=[incoming.pk],
+            reason="Перераспределение участников роли",
+        )
+
+        self.assertEqual(preview["changed_count"], 2)
+        audits = apply_role_membership_change(
+            actor=root,
+            role_name="customer",
+            selected_user_ids=[incoming.pk],
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+            reason="Перераспределение участников роли",
+        )
+
+        self.assertEqual(len(audits), 2)
+        self.assertFalse(self.target.groups.filter(name="customer").exists())
+        self.assertTrue(self.target.groups.filter(name="memory_auditor").exists())
+        self.assertTrue(incoming.groups.filter(name="customer").exists())
+        self.assertTrue(incoming.groups.filter(name="technician").exists())
+        self.assertEqual(
+            set(AccessAssignmentAudit.objects.filter(actor=root).values_list("target_user_id", flat=True)),
+            {self.target.pk, incoming.pk},
+        )
+        self.assertTrue(
+            all(item.reason == "Перераспределение участников роли" for item in audits)
+        )
+
+    def test_role_membership_change_rejects_stale_member_set_without_partial_write(self):
+        root = get_user_model().objects.create_superuser(username="membership-stale-root")
+        incoming = get_user_model().objects.create_user(username="membership-stale-incoming")
+        concurrent = get_user_model().objects.create_user(username="membership-concurrent")
+        preview = preview_role_membership_change(
+            actor=root,
+            role_name="customer",
+            selected_user_ids=[self.target.pk, incoming.pk],
+        )
+        concurrent.groups.add(self.customer_group)
+
+        with self.assertRaisesMessage(ValidationError, "Состав роли уже изменился"):
+            apply_role_membership_change(
+                actor=root,
+                role_name="customer",
+                selected_user_ids=[self.target.pk, incoming.pk],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+            )
+
+        self.assertFalse(incoming.groups.filter(name="customer").exists())
+        self.assertFalse(AccessAssignmentAudit.objects.filter(actor=root).exists())
+
+    def test_role_membership_change_keeps_non_superuser_self_assignment_forbidden(self):
+        with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
+            preview_role_membership_change(
+                actor=self.actor,
+                role_name="customer",
+                selected_user_ids=[self.actor.pk, self.target.pk],
+            )
+
+    def test_role_membership_change_allows_confirmed_superuser_self_assignment(self):
+        root = get_user_model().objects.create_superuser(username="membership-self-root")
+        preview = preview_role_membership_change(
+            actor=root,
+            role_name="customer",
+            selected_user_ids=[self.target.pk, root.pk],
+        )
+
+        self.assertTrue(preview["requires_confirmation"])
+        with self.assertRaisesMessage(ValidationError, "требует подтверждения"):
+            apply_role_membership_change(
+                actor=root,
+                role_name="customer",
+                selected_user_ids=[self.target.pk, root.pk],
+                preview_token=preview["preview_token"],
+            )
+        audits = apply_role_membership_change(
+            actor=root,
+            role_name="customer",
+            selected_user_ids=[self.target.pk, root.pk],
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+        )
+
+        self.assertTrue(root.groups.filter(name="customer").exists())
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(audits[0].actor_id, audits[0].target_user_id)
+
+    def test_user_profile_preview_rejects_stale_target_state(self):
+        root = get_user_model().objects.create_superuser(username="profile-preview-root")
+        preview = preview_user_profile_change(
+            actor=root,
+            target_user=self.target,
+            cleaned_data={"email": "new@example.test"},
+            reason="Исправление рабочего email",
+        )
+        self.target.first_name = "Изменено параллельно"
+        self.target.save(update_fields=["first_name"])
+
+        with self.assertRaisesMessage(ValidationError, "уже изменились"):
+            apply_user_profile_change(
+                actor=root,
+                target_user=self.target,
+                cleaned_data={"email": "new@example.test"},
+                preview_token=preview["preview_token"],
+                reason="Исправление рабочего email",
+            )
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.email, "")
+
+    def test_external_identity_preview_rejects_stale_link(self):
+        root = get_user_model().objects.create_superuser(username="identity-preview-root")
+        proposed = {
+            "provider": ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            "subject_id": "S-1-preview",
+            "username": "preview-user",
+            "upn": "preview@example.test",
+            "distinguished_name": "CN=Preview,DC=example,DC=test",
+            "domain": "example.test",
+            "sync_status": ExternalIdentity.SyncStatus.MANUAL,
+        }
+        preview = preview_external_identity_change(
+            actor=root,
+            target_user=self.target,
+            cleaned_data=proposed,
+            reason="Привязка рабочей учетной записи",
+        )
+        ExternalIdentity.objects.create(
+            user=self.target,
+            provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            subject_id="S-1-concurrent",
+        )
+
+        with self.assertRaisesMessage(ValidationError, "уже изменена"):
+            apply_external_identity_change(
+                actor=root,
+                target_user=self.target,
+                cleaned_data=proposed,
+                preview_token=preview["preview_token"],
+                reason="Привязка рабочей учетной записи",
+            )
 
     def test_role_risk_markers_ignore_display_metadata(self):
         markers = role_risk_markers(

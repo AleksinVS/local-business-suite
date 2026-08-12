@@ -1,6 +1,6 @@
 {
   ".": "Руководства разработчика",
-  "ACCESS_MANAGEMENT_USER_GUIDE.md": "Руководство администратора по ролям, техническим флагам, группам, предпросмотру и журналу",
+  "ACCESS_MANAGEMENT_USER_GUIDE.md": "Руководство администратора по единому окну доступа, derived-полям, preview/apply и резервному Admin",
   "AI_UI_PROTOCOL_OPERATIONS.md": "Операционный guide по общему AI UI protocol foundation и драйверам copilotkit/native",
   "AI_SIDEBAR_CHAT.md": "Руководство по контекстному ИИ-чату в левой панели, PageContextEnvelope и настройкам chat_settings",
   "AI_SKILLS_OPERATIONS.md": "Операционное руководство по module/runtime AI skills, ai.skill_creator и MCP resources",

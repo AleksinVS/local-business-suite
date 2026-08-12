@@ -37,7 +37,13 @@ from .contract_services import (
     rollback_contract_change,
 )
 from .env_services import create_env_proposal
-from .forms import PortalUserCreateForm, PortalUserProfileUpdateForm, PortalUserUpdateForm
+from .forms import (
+    AccessUserProfileForm,
+    PortalUserCreateForm,
+    PortalUserProfileUpdateForm,
+    PortalUserUpdateForm,
+    RoleDescriptionForm,
+)
 from .help_services import answer_help_question, build_help_context
 from .models import SettingsChange, SettingsEnvProposal
 from .registry import get_registry
@@ -45,6 +51,322 @@ from .registry import get_registry
 
 User = get_user_model()
 pytestmark = pytest.mark.integration
+
+
+class AccessWorkspaceTests(TestCase):
+    def test_canonical_workspace_exposes_six_tabs_and_user_projection(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="workspace-root", password="pass")
+        department = Department.objects.create(name="Центр")
+        leaf = Department.objects.create(name="Поддержка", parent=department)
+        target = User.objects.create_user(
+            username="workspace-target",
+            first_name="Анна",
+            last_name="Иванова",
+            department=leaf,
+        )
+        role, _ = Group.objects.get_or_create(name="customer")
+        technical, _ = Group.objects.get_or_create(name="workspace-technical")
+        memory, _ = Group.objects.get_or_create(name="memory_observer")
+        target.groups.add(role, technical, memory)
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:access_workspace"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [tab["code"] for tab in response.context["tabs"]],
+            ["users", "roles", "boards", "site-sections", "technical-groups", "memory-groups"],
+        )
+        row = next(row for row in response.context["users"] if row["id"] == target.pk)
+        self.assertEqual(row["department"], "Поддержка")
+        self.assertEqual(row["department_full"], "Центр / Поддержка")
+        self.assertEqual([group["code"] for group in row["technical_groups"]], [technical.name])
+        self.assertEqual([group["code"] for group in row["memory_groups"]], [memory.name])
+        for heading in ("Имя", "Пользователь AD", "Подразделение", "Статус", "Роли", "Разделы сайта", "Технические группы", "Группы памяти"):
+            self.assertContains(response, heading)
+
+    def test_workspace_deep_link_selects_field_without_leaving_table(self):
+        actor = User.objects.create_superuser(username="workspace-deep-root", password="pass")
+        target = User.objects.create_user(username="workspace-deep-target")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "users", "object": target.pk, "field": "roles"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected"]["id"], target.pk)
+        self.assertEqual(response.context["selected_field"], "roles")
+        self.assertContains(response, "Текущие значения")
+        self.assertContains(response, "Редактор поля")
+        self.assertContains(response, "workspace-deep-target")
+
+    def test_inline_role_assignment_uses_preview_then_apply_service(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-inline-root", password="pass")
+        target = User.objects.create_user(username="workspace-inline-target")
+        role_name = contract_role_names()[0]
+        role, _ = Group.objects.get_or_create(name=role_name)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        response = self.client.post(
+            url,
+            {
+                "view": "users",
+                "object": target.pk,
+                "field": "roles",
+                "panel": "field",
+                "action": "preview",
+                "roles": [role.pk],
+                "is_staff": "",
+                "is_superuser": "",
+                "reason": "Проверка назначения роли через карточку.",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        preview = response.context["field_preview"]
+        self.assertTrue(preview["preview_token"])
+        response = self.client.post(
+            url,
+            {
+                "view": "users",
+                "object": target.pk,
+                "field": "roles",
+                "panel": "field",
+                "action": "apply",
+                "roles": [role.pk],
+                "is_staff": "",
+                "is_superuser": "",
+                "reason": "Проверка назначения роли через карточку.",
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(target.groups.filter(pk=role.pk).exists())
+
+    def test_inline_role_membership_uses_bulk_preview_apply_and_audits_target(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-bulk-root", password="pass")
+        target = User.objects.create_user(username="workspace-bulk-target")
+        role_name = contract_role_names()[0]
+        Group.objects.get_or_create(name=role_name)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        payload = {
+            "view": "roles",
+            "object": role_name,
+            "field": "users",
+            "panel": "field",
+            "action": "preview",
+            "selected_user_ids": [target.pk],
+            "reason": "Проверка состава роли через карточку.",
+        }
+        response = self.client.post(url, payload)
+        self.assertEqual(response.status_code, 200)
+        preview = response.context["field_preview"]
+        self.assertEqual(preview["changed_count"], 1)
+        payload.update(
+            action="apply",
+            preview_token=preview["preview_token"],
+            risk_confirmed="on",
+        )
+        response = self.client.post(url, payload)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(target.groups.filter(name=role_name).exists())
+        self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
+
+    def test_workspace_role_membership_read_model_ignores_user_filters(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-filter-root", password="pass")
+        member = User.objects.create_user(username="workspace-hidden-member")
+        role_name = contract_role_names()[0]
+        role, _ = Group.objects.get_or_create(name=role_name)
+        member.groups.add(role)
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "object": role_name, "field": "users", "q": "no-match"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        selected = response.context["selected"]
+        self.assertIn(member.pk, [user.pk for user in selected["user_objects"]])
+        self.assertEqual(response.context["users"], [])
+
+    def test_workspace_builds_deep_department_paths_from_one_department_query(self):
+        from apps.core.models import Department
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .access_workspace import workspace_context
+
+        parent = None
+        for index in range(5):
+            parent = Department.objects.create(name=f"Узел {index}", parent=parent)
+        User.objects.create_user(username="workspace-deep-department", department=parent)
+
+        with CaptureQueriesContext(connection) as queries:
+            context = workspace_context(query_params={})
+
+        department_queries = [
+            query for query in queries
+            if 'FROM "core_department"' in query["sql"] and "JOIN" not in query["sql"]
+        ]
+        self.assertEqual(len(department_queries), 1)
+        row = next(row for row in context["users"] if row["username"] == "workspace-deep-department")
+        self.assertEqual(row["department_full"], " / ".join(f"Узел {index}" for index in range(5)))
+
+    def test_workspace_marks_default_board_viewer_as_read_only_source(self):
+        actor = User.objects.create_superuser(username="workspace-default-root", password="pass")
+        target = User.objects.create_user(username="workspace-default-target", is_active=True)
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:access_workspace"))
+
+        row = next(row for row in response.context["users"] if row["id"] == target.pk)
+        self.assertEqual(row["role_codes"], [])
+        self.assertEqual(row["roles"], ["Базовый просмотр канбана"])
+        self.assertTrue(row["role_sources"][0]["read_only"])
+
+    def test_profile_editor_requires_signed_preview_and_keeps_inspector_panel(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="workspace-profile-root", password="pass")
+        department = Department.objects.create(name="Рабочее подразделение")
+        target = User.objects.create_user(
+            username="workspace-profile-target",
+            email="before@example.test",
+            department=department,
+        )
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        payload = {
+            "view": "users",
+            "object": target.pk,
+            "field": "profile",
+            "panel": "inspector",
+            "action": "preview",
+            "username": target.username,
+            "first_name": "Ирина",
+            "last_name": "Петрова",
+            "email": "after@example.test",
+            "department": department.pk,
+            "is_active": "on",
+            "password": "",
+            "reason": "Уточнение рабочего профиля",
+        }
+
+        preview_response = self.client.post(url, payload)
+
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertIsInstance(preview_response.context["field_form"], AccessUserProfileForm)
+        self.assertEqual(preview_response.context["selected_panel"], "inspector")
+        preview = preview_response.context["field_preview"]
+        self.assertTrue(preview["preview_token"])
+
+        payload.update(action="apply", preview_token=preview["preview_token"])
+        apply_response = self.client.post(url, payload)
+
+        self.assertEqual(apply_response.status_code, 302)
+        self.assertIn("panel=inspector", apply_response["Location"])
+        target.refresh_from_db()
+        self.assertEqual(target.email, "after@example.test")
+
+    def test_profile_apply_without_preview_is_rejected(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="workspace-no-preview-root", password="pass")
+        department = Department.objects.create(name="Отдел без preview")
+        target = User.objects.create_user(
+            username="workspace-no-preview-target",
+            email="before@example.test",
+            department=department,
+        )
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {
+                "view": "users",
+                "object": target.pk,
+                "field": "profile",
+                "panel": "field",
+                "action": "apply",
+                "username": target.username,
+                "first_name": "",
+                "last_name": "",
+                "email": "forbidden@example.test",
+                "department": department.pk,
+                "is_active": "on",
+                "password": "",
+                "reason": "Попытка без предпросмотра",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Сначала выполните предпросмотр")
+        target.refresh_from_db()
+        self.assertEqual(target.email, "before@example.test")
+
+    def test_invalid_editor_response_keeps_dirty_navigation_guard_enabled(self):
+        actor = User.objects.create_superuser(username="workspace-invalid-root", password="pass")
+        target = User.objects.create_user(username="workspace-invalid-target")
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {
+                "view": "users",
+                "object": target.pk,
+                "field": "profile",
+                "panel": "inspector",
+                "action": "preview",
+                "username": "",
+                "reason": "Проверка ошибки формы",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["field_form"].errors)
+        self.assertContains(response, 'data-access-dirty="true"')
+
+    def test_role_description_cell_uses_dedicated_form(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-description-root", password="pass")
+        role_name = contract_role_names()[0]
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "object": role_name, "field": "description", "panel": "field"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["field_form"]
+        self.assertIsInstance(form, RoleDescriptionForm)
+        self.assertEqual(form["description"].value(), role_definition_read_model(role_name)["description"])
+
+    def test_role_description_form_allows_clearing_existing_description(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.accounts.selectors import contract_role_names
+
+        role_model = role_definition_read_model(contract_role_names()[0])
+        form = RoleDescriptionForm(
+            {"description": "", "base_hash": role_model["base_hash"]},
+            role_read_model=role_model,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.proposed_config()["description"], "")
 
 
 class SettingsCenterRegistryTests(TestCase):

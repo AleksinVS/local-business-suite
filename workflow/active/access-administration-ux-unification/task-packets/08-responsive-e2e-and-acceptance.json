@@ -1,0 +1,35 @@
+{
+  "task_id": "08-responsive-e2e-and-acceptance",
+  "goal": "Довести рабочую область до адаптивной, доступной и воспроизводимо проверенной реализации.",
+  "read_scope": [
+    "templates/settings_center/",
+    "static/src/css/app.css",
+    "static/src/js/access_workspace.js",
+    "scripts/e2e/",
+    "docs/guides/",
+    "docs/architecture/POLICY_MODEL.md"
+  ],
+  "write_scope": [
+    "static/src/css/app.css",
+    "static/src/js/access_workspace.js",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "scripts/e2e/tests/.desc.json",
+    "apps/settings_center/management/commands/access_administration_e2e.py",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/architecture/POLICY_MODEL.md",
+    "workflow/active/access-administration-ux-unification/"
+  ],
+  "acceptance": [
+    "Desktop показывает таблицу и две явно подписанные панели.",
+    "Tablet/mobile использует один modal stack с Escape, возвратом фокуса и без потери URL-state.",
+    "Статус не кодируется только цветом; интерактивные ячейки доступны с клавиатуры.",
+    "Browser e2e покрывает users, roles, memory group preview/apply и narrow viewport.",
+    "Полный verify и архитектурная валидация успешны."
+  ],
+  "tests": [
+    "make verify-profile PROFILE=ui",
+    "python manage.py access_administration_e2e",
+    "python manage.py validate_architecture_contracts",
+    "make verify-full"
+  ]
+}

@@ -1,0 +1,36 @@
+<form class="access-context-form" method="post" action="{% url 'settings_center:access_workspace' %}" data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
+  {% csrf_token %}
+  <input type="hidden" name="view" value="{{ active_tab }}">
+  <input type="hidden" name="object" value="{{ selected.object }}">
+  <input type="hidden" name="field" value="{{ selected_field }}">
+  <input type="hidden" name="panel" value="{{ selected_panel|default:'field' }}">
+  <input type="hidden" name="q" value="{{ access_filter_state.query }}">
+  <input type="hidden" name="role" value="{{ access_filter_state.role }}">
+  <input type="hidden" name="department" value="{{ access_filter_state.department_id|default:"" }}">
+  {% if access_filter_state.attention %}<input type="hidden" name="attention" value="{{ attention_value }}">{% endif %}
+  {{ field_form.non_field_errors }}
+  {% for hidden in field_form.hidden_fields %}{{ hidden }}{% endfor %}
+  {% if selected.kind == "user" and selected_field == "memory-groups" %}<h3>Группы памяти пользователя {{ selected.name }}</h3><p class="access-readonly-explanation">Это технические полномочия памяти, а не роли и не разделы сайта. Изменение выполняется только через сервис памяти с причиной и подтверждением.</p>{% endif %}
+  {% for field in field_form.visible_fields %}
+    <div class="access-form-field{% if field.errors %} has-error{% endif %}">
+      {{ field.label_tag }}
+      {{ field }}
+      {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+      {{ field.errors }}
+    </div>
+  {% endfor %}
+  {% if field_preview %}
+    <div class="access-preview-box" role="status">
+      <strong>Предпросмотр изменения</strong>
+      {% if field_preview.changes %}<ul>{% for item in field_preview.changes %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      {% if field_preview.risk_markers %}<p class="risk-marker risk-marker-critical">{{ field_preview.risk_markers|join:", " }}</p>{% endif %}
+      {% if field_preview.added %}<p>Добавлено: {{ field_preview.added|length }}</p>{% endif %}
+      {% if field_preview.removed %}<p>Удалено: {{ field_preview.removed|length }}</p>{% endif %}
+    </div>
+  {% endif %}
+  {% if editor_error %}<p class="form-error">{{ editor_error }}</p>{% endif %}
+  <div class="access-form-actions">
+    <button class="button" type="submit" name="action" value="preview">Проверить</button>
+    {% if field_preview or field_form.preview_token.value %}<button class="button" type="submit" name="action" value="apply">Применить</button>{% endif %}
+  </div>
+</form>

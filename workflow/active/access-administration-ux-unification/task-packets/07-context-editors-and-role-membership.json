@@ -1,0 +1,36 @@
+{
+  "task_id": "07-context-editors-and-role-membership",
+  "goal": "Встроить канонические редакторы в панели и безопасно добавить изменение участников из роли.",
+  "read_scope": [
+    "apps/accounts/services.py",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/",
+    "apps/workorders/services.py",
+    "apps/memory/access_services.py",
+    "templates/settings_center/"
+  ],
+  "write_scope": [
+    "apps/accounts/services.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/partials/access_workspace/"
+  ],
+  "non_goals": [
+    "Не писать Group.user_set/groups напрямую из view.",
+    "Не менять объект в Active Directory.",
+    "Не объединять аудиты разных доменов в одну модель."
+  ],
+  "acceptance": [
+    "Профиль, AD link, роли, Board ACL и memory membership вызывают существующие доменные сервисы.",
+    "Панель всегда показывает тип объекта, имя и редактируемое поле.",
+    "Role membership preview связан с actor, ролью, contract hash и состоянием каждой цели.",
+    "Apply выполняется под общим access lock и создаёт AccessAssignmentAudit на каждого изменённого пользователя.",
+    "Самоназначение superuser сохраняется; privilege ceiling и последний superuser не обходятся."
+  ],
+  "tests": [
+    "make verify-fast TEST_SCOPE=apps/accounts/tests.py",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py"
+  ]
+}

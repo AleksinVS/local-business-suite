@@ -1,0 +1,43 @@
+{
+  "task_id": "06-workspace-read-model-and-shell",
+  "goal": "Создать один канонический access workspace со всеми предметными разрезами и явной структурой панелей.",
+  "read_scope": [
+    "apps/accounts/selectors.py",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/",
+    "apps/workorders/models.py",
+    "apps/memory/policies.py",
+    "templates/settings_center/",
+    "static/src/css/app.css",
+    "static/src/js/"
+  ],
+  "write_scope": [
+    "apps/accounts/selectors.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/urls.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/access_workspace.html",
+    "templates/settings_center/partials/access_workspace/",
+    "static/src/css/app.css",
+    "static/src/js/access_workspace.js",
+    "templates/settings_center/.desc.json",
+    "templates/settings_center/partials/.desc.json",
+    "static/src/js/.desc.json"
+  ],
+  "non_goals": [
+    "Не менять доменные preview/apply-сервисы.",
+    "Не вводить SPA, новый API или универсальный POST.",
+    "Не давать общий редактор технических групп."
+  ],
+  "acceptance": [
+    "Канонический URL /settings/access/ показывает шесть разрезов.",
+    "Таблица пользователей имеет все согласованные колонки без N+1 effective-access вычислений.",
+    "Имя открывает правый инспектор, остальные значения — левый редактор/объяснение.",
+    "Обрезанные значения доступны по hover и focus; подразделение показывает leaf и полный path.",
+    "Без JavaScript глубокая ссылка остаётся понятной и операбельной."
+  ],
+  "tests": [
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py"
+  ]
+}

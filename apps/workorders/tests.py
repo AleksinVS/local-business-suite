@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -52,7 +52,7 @@ from .department_filter import (
     resolve_department_device_selection,
     resolve_department_selection,
 )
-from .models import Board, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
+from .models import Board, BoardAccessAudit, KanbanColumnConfig, WorkOrder, WorkOrderAttachment, WorkOrderComment, WorkOrderStatus
 from .policies import (
     ROLE_CUSTOMER,
     ROLE_MANAGER,
@@ -69,8 +69,17 @@ from .policies import (
     has_role_capability,
     superuser_rules,
 )
+from .selectors import visible_boards_queryset
 from .right_panel import WorkOrderRightPanelProvider
-from .services import confirm_closure, create_workorder, transition_workorder
+from .services import (
+    apply_board_access,
+    clone_board,
+    confirm_closure,
+    create_workorder,
+    initialize_board_access_for_bootstrap,
+    preview_board_access,
+    transition_workorder,
+)
 from .contracts import validate_role_rules_payload
 
 User = get_user_model()
@@ -78,23 +87,261 @@ User = get_user_model()
 
 @pytest.mark.unit
 class BoardAdminAccessTests(TestCase):
+    def setUp(self):
+        self.actor = User.objects.create_superuser(
+            username="board-admin",
+            password="pass",
+            email="board-admin@example.test",
+        )
+        self.customer_group, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        self.technician_group, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        self.board = Board.objects.create(title="Ресурсная доска", slug="resource-board")
+        self.board.allowed_groups.add(self.customer_group)
+
     def test_allowed_groups_are_read_only_in_django_admin_form(self):
         from django.contrib import admin
         from django.test import RequestFactory
 
         from .admin import BoardAdmin
 
-        actor = User.objects.create_superuser(
-            username="board-admin",
-            password="pass",
-            email="board-admin@example.test",
-        )
         request = RequestFactory().get("/admin/workorders/board/add/")
-        request.user = actor
+        request.user = self.actor
 
         form_class = BoardAdmin(Board, admin.site).get_form(request)
 
         self.assertNotIn("allowed_groups", form_class.base_fields)
+
+    def test_board_access_service_previews_applies_and_changes_visibility(self):
+        technician = User.objects.create_user(username="board-tech", password="pass")
+        technician.groups.add(self.technician_group)
+        self.assertFalse(visible_boards_queryset(technician).filter(pk=self.board.pk).exists())
+
+        preview = preview_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+            reason="Добавить техников",
+        )
+        board, audit = apply_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+            reason="Добавить техников",
+        )
+
+        self.assertEqual(audit.groups_added, [ROLE_TECHNICIAN])
+        self.assertEqual(audit.source, BoardAccessAudit.Source.SETTINGS_CENTER)
+        self.assertTrue(visible_boards_queryset(technician).filter(pk=board.pk).exists())
+
+    def test_removal_requires_confirmation_and_unknown_group_is_rejected(self):
+        self.board.allowed_groups.add(self.technician_group)
+        preview = preview_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_CUSTOMER],
+            reason="Убрать доступ техников",
+        )
+        with self.assertRaisesMessage(ValidationError, "подтверждения риска"):
+            apply_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_CUSTOMER],
+                preview_token=preview["preview_token"],
+                reason="Убрать доступ техников",
+            )
+        self.assertTrue(self.board.allowed_groups.filter(name=ROLE_TECHNICIAN).exists())
+        with self.assertRaisesMessage(ValidationError, "недопустимы группы"):
+            preview_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_CUSTOMER, "memory_auditor"],
+                reason="Проверка неизвестной группы",
+            )
+
+    def test_board_access_change_requires_reason(self):
+        with self.assertRaisesMessage(ValidationError, "укажите причину"):
+            preview_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+            )
+
+    def test_board_impact_includes_roleless_default_customer_and_rejects_stale_population(self):
+        roleless = User.objects.create_user(username="board-roleless-default")
+        preview = preview_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_TECHNICIAN],
+            reason="Закрыть базовый доступ заказчика",
+        )
+        self.assertGreaterEqual(preview["impact"]["active_loss_count"], 1)
+
+        late_technician = User.objects.create_user(username="board-late-technician")
+        late_technician.groups.add(self.technician_group)
+        with self.assertRaisesMessage(ValidationError, "Состав сотрудников"):
+            apply_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_TECHNICIAN],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+                reason="Закрыть базовый доступ заказчика",
+            )
+        self.assertTrue(roleless.is_active)
+
+    def test_board_preview_rejects_lifecycle_change_before_apply(self):
+        from apps.accounts.services import disable_local_user
+
+        technician = User.objects.create_user(username="board-lifecycle-technician")
+        technician.groups.add(self.technician_group)
+        preview = preview_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+            reason="Добавить техников после проверки состава",
+        )
+        lifecycle_operator = User.objects.create_superuser(username="board-lifecycle-root")
+        disable_local_user(actor=lifecycle_operator, user=technician)
+
+        with self.assertRaisesMessage(ValidationError, "Состав сотрудников"):
+            apply_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+                reason="Добавить техников после проверки состава",
+            )
+        self.assertFalse(self.board.allowed_groups.filter(name=ROLE_TECHNICIAN).exists())
+
+    def test_django_admin_break_glass_uses_service_and_domain_audit(self):
+        self.board.allowed_groups.add(self.technician_group)
+        self.client.force_login(self.actor)
+        url = reverse("admin:workorders_board_access", args=[self.board.pk])
+        response = self.client.post(
+            url,
+            {"action": "preview", "group_names": [ROLE_CUSTOMER], "reason": "Аварийный отзыв"},
+        )
+        self.assertEqual(response.status_code, 200)
+        preview = response.context["preview"]
+        response = self.client.post(
+            url,
+            {
+                "action": "apply",
+                "group_names": [ROLE_CUSTOMER],
+                "reason": "Аварийный отзыв",
+                "preview_token": preview["preview_token"],
+                "risk_confirmed": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        audit = BoardAccessAudit.objects.get(board=self.board)
+        self.assertEqual(audit.source, BoardAccessAudit.Source.DJANGO_ADMIN_BREAK_GLASS)
+        self.assertEqual(audit.reason, "Аварийный отзыв")
+
+    def test_clone_service_requires_separate_access_assignment(self):
+        cloned = clone_board(actor=self.actor, board=self.board, reason="Резервная копия")
+        self.assertFalse(cloned.allowed_groups.exists())
+        self.assertFalse(BoardAccessAudit.objects.filter(board=cloned).exists())
+
+    def test_clone_without_actor_fails_closed(self):
+        with self.assertRaises(PermissionDenied):
+            self.board.clone()
+
+    def test_system_bootstrap_allows_only_preexisting_canonical_empty_boards_once(self):
+        for slug in ("main", "backlog"):
+            with self.subTest(slug=slug):
+                canonical = Board.objects.get(slug=slug)
+                canonical.allowed_groups.clear()
+                BoardAccessAudit.objects.filter(board=canonical).delete()
+
+                canonical, audit = initialize_board_access_for_bootstrap(
+                    board=canonical,
+                    selected_group_names=[ROLE_CUSTOMER],
+                    reason=f"Инициализация канонической доски {slug}.",
+                    board_was_created=False,
+                )
+                _canonical, repeated_audit = initialize_board_access_for_bootstrap(
+                    board=canonical,
+                    selected_group_names=[ROLE_CUSTOMER],
+                    reason=f"Повторная инициализация канонической доски {slug}.",
+                    board_was_created=False,
+                )
+
+                self.assertEqual(
+                    set(canonical.allowed_groups.values_list("name", flat=True)),
+                    {ROLE_CUSTOMER},
+                )
+                self.assertEqual(audit.source, BoardAccessAudit.Source.SYSTEM_BOOTSTRAP)
+                self.assertIsNone(repeated_audit)
+                self.assertEqual(
+                    BoardAccessAudit.objects.filter(
+                        board=canonical,
+                        source=BoardAccessAudit.Source.SYSTEM_BOOTSTRAP,
+                    ).count(),
+                    1,
+                )
+
+        arbitrary = Board.objects.create(title="Пустая рабочая доска", slug="empty-real-board")
+        with self.assertRaisesMessage(ValidationError, "канонической системной доски"):
+            initialize_board_access_for_bootstrap(
+                board=arbitrary,
+                selected_group_names=[ROLE_CUSTOMER],
+                reason="Недопустимый bootstrap.",
+                board_was_created=False,
+            )
+        self.assertFalse(arbitrary.allowed_groups.exists())
+        self.assertFalse(BoardAccessAudit.objects.filter(board=arbitrary).exists())
+
+    def test_inactive_user_cannot_see_board_names(self):
+        user = User.objects.create_user(username="inactive-board-user", is_active=False)
+        user.groups.add(self.customer_group)
+
+        self.assertFalse(visible_boards_queryset(user).exists())
+
+    def test_actor_privilege_change_after_preview_fails_closed(self):
+        preview = preview_board_access(
+            actor=self.actor,
+            board=self.board,
+            selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+            reason="Проверка смены полномочий.",
+        )
+        self.actor.is_superuser = False
+        self.actor.save(update_fields=["is_superuser"])
+
+        with self.assertRaises(PermissionDenied):
+            apply_board_access(
+                actor=self.actor,
+                board=self.board,
+                selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+                reason="Проверка смены полномочий.",
+            )
+
+    def test_degraded_role_contract_blocks_board_access_preview(self):
+        from apps.core.contract_store import get_contract
+        from apps.core.json_utils import load_json_file
+
+        payload = load_json_file("contracts/role_rules.json")
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE",
+            "role_rules.json",
+            payload,
+        ) as role_path:
+            get_contract("role_rules")
+            role_path.write_text("{broken", encoding="utf-8")
+            get_contract("role_rules")
+
+            with self.assertRaisesMessage(ValidationError, "режиме деградации"):
+                preview_board_access(
+                    actor=self.actor,
+                    board=self.board,
+                    selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+                    reason="Не должно примениться.",
+                )
 
 
 @pytest.mark.unit
@@ -773,6 +1020,12 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertNotContains(response, resolved.title)
 
     def test_backlog_board_is_created_for_portal_feedback(self):
+        from importlib import import_module
+
+        from django.apps import apps
+
+        migration = import_module("apps.workorders.migrations.0016_create_backlog_board")
+        migration.create_backlog_board(apps, schema_editor=None)
         board = Board.objects.get(slug="backlog")
 
         self.assertEqual(board.title, "Техподдержка")

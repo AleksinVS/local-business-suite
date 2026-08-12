@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Доступ к доске {{ board.title }}{% endblock %}
+
+{% block content %}
+<section class="panel board-access-workspace">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Доступ / доски</p>
+      <h1>{{ board.title }}</h1>
+      <p class="description">Выберите только роли доступа. Членство сотрудников в ролях меняется в их карточках.</p>
+    </div>
+    <a class="button-link" href="{{ return_url }}">{% if is_break_glass %}К Django Admin{% else %}К доскам{% endif %}</a>
+  </div>
+
+  {% if is_break_glass %}
+    <div class="flash warning"><strong>Резервный путь.</strong> Укажите причину. Изменение попадёт в тот же предметный журнал.</div>
+  {% endif %}
+  {% if legacy_group_names %}
+    <div class="flash warning"><strong>Нужен разбор.</strong> В доске есть устаревшие или технические группы: {{ legacy_group_names|join:", " }}. Сохранение закрыто до их ручной проверки.</div>
+  {% endif %}
+
+  <form method="post" class="settings-form board-access-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.preview_token }}
+    <fieldset>
+      <legend>{{ form.group_names.label }}</legend>
+      <p class="description">Список строится из действующего контракта ролей.</p>
+      {{ form.group_names.errors }}
+      <div class="role-choice-list">{{ form.group_names }}</div>
+    </fieldset>
+    <div class="field-stack">
+      <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
+      {{ form.reason }}
+      {% if form.reason.help_text %}<span class="muted">{{ form.reason.help_text }}</span>{% endif %}
+      {{ form.reason.errors }}
+    </div>
+
+    {% if preview %}
+      <section class="access-preview" aria-labelledby="board-preview-title">
+        <h2 id="board-preview-title" tabindex="-1">Проверка изменения</h2>
+        <dl class="diff-summary">
+          <div><dt>Добавятся</dt><dd>{{ preview.added|join:", "|default:"—" }}</dd></div>
+          <div><dt>Удалятся</dt><dd>{{ preview.removed|join:", "|default:"—" }}</dd></div>
+        </dl>
+        <p><strong>Активные сотрудники:</strong> получат доступ — {{ preview.impact.active_gain_count }}, потеряют — {{ preview.impact.active_loss_count }}, сохранят доступ — {{ preview.impact.active_retained_count }}.</p>
+        {% if preview.risk_markers %}
+          <div class="risk-summary">
+            <strong>Требуется подтверждение</strong>
+            <ul>{% for marker in preview.risk_markers %}<li>{{ marker }}</li>{% endfor %}</ul>
+          </div>
+          <label class="checkbox-row">{{ form.risk_confirmed }} {{ form.risk_confirmed.label }}</label>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    <div class="board-access-actions">
+      <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
+      {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head"><div><p class="eyebrow">История</p><h2>Последние изменения этой доски</h2></div></div>
+  <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="История изменений доступа к доске">
+    <table class="data-table">
+      <thead><tr><th scope="col">Время</th><th scope="col">Кто</th><th scope="col">Источник</th><th scope="col">Изменение</th></tr></thead>
+      <tbody>
+        {% for item in history %}
+          <tr>
+            <td>{{ item.created_at }}</td><td>{{ item.actor }}</td><td>{{ item.get_source_display }}</td>
+            <td>+ {{ item.groups_added|join:", "|default:"—" }} / − {{ item.groups_removed|join:", "|default:"—" }}</td>
+          </tr>
+        {% empty %}<tr><td colspan="4" class="muted">Изменений пока нет.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<style>
+  .board-access-form { display: grid; gap: 1rem; }
+  .board-access-form fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .board-access-form legend { padding: 0 0.4rem; font-weight: 700; }
+  .role-choice-list ul { list-style: none; padding: 0; margin: 0.75rem 0 0; display: grid; gap: 0.55rem; }
+  .role-choice-list label, .checkbox-row { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; }
+  .field-stack { display: grid; gap: 0.4rem; }
+  .field-stack textarea { width: 100%; }
+  .access-preview { border-top: 1px solid var(--border); padding-top: 1rem; }
+  .diff-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .diff-summary div { border-left: 3px solid var(--border); padding-left: 0.75rem; }
+  .diff-summary dt { color: var(--text-muted); font-size: 0.85rem; }
+  .diff-summary dd { margin: 0.25rem 0 0; }
+  .risk-summary { margin-top: 1rem; padding: 0.85rem; border: 1px solid #d97706; border-radius: 8px; }
+  .board-access-actions { display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; padding: 0.75rem 0; background: var(--surface); }
+  @media (max-width: 640px) { .diff-summary { grid-template-columns: 1fr; } .board-access-actions { position: static; flex-direction: column; } }
+</style>
+{% if preview %}<script>document.getElementById("board-preview-title")?.focus();</script>{% endif %}
+{% endblock %}

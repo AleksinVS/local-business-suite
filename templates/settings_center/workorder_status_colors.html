@@ -19,6 +19,7 @@
 
   <form method="post" class="settings-form status-color-form">
     {% csrf_token %}
+    <input type="hidden" name="base_hash" value="{{ base_hash }}">
     <div class="status-color-grid">
       {% for row in rows %}
         <div class="status-color-row">

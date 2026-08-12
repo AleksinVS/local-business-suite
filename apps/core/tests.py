@@ -4,6 +4,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -58,13 +59,13 @@ from apps.core.right_panels import (
     register_right_panel_provider,
     registered_right_panel_providers,
 )
-from apps.workorders.policies import ROLE_MANAGER, capability_flags
+from apps.core.contract_store import normalized_hash
+from apps.workorders.policies import ROLE_MANAGER
 from apps.inventory.models import MedicalDevice
 from apps.waiting_list.models import WaitingListEntry
-from apps.workorders.models import WorkOrder
+from apps.workorders.models import Board, BoardAccessAudit, WorkOrder
 from config.settings import database_config_from_url
 from .models import Department
-from .views import ROLE_RULES_FORM_VERSION
 
 User = get_user_model()
 
@@ -125,6 +126,53 @@ def valid_memory_graph_schema_payload():
         "department_evidence": [],
         "changelog": [],
     }
+
+
+@pytest.mark.unit
+class CrossPlatformFileLockTests(SimpleTestCase):
+    def test_second_writer_times_out_then_acquires_after_release(self):
+        from apps.core.file_locks import FileLockTimeoutError, exclusive_file_lock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = Path(tmpdir) / "write.lock"
+            outcome = []
+
+            def contender():
+                try:
+                    with exclusive_file_lock(lock_path, timeout=0.15, poll_interval=0.01):
+                        outcome.append("acquired")
+                except FileLockTimeoutError:
+                    outcome.append("timeout")
+
+            with exclusive_file_lock(lock_path):
+                worker = threading.Thread(target=contender)
+                worker.start()
+                worker.join(timeout=2)
+            self.assertEqual(outcome, ["timeout"])
+            with exclusive_file_lock(lock_path, timeout=0.2):
+                outcome.append("released")
+            self.assertEqual(outcome, ["timeout", "released"])
+
+    def test_windows_msvcrt_branch_locks_and_unlocks_one_byte(self):
+        from apps.core.file_locks import exclusive_file_lock
+
+        class FakeMsvcrt:
+            LK_NBLCK = 1
+            LK_UNLCK = 2
+
+            def __init__(self):
+                self.calls = []
+
+            def locking(self, fileno, mode, length):
+                self.calls.append((mode, length))
+
+        fake = FakeMsvcrt()
+        with tempfile.TemporaryDirectory() as tmpdir, patch(
+            "apps.core.file_locks._import_fcntl", return_value=None
+        ), patch("apps.core.file_locks._import_msvcrt", return_value=fake):
+            with exclusive_file_lock(Path(tmpdir) / "windows.lock"):
+                pass
+        self.assertEqual(fake.calls, [(fake.LK_NBLCK, 1), (fake.LK_UNLCK, 1)])
 
 
 @pytest.mark.integration
@@ -560,255 +608,34 @@ class DepartmentViewTests(TestCase):
         self.assertContains(response, f'action="{reverse("logout")}"')
         self.assertContains(response, "Выйти")
 
-    @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
-    def test_manager_cannot_open_role_rules_editor(self):
-        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")
+    def test_manager_cannot_open_legacy_role_rules_route(self):
         self.client.force_login(self.manager)
+
         response = self.client.get(reverse("core:role_rules"))
+
         self.assertEqual(response.status_code, 403)
 
-    @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
-    def test_superuser_can_open_role_rules_editor(self):
-        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")
+    def test_active_superuser_legacy_role_rules_route_redirects_to_role_catalog(self):
         self.client.force_login(self.role_admin)
+
         response = self.client.get(reverse("core:role_rules"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Роли доступа")
 
-    def test_manager_can_save_role_rules_json(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "role_rules.json"
-            initial_payload = {
-                "manager": {
-                    "view_scope": "all",
-                    "create_workorder": True,
-                    "edit_scope": "all",
-                    "comment_scope": "visible",
-                    "upload_attachment_scope": "visible",
-                    "confirm_closure_scope": "all",
-                    "rate_scope": "all",
-                    "transition_scope": "all",
-                    "transition_targets": "*",
-                    "manage_inventory": True,
-                    "manage_board_columns": True,
-                    "manage_assignments": True,
-                    "view_analytics": True,
-                    "manage_departments": True,
-                    "manage_roles": True,
-                }
-            }
-            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
-            with override_settings(
-                LOCAL_BUSINESS_ROLE_RULES_FILE=config_path,
-                LOCAL_BUSINESS_ROLE_RULES=initial_payload,
-            ):
-                self.client.force_login(self.role_admin)
-                form_response = self.client.get(reverse("core:role_rules"))
-                base_hash = form_response.context["role_rules_base_hash"]
-                response = self.client.post(
-                    reverse("core:role_rules"),
-                    {
-                        "base_hash": base_hash,
-                        "form_version": ROLE_RULES_FORM_VERSION,
-                        "confirm_sensitive_changes": "yes",
-                        "role_manager_create_workorder": "on",
-                        "role_manager_manage_inventory": "",
-                        "role_manager_manage_board_columns": "",
-                        "role_manager_manage_assignments": "",
-                        "role_manager_view_analytics": "",
-                        "role_manager_manage_departments": "",
-                        "role_manager_manage_roles": "",
-                        "role_manager_view_scope": "authored",
-                    },
-                )
-                self.assertEqual(response.status_code, 302)
-                saved = json.loads(config_path.read_text(encoding="utf-8"))
-                # View updates existing roles in-place
-                self.assertTrue(saved["manager"]["create_workorder"])
-                self.assertFalse(saved["manager"]["manage_inventory"])
-                self.assertFalse(saved["manager"]["manage_board_columns"])
-                self.assertFalse(saved["manager"]["manage_assignments"])
-                self.assertFalse(saved["manager"]["view_analytics"])
-                self.assertFalse(saved["manager"]["manage_departments"])
-                self.assertFalse(saved["manager"]["manage_roles"])
-                self.assertEqual(saved["manager"]["view_scope"], "authored")
+        self.assertRedirects(
+            response,
+            reverse("settings_center:role_catalog"),
+            fetch_redirect_response=False,
+        )
 
-    def test_saving_invalid_role_rules_via_ui_is_rejected_and_file_unchanged(self):
-        from apps.core.contract_store import _reset_for_tests
-        from apps.settings_center.models import SettingsChange
+    def test_legacy_role_rules_post_is_not_allowed_and_contract_is_unchanged(self):
+        from apps.core.contract_store import get_contract
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "role_rules.json"
-            initial_payload = {
-                "manager": {
-                    "view_scope": "all",
-                    "create_workorder": True,
-                    "edit_scope": "all",
-                    "comment_scope": "visible",
-                    "upload_attachment_scope": "visible",
-                    "confirm_closure_scope": "all",
-                    "rate_scope": "all",
-                    "transition_scope": "all",
-                    "transition_targets": "*",
-                    "manage_inventory": True,
-                    "manage_board_columns": True,
-                    "manage_assignments": True,
-                    "view_analytics": True,
-                    "manage_departments": True,
-                    "manage_roles": True,
-                }
-            }
-            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
-            before = config_path.read_text(encoding="utf-8")
-            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
-                _reset_for_tests()
-                self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.role_admin)
-                form_response = self.client.get(reverse("core:role_rules"))
-                base_hash = form_response.context["role_rules_base_hash"]
-                response = self.client.post(
-                    reverse("core:role_rules"),
-                    {
-                        "base_hash": base_hash,
-                        "form_version": ROLE_RULES_FORM_VERSION,
-                        "confirm_sensitive_changes": "yes",
-                        "role_manager_manage_roles": "on",
-                        "role_manager_view_scope": "totally_invalid_scope",
-                    },
-                )
-                # Невалидный view_scope отклоняется валидатором в service layer.
-                self.assertEqual(response.status_code, 302)
-                self.assertEqual(config_path.read_text(encoding="utf-8"), before)
-                self.assertEqual(
-                    SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
-                    0,
-                )
+        self.client.force_login(self.role_admin)
+        before = get_contract("role_rules")
 
-    def test_saving_role_rules_via_ui_creates_settings_change(self):
-        from apps.core.contract_store import _reset_for_tests
-        from apps.settings_center.models import SettingsChange
+        response = self.client.post(reverse("core:role_rules"), {"role": "manager"})
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "role_rules.json"
-            initial_payload = {
-                "manager": {
-                    "view_scope": "all",
-                    "create_workorder": True,
-                    "edit_scope": "all",
-                    "comment_scope": "visible",
-                    "upload_attachment_scope": "visible",
-                    "confirm_closure_scope": "all",
-                    "rate_scope": "all",
-                    "transition_scope": "all",
-                    "transition_targets": "*",
-                    "manage_inventory": True,
-                    "manage_board_columns": True,
-                    "manage_assignments": True,
-                    "view_analytics": True,
-                    "manage_departments": True,
-                    "manage_roles": True,
-                }
-            }
-            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
-            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
-                _reset_for_tests()
-                self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.role_admin)
-                form_response = self.client.get(reverse("core:role_rules"))
-                base_hash = form_response.context["role_rules_base_hash"]
-                response = self.client.post(
-                    reverse("core:role_rules"),
-                    {
-                        "base_hash": base_hash,
-                        "form_version": ROLE_RULES_FORM_VERSION,
-                        "confirm_sensitive_changes": "yes",
-                        "role_manager_manage_roles": "on",
-                        "role_manager_create_workorder": "on",
-                        "role_manager_view_scope": "authored",
-                    },
-                )
-                self.assertEqual(response.status_code, 302)
-                changes = SettingsChange.objects.filter(setting_id="core.contract.role_rules")
-                self.assertEqual(changes.count(), 1)
-                self.assertEqual(changes.first().status, SettingsChange.Status.APPLIED)
-                saved = json.loads(config_path.read_text(encoding="utf-8"))
-                self.assertEqual(saved["manager"]["view_scope"], "authored")
-
-    def test_role_rules_form_rejects_lost_update_with_stale_hidden_hash(self):
-        """Классический lost update: два администратора открыли форму,
-        второй сохраняет позже — его запись со старым hidden base_hash
-        отклоняется, конкурентная правка не перезаписывается."""
-        import copy
-
-        from apps.core.contract_store import _reset_for_tests
-        from apps.settings_center.contract_services import apply_contract_payload
-        from apps.settings_center.models import SettingsChange
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "role_rules.json"
-            initial_payload = {
-                "manager": {
-                    "view_scope": "all",
-                    "create_workorder": True,
-                    "edit_scope": "all",
-                    "comment_scope": "visible",
-                    "upload_attachment_scope": "visible",
-                    "confirm_closure_scope": "all",
-                    "rate_scope": "all",
-                    "transition_scope": "all",
-                    "transition_targets": "*",
-                    "manage_inventory": True,
-                    "manage_board_columns": True,
-                    "manage_assignments": True,
-                    "view_analytics": True,
-                    "manage_departments": True,
-                    "manage_roles": True,
-                }
-            }
-            config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
-            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
-                _reset_for_tests()
-                self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.role_admin)
-
-                # Администратор №2 открывает форму: hidden base_hash в контексте.
-                response = self.client.get(reverse("core:role_rules"))
-                stale_hash = response.context["role_rules_base_hash"]
-                self.assertContains(response, 'name="base_hash"')
-
-                # Администратор №1 сохраняет свою правку раньше (через service layer).
-                concurrent = copy.deepcopy(initial_payload)
-                concurrent["manager"]["view_scope"] = "department_branch"
-                apply_contract_payload(
-                    actor=self.role_admin,
-                    setting_id="core.contract.role_rules",
-                    raw_payload=json.dumps(concurrent, ensure_ascii=False),
-                    confirmed=True,
-                )
-
-                # Администратор №2 сохраняет форму со старым hidden base_hash.
-                response = self.client.post(
-                    reverse("core:role_rules"),
-                    {
-                        "base_hash": stale_hash,
-                        "form_version": ROLE_RULES_FORM_VERSION,
-                        "confirm_sensitive_changes": "yes",
-                        "role_manager_manage_roles": "on",
-                        "role_manager_create_workorder": "on",
-                        "role_manager_view_scope": "authored",
-                    },
-                    follow=True,
-                )
-
-                # Запись отклонена: файл хранит конкурентную версию, второй
-                # SettingsChange не создан, пользователю показана ошибка.
-                saved = json.loads(config_path.read_text(encoding="utf-8"))
-                self.assertEqual(saved["manager"]["view_scope"], "department_branch")
-                self.assertEqual(
-                    SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
-                    1,
-                )
-                self.assertContains(response, "изменён другим процессом")
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(get_contract("role_rules"), before)
 
 
 @pytest.mark.integration
@@ -830,7 +657,10 @@ class ContractStoreTests(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             self._write(role_file, self.base)
-            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+            with override_settings(
+                LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+            ):
                 first = get_contract("role_rules")
                 self.assertIn("manager", first)
                 self.assertNotEqual(first["manager"].get("display_name"), "Изменённый менеджер")
@@ -856,7 +686,10 @@ class ContractStoreTests(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             self._write(role_file, self.base)
-            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file):
+            with override_settings(
+                LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+            ):
                 # "Воркер A" читает и кэширует текущую версию.
                 worker_a_before = get_contract("role_rules")
                 self.assertNotEqual(
@@ -870,6 +703,7 @@ class ContractStoreTests(TestCase):
                     setting_id="core.contract.role_rules",
                     raw_payload=json.dumps(changed, ensure_ascii=False),
                     confirmed=True,
+                    base_hash=normalized_hash(self.base),
                 )
 
                 # Тот же процесс без in-process refresh перечитывает новую версию.
@@ -927,370 +761,6 @@ class ContractStoreTests(TestCase):
                 state = get_degradation_state()
                 self.assertTrue(state["degraded"])
                 self.assertIn("role_rules", state["contracts"])
-
-
-@pytest.mark.integration
-class RoleRulesCapabilityUiTests(TestCase):
-    """Редактор ролей показывает названия/описания из справочника
-    "$capabilities" контракта (ADR-0034) и не портит служебные ключи при
-    сохранении. Работает на изолированной рабочей копии контракта, чтобы не
-    писать в реальный data/contracts/."""
-
-    def setUp(self):
-        from apps.core.contract_store import _reset_for_tests
-
-        self.manager = User.objects.create_superuser(
-            username="rr-capability-manager",
-            password="pass",
-            email="rr-capability-manager@example.test",
-        )
-        manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
-        self.manager.groups.add(manager_group)
-
-        self.base_role_rules = json_utils.load_json_file("contracts/role_rules.json")
-        for capability in self.base_role_rules.get("$capabilities", {}).values():
-            if isinstance(capability, dict):
-                capability.setdefault("section", "workorders")
-                capability.setdefault("risk", "normal")
-        self.base_role_rules["$capabilities"]["manage_inventory"].update(
-            section="organization", risk="elevated"
-        )
-        self.base_role_rules["$capabilities"]["manage_roles"].update(
-            section="organization", risk="critical"
-        )
-        self._tmpdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tmpdir.cleanup)
-        self.role_file = Path(self._tmpdir.name) / "role_rules.json"
-        self.role_file.write_text(
-            json.dumps(self.base_role_rules, ensure_ascii=False), encoding="utf-8"
-        )
-
-        self._override = override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=self.role_file)
-        self._override.enable()
-        self.addCleanup(self._override.disable)
-
-        _reset_for_tests()
-        self.addCleanup(_reset_for_tests)
-
-    def _post_data(self, base_hash):
-        post_data = {
-            "base_hash": base_hash,
-            "form_version": ROLE_RULES_FORM_VERSION,
-        }
-        definitions = self.base_role_rules["$capabilities"]
-        for role, config in self.base_role_rules.items():
-            if role.startswith("$"):
-                continue
-            for capability_name, metadata in definitions.items():
-                field_name = f"role_{role}_{capability_name}"
-                if metadata["type"] == "flag" and config.get(capability_name):
-                    post_data[field_name] = "on"
-                elif metadata["type"] == "scope":
-                    post_data[field_name] = config[capability_name]
-                elif metadata["type"] == "targets":
-                    targets = config[capability_name]
-                    post_data[field_name] = targets if targets == "*" else ", ".join(targets)
-        for capability_name, metadata in definitions.items():
-            post_data[f"capability_{capability_name}_description"] = metadata["description"]
-        return post_data
-
-    def _unchanged_post_data(self):
-        base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
-        return self._post_data(base_hash)
-
-    @patch("apps.accounts.ldap_backend.sync_remote_user")
-    def test_first_remote_user_role_post_survives_parallel_favicon(self, _sync_remote_user):
-        """Сквозная регрессия: favicon не перезаписывает cookie первой SSO-формы."""
-        import re
-
-        from config.settings import build_middleware
-
-        middleware = build_middleware(False)
-        middleware.insert(
-            middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
-            "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware",
-        )
-        with override_settings(
-            AUTHENTICATION_BACKENDS=["apps.accounts.ldap_backend.RemoteUserLDAPBackend"],
-            MIDDLEWARE=middleware,
-        ):
-            csrf_client = self.client_class(enforce_csrf_checks=True)
-            get_response = csrf_client.get(
-                reverse("core:role_rules"),
-                REMOTE_USER="DOMAIN\\rr-capability-manager",
-            )
-            self.assertEqual(get_response.status_code, 200)
-            token_match = re.search(
-                r'name="csrfmiddlewaretoken" value="([^"]+)"',
-                get_response.content.decode(),
-            )
-            self.assertIsNotNone(token_match)
-
-            parallel_client = self.client_class(enforce_csrf_checks=True)
-            favicon_response = parallel_client.get(
-                "/",
-                REMOTE_USER="DOMAIN\\rr-capability-manager",
-                REQUEST_URI="/favicon.ico",
-            )
-            self.assertNotIn("sessionid", favicon_response.cookies)
-            self.assertNotIn("csrftoken", favicon_response.cookies)
-
-            post_data = self._post_data(get_response.context["role_rules_base_hash"])
-            updated_description = "Проверочное описание права после первого Windows SSO-входа."
-            post_data["capability_view_waiting_list_description"] = updated_description
-            post_data["csrfmiddlewaretoken"] = token_match.group(1)
-
-            post_response = csrf_client.post(
-                reverse("core:role_rules"),
-                post_data,
-                REMOTE_USER="DOMAIN\\rr-capability-manager",
-            )
-
-            self.assertEqual(post_response.status_code, 302)
-            saved = json.loads(self.role_file.read_text(encoding="utf-8"))
-            self.assertEqual(
-                saved["$capabilities"]["view_waiting_list"]["description"],
-                updated_description,
-            )
-
-    def test_page_shows_editable_capability_descriptions(self):
-        self.client.force_login(self.manager)
-
-        response = self.client.get(reverse("core:role_rules"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Просмотр листа ожидания")
-        self.assertContains(response, "Описания прав")
-        self.assertContains(response, "Технические группы Django")
-        self.assertContains(response, "Предпросмотр изменений")
-        self.assertContains(response, "Журнал изменений ролей")
-        self.assertContains(response, 'name="form_version"')
-        self.assertContains(response, "Подтвердить и сохранить чувствительные изменения")
-        self.assertContains(
-            response,
-            'name="capability_view_waiting_list_description"',
-        )
-
-    def test_page_shows_role_settings_change_history(self):
-        from apps.settings_center.models import SettingsChange
-
-        SettingsChange.objects.create(
-            actor=self.manager,
-            setting_id="core.contract.role_rules",
-            domain="core",
-            storage_kind="runtime_contract",
-            action=SettingsChange.Action.APPLY,
-            status=SettingsChange.Status.APPLIED,
-        )
-        self.client.force_login(self.manager)
-
-        response = self.client.get(reverse("core:role_rules"))
-
-        self.assertContains(response, "Журнал изменений ролей")
-        self.assertContains(response, "Применено")
-        self.assertContains(response, self.manager.username)
-
-    def test_post_updates_capability_description(self):
-        self.client.force_login(self.manager)
-        base_hash = self.client.get(reverse("core:role_rules")).context["role_rules_base_hash"]
-        post_data = {
-            "base_hash": base_hash,
-            "form_version": ROLE_RULES_FORM_VERSION,
-            "confirm_sensitive_changes": "yes",
-        }
-        for role, config in self.base_role_rules.items():
-            if role.startswith("$"):
-                continue
-            post_data[f"role_{role}_view_scope"] = config.get("view_scope", "none")
-            for flag, _label, _description in capability_flags():
-                if config.get(flag):
-                    post_data[f"role_{role}_{flag}"] = "on"
-        post_data["capability_view_waiting_list_description"] = (
-            "Разрешает врачу просматривать список пациентов, ожидающих приёма."
-        )
-
-        response = self.client.post(
-            reverse("core:role_rules"),
-            post_data,
-        )
-
-        self.assertEqual(response.status_code, 302)
-        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
-        self.assertEqual(
-            saved["$capabilities"]["view_waiting_list"]["description"],
-            "Разрешает врачу просматривать список пациентов, ожидающих приёма.",
-        )
-
-    def test_post_disabling_all_doctor_flags_preserves_capabilities_and_schema(self):
-        self.client.force_login(self.manager)
-
-        get_response = self.client.get(reverse("core:role_rules"))
-        base_hash = get_response.context["role_rules_base_hash"]
-        flags = capability_flags()
-        doctor_before_keys = set(self.base_role_rules["doctor"].keys())
-
-        # Полноценная отправка формы: для каждой роли передаём её текущее
-        # состояние (как реальный браузер отправляет отмеченные чекбоксы),
-        # кроме роли doctor — там все чекбоксы выключены явно.
-        post_data = {
-            "base_hash": base_hash,
-            "form_version": ROLE_RULES_FORM_VERSION,
-            "confirm_sensitive_changes": "yes",
-        }
-        for role, config in self.base_role_rules.items():
-            if role.startswith("$"):
-                continue
-            post_data[f"role_{role}_view_scope"] = config.get("view_scope", "none")
-            if role == "doctor":
-                continue  # ни один чекбокс doctor не отмечен
-            for flag, _label, _description in flags:
-                if config.get(flag):
-                    post_data[f"role_{role}_{flag}"] = "on"
-
-        response = self.client.post(reverse("core:role_rules"), post_data)
-        self.assertEqual(response.status_code, 302)
-
-        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
-
-        # Служебный блок не потерян и не испорчен полями ролей.
-        self.assertIn("$schema", saved)
-        self.assertIn("$capabilities", saved)
-        self.assertIsInstance(saved["$capabilities"], dict)
-        self.assertIn("view_waiting_list", saved["$capabilities"])
-        self.assertEqual(
-            saved["$capabilities"]["view_waiting_list"]["label"], "Просмотр листа ожидания"
-        )
-
-        # doctor: все булевы права выключены, никаких новых/чужих ключей не появилось.
-        doctor = saved["doctor"]
-        self.assertEqual(set(doctor.keys()), doctor_before_keys)
-        for flag, _label, _description in flags:
-            self.assertFalse(doctor.get(flag), f"doctor.{flag} должен быть выключен")
-
-    def test_unchanged_full_form_preserves_all_scope_and_targets_values(self):
-        self.client.force_login(self.manager)
-        before = json.loads(self.role_file.read_text(encoding="utf-8"))
-
-        response = self.client.post(reverse("core:role_rules"), self._unchanged_post_data())
-
-        self.assertEqual(response.status_code, 302)
-        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
-        for role_name, before_role in before.items():
-            if role_name.startswith("$"):
-                continue
-            for key in (
-                "view_scope",
-                "edit_scope",
-                "comment_scope",
-                "upload_attachment_scope",
-                "confirm_closure_scope",
-                "rate_scope",
-                "transition_scope",
-                "transition_targets",
-            ):
-                self.assertEqual(saved[role_name][key], before_role[key], f"{role_name}.{key}")
-
-    def test_critical_right_cannot_be_changed_by_direct_post_without_confirmation(self):
-        from apps.settings_center.models import SettingsChange
-
-        self.client.force_login(self.manager)
-        before = self.role_file.read_text(encoding="utf-8")
-        post_data = self._unchanged_post_data()
-        post_data.pop("role_manager_manage_roles")
-        post_data["role_manager_view_scope"] = "authored"
-        post_data["role_manager_transition_targets"] = "new, accepted"
-        post_data["capability_manage_roles_description"] = (
-            "Позволяет безопасно настраивать роли сотрудников."
-        )
-
-        response = self.client.post(reverse("core:role_rules"), post_data)
-
-        self.assertEqual(self.role_file.read_text(encoding="utf-8"), before)
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "требует явного подтверждения")
-        self.assertContains(response, "Подтвердить и сохранить чувствительные изменения")
-        self.assertContains(response, "manager: Управление ролями")
-        self.assertNotContains(response, 'id="sensitive-confirmation" hidden')
-        self.assertNotContains(response, 'role_manager_manage_roles" checked')
-        self.assertContains(response, '<option value="authored" selected>Только свои</option>', html=True)
-        self.assertContains(response, 'value="new, accepted"')
-        self.assertContains(response, "Позволяет безопасно настраивать роли сотрудников.")
-        self.assertFalse(SettingsChange.objects.filter(setting_id="core.contract.role_rules").exists())
-
-        post_data["confirm_sensitive_changes"] = "yes"
-        confirmed_response = self.client.post(reverse("core:role_rules"), post_data)
-
-        self.assertEqual(confirmed_response.status_code, 302)
-        saved = json.loads(self.role_file.read_text(encoding="utf-8"))
-        self.assertFalse(saved["manager"]["manage_roles"])
-        self.assertEqual(saved["manager"]["view_scope"], "authored")
-        self.assertEqual(saved["manager"]["transition_targets"], ["new", "accepted"])
-        self.assertEqual(
-            saved["$capabilities"]["manage_roles"]["description"],
-            "Позволяет безопасно настраивать роли сотрудников.",
-        )
-        self.assertEqual(
-            SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
-            1,
-        )
-
-    def test_outdated_role_form_is_rejected_before_permissions_are_parsed(self):
-        self.client.force_login(self.manager)
-        before = self.role_file.read_text(encoding="utf-8")
-        post_data = self._unchanged_post_data()
-        post_data.pop("form_version")
-        post_data.pop("role_manager_manage_roles")
-
-        response = self.client.post(reverse("core:role_rules"), post_data, follow=True)
-
-        self.assertEqual(self.role_file.read_text(encoding="utf-8"), before)
-        self.assertContains(response, "Форма ролей устарела")
-        self.assertNotContains(response, "Изменение чувствительных прав требует")
-
-    def test_preview_action_does_not_write_contract(self):
-        self.client.force_login(self.manager)
-        before = self.role_file.read_text(encoding="utf-8")
-        post_data = self._unchanged_post_data()
-        post_data["action"] = "preview"
-        post_data["confirm_sensitive_changes"] = "yes"
-        post_data.pop("role_manager_manage_roles")
-
-        response = self.client.post(reverse("core:role_rules"), post_data, follow=True)
-
-        self.assertEqual(self.role_file.read_text(encoding="utf-8"), before)
-        self.assertContains(response, "Контракт ролей не изменён")
-
-    def test_affected_users_context_keeps_users_unique_across_roles(self):
-        self.client.force_login(self.manager)
-        shared_user = User.objects.create_user(username="two-access-roles", password="pass")
-        admin_group, _ = Group.objects.get_or_create(name="admin")
-        manager_group = Group.objects.get(name=ROLE_MANAGER)
-        shared_user.groups.add(admin_group, manager_group)
-
-        response = self.client.get(reverse("core:role_rules"))
-
-        role_member_ids = response.context["role_member_ids"]
-        affected = set(role_member_ids["manager"]) | set(role_member_ids["admin"])
-        self.assertIn(shared_user.id, affected)
-        self.assertEqual(len(affected), len(set(affected)))
-
-    def test_role_member_map_uses_one_membership_query_for_all_roles(self):
-        from django.db import connection
-        from django.test.utils import CaptureQueriesContext
-
-        self.client.force_login(self.manager)
-
-        with CaptureQueriesContext(connection) as queries:
-            response = self.client.get(reverse("core:role_rules"))
-
-        self.assertEqual(response.status_code, 200)
-        group_table = Group._meta.db_table
-        membership_queries = [
-            query["sql"]
-            for query in queries.captured_queries
-            if group_table in query["sql"] and 'AS "groups__name"' in query["sql"]
-        ]
-        self.assertEqual(len(membership_queries), 1)
 
 
 @pytest.mark.integration
@@ -2028,9 +1498,15 @@ class DemoSeedCommandTests(TestCase):
         self.assertGreaterEqual(
             WaitingListEntry.objects.filter(comment__startswith="[demo]").count(), 10
         )
+        board = Board.objects.get(slug="demo-portal")
+        audit = BoardAccessAudit.objects.get(board=board)
+        self.assertEqual(audit.source, BoardAccessAudit.Source.SYSTEM_BOOTSTRAP)
+        self.assertIsNone(audit.actor)
 
     def test_seed_demo_data_is_idempotent(self):
         call_command("seed_demo_data")
+        board = Board.objects.get(slug="demo-portal")
+        groups_before = set(board.allowed_groups.values_list("name", flat=True))
         call_command("seed_demo_data")
         self.assertEqual(User.objects.filter(username__startswith="demo_").count(), 9)
         self.assertEqual(
@@ -2039,6 +1515,18 @@ class DemoSeedCommandTests(TestCase):
         self.assertEqual(WorkOrder.objects.filter(title__startswith="[demo]").count(), 30)
         self.assertEqual(
             WaitingListEntry.objects.filter(comment__startswith="[demo]").count(), 10
+        )
+        board.refresh_from_db()
+        self.assertEqual(
+            set(board.allowed_groups.values_list("name", flat=True)),
+            groups_before,
+        )
+        self.assertEqual(
+            BoardAccessAudit.objects.filter(
+                board=board,
+                source=BoardAccessAudit.Source.SYSTEM_BOOTSTRAP,
+            ).count(),
+            1,
         )
 
     def test_seed_demo_data_flush_removes_marked_objects(self):
@@ -2237,6 +1725,30 @@ class SettingsImportSideEffectTests(TestCase):
                 data_dir.exists(),
                 "импорт settings в чистой среде не должен создавать каталоги data/",
             )
+
+    def test_production_rejects_default_audit_fingerprint_key(self):
+        env = {
+            **os.environ,
+            "DJANGO_ENV": "production",
+            "DJANGO_DEBUG": "0",
+            "DJANGO_SECRET_KEY": "production-secret-key-for-settings-test",
+            "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY": "change-me-too",
+            "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "production-ai-token-for-settings-test",
+            "LOCAL_BUSINESS_DB_BACKEND": "postgresql",
+            "LOCAL_BUSINESS_MEMORY_FULLTEXT_BACKEND": "postgresql",
+            "LOCAL_BUSINESS_EXTERNAL_CONNECTOR_QUEUE_BACKEND": "database",
+        }
+
+        result = subprocess.run(
+            [sys.executable, "-c", "import config.settings"],
+            cwd=str(settings.BASE_DIR),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY", result.stderr)
 
 
 @pytest.mark.integration

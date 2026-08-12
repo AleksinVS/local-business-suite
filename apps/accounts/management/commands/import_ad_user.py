@@ -1,6 +1,12 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
-from apps.accounts.ldap_backend import find_ad_user, sync_user_from_ad, LDAPConfig
+from apps.accounts.ldap_backend import (
+    LDAPConfig,
+    find_ad_user,
+    record_external_user_creation_audit,
+    sync_user_from_ad,
+)
+from apps.accounts.services import get_or_create_external_user
 
 User = get_user_model()
 
@@ -72,13 +78,17 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Создание локального пользователя '{sam_account}'...")
 
-        user = User.objects.create(
+        user, created = get_or_create_external_user(
             username=sam_account,
-            is_active=True,
-            email=attributes.get("mail", ""),
-            first_name=attributes.get("givenName", ""),
-            last_name=attributes.get("sn", ""),
+            defaults={
+                "email": attributes.get("mail", ""),
+                "first_name": attributes.get("givenName", ""),
+                "last_name": attributes.get("sn", ""),
+            },
+            audit_callback=record_external_user_creation_audit,
         )
+        if not created:
+            raise CommandError("Пользователь был создан конкурентным процессом; повторите импорт.")
 
         sync_user_from_ad(user, attributes, config.group_role_map)
 

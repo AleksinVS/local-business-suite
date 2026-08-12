@@ -1242,7 +1242,7 @@ table { width: 100%; border-collapse: collapse; }
 .hero { display: grid; gap: 1rem; grid-template-columns: 2fr 1fr; }
 .metrics, .status-grid { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .metric span, .status-card span { display: block; font-size: 2rem; font-weight: 700; }
-.section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .detail-actions { display: flex; align-items: center; gap: 0.8rem; }
 .filters, .inline-form { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .page-shell {
@@ -3950,16 +3950,18 @@ textarea:focus {
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; }
   .app-layout { flex-direction: column; }
-  .sidebar-nav {
+  .sidebar-nav:not(.sidebar-nav--workorders) {
     width: 100%;
-    height: auto;
+    height: 60px;
+    min-height: 60px;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
-  .sidebar-nav.collapsed { width: 100%; height: 60px; }
+  .sidebar-nav:not(.sidebar-nav--workorders) .sidebar-ai-panel { display: none; }
+  .sidebar-nav:not(.sidebar-nav--workorders).collapsed { width: 100%; height: 60px; }
   .sidebar-nav.collapsed .side-nav { display: none; }
   .ai-session-sidebar { max-height: 260px; }
-  .app-main { height: calc(100vh - 60px); }
+  .app-main { height: calc(100dvh - 60px); }
   .ai-chat-layout { grid-template-columns: 1fr; }
 }
 
@@ -4841,6 +4843,20 @@ body.is-resizing-sidebar .sidebar-nav {
 .access-user-table .row-actions a {
   color: var(--primary);
   font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.access-table-scroll:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.settings-center .button-link,
+.access-user-list .button-link,
+.access-user-list .button {
+  min-height: 44px;
 }
 
 .access-pagination {

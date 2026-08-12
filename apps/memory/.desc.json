@@ -16,6 +16,7 @@
   "tests/": "Пакет тестов приложения памяти, разбитый по темам (admin/review UI, ingestion, sources/models, policy/privacy, chat knowledge, external connectors, indexing, reconcile/edges, data store); общий preamble и фикстуры в _common.py",
   "external_connectors.py": "External API connector landing zone, database/sqlite queue backends and memory handoff",
   "policies.py": "Политики доступа к search documents, knowledge items, scope tokens и trusted source decisions",
+  "access_services.py": "Подписанный preview/apply-сервис экспертных назначений технических групп памяти с отдельным аудитом",
   "acl.py": "ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens",
   "settings_descriptors.py": "Доменные descriptors Settings Center для memory contracts, ACL и ingestion settings",
   "retrieval.py": "Оркестрация memory.search с FTS/vector candidates, trusted-source gate, deterministic rank fusion, citations и audit",

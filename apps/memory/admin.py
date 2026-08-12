@@ -11,12 +11,29 @@ from .models import (
     MemoryFullTextIndex,
     MemoryKnowledgeEdge,
     MemoryKnowledgeItem,
+    MemoryGroupMembershipAudit,
     MemorySearchDocument,
     MemorySource,
     MemorySourceObject,
     SecretAccessAudit,
     SecretHandle,
 )
+
+
+@admin.register(MemoryGroupMembershipAudit)
+class MemoryGroupMembershipAuditAdmin(admin.ModelAdmin):
+    list_display = ("target_user", "actor", "created_at")
+    search_fields = ("target_user__username", "actor__username")
+    readonly_fields = [field.name for field in MemoryGroupMembershipAudit._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MemorySource)

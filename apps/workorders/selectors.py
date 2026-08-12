@@ -17,7 +17,7 @@ from .policies import (
 
 
 def visible_boards_queryset(user):
-    if not user.is_authenticated:
+    if not user.is_authenticated or not getattr(user, "is_active", False):
         return Board.objects.none()
     if user.is_superuser:
         return Board.objects.all()

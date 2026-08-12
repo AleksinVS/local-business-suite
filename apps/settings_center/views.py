@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import Http404
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -13,6 +14,12 @@ from django.views import View
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
 from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity
+from apps.accounts.access_contracts import (
+    apply_role_definition_change,
+    preview_role_definition_change,
+    role_catalog_rows,
+    role_definition_read_model,
+)
 from apps.accounts.selectors import (
     effective_access_for_user,
     split_user_groups,
@@ -22,12 +29,18 @@ from apps.accounts.services import (
     apply_role_assignment,
     create_local_user,
     disable_local_user,
+    external_identity_audit_snapshot,
     link_ad_identity,
     preview_role_assignment,
     update_local_user,
+    user_profile_audit_snapshot,
 )
+from apps.core.contract_store import normalized_hash
 from apps.core.json_utils import pretty_json
-from apps.workorders.policies import can_manage_roles
+from apps.workorders.forms import BoardAccessForm
+from apps.workorders.models import Board, BoardAccessAudit
+from apps.workorders.policies import board_access_role_names, can_manage_board_access, can_manage_roles
+from apps.workorders.services import apply_board_access, preview_board_access
 
 from .contract_services import apply_contract_payload, preview_contract_payload, read_contract_value
 from .env_services import create_env_proposal, env_status_rows
@@ -36,9 +49,11 @@ from .forms import (
     EnvProposalForm,
     ExternalIdentityForm,
     HelpQuestionForm,
+    MemoryGroupMembershipForm,
     PortalUserCreateForm,
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
+    RoleDefinitionForm,
 )
 from .help_services import answer_help_question, initial_help_text
 from .models import SettingsChange
@@ -66,6 +81,20 @@ class SuperuserUserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
         )
 
 
+class BoardAccessManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return can_manage_board_access(self.request.user)
+
+
+class RoleDefinitionManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return bool(
+            self.request.user.is_authenticated
+            and self.request.user.is_active
+            and self.request.user.is_superuser
+        )
+
+
 class SettingsDashboardView(SettingsManagementMixin, TemplateView):
     template_name = "settings_center/dashboard.html"
 
@@ -73,7 +102,171 @@ class SettingsDashboardView(SettingsManagementMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["domains"] = get_registry().by_domain()
         context["recent_changes"] = SettingsChange.objects.select_related("actor")[:12]
+        context["can_manage_roles"] = can_manage_roles(self.request.user)
+        context["can_manage_board_access"] = can_manage_board_access(self.request.user)
         return context
+
+
+class BoardAccessListView(BoardAccessManagementMixin, ListView):
+    model = Board
+    template_name = "settings_center/board_access_list.html"
+    context_object_name = "boards"
+
+    def get_queryset(self):
+        return Board.objects.prefetch_related("allowed_groups").order_by("title")
+
+
+class BoardAccessView(BoardAccessManagementMixin, TemplateView):
+    template_name = "settings_center/board_access_form.html"
+
+    def get(self, request, *args, **kwargs):
+        self.board = get_object_or_404(Board, pk=kwargs["pk"])
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = kwargs.get("form") or BoardAccessForm(
+            initial={
+                "group_names": list(
+                    self.board.allowed_groups.order_by("name").values_list("name", flat=True)
+                )
+            }
+        )
+        context.update(
+            {
+                "board": self.board,
+                "form": form,
+                "preview": kwargs.get("preview"),
+                "history": self.board.access_audits.select_related("actor")[:8],
+                "return_url": reverse("settings_center:board_access_list"),
+                "is_break_glass": False,
+                "legacy_group_names": sorted(
+                    set(self.board.allowed_groups.values_list("name", flat=True))
+                    - set(board_access_role_names())
+                ),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.board = get_object_or_404(Board, pk=kwargs["pk"])
+        form = BoardAccessForm(request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+        selected = form.cleaned_data["group_names"]
+        reason = form.cleaned_data["reason"]
+        try:
+            if request.POST.get("action") == "preview":
+                preview = preview_board_access(
+                    actor=request.user,
+                    board=self.board,
+                    selected_group_names=selected,
+                    reason=reason,
+                )
+                preview_form = BoardAccessForm(
+                    initial={
+                        "group_names": selected,
+                        "reason": reason,
+                        "preview_token": preview["preview_token"],
+                    }
+                )
+                return self.render_to_response(
+                    self.get_context_data(form=preview_form, preview=preview)
+                )
+            board, audit = apply_board_access(
+                actor=request.user,
+                board=self.board,
+                selected_group_names=selected,
+                preview_token=form.cleaned_data["preview_token"],
+                risk_confirmed=form.cleaned_data["risk_confirmed"],
+                reason=reason,
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
+        messages.success(request, f"Доступ к доске «{board.title}» изменён. Аудит #{audit.pk}.")
+        return redirect("settings_center:board_access", pk=board.pk)
+
+
+class RoleCatalogView(RoleDefinitionManagementMixin, TemplateView):
+    template_name = "settings_center/role_catalog.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["roles"] = role_catalog_rows()
+        return context
+
+
+class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
+    template_name = "settings_center/role_definition_form.html"
+
+    def _load_role(self, kwargs):
+        self.role_code = kwargs["role_code"]
+        try:
+            self.role_read_model = role_definition_read_model(self.role_code)
+        except ValidationError as exc:
+            raise Http404("Роль не найдена.") from exc
+
+    def get(self, request, *args, **kwargs):
+        self._load_role(kwargs)
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        form = kwargs.get("form") or RoleDefinitionForm(
+            role_read_model=self.role_read_model,
+            initial={"base_hash": self.role_read_model["base_hash"]},
+        )
+        context.update(
+            {
+                "role": self.role_read_model,
+                "form": form,
+                "preview": kwargs.get("preview"),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self._load_role(kwargs)
+        form = RoleDefinitionForm(request.POST, role_read_model=self.role_read_model)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+        proposed = form.proposed_config()
+        try:
+            if request.POST.get("action") == "preview":
+                preview = preview_role_definition_change(
+                    actor=request.user,
+                    role_code=self.role_code,
+                    proposed_config=proposed,
+                    base_hash=form.cleaned_data["base_hash"],
+                )
+                preview_form = RoleDefinitionForm(
+                    role_read_model=self.role_read_model,
+                    initial={
+                        "base_hash": preview["base_hash"],
+                        "preview_token": preview["preview_token"],
+                        **{
+                            f"capability__{code}": (["*"] if value == "*" else value)
+                            for code, value in preview["proposed_config"].items()
+                        },
+                    },
+                )
+                return self.render_to_response(
+                    self.get_context_data(form=preview_form, preview=preview)
+                )
+            change = apply_role_definition_change(
+                actor=request.user,
+                role_code=self.role_code,
+                proposed_config=proposed,
+                base_hash=form.cleaned_data["base_hash"],
+                preview_token=form.cleaned_data["preview_token"],
+                risk_confirmed=form.cleaned_data["risk_confirmed"],
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
+        messages.success(request, f"Роль «{self.role_read_model['label']}» изменена. Аудит #{change.pk}.")
+        return redirect("settings_center:role_definition", role_code=self.role_code)
 
 
 class SettingDetailView(SettingsManagementMixin, FormView):
@@ -83,14 +276,16 @@ class SettingDetailView(SettingsManagementMixin, FormView):
     def dispatch(self, request, *args, **kwargs):
         self.descriptor = get_registry().get(kwargs["setting_id"])
         if self.descriptor.setting_id == "core.contract.role_rules":
-            return redirect("core:role_rules")
+            return redirect("settings_center:role_catalog")
         return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
         initial = super().get_initial()
         if self.descriptor.storage_kind == "runtime_contract":
             try:
-                initial["payload"] = pretty_json(read_contract_value(self.descriptor))
+                payload = read_contract_value(self.descriptor)
+                initial["payload"] = pretty_json(payload)
+                initial["base_hash"] = normalized_hash(payload)
             except Exception as exc:
                 initial["payload"] = f'{{"error": "{exc}"}}'
         return initial
@@ -134,6 +329,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
                 setting_id=self.descriptor.setting_id,
                 raw_payload=form.cleaned_data["payload"],
                 confirmed=form.cleaned_data["confirm"],
+                base_hash=form.cleaned_data["base_hash"],
             )
         except ValidationError as exc:
             form.add_error(None, exc)
@@ -188,6 +384,7 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
                 "allowed_count": allowed_count,
                 "possible_count": possible_count,
                 "raw_payload": pretty_json(payload),
+                "base_hash": normalized_hash(payload),
             }
         )
         return context
@@ -211,6 +408,7 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
                 setting_id=descriptor.setting_id,
                 raw_payload=json.dumps(after, ensure_ascii=False),
                 confirmed=request.POST.get("confirm") == "on",
+                base_hash=request.POST.get("base_hash"),
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
@@ -263,6 +461,7 @@ class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 "descriptor": descriptor,
                 "rows": rows,
                 "raw_payload": pretty_json(payload),
+                "base_hash": normalized_hash(payload),
             }
         )
         return context
@@ -290,6 +489,7 @@ class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 setting_id=descriptor.setting_id,
                 raw_payload=json.dumps(after, ensure_ascii=False),
                 confirmed=request.POST.get("confirm") == "on",
+                base_hash=request.POST.get("base_hash"),
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
@@ -394,9 +594,92 @@ class UserListView(UserManagementMixin, ListView):
                 "role_filter_options": filter_options["roles"],
                 "department_filter_options": filter_options["departments"],
                 "pagination_query": query_params.urlencode(),
+                "can_manage_board_access": can_manage_board_access(self.request.user),
             }
         )
         return context
+
+
+class MemoryGroupMembershipView(SuperuserUserManagementMixin, TemplateView):
+    template_name = "settings_center/memory_group_membership_form.html"
+
+    def _load_target(self, kwargs):
+        self.target_user = get_object_or_404(get_user_model(), pk=kwargs["pk"])
+
+    def get(self, request, *args, **kwargs):
+        self._load_target(kwargs)
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        from apps.memory.models import MemoryGroupMembershipAudit
+        from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+        context = super().get_context_data(**kwargs)
+        current = list(
+            self.target_user.groups.filter(name__in=MEMORY_REVIEW_GROUP_CAPABILITIES)
+            .order_by("name")
+            .values_list("name", flat=True)
+        )
+        context.update(
+            {
+                "target_user": self.target_user,
+                "form": kwargs.get("form")
+                or MemoryGroupMembershipForm(initial={"group_names": current}),
+                "preview": kwargs.get("preview"),
+                "history": MemoryGroupMembershipAudit.objects.filter(
+                    target_user=self.target_user
+                ).select_related("actor")[:8],
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        from apps.memory.access_services import (
+            apply_memory_group_membership,
+            preview_memory_group_membership,
+        )
+
+        self._load_target(kwargs)
+        form = MemoryGroupMembershipForm(request.POST)
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+        selected = form.cleaned_data["group_names"]
+        reason = form.cleaned_data["reason"]
+        try:
+            if request.POST.get("action") == "preview":
+                preview = preview_memory_group_membership(
+                    actor=request.user,
+                    target_user=self.target_user,
+                    selected_group_names=selected,
+                    reason=reason,
+                )
+                preview_form = MemoryGroupMembershipForm(
+                    initial={
+                        "group_names": selected,
+                        "reason": reason,
+                        "preview_token": preview["preview_token"],
+                    }
+                )
+                return self.render_to_response(
+                    self.get_context_data(form=preview_form, preview=preview)
+                )
+            target, audit = apply_memory_group_membership(
+                actor=request.user,
+                target_user=self.target_user,
+                selected_group_names=selected,
+                reason=reason,
+                preview_token=form.cleaned_data["preview_token"],
+                confirmed=form.cleaned_data["confirmed"],
+            )
+        except (PermissionDenied, ValidationError) as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
+        messages.success(
+            request,
+            f"Технические полномочия памяти пользователя {target.username} изменены. "
+            f"Аудит #{audit.pk}.",
+        )
+        return redirect("settings_center:memory_group_membership", pk=target.pk)
 
 
 class UserCreateView(SuperuserUserManagementMixin, CreateView):
@@ -408,18 +691,24 @@ class UserCreateView(SuperuserUserManagementMixin, CreateView):
         return f"{reverse('settings_center:user_edit', kwargs={'pk': self.object.pk})}?focus=assign#assign"
 
     def form_valid(self, form):
-        user = create_local_user(actor=self.request.user, cleaned_data=form.cleaned_data.copy())
-        self.object = user
         descriptor = get_registry().get("accounts.users.local_management")
-        record_settings_change(
+
+        def audit_callback(before, after):
+            record_settings_change(
+                actor=self.request.user,
+                descriptor=descriptor,
+                action=SettingsChange.Action.USER_CREATE,
+                status=SettingsChange.Status.APPLIED,
+                before=user_profile_audit_snapshot(before),
+                after=user_profile_audit_snapshot(after),
+                validation_result={"valid": True},
+            )
+        user = create_local_user(
             actor=self.request.user,
-            descriptor=descriptor,
-            action=SettingsChange.Action.USER_CREATE,
-            status=SettingsChange.Status.APPLIED,
-            before={},
-            after={"user_id": user.id, "username": user.username, "is_active": user.is_active},
-            validation_result={"valid": True},
+            cleaned_data=form.cleaned_data.copy(),
+            audit_callback=audit_callback,
         )
+        self.object = user
         messages.success(self.request, "Пользователь создан.")
         return HttpResponseRedirect(self.get_success_url())
 
@@ -502,29 +791,29 @@ class UserProfileUpdateView(SuperuserUserManagementMixin, UpdateView):
     success_url = reverse_lazy("settings_center:user_list")
 
     def form_valid(self, form):
-        before = {
-            "user_id": self.object.id,
-            "username": self.object.username,
-            "is_active": self.object.is_active,
-        }
-        user = update_local_user(
+        password_changed = bool(form.cleaned_data.get("password"))
+        changed_fields = sorted(set(form.changed_data) - {"password"})
+        descriptor = get_registry().get("accounts.users.local_management")
+
+        def audit_callback(before, after):
+            record_settings_change(
+                actor=self.request.user,
+                descriptor=descriptor,
+                action=SettingsChange.Action.USER_UPDATE,
+                status=SettingsChange.Status.APPLIED,
+                before=user_profile_audit_snapshot(before),
+                after=user_profile_audit_snapshot(after),
+                validation_result={
+                    "valid": True,
+                    "changed_fields": changed_fields,
+                    "password_changed": password_changed,
+                },
+            )
+        update_local_user(
             actor=self.request.user,
             user=self.object,
             cleaned_data=form.cleaned_data.copy(),
-        )
-        descriptor = get_registry().get("accounts.users.local_management")
-        record_settings_change(
-            actor=self.request.user,
-            descriptor=descriptor,
-            action=SettingsChange.Action.USER_UPDATE,
-            status=SettingsChange.Status.APPLIED,
-            before=before,
-            after={
-                "user_id": user.id,
-                "username": user.username,
-                "is_active": user.is_active,
-            },
-            validation_result={"valid": True},
+            audit_callback=audit_callback,
         )
         messages.success(self.request, "Учётная запись пользователя обновлена.")
         return HttpResponseRedirect(self.get_success_url())
@@ -534,22 +823,27 @@ class UserDisableView(SuperuserUserManagementMixin, View):
     def post(self, request, pk):
         User = get_user_model()
         user = get_object_or_404(User, pk=pk)
-        before = {"user_id": user.id, "username": user.username, "is_active": user.is_active}
         try:
-            disable_local_user(actor=request.user, user=user)
+            descriptor = get_registry().get("accounts.users.local_management")
+
+            def audit_callback(before, after):
+                record_settings_change(
+                    actor=request.user,
+                    descriptor=descriptor,
+                    action=SettingsChange.Action.USER_DISABLE,
+                    status=SettingsChange.Status.APPLIED,
+                    before=user_profile_audit_snapshot(before),
+                    after=user_profile_audit_snapshot(after),
+                    validation_result={"valid": True},
+                )
+            disable_local_user(
+                actor=request.user,
+                user=user,
+                audit_callback=audit_callback,
+            )
         except ValidationError as exc:
             messages.error(request, str(exc))
             return redirect("settings_center:user_list")
-        descriptor = get_registry().get("accounts.users.local_management")
-        record_settings_change(
-            actor=request.user,
-            descriptor=descriptor,
-            action=SettingsChange.Action.USER_DISABLE,
-            status=SettingsChange.Status.APPLIED,
-            before=before,
-            after={"user_id": user.id, "username": user.username, "is_active": False},
-            validation_result={"valid": True},
-        )
         messages.success(request, "Пользователь отключен.")
         return redirect("settings_center:user_list")
 
@@ -581,33 +875,24 @@ class UserADLinkView(SuperuserUserManagementMixin, FormView):
         return context
 
     def form_valid(self, form):
-        before = {}
-        if self.identity:
-            before = {
-                "subject_id": self.identity.subject_id,
-                "username": self.identity.username,
-                "upn": self.identity.upn,
-                "domain": self.identity.domain,
-            }
-        identity = link_ad_identity(
+        changed_fields = sorted(form.changed_data)
+        descriptor = get_registry().get("accounts.user.ad_identity_link")
+
+        def audit_callback(before, after):
+            record_settings_change(
+                actor=self.request.user,
+                descriptor=descriptor,
+                action=SettingsChange.Action.AD_LINK,
+                status=SettingsChange.Status.APPLIED,
+                before=external_identity_audit_snapshot(before),
+                after=external_identity_audit_snapshot(after),
+                validation_result={"valid": True, "changed_fields": changed_fields},
+            )
+        link_ad_identity(
             actor=self.request.user,
             user=self.portal_user,
             cleaned_data=form.cleaned_data.copy(),
-        )
-        descriptor = get_registry().get("accounts.user.ad_identity_link")
-        record_settings_change(
-            actor=self.request.user,
-            descriptor=descriptor,
-            action=SettingsChange.Action.AD_LINK,
-            status=SettingsChange.Status.APPLIED,
-            before=before,
-            after={
-                "subject_id": identity.subject_id,
-                "username": identity.username,
-                "upn": identity.upn,
-                "domain": identity.domain,
-            },
-            validation_result={"valid": True},
+            audit_callback=audit_callback,
         )
         messages.success(self.request, "AD identity link сохранен.")
         return super().form_valid(form)

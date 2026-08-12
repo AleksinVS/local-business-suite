@@ -100,12 +100,15 @@ class AccessAssignmentAudit(models.Model):
         DJANGO_ADMIN_BREAK_GLASS = "django_admin_break_glass", "Резервный Django Admin"
         AI = "ai", "ИИ-инструмент"
         AD_SYNC = "ad_sync", "Синхронизация Active Directory"
+        SYSTEM_BOOTSTRAP = "system_bootstrap", "Инициализация демонстрационных данных"
 
     actor = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,
         related_name="access_assignment_actions",
         verbose_name="Кто изменил",
+        blank=True,
+        null=True,
     )
     target_user = models.ForeignKey(
         "accounts.User",

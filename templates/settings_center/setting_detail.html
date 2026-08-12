@@ -39,6 +39,7 @@
     <form method="post" class="settings-form">
       {% csrf_token %}
       {{ form.non_field_errors }}
+      {{ form.base_hash }}
       <label for="{{ form.payload.id_for_label }}">JSON-содержимое</label>
       {{ form.payload }}
       <label class="checkbox-row">{{ form.confirm }} Подтверждаю применение изменения</label>

@@ -79,14 +79,24 @@ class LDAPBackend(BaseBackend):
             with ldap_connection(config, user=user_dn, password=password):
                 pass
 
-            UserModel = get_user_model()
-            user, _created = UserModel.objects.get_or_create(
-                username=username, defaults={"is_active": True}
+            from .services import (
+                get_or_create_external_user,
+                refresh_external_user_authentication_state,
             )
+
+            user, _created = get_or_create_external_user(
+                username=username,
+                audit_callback=record_external_user_creation_audit,
+            )
+            user = refresh_external_user_authentication_state(user)
             if not user.is_active:
                 logger.warning("LDAP login rejected for disabled local user %s", username)
                 return None
-            sync_user_from_ad(user, attributes, config.group_role_map)
+            user = sync_user_from_ad(user, attributes, config.group_role_map)
+            user = refresh_external_user_authentication_state(user)
+            if not user.is_active:
+                logger.warning("LDAP login rejected for disabled local user %s", username)
+                return None
             return user
         except ImproperlyConfigured as exc:
             logger.error("LDAP authentication is not configured: %s", exc)
@@ -101,30 +111,108 @@ class LDAPBackend(BaseBackend):
             user = UserModel.objects.get(pk=user_id)
         except UserModel.DoesNotExist:
             return None
+        from .services import refresh_external_user_authentication_state
+
+        user = refresh_external_user_authentication_state(user)
         return user if user.is_active else None
 
 
 class RemoteUserLDAPBackend(RemoteUserBackend):
     create_unknown_user = True
 
+    def authenticate(self, request, remote_user):
+        if not remote_user:
+            return None
+        from .services import get_or_create_external_user
+
+        username = self.clean_username(remote_user)
+        user, created = get_or_create_external_user(
+            username=username,
+            audit_callback=record_external_user_creation_audit,
+        )
+        user = self.configure_user(request, user, created=created)
+        return user if self.user_can_authenticate(user) else None
+
     def clean_username(self, username):
         return normalize_username(username)
 
+    def get_user(self, user_id):
+        user = get_user_model().objects.filter(pk=user_id).first()
+        if user is None:
+            return None
+        from .services import refresh_external_user_authentication_state
+
+        user = refresh_external_user_authentication_state(user)
+        return user if user.is_active else None
+
     def configure_user(self, request, user, created=True):
-        sync_remote_user(user)
-        return user
+        return sync_remote_user(user)
+
+
+def record_external_user_creation_audit(before, after):
+    """Зафиксировать автоматическое создание без раскрытия principal."""
+    from apps.settings_center.models import SettingsChange
+    from apps.settings_center.registry import get_registry
+    from apps.settings_center.services import record_settings_change
+
+    from .services import user_profile_audit_snapshot
+
+    record_settings_change(
+        actor=None,
+        descriptor=get_registry().get("accounts.users.local_management"),
+        action=SettingsChange.Action.USER_CREATE,
+        status=SettingsChange.Status.APPLIED,
+        before=user_profile_audit_snapshot(before),
+        after=user_profile_audit_snapshot(after),
+        validation_result={"valid": True, "source": "external_authentication"},
+    )
+
+
+def record_external_directory_sync_audit(
+    profile_before, profile_after, identity_before, identity_after
+):
+    """Атомарно зафиксировать безопасные profile/AD fingerprints системной sync."""
+    from apps.settings_center.models import SettingsChange
+    from apps.settings_center.registry import get_registry
+    from apps.settings_center.services import record_settings_change
+
+    from .services import external_identity_audit_snapshot, user_profile_audit_snapshot
+
+    if profile_before != profile_after:
+        record_settings_change(
+            actor=None,
+            descriptor=get_registry().get("accounts.users.local_management"),
+            action=SettingsChange.Action.USER_UPDATE,
+            status=SettingsChange.Status.APPLIED,
+            before=user_profile_audit_snapshot(profile_before),
+            after=user_profile_audit_snapshot(profile_after),
+            validation_result={"valid": True, "source": "external_authentication"},
+        )
+    if identity_before != identity_after:
+        record_settings_change(
+            actor=None,
+            descriptor=get_registry().get("accounts.user.ad_identity_link"),
+            action=SettingsChange.Action.AD_LINK,
+            status=SettingsChange.Status.APPLIED,
+            before=external_identity_audit_snapshot(identity_before),
+            after=external_identity_audit_snapshot(identity_after),
+            validation_result={"valid": True, "source": "external_authentication"},
+        )
 
 
 def sync_remote_user(user):
+    from .services import refresh_external_user_authentication_state
+
     try:
         config = LDAPConfig.from_env()
         _user_dn, attributes = find_ad_user(config, user.username)
         if attributes:
-            sync_user_from_ad(user, attributes, config.group_role_map)
+            return sync_user_from_ad(user, attributes, config.group_role_map)
     except ImproperlyConfigured as exc:
         logger.error("Remote user AD sync is not configured: %s", exc)
     except Exception:
         logger.exception("AD profile sync failed for remote user %s", user.username)
+    return refresh_external_user_authentication_state(user)
 
 
 def find_ad_user(config, username):
@@ -139,6 +227,7 @@ def find_ad_user(config, username):
         "memberOf",
         "sAMAccountName",
         "userPrincipalName",
+        "objectSid",
     ]
     search_filter = config.user_filter.format(username=escape_filter_value(username))
 
@@ -207,19 +296,18 @@ class _ConnectionContext:
 
 def sync_user_from_ad(user, attributes, group_role_map):
     from django.conf import settings
-    from apps.core.models import Department
-    from apps.accounts.services import upsert_ad_identity_from_attributes
+    from apps.accounts.services import sync_external_user_from_attributes
 
-    # Sync email
+    profile_updates = {}
     email = attributes.get("mail")
     email_domain = getattr(settings, "AD_EMAIL_DOMAIN_OVERRIDE", None)
 
     if email:
-        user.email = email
+        profile_updates["email"] = email
     elif email_domain:
         sam_account_name = attributes.get("sAMAccountName", "")
         if sam_account_name:
-            user.email = f"{sam_account_name}{email_domain}"
+            profile_updates["email"] = f"{sam_account_name}{email_domain}"
 
     # Sync organizational structure (OU and Department)
     # Host-specific OU synchronization belongs in a deployment silo.
@@ -249,22 +337,27 @@ def sync_user_from_ad(user, attributes, group_role_map):
     surname = attributes.get("sn", "")
 
     if given_name or surname:
-        user.first_name = given_name
-        user.last_name = surname
+        profile_updates["first_name"] = given_name
+        profile_updates["last_name"] = surname
     elif display_name:
-        user.first_name = display_name
+        profile_updates["first_name"] = display_name
 
-    # Не сохраняем загруженный целиком User: параллельное отключение или снятие
-    # privileged-флага не должно быть перезаписано устаревшим LDAP-снимком.
-    user.save(update_fields=["email", "first_name", "last_name"])
-    upsert_ad_identity_from_attributes(
+    sync_identity = bool(
+        getattr(settings, "ACCOUNTS_AD_LINK_ENABLED", True)
+        and getattr(settings, "ACCOUNTS_AD_LINK_MODE", "manual") == "automatic"
+    )
+    synced_user = sync_external_user_from_attributes(
         user=user,
+        profile_updates=profile_updates,
         attributes=attributes,
         domain=getattr(settings, "AD_LDAP_DOMAIN", ""),
+        sync_identity=sync_identity,
+        audit_callback=record_external_directory_sync_audit,
     )
-    if not get_user_model().objects.filter(pk=user.pk, is_active=True).exists():
-        return
-    sync_user_groups(user, attributes.get("memberOf", []), group_role_map)
+    if not synced_user.is_active:
+        return synced_user
+    sync_user_groups(synced_user, attributes.get("memberOf", []), group_role_map)
+    return synced_user
 
 
 def _extract_ou_from_dn(dn):

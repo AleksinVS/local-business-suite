@@ -8,7 +8,38 @@ class SettingsChangeAdmin(admin.ModelAdmin):
     list_display = ("setting_id", "domain", "action", "status", "actor", "created_at", "applied_at")
     list_filter = ("domain", "action", "status", "storage_kind")
     search_fields = ("setting_id", "domain", "actor__username")
-    readonly_fields = ("created_at", "applied_at")
+    readonly_fields = (
+        "actor",
+        "setting_id",
+        "domain",
+        "storage_kind",
+        "action",
+        "status",
+        "before_hash",
+        "after_hash",
+        "contract_relpath",
+        "masked_diff",
+        "validation_result",
+        "operation_fingerprint",
+        "failure_code",
+        "requires_restart",
+        "requires_reindex",
+        "file_written_at",
+        "reconciled_at",
+        "rollback_of",
+        "created_at",
+        "applied_at",
+    )
+    exclude = ("before_snapshot", "after_snapshot")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(SettingsChangeComment)

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Технические группы памяти{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Экспертный сценарий памяти</p>
+      <h1>Технические группы: {{ target_user.username }}</h1>
+      <p class="description">Эти назначения управляют обслуживанием памяти ИИ. Обычные роли доступа здесь не изменяются.</p>
+    </div>
+    <a class="button-link" href="{% url 'settings_center:user_edit' target_user.pk %}">К карточке доступа</a>
+  </div>
+
+  <div class="flash warning"><strong>Повышенный риск.</strong> Укажите служебную причину и проверьте изменения до применения.</div>
+
+  <form method="post" class="settings-form memory-membership-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.preview_token }}
+    <fieldset>
+      <legend>{{ form.group_names.label }}</legend>
+      {{ form.group_names.errors }}
+      {{ form.group_names }}
+    </fieldset>
+    <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
+    {{ form.reason }}{{ form.reason.errors }}
+
+    {% if preview %}
+      <section aria-labelledby="memory-membership-preview-title">
+        <h2 id="memory-membership-preview-title" tabindex="-1">Проверка изменения</h2>
+        <p><strong>Добавятся:</strong> {{ preview.added|join:", "|default:"—" }}</p>
+        <p><strong>Удалятся:</strong> {{ preview.removed|join:", "|default:"—" }}</p>
+        <label class="checkbox-row">{{ form.confirmed }} {{ form.confirmed.label }}</label>
+      </section>
+    {% endif %}
+
+    <div class="table-actions">
+      <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
+      {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Последние изменения</h2>
+  <ul>
+    {% for item in history %}
+      <li>{{ item.created_at }} · {{ item.actor }} · + {{ item.groups_added|join:", "|default:"—" }} / − {{ item.groups_removed|join:", "|default:"—" }} · {{ item.reason }}</li>
+    {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
+  </ul>
+</section>
+
+<style>
+  .memory-membership-form { display: grid; gap: 0.8rem; }
+  .memory-membership-form fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .memory-membership-form ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+  .memory-membership-form ul label, .checkbox-row { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; }
+  .memory-membership-form textarea { width: 100%; }
+</style>
+{% if preview %}<script>document.getElementById("memory-membership-preview-title")?.focus();</script>{% endif %}
+{% endblock %}

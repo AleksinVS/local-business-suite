@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Роли доступа{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Доступ / роли</p>
+      <h1>Роли доступа</h1>
+      <p class="description">Откройте одну роль, проверьте влияние и примените точечное изменение.</p>
+    </div>
+    <a class="button-link" href="{% url 'settings_center:user_list' %}">К сотрудникам</a>
+  </div>
+
+  <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Каталог ролей доступа">
+    <table class="data-table role-catalog-table">
+      <thead><tr><th scope="col">Роль</th><th scope="col">Назначение</th><th scope="col">Риск</th><th scope="col">Сотрудники</th><th scope="col"><span class="visually-hidden">Действие</span></th></tr></thead>
+      <tbody>
+        {% for role in roles %}
+          <tr>
+            <td><strong>{{ role.label }}</strong><br><code>{{ role.code }}</code></td>
+            <td>{{ role.description|default:"Описание не задано" }}</td>
+            <td>
+              {% if role.risk_labels %}
+                {{ role.risk_labels|join:", " }}{% if role.additional_risk_count %}; ещё {{ role.additional_risk_count }}{% endif %}
+              {% else %}Обычный{% endif %}
+            </td>
+            <td>{{ role.member_count }}</td>
+            <td><a class="button-link" href="{% url 'settings_center:role_definition' role.code %}">Открыть</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .role-catalog-table { min-width: 720px; }
+  .role-catalog-table .button-link { min-height: 44px; display: inline-flex; align-items: center; }
+  .access-table-scroll:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .access-table-scroll th { cursor: default; }
+</style>
+{% endblock %}

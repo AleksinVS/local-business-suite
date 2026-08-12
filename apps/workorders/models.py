@@ -53,33 +53,64 @@ class Board(models.Model):
     def __str__(self):
         return self.title
 
-    def clone(self, new_title=None, new_slug=None):
-        """
-        Creates a copy of this board and all its columns.
-        Does NOT copy work orders.
-        """
-        old_pk = self.pk
-        old_columns = list(self.columns.all())
-        old_groups = list(self.allowed_groups.all())
+    def clone(self, new_title=None, new_slug=None, *, actor=None, reason=""):
+        """Совместимый адаптер; предметная запись и аудит живут в service layer."""
+        from .services import clone_board
 
-        # Create new board instance
-        self.pk = None
-        self.id = None
-        self.title = new_title or f"{self.title} (копия)"
-        self.slug = new_slug or f"{self.slug}-copy"
-        self.save()
+        return clone_board(
+            actor=actor,
+            board=self,
+            new_title=new_title,
+            new_slug=new_slug,
+            reason=reason,
+        )
 
-        # Restore many-to-many groups
-        self.allowed_groups.set(old_groups)
 
-        # Clone columns
-        for col in old_columns:
-            col.pk = None
-            col.id = None
-            col.board = self
-            col.save()
+class BoardAccessAudit(models.Model):
+    """Предметный журнал изменения групп, которым видна доска."""
 
-        return self
+    class Source(models.TextChoices):
+        SETTINGS_CENTER = "settings_center", "Раздел доступа"
+        DJANGO_ADMIN_BREAK_GLASS = "django_admin_break_glass", "Резервный Django Admin"
+        SYSTEM_BOOTSTRAP = "system_bootstrap", "Инициализация демонстрационных данных"
+
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.PROTECT,
+        related_name="access_audits",
+        verbose_name="Доска",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="board_access_actions",
+        verbose_name="Кто изменил",
+        blank=True,
+        null=True,
+    )
+    groups_before = models.JSONField("Группы до изменения", default=list)
+    groups_after = models.JSONField("Группы после изменения", default=list)
+    groups_added = models.JSONField("Добавленные группы", default=list)
+    groups_removed = models.JSONField("Удалённые группы", default=list)
+    risk_markers = models.JSONField("Маркеры риска", default=list)
+    risk_confirmed = models.BooleanField("Риск подтверждён", default=False)
+    source = models.CharField(max_length=48, choices=Source.choices, db_index=True)
+    reason = models.TextField("Причина", blank=True)
+    role_contract_hash = models.CharField(max_length=64)
+    preview_fingerprint = models.CharField(max_length=64, unique=True, null=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["board", "-created_at"], name="wo_board_audit_board_idx"),
+            models.Index(fields=["actor", "-created_at"], name="wo_board_audit_actor_idx"),
+        ]
+        verbose_name = "Изменение доступа к доске"
+        verbose_name_plural = "Изменения доступа к доскам"
+
+    def __str__(self):
+        return f"Доступ к доске #{self.board_id}, изменение #{self.pk}"
 
 
 class KanbanColumnConfig(models.Model):

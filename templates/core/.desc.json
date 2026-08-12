@@ -2,6 +2,5 @@
   ".": "Шаблоны дашборда, настроек, ролей",
   "dashboard.html": "Главный дашборд",
   "department_list.html": "Список подразделений",
-  "department_form.html": "Форма подразделения",
-  "role_rules_form.html": "Форма редактирования ролей"
+  "department_form.html": "Форма подразделения"
 }

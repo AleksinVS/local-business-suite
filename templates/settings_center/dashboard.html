@@ -11,7 +11,8 @@
       <p class="description">Единый контур настроек, рабочих контрактов, пользователей, заявок на изменение .env и справки.</p>
     </div>
     <div class="header-actions">
-      <a class="button-link" href="{% url 'settings_center:user_list' %}">Пользователи</a>
+      {% if can_manage_roles %}<a class="button-link" href="{% url 'settings_center:user_list' %}">Пользователи</a>{% endif %}
+      {% if can_manage_board_access %}<a class="button-link" href="{% url 'settings_center:board_access_list' %}">Доступ к доскам</a>{% endif %}
       <a class="button-link" href="{% url 'settings_center:env_status' %}">Статус .env</a>
     </div>
   </div>
@@ -55,15 +56,15 @@
       <h2>Последние изменения</h2>
     </div>
   </div>
-  <div class="table-container">
+  <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Последние изменения настроек">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Время</th>
-          <th>Настройка</th>
-          <th>Действие</th>
-          <th>Статус</th>
-          <th>Автор</th>
+          <th scope="col">Время</th>
+          <th scope="col">Настройка</th>
+          <th scope="col">Действие</th>
+          <th scope="col">Статус</th>
+          <th scope="col">Автор</th>
         </tr>
       </thead>
       <tbody>
@@ -95,6 +96,7 @@
   .settings-list a { color: var(--primary); font-weight: 600; }
   .setting-code { display: block; margin-top: 0.15rem; color: var(--text-main); font-size: 0.78rem; overflow-wrap: anywhere; }
   .muted { color: var(--text-muted); font-size: 0.85rem; display: block; }
-  .icon-button { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+  .icon-button { width: 44px; height: 44px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+  @media (max-width: 640px) { .settings-domain-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
 {% endblock %}

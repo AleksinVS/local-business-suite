@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Доступ к доскам{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Доступ / ресурсные назначения</p>
+      <h1>Доступ к доскам</h1>
+      <p class="description">Роли определяют, какие сотрудники видят каждую доску. Технические группы здесь не назначаются.</p>
+    </div>
+    <a class="button-link" href="{% url 'settings_center:user_list' %}">К сотрудникам</a>
+  </div>
+
+  <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Доски и роли с доступом">
+    <table class="data-table">
+      <thead><tr><th scope="col">Доска</th><th scope="col">Роли с доступом</th><th scope="col"><span class="visually-hidden">Действие</span></th></tr></thead>
+      <tbody>
+        {% for board in boards %}
+          <tr>
+            <td><strong>{{ board.title }}</strong><br><code>{{ board.slug }}</code></td>
+            <td>
+              {% for group in board.allowed_groups.all %}
+                {{ group.profile.title|default:group.name }}{% if not forloop.last %}, {% endif %}
+              {% empty %}
+                <span class="muted">Обычным пользователям закрыта</span>
+              {% endfor %}
+            </td>
+            <td><a class="button-link" href="{% url 'settings_center:board_access' board.pk %}">Изменить</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="muted">Досок пока нет.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<style>
+  .access-table-scroll .button-link { min-height: 44px; display: inline-flex; align-items: center; }
+  .access-table-scroll:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .access-table-scroll th { cursor: default; }
+</style>
+{% endblock %}

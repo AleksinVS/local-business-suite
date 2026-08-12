@@ -171,14 +171,18 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
             def search(self, *args, **kwargs):
                 return []
 
-        result = memory_search(
-            actor=user,
-            query="alpha beta",
-            scope_tokens=[f"user:{user.id}"],
-            sensitivity="internal",
-            vector_backend=EmptyVectorBackend(),
-            request_id="req-memory-belief",
-        )
+        with patch(
+            "apps.memory.retrieval.get_default_vector_backend",
+            return_value=EmptyVectorBackend(),
+        ):
+            result = memory_search(
+                actor=user,
+                query="alpha beta",
+                scope_tokens=[f"user:{user.id}"],
+                sensitivity="internal",
+                vector_backend=EmptyVectorBackend(),
+                request_id="req-memory-belief",
+            )
 
         self.assertEqual(result["items"], [])
         self.assertEqual(result["citations"], [])

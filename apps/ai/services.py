@@ -5,6 +5,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
 
@@ -35,6 +36,8 @@ logger = logging.getLogger(__name__)
 AI_SESSION_NAMESPACE = uuid.UUID("4cf98619-f5ff-4f02-9d68-b9240c5778c8")
 
 DEFAULT_CHAT_TITLE = "Новый чат"
+USER_UPDATE_PREVIEW_SALT = "ai.access-user-update-preview.v1"
+USER_UPDATE_PREVIEW_MAX_AGE_SECONDS = 600
 
 
 def generate_session_title(session):
@@ -319,6 +322,18 @@ def _build_sidebar_summary_text(messages):
 SECRET_LIKE_RE = re.compile(
     r"(?i)\b(password|passwd|token|api[_-]?key|secret|credential)\b\s*[:=]\s*([^\s,;]+)"
 )
+AI_AUDIT_PII_KEYS = {
+    "username",
+    "email",
+    "full_name",
+    "first_name",
+    "last_name",
+    "author",
+    "assignee",
+    "upn",
+    "subject_id",
+    "distinguished_name",
+}
 
 
 def mask_chat_runtime_text(value):
@@ -522,12 +537,30 @@ def record_action(
         tool_code=tool_code,
         action_kind=action_kind,
         status=status,
-        request_payload=request_payload,
-        response_payload=response_payload or {},
+        request_payload=_sanitize_ai_audit_payload(request_payload),
+        response_payload=_sanitize_ai_audit_payload(response_payload or {}),
         session=session,
         message=message,
         error_message=error_message,
     )
+
+
+def _sanitize_ai_audit_payload(value):
+    """Удалить identity PII из долговечного AI-аудита, сохранив структуру."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                "***"
+                if str(key).casefold() in AI_AUDIT_PII_KEYS and item not in (None, "")
+                else _sanitize_ai_audit_payload(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_ai_audit_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_ai_audit_payload(item) for item in value]
+    return value
 
 
 def confirm_closure_for_actor(*, actor, payload):
@@ -665,55 +698,79 @@ def get_analytics_summary_for_actor(*, actor, payload):
     else:
         raise ValidationError(f"Некорректный summary_type: {summary_type}")
 
-def update_role_permissions_for_actor(*, actor, payload):
-    """
-    Изменяет права роли через Settings Center service layer.
+def prepare_role_permissions_change_for_actor(*, actor, payload):
+    """Готовит тот же подписанный предметный preview, который использует UI."""
+    from apps.accounts.access_contracts import (
+        preview_role_definition_change,
+        role_definition_read_model,
+    )
+    from apps.accounts.selectors import capability_catalog
 
-    AI-инструмент и UI используют один и тот же путь записи
-    ``apply_contract_payload``: валидацию, атомарную запись в рабочий контракт,
-    SettingsChange audit и оптимистическую проверку версии по хешу.
-    """
-    if not actor.is_superuser:
-        raise PermissionDenied("Критичное действие: менять права ролей могут только администраторы с полными правами.")
-
-    from apps.settings_center.contract_services import apply_contract_payload
-    from apps.core.contract_store import get_contract, normalized_hash
-    import json
-
-    role_name = payload.get("role_name")
+    role_name = str(payload.get("role_name") or "")
     permissions_map = payload.get("permissions_map", {})
-
-    if not role_name:
-        raise ValidationError("Нужно указать role_name.")
+    if not role_name or role_name.startswith("$"):
+        raise ValidationError("Нужно указать существующую предметную роль.")
     if not isinstance(permissions_map, dict):
         raise ValidationError("permissions_map должен быть JSON-объектом.")
-
-    current_rules = get_contract("role_rules")
-    base_hash = normalized_hash(current_rules)
-    if role_name not in current_rules:
-        raise ValidationError(f"Роль '{role_name}' не существует.")
-
-    updated_keys = []
-    for key, value in permissions_map.items():
-        if key in current_rules[role_name] or key == "display_name":
-            current_rules[role_name][key] = value
-            updated_keys.append(key)
-
-    if not updated_keys:
+    catalog = capability_catalog()
+    unknown = sorted(set(permissions_map) - set(catalog))
+    if unknown:
+        raise ValidationError("Недопустимые поля роли: " + ", ".join(unknown) + ".")
+    if not permissions_map:
         raise ValidationError("Нет допустимых полей для изменения роли.")
 
-    change = apply_contract_payload(
+    read_model = role_definition_read_model(role_name)
+    proposed = {
+        capability: read_model["config"].get(capability)
+        for capability in catalog
+    }
+    proposed.update(permissions_map)
+    preview = preview_role_definition_change(
         actor=actor,
-        setting_id="core.contract.role_rules",
-        raw_payload=json.dumps(current_rules, ensure_ascii=False),
-        confirmed=True,
-        base_hash=base_hash,
+        role_code=role_name,
+        proposed_config=proposed,
+        base_hash=read_model["base_hash"],
+    )
+    prepared_payload = {
+        "role_name": role_name,
+        "proposed_config": {
+            capability: preview["proposed_config"].get(capability)
+            for capability in catalog
+        },
+        "base_hash": preview["base_hash"],
+        "role_preview_token": preview["preview_token"],
+        "updated_keys": sorted(permissions_map),
+    }
+    public_preview = {
+        "role": preview["role"],
+        "changes": preview["changes"],
+        "impact": preview["impact"],
+        "risk_markers": preview["risk_markers"],
+        "requires_confirmation": True,
+    }
+    return prepared_payload, public_preview
+
+
+def update_role_permissions_for_actor(*, actor, payload):
+    """Применяет сохранённый AI preview через предметный сервис одной роли."""
+    from apps.accounts.access_contracts import apply_role_definition_change
+
+    role_name = payload.get("role_name")
+    if not role_name or str(role_name).startswith("$"):
+        raise ValidationError("Нужно указать существующую предметную роль.")
+    change = apply_role_definition_change(
+        actor=actor,
+        role_code=role_name,
+        proposed_config=payload.get("proposed_config"),
+        base_hash=payload.get("base_hash"),
+        preview_token=payload.get("role_preview_token"),
+        risk_confirmed=True,
     )
     return {
         "ok": True,
         "message": f"Права роли '{role_name}' успешно обновлены.",
         "role_name": role_name,
-        "updated_keys": updated_keys,
+        "updated_keys": payload.get("updated_keys", []),
         "settings_change_id": change.id,
     }
 
@@ -752,66 +809,166 @@ def list_users_for_actor(*, actor, payload):
         ]
     }
 
-def update_user_for_actor(*, actor, payload):
-    """Update lifecycle/profile fields through the accounts service layer.
+def prepare_user_update_for_actor(*, actor, payload):
+    """Подписать точное исходное и целевое состояние lifecycle пользователя."""
+    from apps.accounts.department_policy import available_user_departments
+    from apps.accounts.services import user_access_state
 
-    Contract roles and technical groups are deliberately outside this tool. Role
-    assignment has its own preview/apply protocol and must never be replaced by
-    a generic ``groups.set`` operation.
-    """
+    actor = get_user_model().objects.get(pk=actor.pk)
+    if not actor.is_active or not actor.is_superuser:
+        raise PermissionDenied("Данные пользователей могут изменять только администраторы.")
+    allowed_fields = {"user_id", "is_active", "department_id"}
+    unknown = sorted(set(payload) - allowed_fields)
+    if unknown:
+        if "group_names" in unknown:
+            raise ValidationError("Группы назначаются только через карточку доступа.")
+        raise ValidationError("Недопустимые поля пользователя: " + ", ".join(unknown) + ".")
+    user_id = payload.get("user_id")
+    if isinstance(user_id, bool) or not isinstance(user_id, int):
+        raise ValidationError("Нужно указать целочисленный user_id.")
+    target = get_user_model().objects.get(pk=user_id)
+    before = user_access_state(target)
+    after = dict(before)
+    requested_fields = []
+    if "is_active" in payload:
+        if not isinstance(payload["is_active"], bool):
+            raise ValidationError("Поле is_active должно быть логическим значением.")
+        after["is_active"] = payload["is_active"]
+        requested_fields.append("is_active")
+    if "department_id" in payload:
+        department_id = payload["department_id"]
+        if isinstance(department_id, bool) or not isinstance(department_id, int):
+            raise ValidationError("Поле department_id должно быть целым идентификатором.")
+        if not available_user_departments().filter(pk=department_id).exists():
+            raise ValidationError("Указано недоступное для назначения подразделение.")
+        after["department_id"] = department_id
+        requested_fields.append("department_id")
+    if not requested_fields:
+        raise ValidationError("Нет полей пользователя для изменения.")
+    if before == after:
+        raise ValidationError("Данные пользователя не изменились.")
+    token_payload = {
+        "actor_id": actor.pk,
+        "actor_state": user_access_state(actor),
+        "target_id": target.pk,
+        "before": before,
+        "after": after,
+        "requested_fields": sorted(requested_fields),
+        "nonce": str(uuid.uuid4()),
+    }
+    preview_token = signing.dumps(
+        token_payload,
+        salt=USER_UPDATE_PREVIEW_SALT,
+        compress=True,
+    )
+    prepared = {
+        "user_id": target.pk,
+        **{field: payload[field] for field in requested_fields},
+        "user_preview_token": preview_token,
+    }
+    return prepared, {
+        "target_user_id": target.pk,
+        "changes": [
+            {"field": field, "before": before[field], "after": after[field]}
+            for field in requested_fields
+        ],
+        "requires_confirmation": True,
+    }
+
+
+def update_user_for_actor(*, actor, payload):
+    """Атомарно применить сохранённый и подписанный lifecycle preview."""
     if not actor.is_superuser:
         raise PermissionDenied("Данные пользователей могут изменять только администраторы.")
+    allowed_fields = {"user_id", "is_active", "department_id", "user_preview_token"}
+    unknown = sorted(set(payload) - allowed_fields)
+    if unknown:
+        if "group_names" in unknown:
+            raise ValidationError("Группы назначаются только через карточку доступа.")
+        raise ValidationError("Недопустимые поля пользователя: " + ", ".join(unknown) + ".")
 
-    if "group_names" in payload:
-        raise ValidationError("Группы назначаются только через карточку доступа.")
-
-    User = get_user_model()
     user_id = payload.get("user_id")
-    if not user_id:
-        raise ValidationError("Нужно указать user_id.")
+    if isinstance(user_id, bool) or not isinstance(user_id, int):
+        raise ValidationError("Нужно указать целочисленный user_id.")
+    target_user = get_user_model().objects.get(pk=user_id)
+    try:
+        signed = signing.loads(
+            payload.get("user_preview_token", ""),
+            salt=USER_UPDATE_PREVIEW_SALT,
+            max_age=USER_UPDATE_PREVIEW_MAX_AGE_SECONDS,
+        )
+    except signing.SignatureExpired as exc:
+        raise ValidationError("Срок проверки изменения пользователя истёк.") from exc
+    except signing.BadSignature as exc:
+        raise ValidationError("Проверка изменения пользователя недействительна.") from exc
+    if signed.get("actor_id") != actor.pk or signed.get("target_id") != target_user.pk:
+        raise ValidationError("Проверка относится к другому пользователю или администратору.")
 
-    target_user = User.objects.get(pk=user_id)
+    requested_fields = signed.get("requested_fields")
+    if not isinstance(requested_fields, list) or not requested_fields:
+        raise ValidationError("Проверка изменения пользователя имеет неверный формат.")
+    cleaned_data = {}
+    if "is_active" in requested_fields:
+        if not isinstance(payload.get("is_active"), bool):
+            raise ValidationError("Поле is_active изменилось после проверки.")
+        cleaned_data["is_active"] = payload["is_active"]
+    if "department_id" in requested_fields:
+        department_id = payload.get("department_id")
+        if isinstance(department_id, bool) or not isinstance(department_id, int):
+            raise ValidationError("Поле department_id изменилось после проверки.")
+        cleaned_data["department_id"] = department_id
+    expected_after = dict(signed.get("before") or {})
+    expected_after.update(cleaned_data)
+    if signed.get("after") != expected_after:
+        raise ValidationError("Целевые данные пользователя изменились после проверки.")
 
-    requested_active = payload.get("is_active")
-    if requested_active is not None and not isinstance(requested_active, bool):
-        raise ValidationError("Поле is_active должно быть логическим значением.")
+    from apps.accounts.services import (
+        update_local_user,
+        user_access_state,
+        user_profile_audit_snapshot,
+    )
+    from apps.settings_center.models import SettingsChange
+    from apps.settings_center.registry import get_registry
+    from apps.settings_center.services import record_settings_change
 
-    requested_department = payload.get("department_id")
-    if requested_department is not None:
-        if isinstance(requested_department, bool) or not isinstance(requested_department, int):
-            raise ValidationError("Поле department_id должно быть целым идентификатором.")
-        from apps.accounts.department_policy import available_user_departments
+    def locked_precondition(locked_actor, _locked_target, before_access):
+        if signed.get("actor_state") != user_access_state(locked_actor):
+            raise ValidationError("Права администратора изменились после проверки.")
+        if signed.get("before") != before_access:
+            raise ValidationError("Данные или доступ пользователя изменились. Повторите проверку.")
 
-        if not available_user_departments().filter(pk=requested_department).exists():
-            raise ValidationError("Указано недоступное для назначения подразделение.")
+    descriptor = get_registry().get("accounts.users.local_management")
 
-    # Keep all account mutations behind the canonical accounts services.  The
-    # imports are local to avoid making the AI service import accounts at module
-    # load time and to keep the domain boundary explicit.
-    from apps.accounts.services import disable_local_user, update_local_user
-
-    if requested_active is False and target_user.is_active:
-        disable_local_user(actor=actor, user=target_user)
-    elif requested_active is True and not target_user.is_active:
-        update_local_user(actor=actor, user=target_user, cleaned_data={"is_active": True})
-
-    if requested_department is not None and target_user.department_id != requested_department:
-        update_local_user(
+    def audit_callback(before, after):
+        record_settings_change(
             actor=actor,
-            user=target_user,
-            cleaned_data={"department_id": requested_department},
+            descriptor=descriptor,
+            action=SettingsChange.Action.USER_UPDATE,
+            status=SettingsChange.Status.APPLIED,
+            before=user_profile_audit_snapshot(before),
+            after=user_profile_audit_snapshot(after),
+            validation_result={
+                "valid": True,
+                "source": "ai",
+                "changed_fields": sorted(requested_fields),
+            },
         )
 
-    target_user.refresh_from_db()
-
+    target_user = update_local_user(
+        actor=actor,
+        user=target_user,
+        cleaned_data=cleaned_data,
+        locked_precondition=locked_precondition,
+        audit_callback=audit_callback,
+    )
     return {
         "ok": True,
         "user": {
             "id": target_user.id,
-            "username": target_user.username,
             "is_active": target_user.is_active,
-            "groups": list(target_user.groups.values_list("name", flat=True))
-        }
+            "department_id": target_user.department_id,
+            "groups": list(target_user.groups.values_list("name", flat=True)),
+        },
     }
 
 def list_groups_for_actor(*, actor, payload):

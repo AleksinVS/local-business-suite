@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin, UserAdmin
+from django.contrib.auth.forms import UserChangeForm
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseRedirect
@@ -56,15 +57,43 @@ class AdminAccessAssignmentForm(forms.Form):
         return cleaned
 
 
+class AdminReadOnlyUserForm(UserChangeForm):
+    """Стандартная карточка без унаследованного поля/ссылки смены пароля."""
+
+    password = None
+
+
 class ExternalIdentityInline(admin.TabularInline):
     model = ExternalIdentity
     extra = 0
-    readonly_fields = ("last_synced_at", "created_at", "updated_at")
+    can_delete = False
+    readonly_fields = tuple(field.name for field in ExternalIdentity._meta.fields)
 
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (
+    # Резервный административный путь управляет только ролями и флагами.
+    form = AdminReadOnlyUserForm
+    fieldsets = tuple(
+        (
+            title,
+            {
+                **options,
+                "fields": tuple(
+                    field for field in options.get("fields", ()) if field != "password"
+                ),
+            },
+        )
+        for title, options in UserAdmin.fieldsets
+    ) + (
         ("Организация", {"fields": ("department",)}),
         ("Управляемый доступ", {"fields": ("managed_access_link",)}),
     )
@@ -72,6 +101,10 @@ class CustomUserAdmin(UserAdmin):
     list_filter = UserAdmin.list_filter + ("department",)
     inlines = [ExternalIdentityInline]
     readonly_fields = tuple(UserAdmin.readonly_fields) + (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
         "groups",
         "user_permissions",
         "is_staff",
@@ -154,21 +187,20 @@ class CustomUserAdmin(UserAdmin):
         return TemplateResponse(request, "settings_center/admin_access_assignment.html", context)
 
     def user_change_password(self, request, id, form_url=""):
-        if not request.user.is_active or not request.user.is_superuser:
-            raise PermissionDenied(
-                "Резервная смена пароля доступна только активному суперпользователю."
-            )
-        return super().user_change_password(request, id, form_url)
+        raise PermissionDenied(
+            "Пароль изменяется через управляемую карточку пользователя с аудитом."
+        )
 
     def has_delete_permission(self, request, obj=None):
-        if obj is not None and obj.is_superuser:
-            return False
-        return super().has_delete_permission(request, obj=obj)
+        return False
+
+    def has_add_permission(self, request):
+        # Создание активного пользователя меняет Board population и должно идти
+        # через управляемый lifecycle-сервис с общим lock и SettingsChange.
+        return False
 
     def delete_queryset(self, request, queryset):
-        if queryset.filter(is_superuser=True).exists():
-            raise PermissionDenied("Нельзя удалить суперпользователя массовым действием.")
-        return super().delete_queryset(request, queryset)
+        raise PermissionDenied("Учётные записи отключаются через управляемый сценарий.")
 
 
 @admin.register(ExternalIdentity)
@@ -176,6 +208,16 @@ class ExternalIdentityAdmin(admin.ModelAdmin):
     list_display = ("user", "provider", "domain", "username", "upn", "sync_status", "last_synced_at")
     list_filter = ("provider", "domain", "sync_status")
     search_fields = ("user__username", "username", "upn", "subject_id", "distinguished_name")
+    readonly_fields = tuple(field.name for field in ExternalIdentity._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class GroupProfileInline(admin.StackedInline):

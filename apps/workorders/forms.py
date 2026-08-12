@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import Group
 
 from apps.core.models import Department
 
@@ -16,6 +17,51 @@ from .selectors import (
     visible_departments_queryset,
     visible_devices_queryset,
 )
+
+
+class BoardRoleMultipleChoiceField(forms.MultipleChoiceField):
+    """Статический список кодов ролей с понятными подписями из профиля группы."""
+
+
+class BoardAccessForm(forms.Form):
+    group_names = BoardRoleMultipleChoiceField(
+        label="Роли, которым видна доска",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    reason = forms.CharField(
+        label="Причина",
+        required=True,
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Обязательно: причина сохраняется в журнале изменения доступа.",
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    risk_confirmed = forms.BooleanField(
+        label="Подтверждаю изменение круга сотрудников с доступом к доске",
+        required=False,
+    )
+
+    def __init__(self, *args, source="settings_center", **kwargs):
+        super().__init__(*args, **kwargs)
+        from .policies import board_access_role_names
+
+        role_names = board_access_role_names()
+        groups = {
+            group.name: group
+            for group in Group.objects.filter(name__in=role_names)
+            .select_related("profile")
+            .order_by("name")
+        }
+        choices = []
+        for role_name in role_names:
+            group = groups.get(role_name)
+            profile = getattr(group, "profile", None) if group else None
+            label = getattr(profile, "title", "") or role_name
+            choices.append((role_name, f"{label} ({role_name})"))
+        self.fields["group_names"].choices = choices
+        if source == "django_admin_break_glass":
+            self.fields["reason"].help_text = "Обязательно для резервного изменения."
 
 
 class DepartmentChoiceField(forms.ModelChoiceField):

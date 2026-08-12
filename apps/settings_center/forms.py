@@ -14,6 +14,110 @@ class ContractPayloadForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 24, "spellcheck": "false"}),
     )
     confirm = forms.BooleanField(label="Подтверждаю применение изменения", required=False)
+    base_hash = forms.CharField(widget=forms.HiddenInput, required=True)
+
+
+class RoleDefinitionForm(forms.Form):
+    base_hash = forms.CharField(widget=forms.HiddenInput)
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    risk_confirmed = forms.BooleanField(
+        label="Подтверждаю изменение чувствительных прав",
+        required=False,
+    )
+
+    def __init__(self, *args, role_read_model, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.role_read_model = role_read_model
+        for section in role_read_model["sections"]:
+            for capability in section["capabilities"]:
+                code = capability["code"]
+                field_name = f"capability__{code}"
+                value = capability["value"]
+                capability_type = capability["type"]
+                if capability_type == "flag":
+                    field = forms.BooleanField(required=False, label=capability["label"])
+                elif capability_type == "scope":
+                    from apps.workorders.contracts import ROLE_SCOPE_VALUES
+
+                    field = forms.ChoiceField(
+                        choices=[
+                            (choice, {
+                                "all": "Все",
+                                "department_branch": "Ветка подразделения",
+                                "assigned_or_unassigned_or_authored": "Свои, назначенные и неназначенные",
+                                "assigned_or_unassigned": "Назначенные и неназначенные",
+                                "assigned": "Только назначенные",
+                                "visible": "Все видимые",
+                                "authored": "Только созданные пользователем",
+                                "none": "Нет доступа",
+                            }.get(choice, choice))
+                            for choice in sorted(ROLE_SCOPE_VALUES)
+                        ],
+                        label=capability["label"],
+                    )
+                elif capability_type == "targets":
+                    from apps.core.contract_store import get_contract
+
+                    workflow_statuses = get_contract("workflow_rules").get("statuses", [])
+                    field = forms.MultipleChoiceField(
+                        label=capability["label"],
+                        choices=[("*", "Все статусы")] + [
+                            (status, status) for status in workflow_statuses
+                        ],
+                        widget=forms.CheckboxSelectMultiple,
+                        required=False,
+                        help_text=(
+                            "Выберите отдельные статусы или вариант «Все статусы». "
+                            "При выборе «Все статусы» остальные отметки не учитываются."
+                        ),
+                    )
+                    value = ["*"] if value == "*" else list(value or [])
+                else:
+                    continue
+                field.initial = value
+                field.help_text = field.help_text or capability["description"]
+                self.fields[field_name] = field
+
+    def proposed_config(self):
+        proposed = {}
+        for section in self.role_read_model["sections"]:
+            for capability in section["capabilities"]:
+                code = capability["code"]
+                field_name = f"capability__{code}"
+                if field_name not in self.cleaned_data:
+                    continue
+                value = self.cleaned_data[field_name]
+                if capability["type"] == "targets":
+                    value = "*" if "*" in value else list(value)
+                proposed[code] = value
+        return proposed
+
+
+class MemoryGroupMembershipForm(forms.Form):
+    group_names = forms.MultipleChoiceField(
+        label="Технические группы памяти",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    reason = forms.CharField(
+        label="Причина",
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    confirmed = forms.BooleanField(
+        label="Подтверждаю изменение технических полномочий памяти",
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.memory.access_services import memory_group_choices
+
+        self.fields["group_names"].choices = [
+            (item["code"], f"{item['label']} ({item['code']}) — {item['description']}")
+            for item in memory_group_choices()
+        ]
 
 
 class EnvProposalForm(forms.Form):

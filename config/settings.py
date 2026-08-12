@@ -26,6 +26,14 @@ env_file = BASE_DIR / ".env"
 load_dotenv(env_file)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
+LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY = os.environ.get(
+    "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY",
+    SECRET_KEY,
+)
+LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY_VERSION = os.environ.get(
+    "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY_VERSION",
+    "v1",
+).strip() or "v1"
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 DJANGO_ENV = os.environ.get("DJANGO_ENV", "development").strip().lower()
 if DJANGO_ENV not in {"development", "production"}:
@@ -707,6 +715,10 @@ SETTINGS_CENTER_AUDIT_RETENTION_DAYS = int(
 )
 ACCOUNTS_AD_LINK_ENABLED = env_bool("ACCOUNTS_AD_LINK_ENABLED", True)
 ACCOUNTS_AD_LINK_MODE = os.environ.get("ACCOUNTS_AD_LINK_MODE", "manual").strip().lower()
+if ACCOUNTS_AD_LINK_MODE not in {"manual", "automatic"}:
+    raise ImproperlyConfigured(
+        "ACCOUNTS_AD_LINK_MODE must be one of: manual, automatic"
+    )
 ACCOUNTS_AD_GROUP_ROLE_SYNC = env_bool("ACCOUNTS_AD_GROUP_ROLE_SYNC", False)
 MEMORY_ACL_INHERITANCE_ENABLED = env_bool("MEMORY_ACL_INHERITANCE_ENABLED", True)
 MEMORY_ACL_FAIL_CLOSED = env_bool("MEMORY_ACL_FAIL_CLOSED", True)
@@ -721,6 +733,12 @@ MEMORY_ACL_CACHE_TTL_SECONDS = int(os.environ.get("MEMORY_ACL_CACHE_TTL_SECONDS"
 if DJANGO_ENV == "production":
     unsafe_secret_keys = {"", "dev-only-secret-key", "change-me"}
     unsafe_gateway_tokens = {"", "dev-ai-gateway-token", "change-me"}
+    unsafe_audit_fingerprint_keys = {
+        "",
+        "dev-only-secret-key",
+        "change-me",
+        "change-me-too",
+    }
     if DEBUG:
         raise ImproperlyConfigured("DJANGO_DEBUG must be 0 when DJANGO_ENV=production")
     if SECRET_KEY in unsafe_secret_keys:
@@ -728,6 +746,15 @@ if DJANGO_ENV == "production":
     if LOCAL_BUSINESS_AI_GATEWAY_TOKEN in unsafe_gateway_tokens:
         raise ImproperlyConfigured(
             "LOCAL_BUSINESS_AI_GATEWAY_TOKEN must be set to a non-default value in production"
+        )
+    if (
+        LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY in unsafe_audit_fingerprint_keys
+        or LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY == SECRET_KEY
+        or len(LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY) < 32
+    ):
+        raise ImproperlyConfigured(
+            "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY must be set to a separate "
+            "non-default value of at least 32 characters in production"
         )
     min_stream_timeout = int(LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT) + 30
     if GUNICORN_TIMEOUT < min_stream_timeout:

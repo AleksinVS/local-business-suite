@@ -49,9 +49,12 @@ from django.utils import timezone
 
 from apps.core.contract_store import get_contract
 from apps.core.models import Department
+from apps.accounts.models import AccessAssignmentAudit
+from apps.accounts.services import initialize_demo_user_access
 from apps.inventory.models import MedicalDevice, OperationalStatus
 from apps.waiting_list.models import WaitingListEntry, WaitingListStatus
-from apps.workorders.models import Board, WorkOrder, WorkOrderPriority, WorkOrderStatus
+from apps.workorders.models import Board, BoardAccessAudit, WorkOrder, WorkOrderPriority, WorkOrderStatus
+from apps.workorders.services import initialize_board_access_for_bootstrap
 
 User = get_user_model()
 
@@ -203,7 +206,7 @@ class Command(BaseCommand):
 
         groups = {role: Group.objects.get_or_create(name=role)[0] for role in ROLE_NAMES}
         catchall, departments = self._ensure_departments()
-        users = self._ensure_users(departments, groups)
+        users = self._ensure_users(catchall, departments, groups)
         board = self._ensure_board(groups)
         devices = self._ensure_devices(departments)
         workorder_count = self._ensure_workorders(departments, devices, users, board)
@@ -238,11 +241,25 @@ class Command(BaseCommand):
         deleted_waiting = WaitingListEntry.objects.filter(comment__startswith=DEMO_MARKER).delete()[0]
         # Удаление демо-доски каскадно удаляет ее колонки и все заявки на ней
         # (включая их комментарии/вложения/переходы статусов).
+        demo_board = Board.objects.filter(slug=DEMO_BOARD_SLUG).first()
+        if demo_board is not None:
+            # Удаляем только созданный этой же командой bootstrap-аудит. Любая
+            # ручная история продолжит защищать доску через PROTECT.
+            BoardAccessAudit.objects.filter(
+                board=demo_board,
+                source=BoardAccessAudit.Source.SYSTEM_BOOTSTRAP,
+            ).delete()
         deleted_board = Board.objects.filter(slug=DEMO_BOARD_SLUG).delete()[0]
         deleted_devices = MedicalDevice.objects.filter(inventory_number__startswith=DEMO_INVENTORY_PREFIX).delete()[0]
         # User.department защищен через PROTECT: сначала удаляем демо-пользователей,
         # и только затем подразделения, на которые они ссылаются.
-        deleted_users = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX).delete()[0]
+        demo_users = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX)
+        AccessAssignmentAudit.objects.filter(
+            target_user__in=demo_users,
+            source=AccessAssignmentAudit.Source.SYSTEM_BOOTSTRAP,
+        ).delete()
+        # Иная предметная история намеренно оставит PROTECT и остановит flush.
+        deleted_users = demo_users.delete()[0]
 
         # Подразделения с self-FK parent=PROTECT: удаляем от листьев к корню,
         # иначе удаление родителя раньше ребенка упадет с ProtectedError.
@@ -305,30 +322,51 @@ class Command(BaseCommand):
 
         return catchall, departments
 
-    def _ensure_users(self, departments, groups):
+    def _ensure_users(self, catchall, departments, groups):
         users = {}
         for key, suffix, first_name, last_name, role, department_key, is_staff in USER_SPECS:
             username = f"{DEMO_USERNAME_PREFIX}{suffix}"
-            user, _ = User.objects.get_or_create(username=username)
-            user.first_name = first_name
-            user.last_name = last_name
-            user.email = f"{username}@{DEMO_EMAIL_DOMAIN}"
-            user.is_staff = is_staff
-            user.is_active = True
-            user.department = departments.get(department_key) if department_key else None
-            user.set_password(DEMO_PASSWORD)
-            user.save()
-            user.groups.set([groups[role]])
+            expected_email = f"{username}@{DEMO_EMAIL_DOMAIN}"
+            user, created = User.objects.get_or_create(
+                username=username,
+                defaults={"email": expected_email, "is_active": False},
+            )
+            if not created and user.email != expected_email:
+                raise CommandError(
+                    f"Логин {username} уже принадлежит не демонстрационной учётной записи."
+                )
+            initialize_demo_user_access(
+                user=user,
+                role_name=role,
+                is_staff=is_staff,
+                reason="Инициализация учётной записи команды seed_demo_data.",
+                profile_updates={
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": expected_email,
+                    "is_active": True,
+                    "department": departments.get(department_key) if department_key else catchall,
+                    "password": DEMO_PASSWORD,
+                },
+            )
             users[key] = user
         return users
 
     def _ensure_board(self, groups):
         title = f"{DEMO_MARKER} Демо-заявки"
-        board, _ = Board.objects.get_or_create(slug=DEMO_BOARD_SLUG, defaults={"title": title})
+        board, board_created = Board.objects.get_or_create(
+            slug=DEMO_BOARD_SLUG,
+            defaults={"title": title},
+        )
         if board.title != title:
             board.title = title
             board.save(update_fields=["title"])
-        board.allowed_groups.set(groups.values())
+        initialize_board_access_for_bootstrap(
+            board=board,
+            selected_group_names=list(groups),
+            reason="Инициализация отдельной доски команды seed_demo_data.",
+            board_was_created=board_created,
+        )
         for code, col_title, position, statuses in DEFAULT_COLUMNS:
             board.columns.update_or_create(
                 code=code,

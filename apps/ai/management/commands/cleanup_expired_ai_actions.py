@@ -13,3 +13,10 @@ class Command(BaseCommand):
             expires_at__lte=timezone.now(),
         ).update(status=PendingAction.Status.EXPIRED)
         self.stdout.write(self.style.SUCCESS(f"Expired pending AI actions: {updated}"))
+        failed = PendingAction.objects.filter(
+            status=PendingAction.Status.PROCESSING,
+            processing_expires_at__lte=timezone.now(),
+        ).update(status=PendingAction.Status.RECONCILIATION_REQUIRED)
+        self.stdout.write(
+            self.style.WARNING(f"AI actions requiring reconciliation: {failed}")
+        )

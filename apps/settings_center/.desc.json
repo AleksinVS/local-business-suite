@@ -7,7 +7,7 @@
   "models.py": "Audit and env proposal models",
   "admin.py": "Django Admin registration for Settings Center audit models",
   "services.py": "Generic audit/hash/masked diff helpers",
-  "contract_services.py": "Runtime contract preview/apply service with validation and atomic writes",
+  "contract_services.py": "Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback",
   "env_services.py": ".env effective status and proposal generation service",
   "help_services.py": "Contextual help context and mini-chat response service",
   "forms.py": "Forms for contracts, env proposals, help and user workflows",
@@ -16,4 +16,6 @@
   "urls.py": "URL routes for Settings Center",
   "tests.py": "Settings Center tests",
   "migrations/": "Settings Center database migrations"
+  ,"management/commands/reconcile_settings_changes.py": "Dry-run/apply сверка незавершённых file/audit переходов рабочих контрактов",
+  "management/commands/access_administration_e2e.py": "Самоочищаемая HTTP e2e-проверка редактора роли, доступа к доске и технических групп памяти"
 }

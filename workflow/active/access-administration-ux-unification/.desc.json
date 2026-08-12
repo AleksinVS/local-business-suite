@@ -4,5 +4,7 @@
   "ARCHITECT_PLAN.json": "Порядок исполнения, ограничения и рекомендуемое распределение задач",
   "task-packets": "Пакеты безопасности, интерфейса, объяснимости и приемки",
   "EXECUTOR_REPORT.first-safe-slice.md": "Отчёт реализации первого безопасного среза ADR-0040",
-  "TASK_ACCEPTANCE.first-safe-slice.md": "Техническая приёмка первого безопасного среза и остаточные границы"
+  "TASK_ACCEPTANCE.first-safe-slice.md": "Техническая приёмка первого безопасного среза и остаточные границы",
+  "EXECUTOR_REPORT.contract-board-role-memory-slice.md": "Отчёт реализации пакетов 00c, 00d и 03",
+  "TASK_ACCEPTANCE.contract-board-role-memory-slice.md": "Техническая приёмка пакетов 00c, 00d и 03"
 }

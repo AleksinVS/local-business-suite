@@ -245,4 +245,4 @@ class ADGroupRoleSyncTests(TestCase):
         self.assertFalse(root.is_active)
         self.assertFalse(root.is_staff)
         self.assertFalse(root.is_superuser)
-        self.assertEqual(root.email, "updated-profile@example.test")
+        self.assertNotEqual(root.email, "updated-profile@example.test")

@@ -1,7 +1,10 @@
 """Тесты представлений AI-чата, стриминга и прав доступа."""
+import threading
+
 import pytest
 
-from django.test import Client
+from django.db import close_old_connections
+from django.test import Client, TransactionTestCase
 
 from apps.ai.tests._common import *  # noqa: F401,F403
 
@@ -23,7 +26,10 @@ class AIViewsTests(TestCase):
         cls.customer.department = cls.department
         cls.manager.save(update_fields=["department"])
         cls.customer.save(update_fields=["department"])
-        cls.board = Board.objects.create(title="Test Board", slug="test-board-ai")
+        cls.board, _created = Board.objects.get_or_create(
+            slug="main",
+            defaults={"title": "Test Board"},
+        )
         cls.board.allowed_groups.add(manager_group, customer_group)
         cls.customer_workorder = WorkOrder.objects.create(
             title="Сломан светильник",
@@ -643,22 +649,30 @@ class AIViewsTests(TestCase):
             role_rules = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(role_rules, ensure_ascii=False), encoding="utf-8")
             first_role = next(role for role in role_rules if not role.startswith("$"))
+            flag = next(
+                code
+                for code, metadata in role_rules["$capabilities"].items()
+                if metadata.get("type") == "flag"
+            )
+            new_value = not role_rules[first_role][flag]
 
             with override_settings(
                 LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
                 LOCAL_BUSINESS_ROLE_RULES=role_rules,
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
             ):
                 result = execute_tool(
                     tool_code="access.update_role_permissions",
                     actor_context={"user_id": self.manager.id, "channel": "internal"},
                     payload={
                         "role_name": first_role,
-                        "permissions_map": {"display_name": "AI audited role"},
+                        "permissions_map": {flag: new_value},
                     },
                     request_id="req-ai-role-update",
                 )
                 self.assertTrue(result["ok"], result)
                 self.assertTrue(result["meta"]["awaiting_confirmation"])
+                self.assertIn("confirmation_preview", result["meta"])
 
                 confirm = execute_pending_action(
                     token=result["meta"]["pending_action_token"],
@@ -668,7 +682,8 @@ class AIViewsTests(TestCase):
                 )
 
                 self.assertTrue(confirm["ok"], confirm)
-                self.assertEqual(load_json_file(role_file)[first_role]["display_name"], "AI audited role")
+                self.assertEqual(confirm["meta"]["pending_action_status"], "confirmed")
+                self.assertEqual(load_json_file(role_file)[first_role][flag], new_value)
                 self.assertEqual(
                     SettingsChange.objects.filter(setting_id="core.contract.role_rules").count(),
                     1,
@@ -685,6 +700,62 @@ class AIViewsTests(TestCase):
         self.assertIsNotNone(action)
         self.assertEqual(action.request_payload["command"]["confirmation_state"], "pending_required")
         self.assertEqual(action.request_payload["command"]["tool_code"], "access.update_role_permissions")
+
+    def test_role_update_tool_rejects_contract_metadata_keys(self):
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+
+        for role_name in ("$capabilities", "$administration"):
+            with self.subTest(role_name=role_name):
+                with self.assertRaisesMessage(ValidationError, "предметную роль"):
+                    execute_tool(
+                        tool_code="access.update_role_permissions",
+                        actor_context={"user_id": self.manager.id, "channel": "internal"},
+                        payload={
+                            "role_name": role_name,
+                            "permissions_map": {"manage_roles": True},
+                        },
+                    )
+        self.assertFalse(PendingAction.objects.filter(tool_code="access.update_role_permissions").exists())
+
+    def test_processing_cleanup_uses_its_own_lease_and_requires_reconciliation(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={},
+            status=PendingAction.Status.PROCESSING,
+            expires_at=timezone.now() - timezone.timedelta(minutes=5),
+            processing_started_at=timezone.now(),
+            processing_expires_at=timezone.now() + timezone.timedelta(minutes=5),
+        )
+
+        call_command("cleanup_expired_ai_actions", verbosity=0)
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, PendingAction.Status.PROCESSING)
+
+        pending.processing_expires_at = timezone.now() - timezone.timedelta(seconds=1)
+        pending.save(update_fields=["processing_expires_at"])
+        call_command("cleanup_expired_ai_actions", verbosity=0)
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, PendingAction.Status.RECONCILIATION_REQUIRED)
+
+    def test_pending_confirmation_requires_actor_identity_at_service_boundary(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={},
+        )
+
+        result = execute_pending_action(
+            token=pending.token,
+            confirmed=True,
+            actor_context={},
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("идентификатор пользователя", result["errors"][0])
 
     def test_access_users_update_rejects_group_names_without_mutating_groups(self):
         from apps.ai.services import update_user_for_actor
@@ -708,41 +779,78 @@ class AIViewsTests(TestCase):
             set(self.customer.groups.values_list("name", flat=True)),
             before,
         )
-
     def test_access_users_update_uses_account_services_for_profile_fields(self):
-        from apps.ai.services import update_user_for_actor
+        from apps.ai.services import prepare_user_update_for_actor, update_user_for_actor
 
         self.manager.is_superuser = True
         self.manager.save(update_fields=["is_superuser"])
         new_department = Department.objects.create(name="Новое подразделение AI")
 
-        with patch("apps.accounts.services.update_local_user") as update_local_user:
+        prepared, _preview = prepare_user_update_for_actor(
+            actor=self.manager,
+            payload={
+                "user_id": self.customer.id,
+                "department_id": new_department.id,
+            },
+        )
+        with patch(
+            "apps.accounts.services.update_local_user",
+            return_value=self.customer,
+        ) as update_local_user:
             result = update_user_for_actor(
                 actor=self.manager,
-                payload={
-                    "user_id": self.customer.id,
-                    "is_active": True,
-                    "department_id": new_department.id,
-                },
+                payload=prepared,
             )
 
         self.assertTrue(result["ok"])
-        update_local_user.assert_called_once_with(
-            actor=self.manager,
-            user=self.customer,
-            cleaned_data={"department_id": new_department.id},
+        update_local_user.assert_called_once()
+        self.assertEqual(
+            update_local_user.call_args.kwargs["cleaned_data"],
+            {"department_id": new_department.id},
         )
+        self.assertTrue(callable(update_local_user.call_args.kwargs["locked_precondition"]))
+        self.assertTrue(callable(update_local_user.call_args.kwargs["audit_callback"]))
+
+    def test_record_action_recursively_redacts_identity_fields(self):
+        from apps.ai.services import record_action
+
+        audit = record_action(
+            actor=self.manager,
+            tool_code="test.identity-redaction",
+            action_kind="read",
+            status=AgentActionLog.Status.SUCCEEDED,
+            request_payload={
+                "id": 41,
+                "username": "request-user",
+                "nested": [{"email": "request@example.test", "status": "ok"}],
+            },
+            response_payload={
+                "id": 42,
+                "author": "response-author",
+                "items": ({"assignee": "response-assignee"},),
+            },
+        )
+
+        audit.refresh_from_db()
+        self.assertEqual(audit.status, AgentActionLog.Status.SUCCEEDED)
+        self.assertEqual(audit.request_payload["id"], 41)
+        self.assertEqual(audit.request_payload["username"], "***")
+        self.assertEqual(audit.request_payload["nested"][0]["email"], "***")
+        self.assertEqual(audit.request_payload["nested"][0]["status"], "ok")
+        self.assertEqual(audit.response_payload["id"], 42)
+        self.assertEqual(audit.response_payload["author"], "***")
+        self.assertEqual(audit.response_payload["items"][0]["assignee"], "***")
 
     def test_access_users_update_rejects_quarantine_department(self):
         from apps.accounts.department_policy import get_unassigned_user_department
-        from apps.ai.services import update_user_for_actor
+        from apps.ai.services import prepare_user_update_for_actor
 
         self.manager.is_superuser = True
         self.manager.save(update_fields=["is_superuser"])
         quarantine = get_unassigned_user_department()
 
         with self.assertRaisesMessage(ValidationError, "недоступное"):
-            update_user_for_actor(
+            prepare_user_update_for_actor(
                 actor=self.manager,
                 payload={
                     "user_id": self.customer.id,
@@ -751,19 +859,30 @@ class AIViewsTests(TestCase):
             )
 
     def test_access_users_update_uses_lifecycle_service_for_disable(self):
-        from apps.ai.services import update_user_for_actor
+        from apps.ai.services import prepare_user_update_for_actor, update_user_for_actor
 
         self.manager.is_superuser = True
         self.manager.save(update_fields=["is_superuser"])
 
-        with patch("apps.accounts.services.disable_local_user") as disable_local_user:
+        prepared, _preview = prepare_user_update_for_actor(
+            actor=self.manager,
+            payload={"user_id": self.customer.id, "is_active": False},
+        )
+        with patch(
+            "apps.accounts.services.update_local_user",
+            return_value=self.customer,
+        ) as update_local_user:
             result = update_user_for_actor(
                 actor=self.manager,
-                payload={"user_id": self.customer.id, "is_active": False},
+                payload=prepared,
             )
 
         self.assertTrue(result["ok"])
-        disable_local_user.assert_called_once_with(actor=self.manager, user=self.customer)
+        update_local_user.assert_called_once()
+        self.assertEqual(
+            update_local_user.call_args.kwargs["cleaned_data"],
+            {"is_active": False},
+        )
 
     def test_access_users_update_preserves_roles_and_technical_groups_after_confirmation(self):
         self.manager.is_superuser = True
@@ -798,6 +917,73 @@ class AIViewsTests(TestCase):
         self.assertEqual(
             set(self.customer.groups.values_list("name", flat=True)),
             before,
+        )
+        success_audit = AgentActionLog.objects.filter(
+            tool_code="access.users.update",
+            status=AgentActionLog.Status.SUCCEEDED,
+        ).latest("id")
+        self.assertNotIn(self.customer.username, json.dumps(success_audit.response_payload))
+        self.assertNotIn("username", success_audit.response_payload.get("user", {}))
+
+    def test_access_users_update_rejects_stale_target_state(self):
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        requested_department = Department.objects.create(name="AI requested department")
+        external_department = Department.objects.create(name="External department")
+        pending_result = execute_tool(
+            tool_code="access.users.update",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            payload={
+                "user_id": self.customer.id,
+                "department_id": requested_department.id,
+            },
+        )
+        self.customer.department = external_department
+        self.customer.save(update_fields=["department"])
+
+        confirmed = execute_pending_action(
+            token=pending_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+        )
+
+        self.assertFalse(confirmed["ok"])
+        self.assertIn("изменились", confirmed["errors"][0])
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.department_id, external_department.id)
+
+    def test_access_users_update_rolls_back_all_fields_when_audit_fails(self):
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        requested_department = Department.objects.create(name="Atomic AI department")
+        pending_result = execute_tool(
+            tool_code="access.users.update",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            payload={
+                "user_id": self.customer.id,
+                "is_active": False,
+                "department_id": requested_department.id,
+            },
+        )
+        initial_department_id = self.customer.department_id
+
+        with patch(
+            "apps.settings_center.services.record_settings_change",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            confirmed = execute_pending_action(
+                token=pending_result["meta"]["pending_action_token"],
+                confirmed=True,
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+            )
+
+        self.assertFalse(confirmed["ok"])
+        self.customer.refresh_from_db()
+        self.assertTrue(self.customer.is_active)
+        self.assertEqual(self.customer.department_id, initial_department_id)
+        self.assertNotEqual(
+            confirmed["meta"]["pending_action_status"],
+            PendingAction.Status.CONFIRMED,
         )
 
     def test_execute_tool_rejects_confirmed_token_before_dispatch(self):
@@ -1206,7 +1392,7 @@ class AIViewsTests(TestCase):
             content_type="application/json",
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
-        self.assertEqual(confirm_response.status_code, 200)
+        self.assertEqual(confirm_response.status_code, 200, confirm_response.json())
         confirm_payload = confirm_response.json()
         self.assertTrue(confirm_payload["ok"])
         self.assertEqual(confirm_payload["tool"], "workorders.create")
@@ -1683,3 +1869,130 @@ class AIViewsTests(TestCase):
 # ---------------------------------------------------------------------------
 # Tests for identity/correlation propagation and task type resolution
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class PendingActionConcurrencyTests(TransactionTestCase):
+    databases = RUNTIME_DATABASES
+    reset_sequences = True
+
+    def setUp(self):
+        self.actor = User.objects.create_user(username="pending-concurrency")
+        self.pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.actor,
+            payload={"subject": "Однократная команда"},
+        )
+
+    def test_concurrent_confirmation_dispatches_once_and_writes_one_terminal_audit(self):
+        from apps.ai import tooling as ai_tooling
+
+        start = threading.Barrier(3)
+        dispatch_lock = threading.Lock()
+        dispatch_count = 0
+        results = []
+
+        def fake_dispatch(**kwargs):
+            nonlocal dispatch_count
+            with dispatch_lock:
+                dispatch_count += 1
+            return {"id": 1}
+
+        def confirm():
+            close_old_connections()
+            start.wait()
+            try:
+                results.append(
+                    execute_pending_action(
+                        token=self.pending.token,
+                        confirmed=True,
+                        actor_context={"user_id": self.actor.pk},
+                    )
+                )
+            finally:
+                close_old_connections()
+
+        with patch.object(ai_tooling, "_dispatch_tool", side_effect=fake_dispatch):
+            workers = [threading.Thread(target=confirm), threading.Thread(target=confirm)]
+            for worker in workers:
+                worker.start()
+            start.wait()
+            for worker in workers:
+                worker.join(timeout=10)
+
+        self.assertFalse(any(worker.is_alive() for worker in workers))
+        self.assertEqual(dispatch_count, 1)
+        self.assertEqual(sum(bool(result["ok"]) for result in results), 1)
+        self.pending.refresh_from_db()
+        self.assertEqual(self.pending.status, PendingAction.Status.CONFIRMED)
+        self.assertEqual(
+            AgentActionLog.objects.filter(
+                tool_code=self.pending.tool_code,
+                status=AgentActionLog.Status.SUCCEEDED,
+            ).count(),
+            1,
+        )
+
+    def test_terminal_failure_after_dispatch_requires_reconciliation_and_is_audited(self):
+        from apps.ai import tooling as ai_tooling
+
+        with (
+            patch.object(ai_tooling, "_dispatch_tool", return_value={"id": 7}),
+            patch.object(
+                ai_tooling,
+                "_finalize_pending_action_success",
+                side_effect=RuntimeError("terminal audit unavailable"),
+            ),
+        ):
+            result = execute_pending_action(
+                token=self.pending.token,
+                confirmed=True,
+                actor_context={"user_id": self.actor.pk},
+            )
+
+        self.assertFalse(result["ok"])
+        self.pending.refresh_from_db()
+        self.assertEqual(
+            self.pending.status,
+            PendingAction.Status.RECONCILIATION_REQUIRED,
+        )
+        audit = AgentActionLog.objects.get(
+            tool_code=self.pending.tool_code,
+            status=AgentActionLog.Status.FAILED,
+        )
+        self.assertTrue(audit.response_payload["dispatch_succeeded"])
+        self.assertTrue(audit.response_payload["reconciliation_required"])
+        self.assertFalse(
+            AgentActionLog.objects.filter(
+                tool_code=self.pending.tool_code,
+                status=AgentActionLog.Status.SUCCEEDED,
+            ).exists()
+        )
+
+    def test_manual_reconciliation_records_observation_without_closing_unknown_outcome(self):
+        self.pending.status = PendingAction.Status.RECONCILIATION_REQUIRED
+        self.pending.save(update_fields=["status"])
+        operator = User.objects.create_superuser(username="reconciliation-operator")
+
+        call_command(
+            "reconcile_ai_action",
+            token=str(self.pending.token),
+            outcome="succeeded",
+            reason="Предметный эффект проверен оператором по журналу.",
+            operator=operator.username,
+            verbosity=0,
+        )
+
+        self.pending.refresh_from_db()
+        self.assertEqual(
+            self.pending.status,
+            PendingAction.Status.RECONCILIATION_REQUIRED,
+        )
+        audit = AgentActionLog.objects.get(
+            tool_code=self.pending.tool_code,
+            status=AgentActionLog.Status.PENDING,
+        )
+        self.assertEqual(audit.actor, operator)
+        self.assertTrue(audit.response_payload["manual_reconciliation"])
+        self.assertFalse(audit.response_payload["state_closed"])

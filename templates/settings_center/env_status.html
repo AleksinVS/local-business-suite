@@ -15,16 +15,16 @@
       <a class="button" href="{% url 'settings_center:env_propose' %}">Создать заявку</a>
     </div>
   </div>
-  <div class="table-container">
+  <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Статус переменных окружения">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Настройка</th>
-          <th>Переменная</th>
-          <th>Раздел</th>
-          <th>Эффективное значение</th>
-          <th>Режим</th>
-          <th>Перезапуск</th>
+          <th scope="col">Настройка</th>
+          <th scope="col">Переменная</th>
+          <th scope="col">Раздел</th>
+          <th scope="col">Эффективное значение</th>
+          <th scope="col">Режим</th>
+          <th scope="col">Перезапуск</th>
         </tr>
       </thead>
       <tbody>

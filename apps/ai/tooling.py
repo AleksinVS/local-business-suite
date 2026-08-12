@@ -324,6 +324,21 @@ def execute_tool(
         )
 
     requires_confirmation = tool.get("requires_confirmation", False)
+    confirmation_preview = None
+    if requires_confirmation and tool_code == "access.update_role_permissions":
+        from .services import prepare_role_permissions_change_for_actor
+
+        payload, confirmation_preview = prepare_role_permissions_change_for_actor(
+            actor=actor,
+            payload=payload,
+        )
+    elif requires_confirmation and tool_code == "access.users.update":
+        from .services import prepare_user_update_for_actor
+
+        payload, confirmation_preview = prepare_user_update_for_actor(
+            actor=actor,
+            payload=payload,
+        )
 
     confirmation_state = "not_required"
     if requires_confirmation and not confirmed_token:
@@ -377,6 +392,7 @@ def execute_tool(
                 "session_id": str(session.external_id),
                 "pending_action_token": str(pending.token),
                 "awaiting_confirmation": True,
+                **({"confirmation_preview": confirmation_preview} if confirmation_preview else {}),
                 **trace_context,
                 **({"task_type_report": task_report} if task_report else {}),
             },
@@ -521,60 +537,25 @@ def execute_pending_action(
         # where execute_tool calls this with token=None
         token = actor_context.get("token")
 
+    pending = None
+    dispatch_succeeded = False
     try:
+        # Транзакция защищает только одноразовое занятие действия. Исполнение
+        # намеренно идёт после commit: инструменты могут атомарно писать файлы и
+        # обязаны сначала зафиксировать собственную pending-запись аудита.
         with transaction.atomic():
-            pending = PendingAction.objects.select_for_update().filter(token=token).first()
-            if not pending:
-                return {
-                    "ok": False,
-                    "tool": None,
-                    "result": None,
-                    "errors": ["Ожидающее действие не найдено или уже обработано."],
-                    "meta": {},
-                }
-
-            if pending.status != PendingAction.Status.PENDING:
-                return {
-                    "ok": False,
-                    "tool": pending.tool_code,
-                    "result": None,
-                    "errors": [f"Ожидающее действие уже имеет статус {pending.get_status_display()}."],
-                    "meta": {"pending_action_status": pending.status},
-                }
-
-            if pending.expires_at <= timezone.now():
-                pending.status = PendingAction.Status.EXPIRED
-                pending.save(update_fields=["status", "updated_at"])
-                return {
-                    "ok": False,
-                    "tool": pending.tool_code,
-                    "result": None,
-                    "errors": ["Срок ожидания действия истек."],
-                    "meta": {"pending_action_status": pending.status},
-                }
-
-            actor_user_id = actor_context.get("user_id")
-            if actor_user_id and str(actor_user_id) != str(pending.actor_id):
-                return {
-                    "ok": False,
-                    "tool": pending.tool_code,
-                    "result": None,
-                    "errors": ["Actor does not own this pending action."],
-                    "meta": {"pending_action_status": pending.status},
-                }
-
-            if session_external_id:
-                from .services import normalize_session_external_id
-
-                normalized_session_id = normalize_session_external_id(session_external_id)
-                if pending.session and pending.session.external_id != normalized_session_id:
-                    return {
-                        "ok": False,
-                        "tool": pending.tool_code,
-                        "result": None,
-                        "errors": ["Session does not own this pending action."],
-                        "meta": {"pending_action_status": pending.status},
-                    }
+            pending = (
+                PendingAction.objects.select_related("actor", "session")
+                .filter(token=token)
+                .first()
+            )
+            error = _validate_pending_action_owner(
+                pending=pending,
+                actor_context=actor_context,
+                session_external_id=session_external_id,
+            )
+            if error:
+                return error
 
             trace_context = {
                 "conversation_id": conversation_id,
@@ -597,142 +578,18 @@ def execute_pending_action(
                 trace_context=trace_context,
                 command_context=command_context,
             )
+            audit_request_payload["pending_token"] = str(pending.token)
 
-            if confirmed:
-                registry = tool_registry()
-                tool = registry.get(pending.tool_code)
-                if not tool:
-                    pending.status = PendingAction.Status.CANCELLED
-                    pending.save(update_fields=["status", "updated_at"])
-                    return {
-                        "ok": False,
-                        "tool": pending.tool_code,
-                        "result": None,
-                        "errors": [f"Tool {pending.tool_code} no longer available."],
-                        "meta": {},
-                    }
-
-                try:
-                    result = _dispatch_tool(
-                        tool_code=pending.tool_code,
-                        actor=pending.actor,
-                        session=pending.session,
-                        actor_context={**actor_context, **trace_context},
-                        payload=pending.payload,
-                        user_message=None,
-                    )
-                except PermissionDenied as exc:
-                    record_action(
-                        actor=pending.actor,
-                        tool_code=pending.tool_code,
-                        action_kind=pending.action_kind,
-                        status=AgentActionLog.Status.DENIED,
-                        request_payload=audit_request_payload,
-                        response_payload={"error": str(exc), **trace_context},
-                        session=pending.session,
-                        message=None,
-                        error_message=str(exc),
-                    )
-                    return {
-                        "ok": False,
-                        "tool": pending.tool_code,
-                        "result": None,
-                        "errors": [str(exc)],
-                        "meta": {
-                            "pending_action_token": str(pending.token),
-                            "pending_action_status": pending.status,
-                            **trace_context,
-                        },
-                    }
-                except (ValidationError, KeyError, WorkOrder.DoesNotExist) as exc:
-                    record_action(
-                        actor=pending.actor,
-                        tool_code=pending.tool_code,
-                        action_kind=pending.action_kind,
-                        status=AgentActionLog.Status.FAILED,
-                        request_payload=audit_request_payload,
-                        response_payload={"error": str(exc), **trace_context},
-                        session=pending.session,
-                        message=None,
-                        error_message=str(exc),
-                    )
-                    return {
-                        "ok": False,
-                        "tool": pending.tool_code,
-                        "result": None,
-                        "errors": [str(exc)],
-                        "meta": {
-                            "pending_action_token": str(pending.token),
-                            "pending_action_status": pending.status,
-                            **trace_context,
-                        },
-                    }
-                except Exception as exc:
-                    record_action(
-                        actor=pending.actor,
-                        tool_code=pending.tool_code,
-                        action_kind=pending.action_kind,
-                        status=AgentActionLog.Status.FAILED,
-                        request_payload=audit_request_payload,
-                        response_payload={"error": str(exc), **trace_context},
-                        session=pending.session,
-                        message=None,
-                        error_message=str(exc),
-                    )
-                    return {
-                        "ok": False,
-                        "tool": pending.tool_code,
-                        "result": None,
-                        "errors": [str(exc)],
-                        "meta": {
-                            "pending_action_token": str(pending.token),
-                            "pending_action_status": pending.status,
-                            **trace_context,
-                        },
-                    }
-
-                # Mark CONFIRMED only after successful execution
-                pending.status = PendingAction.Status.CONFIRMED
-                pending.save(update_fields=["status", "updated_at"])
-
-                record_action(
-                    actor=pending.actor,
-                    tool_code=pending.tool_code,
-                    action_kind=pending.action_kind,
-                    status=AgentActionLog.Status.SUCCEEDED,
-                    request_payload=audit_request_payload,
-                    response_payload={**trace_context, **result},
-                    session=pending.session,
-                    message=None,
-                )
-
-                if pending.session:
-                    append_chat_message(
-                        session=pending.session,
-                        role=ChatMessage.Role.TOOL,
-                        content=f"Tool {pending.tool_code} executed after confirmation.",
-                        tool_name=pending.tool_code,
-                        metadata={**{"result_preview": result, "pending_token": str(pending.token)}, **trace_context},
-                    )
-
-                task_report = _build_task_type_report(pending.tool_code, pending.payload)
-                return {
-                    "ok": True,
-                    "tool": pending.tool_code,
-                    "result": result,
-                    "errors": [],
-                    "meta": {
-                        "pending_action_token": str(pending.token),
-                        "pending_action_status": pending.status,
-                        "session_id": str(pending.session.external_id) if pending.session else None,
-                        **trace_context,
-                        **({"task_type_report": task_report} if task_report else {}),
-                    },
-                }
-            else:
+            if not confirmed:
+                now = timezone.now()
+                claimed = PendingAction.objects.filter(
+                    pk=pending.pk,
+                    status=PendingAction.Status.PENDING,
+                ).update(status=PendingAction.Status.CANCELLED, updated_at=now)
+                if claimed != 1:
+                    pending.refresh_from_db()
+                    return _pending_action_status_conflict(pending)
                 pending.status = PendingAction.Status.CANCELLED
-                pending.save(update_fields=["status", "updated_at"])
-
                 record_action(
                     actor=pending.actor,
                     tool_code=pending.tool_code,
@@ -744,29 +601,306 @@ def execute_pending_action(
                     message=None,
                     error_message="Cancelled by user.",
                 )
-
-                task_report = _build_task_type_report(pending.tool_code, pending.payload)
+            elif not tool_registry().get(pending.tool_code):
+                now = timezone.now()
+                claimed = PendingAction.objects.filter(
+                    pk=pending.pk,
+                    status=PendingAction.Status.PENDING,
+                ).update(status=PendingAction.Status.CANCELLED, updated_at=now)
+                if claimed != 1:
+                    pending.refresh_from_db()
+                    return _pending_action_status_conflict(pending)
+                pending.status = PendingAction.Status.CANCELLED
+                record_action(
+                    actor=pending.actor,
+                    tool_code=pending.tool_code,
+                    action_kind=pending.action_kind,
+                    status=AgentActionLog.Status.FAILED,
+                    request_payload=audit_request_payload,
+                    response_payload={"error": "Tool no longer available.", **trace_context},
+                    session=pending.session,
+                    message=None,
+                    error_message="Tool no longer available.",
+                )
                 return {
-                    "ok": True,
+                    "ok": False,
                     "tool": pending.tool_code,
                     "result": None,
-                    "errors": [],
-                    "meta": {
-                        "pending_action_token": str(pending.token),
-                        "pending_action_status": pending.status,
-                        "session_id": str(pending.session.external_id) if pending.session else None,
-                        **trace_context,
-                        **({"task_type_report": task_report} if task_report else {}),
-                    },
+                    "errors": [f"Tool {pending.tool_code} no longer available."],
+                    "meta": {"pending_action_status": pending.status},
                 }
+            else:
+                now = timezone.now()
+                processing_expires_at = now + timezone.timedelta(hours=1)
+                claimed = PendingAction.objects.filter(
+                    pk=pending.pk,
+                    status=PendingAction.Status.PENDING,
+                ).update(
+                    status=PendingAction.Status.PROCESSING,
+                    processing_started_at=now,
+                    processing_expires_at=processing_expires_at,
+                    updated_at=now,
+                )
+                if claimed != 1:
+                    pending.refresh_from_db()
+                    return _pending_action_status_conflict(pending)
+                pending.status = PendingAction.Status.PROCESSING
+                pending.processing_started_at = now
+                pending.processing_expires_at = processing_expires_at
+
+        if not confirmed:
+            return _pending_action_response(
+                pending=pending,
+                trace_context=trace_context,
+                ok=True,
+                result=None,
+            )
+
+        try:
+            result = _dispatch_tool(
+                tool_code=pending.tool_code,
+                actor=pending.actor,
+                session=pending.session,
+                actor_context={**actor_context, **trace_context},
+                payload=pending.payload,
+                user_message=None,
+            )
+            dispatch_succeeded = True
+        except Exception as exc:
+            known_no_effect = isinstance(
+                exc,
+                (PermissionDenied, ValidationError, KeyError, WorkOrder.DoesNotExist),
+            )
+            audit_status = (
+                AgentActionLog.Status.DENIED
+                if isinstance(exc, PermissionDenied)
+                else AgentActionLog.Status.FAILED
+            )
+            with transaction.atomic():
+                terminal = PendingAction.objects.select_for_update().get(pk=pending.pk)
+                if terminal.status == PendingAction.Status.PROCESSING:
+                    terminal.status = (
+                        PendingAction.Status.FAILED
+                        if known_no_effect
+                        else PendingAction.Status.RECONCILIATION_REQUIRED
+                    )
+                    terminal.save(update_fields=["status", "updated_at"])
+                record_action(
+                    actor=pending.actor,
+                    tool_code=pending.tool_code,
+                    action_kind=pending.action_kind,
+                    status=audit_status,
+                    request_payload=audit_request_payload,
+                    response_payload={"error": str(exc), **trace_context},
+                    session=pending.session,
+                    message=None,
+                    error_message=str(exc),
+                )
+            pending.status = terminal.status
+            return _pending_action_response(
+                pending=pending,
+                trace_context=trace_context,
+                ok=False,
+                result=None,
+                errors=[str(exc)],
+            )
+
+        _finalize_pending_action_success(
+            pending=pending,
+            result=result,
+            trace_context=trace_context,
+            audit_request_payload=audit_request_payload,
+        )
+        pending.status = PendingAction.Status.CONFIRMED
+        return _pending_action_response(
+            pending=pending,
+            trace_context=trace_context,
+            ok=True,
+            result=result,
+        )
     except Exception as exc:
+        if dispatch_succeeded and pending is not None:
+            _record_pending_action_reconciliation(
+                pending=pending,
+                result=result,
+                error=exc,
+                trace_context=trace_context,
+                audit_request_payload=audit_request_payload,
+            )
+            pending.status = PendingAction.Status.RECONCILIATION_REQUIRED
+        return {
+            "ok": False,
+            "tool": pending.tool_code if pending is not None else None,
+            "result": None,
+            "errors": [f"Unexpected error processing pending action: {str(exc)}"],
+            "meta": (
+                {"pending_action_status": pending.status}
+                if pending is not None
+                else {}
+            ),
+        }
+
+
+def _finalize_pending_action_success(*, pending, result, trace_context, audit_request_payload):
+    """Атомарно завершить исполнение и записать его предметный аудит."""
+    with transaction.atomic():
+        terminal = PendingAction.objects.select_for_update().get(pk=pending.pk)
+        if terminal.status != PendingAction.Status.PROCESSING:
+            raise RuntimeError("Статус выполняемого действия изменился до завершения.")
+        terminal.status = PendingAction.Status.CONFIRMED
+        terminal.save(update_fields=["status", "updated_at"])
+        record_action(
+            actor=pending.actor,
+            tool_code=pending.tool_code,
+            action_kind=pending.action_kind,
+            status=AgentActionLog.Status.SUCCEEDED,
+            request_payload=audit_request_payload,
+            response_payload={**trace_context, **result},
+            session=pending.session,
+            message=None,
+        )
+        if pending.session:
+            append_chat_message(
+                session=pending.session,
+                role=ChatMessage.Role.TOOL,
+                content=f"Tool {pending.tool_code} executed after confirmation.",
+                tool_name=pending.tool_code,
+                metadata={
+                    "result_preview": result,
+                    "pending_token": str(pending.token),
+                    **trace_context,
+                },
+            )
+
+
+def _record_pending_action_reconciliation(
+    *, pending, result, error, trace_context, audit_request_payload
+):
+    """Зафиксировать неопределённый итог после уже выполненного побочного эффекта."""
+    try:
+        with transaction.atomic():
+            PendingAction.objects.filter(
+                pk=pending.pk,
+                status__in=(
+                    PendingAction.Status.PROCESSING,
+                    PendingAction.Status.RECONCILIATION_REQUIRED,
+                ),
+            ).update(
+                status=PendingAction.Status.RECONCILIATION_REQUIRED,
+                updated_at=timezone.now(),
+            )
+            record_action(
+                actor=pending.actor,
+                tool_code=pending.tool_code,
+                action_kind=pending.action_kind,
+                status=AgentActionLog.Status.FAILED,
+                request_payload=audit_request_payload,
+                response_payload={
+                    **trace_context,
+                    "dispatch_succeeded": True,
+                    "reconciliation_required": True,
+                    "result_preview": result,
+                },
+                session=pending.session,
+                message=None,
+                error_message=f"Terminal audit failed after dispatch: {error}",
+            )
+    except Exception:
+        # Даже если вторичный аудит временно недоступен, статус остаётся
+        # главным сигналом для операционной сверки при следующем восстановлении.
+        PendingAction.objects.filter(
+            pk=pending.pk,
+            status=PendingAction.Status.PROCESSING,
+        ).update(
+            status=PendingAction.Status.RECONCILIATION_REQUIRED,
+            updated_at=timezone.now(),
+        )
+
+
+def _pending_action_status_conflict(pending):
+    return {
+        "ok": False,
+        "tool": pending.tool_code,
+        "result": None,
+        "errors": [f"Ожидающее действие уже имеет статус {pending.get_status_display()}."],
+        "meta": {"pending_action_status": pending.status},
+    }
+
+
+def _validate_pending_action_owner(*, pending, actor_context, session_external_id):
+    if not pending:
         return {
             "ok": False,
             "tool": None,
             "result": None,
-            "errors": [f"Unexpected error processing pending action: {str(exc)}"],
+            "errors": ["Ожидающее действие не найдено или уже обработано."],
             "meta": {},
         }
+    if pending.status != PendingAction.Status.PENDING:
+        return {
+            "ok": False,
+            "tool": pending.tool_code,
+            "result": None,
+            "errors": [f"Ожидающее действие уже имеет статус {pending.get_status_display()}."],
+            "meta": {"pending_action_status": pending.status},
+        }
+    if pending.expires_at <= timezone.now():
+        pending.status = PendingAction.Status.EXPIRED
+        pending.save(update_fields=["status", "updated_at"])
+        return {
+            "ok": False,
+            "tool": pending.tool_code,
+            "result": None,
+            "errors": ["Срок ожидания действия истек."],
+            "meta": {"pending_action_status": pending.status},
+        }
+    actor_user_id = actor_context.get("user_id")
+    if not actor_user_id:
+        return {
+            "ok": False,
+            "tool": pending.tool_code,
+            "result": None,
+            "errors": ["Для подтверждения требуется идентификатор пользователя."],
+            "meta": {"pending_action_status": pending.status},
+        }
+    if str(actor_user_id) != str(pending.actor_id):
+        return {
+            "ok": False,
+            "tool": pending.tool_code,
+            "result": None,
+            "errors": ["Actor does not own this pending action."],
+            "meta": {"pending_action_status": pending.status},
+        }
+    if session_external_id:
+        from .services import normalize_session_external_id
+
+        normalized_session_id = normalize_session_external_id(session_external_id)
+        if pending.session and pending.session.external_id != normalized_session_id:
+            return {
+                "ok": False,
+                "tool": pending.tool_code,
+                "result": None,
+                "errors": ["Session does not own this pending action."],
+                "meta": {"pending_action_status": pending.status},
+            }
+    return None
+
+
+def _pending_action_response(*, pending, trace_context, ok, result, errors=None):
+    task_report = _build_task_type_report(pending.tool_code, pending.payload)
+    return {
+        "ok": ok,
+        "tool": pending.tool_code,
+        "result": result,
+        "errors": errors or [],
+        "meta": {
+            "pending_action_token": str(pending.token),
+            "pending_action_status": pending.status,
+            "session_id": str(pending.session.external_id) if pending.session else None,
+            **trace_context,
+            **({"task_type_report": task_report} if task_report else {}),
+        },
+    }
 
 
 def _build_audit_request_payload(*, tool_code, payload, trace_context, command_context=None):

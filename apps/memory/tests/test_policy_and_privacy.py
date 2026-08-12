@@ -1,5 +1,6 @@
 """Тесты политик доступа, проекции source adapter и privacy pipeline."""
 import pytest
+from django.core.exceptions import PermissionDenied
 
 from apps.memory.tests._common import *  # noqa: F401,F403
 
@@ -54,6 +55,79 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(audit.allowed_scope_tokens, sorted({"org:default", f"user:{user.id}", "role:operators"}))
         self.assertNotIn("query", {field.name for field in MemoryAccessAudit._meta.fields})
         self.assertEqual(str(audit), "req-audit-1:allowed")
+
+    def test_memory_group_membership_preview_apply_preserves_contract_roles_and_audits(self):
+        from apps.memory.access_services import (
+            apply_memory_group_membership,
+            preview_memory_group_membership,
+        )
+        from apps.memory.models import MemoryGroupMembershipAudit
+
+        actor = User.objects.create_superuser(username="memory-membership-root")
+        target = User.objects.create_user(username="memory-membership-target")
+        role, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        observer, _ = Group.objects.get_or_create(name="memory_observer")
+        Group.objects.get_or_create(name="memory_auditor")
+        target.groups.add(role, observer)
+
+        preview = preview_memory_group_membership(
+            actor=actor,
+            target_user=target,
+            selected_group_names=["memory_auditor"],
+            reason="Передача обязанностей ревью.",
+        )
+        target, audit = apply_memory_group_membership(
+            actor=actor,
+            target_user=target,
+            selected_group_names=["memory_auditor"],
+            reason="Передача обязанностей ревью.",
+            preview_token=preview["preview_token"],
+            confirmed=True,
+        )
+
+        self.assertEqual(
+            set(target.groups.values_list("name", flat=True)),
+            {ROLE_CUSTOMER, "memory_auditor"},
+        )
+        self.assertEqual(audit.groups_added, ["memory_auditor"])
+        self.assertEqual(audit.groups_removed, ["memory_observer"])
+        self.assertEqual(MemoryGroupMembershipAudit.objects.count(), 1)
+
+    def test_memory_group_membership_rejects_non_superuser_and_stale_target(self):
+        from apps.memory.access_services import (
+            apply_memory_group_membership,
+            preview_memory_group_membership,
+        )
+
+        actor = User.objects.create_superuser(username="memory-membership-stale-root")
+        target = User.objects.create_user(username="memory-membership-stale-target")
+        observer = Group.objects.create(name="memory_observer")
+        auditor = Group.objects.create(name="memory_auditor")
+        outsider = User.objects.create_user(username="memory-membership-outsider")
+        with self.assertRaises(PermissionDenied):
+            preview_memory_group_membership(
+                actor=outsider,
+                target_user=target,
+                selected_group_names=[observer.name],
+                reason="Недопустимо.",
+            )
+
+        preview = preview_memory_group_membership(
+            actor=actor,
+            target_user=target,
+            selected_group_names=[observer.name],
+            reason="Проверка stale state.",
+        )
+        target.groups.add(auditor)
+        with self.assertRaisesMessage(ValidationError, "изменился после предпросмотра"):
+            apply_memory_group_membership(
+                actor=actor,
+                target_user=target,
+                selected_group_names=[observer.name],
+                reason="Проверка stale state.",
+                preview_token=preview["preview_token"],
+                confirmed=True,
+            )
 
 
 @pytest.mark.integration

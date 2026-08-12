@@ -4,6 +4,7 @@
   "ai_skill_reload.py": "Clear current-process AI skill catalog cache and rediscover skills",
   "ai_skill_validate.py": "Validate AI skill catalog and runtime SKILL.md files",
   "cleanup_ai_window_context.py": "Delete expired AI window context snapshots",
-  "cleanup_expired_ai_actions.py": "Mark expired pending AI actions as expired",
+  "cleanup_expired_ai_actions.py": "Перевод просроченных pending/processing AI-действий в терминальные или требующие сверки состояния",
+  "reconcile_ai_action.py": "Запись операторского наблюдения по неопределённому AI-действию без небезопасного закрытия статуса",
   "migrate_legacy_chat_db.py": "Copy legacy chat tables from main_vault.sqlite3 to data/db/chat.sqlite3"
 }

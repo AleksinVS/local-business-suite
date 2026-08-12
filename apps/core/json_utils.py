@@ -45,9 +45,20 @@ def atomic_write_json(path, payload):
     # Create temp file in the same directory to ensure os.replace works across devices
     fd, temp_path = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".tmp")
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(temp_path, path)
+        # На POSIX fsync каталога делает сам replace устойчивым к сбою питания.
+        # Windows не разрешает обычный os.open каталога; там os.replace уже
+        # является атомарной границей, а синхронизацию файла обеспечил fsync.
+        if os.name != "nt":
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     except Exception:
         if os.path.exists(temp_path):
             os.remove(temp_path)

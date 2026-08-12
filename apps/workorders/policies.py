@@ -227,6 +227,28 @@ def can_manage_roles(user):
     return has_role_capability(user, "manage_roles")
 
 
+def board_access_role_names():
+    """Контрактные роли, допустимые в ресурсном ACL доски."""
+    rules = role_rules()
+    return tuple(
+        sorted(
+            key
+            for key, config in rules.items()
+            if not key.startswith("$")
+            and isinstance(config, dict)
+            and config.get("view_scope", "none") != "none"
+        )
+    )
+
+
+def can_manage_board_access(user):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and (getattr(user, "is_superuser", False) or can_manage_roles(user))
+    )
+
+
 def can_view(user, workorder: WorkOrder) -> bool:
     if not user.is_authenticated:
         return False

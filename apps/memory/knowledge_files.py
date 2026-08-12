@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import os
 import re
 import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +12,8 @@ import yaml
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
+
+from apps.core.file_locks import exclusive_file_lock
 
 from .models import MemoryKnowledgeItem
 from .policies import can_access_knowledge_item
@@ -436,7 +436,6 @@ def parse_knowledge_file(content: str) -> KnowledgeFile:
     return KnowledgeFile(metadata=metadata, body=body.strip())
 
 
-@contextlib.contextmanager
 def knowledge_repo_lock(root: Path):
     """Exclusive inter-process lock for knowledge repository writes.
 
@@ -448,66 +447,7 @@ def knowledge_repo_lock(root: Path):
     really excluded on both platforms; if neither locking primitive is
     available we raise instead of silently proceeding.
     """
-    lock_path = root / ".knowledge-write.lock"
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    # Append mode so concurrent openers do not truncate each other's lock file.
-    with lock_path.open("a+", encoding="utf-8") as lock_file:
-        _acquire_exclusive_lock(lock_file)
-        try:
-            yield
-        finally:
-            _release_exclusive_lock(lock_file)
-
-
-def _acquire_exclusive_lock(lock_file) -> None:
-    fcntl = _import_fcntl()
-    if fcntl is not None:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        return
-    msvcrt = _import_msvcrt()
-    if msvcrt is not None:
-        lock_file.seek(0)
-        while True:
-            try:
-                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
-                return
-            except OSError:
-                time.sleep(0.1)
-    raise RuntimeError(
-        "No cross-platform file lock available (need fcntl on POSIX or msvcrt on Windows)."
-    )
-
-
-def _release_exclusive_lock(lock_file) -> None:
-    fcntl = _import_fcntl()
-    if fcntl is not None:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        return
-    msvcrt = _import_msvcrt()
-    if msvcrt is not None:
-        lock_file.seek(0)
-        try:
-            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-        except OSError:
-            pass
-
-
-def _import_fcntl():
-    try:
-        import fcntl
-
-        return fcntl
-    except ImportError:
-        return None
-
-
-def _import_msvcrt():
-    try:
-        import msvcrt
-
-        return msvcrt
-    except ImportError:
-        return None
+    return exclusive_file_lock(root / ".knowledge-write.lock", timeout=60.0)
 
 
 def sha256_text(value: str) -> str:

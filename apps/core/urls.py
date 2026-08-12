@@ -8,7 +8,7 @@ from .views import (
     DepartmentCreateView,
     DepartmentListView,
     DepartmentUpdateView,
-    RoleRulesUpdateView,
+    LegacyRoleRulesRedirectView,
 )
 
 app_name = "core"
@@ -24,7 +24,7 @@ urlpatterns = [
         DepartmentUpdateView.as_view(),
         name="department_edit",
     ),
-    path("settings/roles/", RoleRulesUpdateView.as_view(), name="role_rules"),
+    path("settings/roles/", LegacyRoleRulesRedirectView.as_view(), name="role_rules"),
 ]
 
 # debug_request выводит переменные окружения процесса (staff-only, но всё равно

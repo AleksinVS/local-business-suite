@@ -668,6 +668,46 @@ class MemoryAccessAudit(models.Model):
         return f"{self.request_id}:{self.policy_decision}"
 
 
+class MemoryGroupMembershipAudit(models.Model):
+    """Неизменяемый журнал экспертных назначений технических групп памяти."""
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_group_membership_actions",
+    )
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="memory_group_membership_history",
+    )
+    groups_before = models.JSONField(default=list)
+    groups_after = models.JSONField(default=list)
+    groups_added = models.JSONField(default=list)
+    groups_removed = models.JSONField(default=list)
+    reason = models.TextField()
+    preview_fingerprint = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["target_user", "-created_at"],
+                name="memory_group_target_idx",
+            ),
+            models.Index(
+                fields=["actor", "-created_at"],
+                name="memory_group_actor_idx",
+            ),
+        ]
+        verbose_name = "Изменение технических групп памяти"
+        verbose_name_plural = "Изменения технических групп памяти"
+
+    def __str__(self):
+        return f"Технические группы памяти #{self.pk}"
+
+
 class MemoryEvalCase(models.Model):
     class Status(models.TextChoices):
         ACTIVE = "active", "Активен"

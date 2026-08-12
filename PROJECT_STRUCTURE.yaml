@@ -3,14 +3,15 @@
 
 apps: # Django-приложения: бизнес-логика, API и шаблоны
   accounts: # Аутентификация, хелперы и сидирование ролей
+    access_contracts.py: file # Каталог определений ролей, подписанный preview/apply одной роли и серверная оценка влияния
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
     department_policy.py: file # Fail-closed политика обязательного подразделения и карантинной записи
-    ldap_backend.py: file # LDAP-бэкенд аутентификации с fail-closed синхронизацией контрактных ролей
+    ldap_backend.py: file # LDAP-бэкенд аутентификации с сериализованным внешним созданием пользователя и fail-closed синхронизацией контрактных ролей
     middleware.py: file # Middleware для согласования ручного входа с REMOTE_USER
     models.py: file # Пользователи, профили групп и журнал назначения доступа
     selectors.py: file # Селекторы контрактных ролей, технических групп и итогового доступа
-    services.py: file # Транзакционные сервисы назначения ролей, локальных пользователей и AD identity link
+    services.py: file # Сервисы ролей и lifecycle под общим lock, аудируемый demo/bootstrap, AD identity link и HMAC-отпечатки principal
     settings_descriptors.py: file # Доменные descriptors для Settings Center по пользователям и AD link
     signals.py: file # Сигналы Django (пост-сохранение пользователя)
     test_ldap_role_sync.py: file # Матрица выключателя, валидации и fail-closed поведения синхронизации ролей AD
@@ -65,6 +66,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     contract_store.py: file # Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)
     contracts.py: file # Core-workflow валидаторы, не принадлежащие доменам: реестр интеграций, task brief и change plan (артефакты агентного workflow и общий SDK-реестр)
     debug_views.py: file # Debug-представления (включаются в DEBUG=True)
+    file_locks.py: file # Межпроцессная блокировка файлов Linux/Windows с ограничением времени и закрытым отказом
     forms.py: file # Формы настроек
     health_views.py: file # Health-check endpoint (/health/)
     json_utils.py: file # Универсальные JSON-примитивы ядра: pretty_json/load_json_file/atomic_write_json и общие внутренние проверки _ensure_* (доменные валидаторы вынесены в contracts.py приложений, правила 3/5 AGENTS.md)
@@ -101,6 +103,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты инвентаря
     views.py: file # Представления CRUD устройств
   memory: # Метаданные AI memory service: sources, search documents, knowledge items, jobs, audit and eval cases
+    access_services.py: file # Подписанный preview/apply-сервис экспертных назначений технических групп памяти с отдельным аудитом
     acl.py: file # ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens
     admin.py: file # Регистрация моделей памяти в Django Admin
     apps.py: file # Конфигурация Django-приложения memory
@@ -144,7 +147,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     access_filters.py: file # Server-side search, role, department branch and attention filters for access administration
     admin.py: file # Django Admin registration for Settings Center audit models
     apps.py: file # Django AppConfig for Settings Center
-    contract_services.py: file # Runtime contract preview/apply service with validation and atomic writes
+    contract_services.py: file # Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback
     descriptors.py: file # Dataclass contract for setting descriptors and safe context masking
     env_services.py: file # .env effective status and proposal generation service
     forms.py: file # Forms for contracts, env proposals, help and user workflows
@@ -177,12 +180,12 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     department_filter.py: file # Нормализация фильтра подразделений и безопасная модель доступного дерева
     forms.py: file # Формы нарядов, подписи справочников и проверка согласованности изделия с подразделением
     media_policies.py: file # Политика защищённой выдачи файлов вложений заявок (префикс workorders) для media-dispatcher: доступ через can_view связанной заявки
-    models.py: file # Модели: WorkOrder, Board, KanbanColumnConfig, Comment, WorkOrderPriority
+    models.py: file # Модели заявок и досок, включая предметный аудит изменения Board.allowed_groups
     notification_events.py: file # Производители безопасных уведомлений по событиям заявок
-    policies.py: file # Политики доступа: can_create, can_transition, can_comment, can_rate, can_manage_inventory
+    policies.py: file # Политики заявок и допустимых контрактных ролей для ресурсного доступа к доскам
     right_panel.py: file # RightPanelProvider заявок для безопасного открытия карточки в общем правом сайдбаре
     selectors.py: file # Запросы для получения видимых нарядов
-    services.py: file # Сервисы: создание, переходы статусов, подтверждение закрытия, оценка
+    services.py: file # Сервисы заявок и подписанный preview/apply/clone доступа к доскам с предметным аудитом
     settings_descriptors.py: file # Дескрипторы настроек заявок для центра настроек
     source_adapter.py: file # SourceAdapter заявок для memory source_data search и analytics projection
     tests.py: file # Тесты приложения
@@ -486,7 +489,6 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     dashboard.html: file # Главный дашборд
     department_form.html: file # Форма подразделения
     department_list.html: file # Список подразделений
-    role_rules_form.html: file # Форма редактирования ролей
   filehub: # Шаблоны контура File Source Auto Organization (заморожен ADR-0030 решением 5)
     files: # Пользовательские виртуальные структуры файлов памяти
       user_views.html: file # Личная виртуальная структура доступных пользователю файлов
@@ -518,9 +520,14 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
       help_panel.html: file # Плавающее окно справки и миничата по конкретному setting_id
     ad_link_form.html: file # Форма явной привязки локального пользователя к AD identity
     admin_access_assignment.html: file # Резервный Django Admin preview/apply для контрактных ролей и технических флагов
+    board_access_form.html: file # Основной и резервный preview/apply-сценарий доступа к доске
+    board_access_list.html: file # Список досок и назначенных им контрактных ролей
     dashboard.html: file # Дашборд зарегистрированных settings descriptors и audit
     env_proposal.html: file # Форма создания .env proposal в data/
     env_status.html: file # Статус bootstrap .env настроек
+    memory_group_membership_form.html: file # Экспертный superuser-only preview/apply технических групп памяти с причиной и историей
+    role_catalog.html: file # Компактный каталог ролей доступа с числом участников и уровнем риска
+    role_definition_form.html: file # Точечный редактор одной роли с серверным diff и оценкой влияния
     setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
     user_form.html: file # Создание пользователя, отдельное изменение учётной записи и карточка доступа
     user_list.html: file # Локальное управление пользователями портала
@@ -563,7 +570,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения и рекомендуемое распределение задач
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
+      EXECUTOR_REPORT.contract-board-role-memory-slice.md: file # Отчёт реализации пакетов 00c, 00d и 03
       EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
+      TASK_ACCEPTANCE.contract-board-role-memory-slice.md: file # Техническая приёмка пакетов 00c, 00d и 03
       TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file

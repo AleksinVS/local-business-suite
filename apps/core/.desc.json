@@ -8,6 +8,7 @@
   "debug_views.py": "Debug-представления (включаются в DEBUG=True)",
   "health_views.py": "Health-check endpoint (/health/)",
   "json_utils.py": "Универсальные JSON-примитивы ядра: pretty_json/load_json_file/atomic_write_json и общие внутренние проверки _ensure_* (доменные валидаторы вынесены в contracts.py приложений, правила 3/5 AGENTS.md)",
+  "file_locks.py": "Межпроцессная блокировка файлов Linux/Windows с ограничением времени и закрытым отказом",
   "contracts.py": "Core-workflow валидаторы, не принадлежащие доменам: реестр интеграций, task brief и change plan (артефакты агентного workflow и общий SDK-реестр)",
   "contract_store.py": "Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)",
   "contract_drift.py": "Диагностика дрейфа default (contracts/) vs runtime (data/contracts/) по всем контрактам реестра Settings Center: три исхода (совпадает / рабочая копия изменена / кандидат на перенос из дефолта), только диагностика без автослияния (ADR-0031 п.4)",

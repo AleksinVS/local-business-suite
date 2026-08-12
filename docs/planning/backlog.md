@@ -6,14 +6,13 @@
 
 ### Единый UX администрирования доступа
 
-ADR-0040 принят. Первый безопасный срез реализован: канонический preview/apply с
-privilege ceiling и self-assignment для active superuser, резервный Django Admin,
-закрытие обходов AI/LDAP, active-account guards, строгий role contract, один пункт
-«Доступ», поиск/фильтры и компактная карточка источников.
+ADR-0040 принят. Пакеты 00a–00d и 01–03 реализованы: канонические preview/apply,
+privilege ceiling и self-assignment active superuser, резервный Django Admin,
+staged contract write с межпроцессной блокировкой, доменные Board/memory write,
+каталог и impact-редактор роли, поиск и компактная карточка источников.
 
-Остаются пакеты: staged file/audit protocol и межпроцессная блокировка; доменные
-write-сервисы Board и memory groups; общий журнал; role impact editor; explain
-adapters; итоговая usability-приёмка.
+Остаются пакеты 04/05: общая read-only проекция журнала, explain-адаптеры,
+браузерная матрица 320/768/1440, usability-проверка владельцем и итоговая приёмка.
 
 Контекст:
 

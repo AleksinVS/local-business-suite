@@ -2,12 +2,14 @@ from datetime import date, timedelta
 
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.core.models import Department
+from apps.accounts.services import initialize_demo_user_access
 from apps.inventory.models import MedicalDevice, OperationalStatus
 from apps.workorders.models import Board, WorkOrder, WorkOrderPriority, WorkOrderStatus
+from apps.workorders.services import initialize_board_access_for_bootstrap
 
 User = get_user_model()
 
@@ -28,18 +30,28 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         groups = {name: Group.objects.get_or_create(name=name)[0] for name in ("manager", "technician", "customer")}
 
-        main_board, _ = Board.objects.get_or_create(
+        main_board, main_board_created = Board.objects.get_or_create(
             slug="main",
             defaults={"title": "Основная доска"},
         )
-        main_board.allowed_groups.set(groups.values())
-        backlog_board, _ = Board.objects.get_or_create(
+        initialize_board_access_for_bootstrap(
+            board=main_board,
+            selected_group_names=list(groups),
+            reason="Инициализация основной доски команды seed_hospital_demo.",
+            board_was_created=main_board_created,
+        )
+        backlog_board, backlog_board_created = Board.objects.get_or_create(
             slug="backlog",
             defaults={"title": "Техподдержка"},
         )
         backlog_board.title = "Техподдержка"
         backlog_board.save(update_fields=["title"])
-        backlog_board.allowed_groups.set(groups.values())
+        initialize_board_access_for_bootstrap(
+            board=backlog_board,
+            selected_group_names=list(groups),
+            reason="Инициализация доски техподдержки команды seed_hospital_demo.",
+            board_was_created=backlog_board_created,
+        )
 
         for board in (main_board, backlog_board):
             for code, title, position, statuses in DEFAULT_COLUMNS:
@@ -81,23 +93,34 @@ class Command(BaseCommand):
             ("admin_office", "customer", "Ольга", "Киреева", False, administration),
         ]
         for username, role, first_name, last_name, is_staff, department in user_specs:
-            user, _ = User.objects.get_or_create(
+            expected_email = f"{username}@{DEMO_EMAIL_DOMAIN}"
+            user, created = User.objects.get_or_create(
                 username=username,
                 defaults={
-                    "email": f"{username}@{DEMO_EMAIL_DOMAIN}",
+                    "email": expected_email,
                     "first_name": first_name,
                     "last_name": last_name,
-                    "is_staff": is_staff,
+                    "is_active": False,
                 },
             )
-            user.email = f"{username}@{DEMO_EMAIL_DOMAIN}"
-            user.first_name = first_name
-            user.last_name = last_name
-            user.is_staff = is_staff
-            user.department = department
-            user.set_password(DEMO_PASSWORD)
-            user.save()
-            user.groups.set([groups[role]])
+            if not created and user.email != expected_email:
+                raise CommandError(
+                    f"Логин {username} уже принадлежит не демонстрационной учётной записи."
+                )
+            initialize_demo_user_access(
+                user=user,
+                role_name=role,
+                is_staff=is_staff,
+                reason="Инициализация учётной записи команды seed_hospital_demo.",
+                profile_updates={
+                    "email": expected_email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "department": department,
+                    "is_active": True,
+                    "password": DEMO_PASSWORD,
+                },
+            )
             users[username] = user
 
         device_specs = [

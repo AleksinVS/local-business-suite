@@ -11,12 +11,14 @@ class SettingsChange(models.Model):
         USER_UPDATE = "user_update", "Обновление пользователя"
         USER_DISABLE = "user_disable", "Отключение пользователя"
         AD_LINK = "ad_link", "Связь с AD"
+        ROLLBACK = "rollback", "Восстановление версии"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Ожидает"
         APPLIED = "applied", "Применено"
         REJECTED = "rejected", "Отклонено"
         FAILED = "failed", "Ошибка"
+        INCONSISTENT = "inconsistent", "Требует разбора"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -34,6 +36,20 @@ class SettingsChange(models.Model):
     after_hash = models.CharField(max_length=80, blank=True)
     masked_diff = models.JSONField(default=dict, blank=True)
     validation_result = models.JSONField(default=dict, blank=True)
+    operation_fingerprint = models.CharField(max_length=64, unique=True, blank=True, null=True)
+    before_snapshot = models.JSONField(blank=True, null=True)
+    after_snapshot = models.JSONField(blank=True, null=True)
+    failure_code = models.CharField(max_length=64, blank=True)
+    contract_relpath = models.CharField(max_length=500, blank=True)
+    file_written_at = models.DateTimeField(blank=True, null=True)
+    reconciled_at = models.DateTimeField(blank=True, null=True)
+    rollback_of = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="rollbacks",
+        blank=True,
+        null=True,
+    )
     requires_restart = models.BooleanField(default=False)
     requires_reindex = models.BooleanField(default=False)
     applied_at = models.DateTimeField(blank=True, null=True)
@@ -45,6 +61,20 @@ class SettingsChange(models.Model):
             models.Index(fields=["setting_id", "-created_at"]),
             models.Index(fields=["domain", "-created_at"]),
             models.Index(fields=["status", "-created_at"]),
+            models.Index(
+                fields=["setting_id", "status", "-created_at"],
+                name="settings_ce_setting_d722aa_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["setting_id"],
+                condition=models.Q(
+                    action__in=["apply", "rollback"],
+                    status__in=["pending", "inconsistent"],
+                ),
+                name="settings_one_incomplete_contract_change",
+            )
         ]
 
     def mark_applied(self):

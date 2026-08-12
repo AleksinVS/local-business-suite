@@ -114,9 +114,12 @@ class ChatMessage(models.Model):
 class PendingAction(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Ожидает"
+        PROCESSING = "processing", "Выполняется"
         CONFIRMED = "confirmed", "Подтверждено"
         CANCELLED = "cancelled", "Отменено"
         EXPIRED = "expired", "Истекло"
+        FAILED = "failed", "Ошибка"
+        RECONCILIATION_REQUIRED = "reconciliation_required", "Требует сверки"
 
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     tool_code = models.CharField(max_length=120)
@@ -134,8 +137,10 @@ class PendingAction(models.Model):
         related_name="pending_actions",
     )
     payload = models.JSONField(default=dict, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
     expires_at = models.DateTimeField(default=default_pending_action_expires_at)
+    processing_started_at = models.DateTimeField(blank=True, null=True)
+    processing_expires_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

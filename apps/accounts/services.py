@@ -3,15 +3,22 @@ from __future__ import annotations
 import hashlib
 import uuid
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
+from django.utils.crypto import salted_hmac
 from django.utils import timezone
 
-from apps.workorders.policies import can_manage_roles
 from apps.core.contract_store import current_contract_hash
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+)
+from apps.workorders.policies import can_manage_roles
 
 from .department_policy import available_user_departments
 from .models import AccessAssignmentAudit, ExternalIdentity
@@ -158,8 +165,38 @@ def preview_role_assignment(
     }
 
 
-@transaction.atomic
 def apply_role_assignment(
+    *,
+    actor,
+    target_user,
+    selected_role_names,
+    preview_token,
+    risk_confirmed=False,
+    is_staff=None,
+    is_superuser=None,
+    source=AccessAssignmentAudit.Source.SETTINGS_CENTER,
+    reason="",
+):
+    """Сериализовать назначение с записью и предпросмотром контракта ролей."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _apply_role_assignment_locked(
+                actor=actor,
+                target_user=target_user,
+                selected_role_names=selected_role_names,
+                preview_token=preview_token,
+                risk_confirmed=risk_confirmed,
+                is_staff=is_staff,
+                is_superuser=is_superuser,
+                source=source,
+                reason=reason,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _apply_role_assignment_locked(
     *,
     actor,
     target_user,
@@ -453,8 +490,27 @@ def _validate_technical_flag_change(*, actor, target_user, before, after):
             raise ValidationError("Нельзя снять права у последнего активного супер-пользователя.")
 
 
-def create_local_user(*, actor, cleaned_data):
-    _require_superuser(actor)
+def create_local_user(*, actor, cleaned_data, audit_callback=None):
+    """Создать пользователя под общей блокировкой контура доступа."""
+    payload = dict(cleaned_data)
+    password = payload.pop("password", "")
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _create_local_user_locked(
+                actor=actor,
+                cleaned_data=payload,
+                password=password,
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _create_local_user_locked(*, actor, cleaned_data, password, audit_callback=None):
+    User = get_user_model()
+    locked_actor = User.objects.select_for_update().get(pk=actor.pk)
+    _require_superuser(locked_actor)
     User = get_user_model()
     forbidden_fields = {"groups", "user_permissions", "is_staff", "is_superuser"}
     submitted_forbidden = sorted(forbidden_fields & set(cleaned_data))
@@ -465,20 +521,85 @@ def create_local_user(*, actor, cleaned_data):
             + "."
         )
     _validate_managed_department(cleaned_data, required=True)
-    password = cleaned_data.pop("password", "")
     user = User(**cleaned_data)
     if password:
         user.set_password(password)
     else:
         user.set_unusable_password()
-    with transaction.atomic():
-        user.save()
+    user.save()
+    if audit_callback is not None:
+        audit_callback({}, _user_profile_state(user))
     return user
 
 
+def get_or_create_external_user(*, username, defaults=None, audit_callback=None):
+    """Создать активного внешнего пользователя без гонки с ACL/role preview."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _get_or_create_external_user_locked(
+                username=username,
+                defaults=dict(defaults or {}),
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
 @transaction.atomic
-def update_local_user(*, actor, user, cleaned_data):
-    _require_superuser(actor)
+def _get_or_create_external_user_locked(*, username, defaults, audit_callback=None):
+    User = get_user_model()
+    existing = User.objects.select_for_update().filter(username=username).first()
+    if existing is not None:
+        return existing, False
+    forbidden_fields = {"groups", "user_permissions", "is_staff", "is_superuser"}
+    if forbidden_fields & set(defaults):
+        raise ValidationError("Внешнее создание не может назначать права напрямую.")
+    user = User(username=username, **{"is_active": True, **defaults})
+    user.set_unusable_password()
+    user.save()
+    if audit_callback is not None:
+        audit_callback({}, _user_profile_state(user))
+    return user, True
+
+
+def update_local_user(
+    *,
+    actor,
+    user,
+    cleaned_data,
+    locked_precondition=None,
+    audit_callback=None,
+):
+    """Изменить профиль и lifecycle пользователя одним сериализованным commit."""
+    payload = dict(cleaned_data)
+    password = payload.pop("password", "")
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _update_local_user_locked(
+                actor=actor,
+                user=user,
+                cleaned_data=payload,
+                password=password,
+                locked_precondition=locked_precondition,
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _update_local_user_locked(
+    *,
+    actor,
+    user,
+    cleaned_data,
+    password,
+    locked_precondition=None,
+    audit_callback=None,
+):
+    User = get_user_model()
+    locked_actor = User.objects.select_for_update().get(pk=actor.pk)
+    _require_superuser(locked_actor)
     forbidden_fields = {"groups", "user_permissions", "is_staff", "is_superuser"}
     submitted_forbidden = sorted(forbidden_fields & set(cleaned_data))
     if submitted_forbidden:
@@ -488,11 +609,18 @@ def update_local_user(*, actor, user, cleaned_data):
             + "."
         )
     _validate_managed_department(cleaned_data)
-    locked_user = get_user_model().objects.select_for_update().get(pk=user.pk)
-    password = cleaned_data.pop("password", "")
+    locked_user = (
+        locked_actor
+        if user.pk == locked_actor.pk
+        else User.objects.select_for_update().get(pk=user.pk)
+    )
+    before_profile = _user_profile_state(locked_user)
+    before_access = user_access_state(locked_user)
+    if locked_precondition is not None:
+        locked_precondition(locked_actor, locked_user, before_access)
     requested_is_active = cleaned_data.pop("is_active", locked_user.is_active)
     _validate_user_active_change(
-        actor=actor,
+        actor=locked_actor,
         user=locked_user,
         requested_is_active=requested_is_active,
     )
@@ -502,17 +630,88 @@ def update_local_user(*, actor, user, cleaned_data):
     if password:
         locked_user.set_password(password)
     locked_user.save()
+    if audit_callback is not None:
+        audit_callback(before_profile, _user_profile_state(locked_user))
     return locked_user
+
+
+def disable_local_user(*, actor, user, audit_callback=None):
+    return update_local_user(
+        actor=actor,
+        user=user,
+        cleaned_data={"is_active": False},
+        audit_callback=audit_callback,
+    )
+
+
+def initialize_demo_user_access(
+    *, user, role_name, is_staff, reason, profile_updates=None
+):
+    """Аудируемо инициализировать доступ учётной записи демо-набора."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _initialize_demo_user_access_locked(
+                user=user,
+                role_name=role_name,
+                is_staff=is_staff,
+                reason=reason,
+                profile_updates=dict(profile_updates or {}),
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
 @transaction.atomic
-def disable_local_user(*, actor, user):
-    _require_superuser(actor)
+def _initialize_demo_user_access_locked(
+    *, user, role_name, is_staff, reason, profile_updates
+):
+    roles_after = _validate_role_names([role_name])
+    if not str(reason or "").strip():
+        raise ValidationError("Для bootstrap-назначения требуется причина.")
     locked_user = get_user_model().objects.select_for_update().get(pk=user.pk)
-    _validate_user_active_change(actor=actor, user=locked_user, requested_is_active=False)
-    locked_user.is_active = False
-    locked_user.save(update_fields=["is_active"])
-    return locked_user
+    password = profile_updates.pop("password", "")
+    _validate_managed_department(profile_updates)
+    for field, value in profile_updates.items():
+        setattr(locked_user, field, value)
+    if password:
+        locked_user.set_password(password)
+    roles_before = selected_role_names_for_user(locked_user)
+    flags_before = _technical_flags_for_user(locked_user)
+    flags_after = {"is_staff": bool(is_staff), "is_superuser": False}
+    profile_changed = bool(profile_updates or password)
+    if roles_before == roles_after and flags_before == flags_after:
+        if profile_changed:
+            locked_user.save()
+        return locked_user, None
+    role_group = Group.objects.filter(name=role_name).first()
+    if role_group is None:
+        raise ValidationError(f"Группа роли '{role_name}' не создана.")
+    current_role_groups = list(
+        locked_user.groups.filter(name__in=contract_role_configs())
+    )
+    if current_role_groups:
+        locked_user.groups.remove(*current_role_groups)
+    locked_user.groups.add(role_group)
+    locked_user.is_staff = flags_after["is_staff"]
+    locked_user.is_superuser = False
+    locked_user.save()
+    audit = AccessAssignmentAudit.objects.create(
+        actor=None,
+        target_user=locked_user,
+        roles_before=roles_before,
+        roles_after=roles_after,
+        roles_added=sorted(set(roles_after) - set(roles_before)),
+        roles_removed=sorted(set(roles_before) - set(roles_after)),
+        flags_before=flags_before,
+        flags_after=flags_after,
+        flags_changed=_technical_flag_changes(flags_before, flags_after),
+        risk_markers=[],
+        risk_confirmed=False,
+        source=AccessAssignmentAudit.Source.SYSTEM_BOOTSTRAP,
+        is_break_glass=False,
+        reason=str(reason).strip(),
+    )
+    return locked_user, audit
 
 
 def _validate_user_active_change(*, actor, user, requested_is_active):
@@ -546,49 +745,298 @@ def _validate_managed_department(cleaned_data, *, required=False):
         raise ValidationError("Выберите рабочее подразделение из доступного справочника.")
 
 
-def link_ad_identity(*, actor, user, cleaned_data):
-    _require_superuser(actor)
+def link_ad_identity(*, actor, user, cleaned_data, audit_callback=None):
+    """Привязать внешний субъект под общей блокировкой и с атомарным аудитом."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _link_ad_identity_locked(
+                actor=actor,
+                user=user,
+                cleaned_data=dict(cleaned_data),
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _link_ad_identity_locked(*, actor, user, cleaned_data, audit_callback=None):
+    User = get_user_model()
+    locked_actor = User.objects.select_for_update().get(pk=actor.pk)
+    _require_superuser(locked_actor)
+    locked_user = (
+        locked_actor
+        if user.pk == locked_actor.pk
+        else User.objects.select_for_update().get(pk=user.pk)
+    )
     provider = cleaned_data.get("provider") or ExternalIdentity.Provider.ACTIVE_DIRECTORY
     subject_id = cleaned_data.get("subject_id", "")
     username = cleaned_data.get("username", "")
     domain = cleaned_data.get("domain", "")
     if not (subject_id or username or cleaned_data.get("upn")):
         raise ValidationError("Для связи с AD нужен SID, логин или UPN.")
-    identity, _created = ExternalIdentity.objects.update_or_create(
-        user=user,
-        provider=provider,
-        defaults={
-            "subject_id": subject_id,
-            "username": username,
-            "upn": cleaned_data.get("upn", ""),
-            "distinguished_name": cleaned_data.get("distinguished_name", ""),
-            "domain": domain,
-            "sync_status": cleaned_data.get("sync_status") or ExternalIdentity.SyncStatus.MANUAL,
-            "last_synced_at": timezone.now(),
-            "last_error": "",
-        },
+    identity = (
+        ExternalIdentity.objects.select_for_update()
+        .filter(user=locked_user, provider=provider)
+        .first()
     )
+    before = _external_identity_state(identity)
+    if identity is None:
+        identity = ExternalIdentity(user=locked_user, provider=provider)
+    identity.subject_id = subject_id
+    identity.username = username
+    identity.upn = cleaned_data.get("upn", "")
+    identity.distinguished_name = cleaned_data.get("distinguished_name", "")
+    identity.domain = domain
+    identity.sync_status = (
+        cleaned_data.get("sync_status") or ExternalIdentity.SyncStatus.MANUAL
+    )
+    identity.last_synced_at = timezone.now()
+    identity.last_error = ""
+    identity.save()
+    if audit_callback is not None:
+        audit_callback(before, _external_identity_state(identity))
     return identity
 
 
-def upsert_ad_identity_from_attributes(*, user, attributes, domain=""):
-    safe_attributes = {
-        key: value for key, value in dict(attributes or {}).items() if key in SAFE_AD_ATTRIBUTE_KEYS
+def user_access_state(user):
+    """Минимальное состояние, определяющее доступ пользователя, без PII."""
+    return {
+        "user_id": user.pk,
+        "is_active": bool(user.is_active),
+        "department_id": user.department_id,
+        "is_staff": bool(user.is_staff),
+        "is_superuser": bool(user.is_superuser),
+        "roles": selected_role_names_for_user(user),
     }
-    return ExternalIdentity.objects.update_or_create(
+
+
+def audit_identity_fingerprint(field_name, value):
+    """Версионированный HMAC-отпечаток идентификатора для безопасного аудита."""
+    version = str(
+        getattr(settings, "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY_VERSION", "v1")
+        or "v1"
+    )
+    secret = str(
+        getattr(settings, "LOCAL_BUSINESS_AUDIT_FINGERPRINT_KEY", settings.SECRET_KEY)
+    )
+    normalized = _normalize_audit_identity_value(field_name, value)
+    if not normalized:
+        return {"present": False, "fingerprint": "", "key_version": version}
+    digest = salted_hmac(
+        f"accounts.audit-identity.{version}.{field_name}",
+        normalized,
+        secret=secret,
+        algorithm="sha256",
+    ).hexdigest()
+    return {"present": True, "fingerprint": digest, "key_version": version}
+
+
+def user_profile_audit_snapshot(user):
+    """Безопасный снимок профиля: только идентификаторы БД и HMAC-отпечатки PII."""
+    if not user:
+        return {}
+    return {
+        "user_id": _state_value(user, "user_id", "pk"),
+        "department_id": _state_value(user, "department_id"),
+        "is_active": bool(_state_value(user, "is_active")),
+        "username_fingerprint": audit_identity_fingerprint(
+            "username", _state_value(user, "username")
+        ),
+        "email_fingerprint": audit_identity_fingerprint(
+            "email", _state_value(user, "email")
+        ),
+        "first_name_fingerprint": audit_identity_fingerprint(
+            "first_name", _state_value(user, "first_name")
+        ),
+        "last_name_fingerprint": audit_identity_fingerprint(
+            "last_name", _state_value(user, "last_name")
+        ),
+    }
+
+
+def external_identity_audit_snapshot(identity):
+    """Безопасный снимок AD-привязки без исходных principal-значений."""
+    if identity is None or not _state_value(identity, "identity_exists", default=True):
+        return {"identity_exists": False}
+    return {
+        "identity_exists": True,
+        "identity_id": _state_value(identity, "identity_id", "pk"),
+        "user_id": _state_value(identity, "user_id"),
+        "provider": _state_value(identity, "provider"),
+        "sync_status": _state_value(identity, "sync_status"),
+        "subject_fingerprint": audit_identity_fingerprint(
+            "subject_id", _state_value(identity, "subject_id")
+        ),
+        "username_fingerprint": audit_identity_fingerprint(
+            "username", _state_value(identity, "username")
+        ),
+        "upn_fingerprint": audit_identity_fingerprint(
+            "upn", _state_value(identity, "upn")
+        ),
+        "distinguished_name_fingerprint": audit_identity_fingerprint(
+            "distinguished_name", _state_value(identity, "distinguished_name")
+        ),
+        "domain_fingerprint": audit_identity_fingerprint(
+            "domain", _state_value(identity, "domain")
+        ),
+    }
+
+
+def _normalize_audit_identity_value(field_name, value):
+    normalized = str(value or "").strip()
+    if field_name in {"username", "email", "upn", "domain"}:
+        return normalized.casefold()
+    return normalized
+
+
+def _state_value(value, key, fallback_key=None, default=None):
+    if isinstance(value, dict):
+        return value.get(key, value.get(fallback_key, default) if fallback_key else default)
+    if hasattr(value, key):
+        return getattr(value, key)
+    if fallback_key and hasattr(value, fallback_key):
+        return getattr(value, fallback_key)
+    return default
+
+
+def _user_profile_state(user):
+    return {
+        "user_id": user.pk,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "department_id": user.department_id,
+        "is_active": bool(user.is_active),
+    }
+
+
+def _external_identity_state(identity):
+    if identity is None:
+        return {"identity_exists": False}
+    return {
+        "identity_exists": True,
+        "identity_id": identity.pk,
+        "user_id": identity.user_id,
+        "provider": identity.provider,
+        "subject_id": identity.subject_id,
+        "username": identity.username,
+        "upn": identity.upn,
+        "distinguished_name": identity.distinguished_name,
+        "domain": identity.domain,
+        "sync_status": identity.sync_status,
+    }
+
+
+def sync_external_user_from_attributes(
+    *,
+    user,
+    profile_updates,
+    attributes,
+    domain="",
+    sync_identity=False,
+    audit_callback,
+):
+    """Синхронизировать профиль/AD principal под lock, с аудитом и active guard."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _sync_external_user_from_attributes_locked(
+                user=user,
+                profile_updates=dict(profile_updates or {}),
+                attributes=dict(attributes or {}),
+                domain=domain,
+                sync_identity=sync_identity,
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+@transaction.atomic
+def _sync_external_user_from_attributes_locked(
+    *, user, profile_updates, attributes, domain, sync_identity, audit_callback
+):
+    locked_user = get_user_model().objects.select_for_update().get(pk=user.pk)
+    if not locked_user.is_active:
+        return locked_user
+    allowed_profile_fields = {"email", "first_name", "last_name"}
+    unknown_profile_fields = sorted(set(profile_updates) - allowed_profile_fields)
+    if unknown_profile_fields:
+        raise ValidationError(
+            "AD-синхронизация передала недопустимые поля профиля: "
+            + ", ".join(unknown_profile_fields)
+            + "."
+        )
+    profile_before = _user_profile_state(locked_user)
+    for field, value in profile_updates.items():
+        setattr(locked_user, field, value)
+    if profile_updates:
+        locked_user.save(update_fields=sorted(profile_updates))
+
+    identity_before = {"identity_exists": False}
+    identity_after = identity_before
+    identity = None
+    if sync_identity:
+        safe_attributes = {
+            key: value
+            for key, value in attributes.items()
+            if key in SAFE_AD_ATTRIBUTE_KEYS
+        }
+        identity = (
+            ExternalIdentity.objects.select_for_update()
+            .filter(
+                user=locked_user,
+                provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            )
+            .first()
+        )
+        identity_before = _external_identity_state(identity)
+        if identity is None:
+            identity = ExternalIdentity(
+                user=locked_user,
+                provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            )
+        identity.subject_id = str(safe_attributes.get("objectSid", ""))
+        identity.username = str(safe_attributes.get("sAMAccountName", ""))
+        identity.upn = str(safe_attributes.get("userPrincipalName", ""))
+        identity.domain = domain
+        identity.attributes = safe_attributes
+        identity.sync_status = ExternalIdentity.SyncStatus.VERIFIED
+        identity.last_synced_at = timezone.now()
+        identity.last_error = ""
+        identity.save()
+        identity_after = _external_identity_state(identity)
+
+    profile_after = _user_profile_state(locked_user)
+    if profile_before != profile_after or identity_before != identity_after:
+        audit_callback(profile_before, profile_after, identity_before, identity_after)
+    return locked_user
+
+
+def upsert_ad_identity_from_attributes(*, user, attributes, domain="", audit_callback):
+    """Явный audited automatic-link API; manual mode не вызывает этот путь."""
+    synced_user = sync_external_user_from_attributes(
         user=user,
+        profile_updates={},
+        attributes=attributes,
+        domain=domain,
+        sync_identity=True,
+        audit_callback=audit_callback,
+    )
+    return ExternalIdentity.objects.get(
+        user=synced_user,
         provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
-        defaults={
-            "subject_id": str(safe_attributes.get("objectSid", "")),
-            "username": str(safe_attributes.get("sAMAccountName", "")),
-            "upn": str(safe_attributes.get("userPrincipalName", "")),
-            "domain": domain,
-            "attributes": safe_attributes,
-            "sync_status": ExternalIdentity.SyncStatus.VERIFIED,
-            "last_synced_at": timezone.now(),
-            "last_error": "",
-        },
-    )[0]
+    )
+
+
+def refresh_external_user_authentication_state(user):
+    """Прочитать activity под тем же lock, который использует отключение."""
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return get_user_model().objects.get(pk=user.pk)
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
 def scope_tokens_for_principal(*, sid="", username="", domain=""):

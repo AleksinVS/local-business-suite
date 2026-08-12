@@ -13,7 +13,13 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 import apps.core.json_utils as json_utils
-from .ldap_backend import LDAPConfig, normalize_username, sync_user_groups
+from .ldap_backend import (
+    LDAPConfig,
+    normalize_username,
+    record_external_directory_sync_audit,
+    sync_user_from_ad,
+    sync_user_groups,
+)
 from .models import AccessAssignmentAudit, ExternalIdentity, GroupProfile
 from .department_policy import (
     ORGANIZATION_ROOT_DEPARTMENT_NAME,
@@ -99,6 +105,7 @@ class LDAPAuthConfigTests(TestCase):
         identity = upsert_ad_identity_from_attributes(
             user=user,
             domain="EXAMPLE",
+            audit_callback=record_external_directory_sync_audit,
             attributes={
                 "objectSid": "S-1-5-21-linked",
                 "sAMAccountName": "ad-linked-user",
@@ -110,6 +117,84 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(identity.sync_status, ExternalIdentity.SyncStatus.VERIFIED)
         self.assertNotIn("unicodePwd", identity.attributes)
         self.assertEqual(scope_tokens_for_principal(sid="S-1-5-21-linked"), {f"user:{user.id}"})
+
+    @override_settings(ACCOUNTS_AD_LINK_ENABLED=True, ACCOUNTS_AD_LINK_MODE="manual")
+    def test_manual_ad_sync_updates_profile_without_overwriting_identity(self):
+        from apps.settings_center.models import SettingsChange
+
+        user = get_user_model().objects.create_user(
+            username="manual-ad-sync-user",
+            email="before@example.test",
+        )
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            subject_id="S-1-5-21-before",
+            username="before-login",
+            upn="before@example.test",
+            domain="EXAMPLE",
+            sync_status=ExternalIdentity.SyncStatus.VERIFIED,
+        )
+
+        sync_user_from_ad(
+            user,
+            {
+                "mail": "after@example.test",
+                "givenName": "Новый",
+                "sn": "Профиль",
+                "objectSid": "S-1-5-21-after",
+                "sAMAccountName": "after-login",
+                "userPrincipalName": "after@example.test",
+            },
+            {},
+        )
+
+        user.refresh_from_db()
+        identity = ExternalIdentity.objects.get(user=user)
+        self.assertEqual(user.email, "after@example.test")
+        self.assertEqual(user.first_name, "Новый")
+        self.assertEqual(identity.subject_id, "S-1-5-21-before")
+        self.assertEqual(identity.username, "before-login")
+        self.assertTrue(
+            SettingsChange.objects.filter(
+                action=SettingsChange.Action.USER_UPDATE,
+            ).exists()
+        )
+        self.assertFalse(
+            SettingsChange.objects.filter(
+                action=SettingsChange.Action.AD_LINK,
+            ).exists()
+        )
+
+    @override_settings(ACCOUNTS_AD_LINK_ENABLED=True, ACCOUNTS_AD_LINK_MODE="automatic")
+    def test_automatic_ad_sync_updates_identity_and_audits_without_raw_principal(self):
+        from apps.settings_center.models import SettingsChange
+
+        user = get_user_model().objects.create_user(username="automatic-ad-sync-user")
+        sync_user_from_ad(
+            user,
+            {
+                "mail": "automatic@example.test",
+                "givenName": "Авто",
+                "sn": "Синхронизация",
+                "objectSid": "S-1-5-21-automatic",
+                "sAMAccountName": "automatic-login",
+                "userPrincipalName": "automatic@example.test",
+            },
+            {},
+        )
+
+        identity = ExternalIdentity.objects.get(user=user)
+        self.assertEqual(identity.subject_id, "S-1-5-21-automatic")
+        self.assertEqual(identity.username, "automatic-login")
+        self.assertEqual(identity.upn, "automatic@example.test")
+        audit = SettingsChange.objects.get(
+            action=SettingsChange.Action.AD_LINK,
+        )
+        serialized = json.dumps(audit.masked_diff, sort_keys=True)
+        for principal in ("S-1-5-21-automatic", "automatic-login", "automatic@example.test"):
+            self.assertNotIn(principal, serialized)
+        self.assertIn("fingerprint", serialized)
 
 
 @pytest.mark.integration
@@ -169,6 +254,26 @@ class PortalAuthViewTests(TestCase):
             self.assertFalse(
                 get_user_model().objects.filter(username="missing-static-user").exists()
             )
+
+    @patch("apps.accounts.ldap_backend.sync_remote_user")
+    def test_remote_user_creation_is_serialized_and_audited_without_raw_login(
+        self, _sync_remote_user
+    ):
+        from apps.accounts.ldap_backend import RemoteUserLDAPBackend
+        from apps.settings_center.models import SettingsChange
+
+        user = RemoteUserLDAPBackend().authenticate(
+            request=None,
+            remote_user="DOMAIN\\new-external-user",
+        )
+
+        self.assertIsNotNone(user)
+        audit = SettingsChange.objects.get(action=SettingsChange.Action.USER_CREATE)
+        self.assertIsNone(audit.actor)
+        self.assertTrue(audit.masked_diff["changed"])
+        serialized = json.dumps(audit.masked_diff, sort_keys=True)
+        self.assertNotIn("new-external-user", serialized)
+        self.assertIn("username_fingerprint", serialized)
 
     def test_logout_keeps_remote_user_from_immediate_relogin(self):
         User = get_user_model()
@@ -684,6 +789,11 @@ class AccessAssignmentServiceTests(TestCase):
         )
 
         for field_name in (
+            "username",
+            "password",
+            "email",
+            "first_name",
+            "last_name",
             "groups",
             "user_permissions",
             "is_staff",
@@ -693,7 +803,7 @@ class AccessAssignmentServiceTests(TestCase):
         ):
             self.assertNotIn(field_name, form_class.base_fields)
 
-    def test_django_admin_bulk_delete_cannot_remove_superuser(self):
+    def test_django_admin_bulk_delete_is_disabled_for_all_users(self):
         from django.contrib import admin
         from django.test import RequestFactory
 
@@ -704,11 +814,32 @@ class AccessAssignmentServiceTests(TestCase):
         request.user = root
         model_admin = CustomUserAdmin(get_user_model(), admin.site)
 
-        with self.assertRaisesMessage(PermissionDenied, "Нельзя удалить суперпользователя"):
+        self.assertFalse(model_admin.has_add_permission(request))
+        self.assertFalse(model_admin.has_delete_permission(request, obj=root))
+        with self.assertRaisesMessage(PermissionDenied, "отключаются"):
             model_admin.delete_queryset(
                 request,
                 get_user_model().objects.filter(pk=root.pk),
             )
+
+    def test_external_identity_admin_and_inline_are_read_only(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from apps.accounts.admin import ExternalIdentityAdmin, ExternalIdentityInline
+
+        root = get_user_model().objects.create_superuser(username="identity-admin-root")
+        request = RequestFactory().get("/admin/accounts/externalidentity/")
+        request.user = root
+        identity_admin = ExternalIdentityAdmin(ExternalIdentity, admin.site)
+        inline = ExternalIdentityInline(get_user_model(), admin.site)
+
+        self.assertFalse(identity_admin.has_add_permission(request))
+        self.assertFalse(identity_admin.has_change_permission(request, obj=None))
+        self.assertFalse(identity_admin.has_delete_permission(request, obj=None))
+        self.assertFalse(inline.has_add_permission(request, obj=self.target))
+        self.assertFalse(inline.has_change_permission(request, obj=None))
+        self.assertFalse(inline.has_delete_permission(request, obj=None))
 
     def test_delegated_django_admin_cannot_change_superuser_password(self):
         delegated = get_user_model().objects.create_user(
@@ -726,6 +857,17 @@ class AccessAssignmentServiceTests(TestCase):
 
         response = self.client.get(
             reverse("admin:auth_user_password_change", args=[root.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_superuser_django_admin_password_path_is_disabled_in_favour_of_audited_profile(self):
+        root = get_user_model().objects.create_superuser(username="password-admin-root")
+        target = get_user_model().objects.create_user(username="password-admin-target")
+        self.client.force_login(root)
+
+        response = self.client.get(
+            reverse("admin:auth_user_password_change", args=[target.pk])
         )
 
         self.assertEqual(response.status_code, 403)

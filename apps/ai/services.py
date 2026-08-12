@@ -111,12 +111,16 @@ def resolve_actor(*, user_id=None, username=None):
     User = get_user_model()
     try:
         if user_id:
-            return User.objects.get(pk=user_id)
-        if username:
-            return User.objects.get(username=username)
+            actor = User.objects.get(pk=user_id)
+        elif username:
+            actor = User.objects.get(username=username)
+        else:
+            raise ValidationError("Учетная запись исполнителя обязательна.")
     except User.DoesNotExist:
         raise ValidationError("Учетная запись исполнителя не найдена.")
-    raise ValidationError("Учетная запись исполнителя обязательна.")
+    if not actor.is_active:
+        raise PermissionDenied("Учетная запись исполнителя отключена.")
+    return actor
 
 
 def normalize_session_external_id(session_external_id):
@@ -749,9 +753,17 @@ def list_users_for_actor(*, actor, payload):
     }
 
 def update_user_for_actor(*, actor, payload):
-    """Updates user details. Only for superusers."""
+    """Update lifecycle/profile fields through the accounts service layer.
+
+    Contract roles and technical groups are deliberately outside this tool. Role
+    assignment has its own preview/apply protocol and must never be replaced by
+    a generic ``groups.set`` operation.
+    """
     if not actor.is_superuser:
         raise PermissionDenied("Данные пользователей могут изменять только администраторы.")
+
+    if "group_names" in payload:
+        raise ValidationError("Группы назначаются только через карточку доступа.")
 
     User = get_user_model()
     user_id = payload.get("user_id")
@@ -760,18 +772,37 @@ def update_user_for_actor(*, actor, payload):
 
     target_user = User.objects.get(pk=user_id)
 
-    if "is_active" in payload:
-        target_user.is_active = payload["is_active"]
+    requested_active = payload.get("is_active")
+    if requested_active is not None and not isinstance(requested_active, bool):
+        raise ValidationError("Поле is_active должно быть логическим значением.")
 
-    if "department_id" in payload:
-        target_user.department_id = payload["department_id"]
+    requested_department = payload.get("department_id")
+    if requested_department is not None:
+        if isinstance(requested_department, bool) or not isinstance(requested_department, int):
+            raise ValidationError("Поле department_id должно быть целым идентификатором.")
+        from apps.accounts.department_policy import available_user_departments
 
-    if "group_names" in payload:
-        from django.contrib.auth.models import Group
-        groups = Group.objects.filter(name__in=payload["group_names"])
-        target_user.groups.set(groups)
+        if not available_user_departments().filter(pk=requested_department).exists():
+            raise ValidationError("Указано недоступное для назначения подразделение.")
 
-    target_user.save()
+    # Keep all account mutations behind the canonical accounts services.  The
+    # imports are local to avoid making the AI service import accounts at module
+    # load time and to keep the domain boundary explicit.
+    from apps.accounts.services import disable_local_user, update_local_user
+
+    if requested_active is False and target_user.is_active:
+        disable_local_user(actor=actor, user=target_user)
+    elif requested_active is True and not target_user.is_active:
+        update_local_user(actor=actor, user=target_user, cleaned_data={"is_active": True})
+
+    if requested_department is not None and target_user.department_id != requested_department:
+        update_local_user(
+            actor=actor,
+            user=target_user,
+            cleaned_data={"department_id": requested_department},
+        )
+
+    target_user.refresh_from_db()
 
     return {
         "ok": True,

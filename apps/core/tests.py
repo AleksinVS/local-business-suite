@@ -493,6 +493,11 @@ class DepartmentViewTests(TestCase):
     def setUpTestData(cls):
         cls.manager = User.objects.create_user(username="manager-ui", password="pass")
         cls.staff = User.objects.create_user(username="staff-ui", password="pass", is_staff=True)
+        cls.role_admin = User.objects.create_superuser(
+            username="role-admin-ui",
+            password="pass",
+            email="role-admin@example.test",
+        )
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         cls.manager.groups.add(manager_group)
         cls.department = Department.objects.create(name="Стационар")
@@ -556,9 +561,16 @@ class DepartmentViewTests(TestCase):
         self.assertContains(response, "Выйти")
 
     @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
-    def test_manager_can_open_role_rules_editor(self):
+    def test_manager_cannot_open_role_rules_editor(self):
         Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")
         self.client.force_login(self.manager)
+        response = self.client.get(reverse("core:role_rules"))
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=Path("/tmp/nonexistent-role-rules.json"))
+    def test_superuser_can_open_role_rules_editor(self):
+        Path("/tmp/nonexistent-role-rules.json").write_text('{"manager": {"view_scope": "all", "create_workorder": true, "edit_scope": "all", "comment_scope": "visible", "upload_attachment_scope": "visible", "confirm_closure_scope": "all", "rate_scope": "all", "transition_scope": "all", "transition_targets": "*", "manage_inventory": true, "manage_board_columns": true, "manage_assignments": true, "view_analytics": true, "manage_departments": true, "manage_roles": true}}', encoding="utf-8")
+        self.client.force_login(self.role_admin)
         response = self.client.get(reverse("core:role_rules"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Роли доступа")
@@ -590,7 +602,7 @@ class DepartmentViewTests(TestCase):
                 LOCAL_BUSINESS_ROLE_RULES_FILE=config_path,
                 LOCAL_BUSINESS_ROLE_RULES=initial_payload,
             ):
-                self.client.force_login(self.manager)
+                self.client.force_login(self.role_admin)
                 form_response = self.client.get(reverse("core:role_rules"))
                 base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
@@ -651,7 +663,7 @@ class DepartmentViewTests(TestCase):
             with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.manager)
+                self.client.force_login(self.role_admin)
                 form_response = self.client.get(reverse("core:role_rules"))
                 base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
@@ -701,7 +713,7 @@ class DepartmentViewTests(TestCase):
             with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.manager)
+                self.client.force_login(self.role_admin)
                 form_response = self.client.get(reverse("core:role_rules"))
                 base_hash = form_response.context["role_rules_base_hash"]
                 response = self.client.post(
@@ -757,7 +769,7 @@ class DepartmentViewTests(TestCase):
             with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=config_path):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
-                self.client.force_login(self.manager)
+                self.client.force_login(self.role_admin)
 
                 # Администратор №2 открывает форму: hidden base_hash в контексте.
                 response = self.client.get(reverse("core:role_rules"))
@@ -768,7 +780,7 @@ class DepartmentViewTests(TestCase):
                 concurrent = copy.deepcopy(initial_payload)
                 concurrent["manager"]["view_scope"] = "department_branch"
                 apply_contract_payload(
-                    actor=self.manager,
+                    actor=self.role_admin,
                     setting_id="core.contract.role_rules",
                     raw_payload=json.dumps(concurrent, ensure_ascii=False),
                     confirmed=True,
@@ -836,7 +848,11 @@ class ContractStoreTests(TestCase):
         from apps.core.contract_store import _reset_for_tests, get_contract
         from apps.settings_center.contract_services import apply_contract_payload
 
-        actor = User.objects.create_user(username="store-admin", password="pass", is_staff=True)
+        actor = User.objects.create_superuser(
+            username="store-admin",
+            password="pass",
+            email="store-admin@example.test",
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             self._write(role_file, self.base)
@@ -923,7 +939,11 @@ class RoleRulesCapabilityUiTests(TestCase):
     def setUp(self):
         from apps.core.contract_store import _reset_for_tests
 
-        self.manager = User.objects.create_user(username="rr-capability-manager", password="pass")
+        self.manager = User.objects.create_superuser(
+            username="rr-capability-manager",
+            password="pass",
+            email="rr-capability-manager@example.test",
+        )
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
         self.manager.groups.add(manager_group)
 

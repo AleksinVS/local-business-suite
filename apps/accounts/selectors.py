@@ -29,6 +29,24 @@ def contract_role_names() -> tuple[str, ...]:
     return tuple(contract_role_configs())
 
 
+def role_assignment_allowlist() -> dict[str, tuple[str, ...]]:
+    administration = get_contract("role_rules").get("$administration", {})
+    raw_allowlist = (
+        administration.get("role_assignment_allowlist", {})
+        if isinstance(administration, dict)
+        else {}
+    )
+    if not isinstance(raw_allowlist, dict):
+        return {}
+    return {
+        actor_role: tuple(target_roles)
+        for actor_role, target_roles in raw_allowlist.items()
+        if isinstance(actor_role, str)
+        and isinstance(target_roles, list)
+        and all(isinstance(role, str) for role in target_roles)
+    }
+
+
 def capability_catalog() -> dict[str, dict]:
     metadata = get_contract("role_rules").get("$capabilities", {})
     return metadata if isinstance(metadata, dict) else {}

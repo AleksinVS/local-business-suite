@@ -1,4 +1,5 @@
 import json
+import copy
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -11,6 +12,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -64,12 +66,35 @@ from .policies import (
     can_view,
     capability_flags,
     default_board_access_applies,
+    has_role_capability,
     superuser_rules,
 )
 from .right_panel import WorkOrderRightPanelProvider
 from .services import confirm_closure, create_workorder, transition_workorder
+from .contracts import validate_role_rules_payload
 
 User = get_user_model()
+
+
+@pytest.mark.unit
+class BoardAdminAccessTests(TestCase):
+    def test_allowed_groups_are_read_only_in_django_admin_form(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from .admin import BoardAdmin
+
+        actor = User.objects.create_superuser(
+            username="board-admin",
+            password="pass",
+            email="board-admin@example.test",
+        )
+        request = RequestFactory().get("/admin/workorders/board/add/")
+        request.user = actor
+
+        form_class = BoardAdmin(Board, admin.site).get_form(request)
+
+        self.assertNotIn("allowed_groups", form_class.base_fields)
 
 
 @pytest.mark.unit
@@ -1932,6 +1957,16 @@ class CapabilityRegistryTests(TestCase):
         self.assertEqual(rules["view_scope"], "all")
         self.assertEqual(rules["transition_targets"], "*")
 
+    def test_inactive_superuser_has_no_capabilities(self):
+        inactive_root = User.objects.create_superuser(username="inactive-policy-root")
+        inactive_root.is_active = False
+        inactive_root.save(update_fields=["is_active"])
+
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", self.base_role_rules
+        ):
+            self.assertFalse(has_role_capability(inactive_root, "manage_roles"))
+
     def test_every_contract_role_has_display_name_and_description(self):
         with _override_contract_file(
             "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", self.base_role_rules
@@ -1951,6 +1986,34 @@ class CapabilityRegistryTests(TestCase):
             self.assertTrue(description.strip(), f"{role}: пустой description")
 
         self.assertGreater(roles_checked, 0)
+
+    def test_role_contract_rejects_string_flag_and_unknown_capability(self):
+        string_flag = copy.deepcopy(self.base_role_rules)
+        string_flag["customer"]["create_workorder"] = "false"
+        with self.assertRaisesMessage(ValidationError, "логическим"):
+            validate_role_rules_payload(string_flag)
+
+        unknown_capability = copy.deepcopy(self.base_role_rules)
+        unknown_capability["customer"]["unregistered_access"] = True
+        with self.assertRaisesMessage(ValidationError, "неизвестные права"):
+            validate_role_rules_payload(unknown_capability)
+
+    def test_role_assignment_allowlist_rejects_critical_or_unknown_roles(self):
+        critical = copy.deepcopy(self.base_role_rules)
+        critical["$administration"]["role_assignment_allowlist"]["manager"] = ["admin"]
+        with self.assertRaisesMessage(ValidationError, "критичные роли"):
+            validate_role_rules_payload(critical)
+
+        unknown = copy.deepcopy(self.base_role_rules)
+        unknown["$administration"]["role_assignment_allowlist"]["manager"] = ["missing"]
+        with self.assertRaisesMessage(ValidationError, "неизвестные роли"):
+            validate_role_rules_payload(unknown)
+
+    def test_missing_assignment_allowlist_is_backward_compatible_and_fail_closed(self):
+        legacy = copy.deepcopy(self.base_role_rules)
+        legacy.pop("$administration")
+
+        validate_role_rules_payload(legacy)
     can_comment,
     can_create,
     can_edit,

@@ -4,7 +4,8 @@ from django.contrib.auth.models import Group
 
 from apps.accounts.department_policy import available_user_departments
 from apps.accounts.models import ExternalIdentity
-from apps.accounts.selectors import contract_role_names
+from apps.accounts.selectors import contract_role_names, selected_role_names_for_user
+from apps.accounts.services import assignable_role_names_for_actor
 
 
 class ContractPayloadForm(forms.Form):
@@ -98,9 +99,24 @@ class PortalUserUpdateForm(forms.Form):
     def __init__(self, *args, portal_user=None, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
         role_names = contract_role_names()
+        current_role_names = set()
+        if portal_user is not None and actor is not None:
+            current_role_names = set(selected_role_names_for_user(portal_user))
+            role_names = assignable_role_names_for_actor(actor=actor, target_user=portal_user)
         self.fields["roles"].queryset = Group.objects.filter(name__in=role_names).select_related("profile").order_by("name")
         if portal_user is not None and not self.is_bound:
             self.initial["roles"] = list(portal_user.groups.filter(name__in=role_names).values_list("pk", flat=True))
+        protected_role_names = current_role_names - set(role_names)
+        self.protected_role_groups = list(
+            Group.objects.filter(name__in=protected_role_names)
+            .select_related("profile")
+            .order_by("name")
+        )
+        self._protected_role_names = protected_role_names
+        if protected_role_names:
+            self.fields["roles"].help_text += (
+                " Роли вне ваших полномочий показаны отдельно и сохраняются без изменений."
+            )
         if portal_user is not None:
             self.initial["is_staff"] = portal_user.is_staff
             self.initial["is_superuser"] = portal_user.is_superuser
@@ -111,6 +127,12 @@ class PortalUserUpdateForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        selected_roles = cleaned_data.get("roles")
+        if selected_roles is not None and self._protected_role_names:
+            selected_names = set(selected_roles.values_list("name", flat=True))
+            cleaned_data["roles"] = Group.objects.filter(
+                name__in=selected_names | self._protected_role_names
+            )
         if cleaned_data.get("is_superuser") and not cleaned_data.get("is_staff"):
             self.add_error(
                 "is_staff",

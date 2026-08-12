@@ -686,6 +686,161 @@ class AIViewsTests(TestCase):
         self.assertEqual(action.request_payload["command"]["confirmation_state"], "pending_required")
         self.assertEqual(action.request_payload["command"]["tool_code"], "access.update_role_permissions")
 
+    def test_access_users_update_rejects_group_names_without_mutating_groups(self):
+        from apps.ai.services import update_user_for_actor
+
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        technical_group, _ = Group.objects.get_or_create(name="memory_auditor")
+        self.customer.groups.add(technical_group)
+        before = set(self.customer.groups.values_list("name", flat=True))
+
+        with self.assertRaisesMessage(ValidationError, "Группы назначаются"):
+            update_user_for_actor(
+                actor=self.manager,
+                payload={
+                    "user_id": self.customer.id,
+                    "group_names": [ROLE_MANAGER],
+                },
+            )
+
+        self.assertEqual(
+            set(self.customer.groups.values_list("name", flat=True)),
+            before,
+        )
+
+    def test_access_users_update_uses_account_services_for_profile_fields(self):
+        from apps.ai.services import update_user_for_actor
+
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        new_department = Department.objects.create(name="Новое подразделение AI")
+
+        with patch("apps.accounts.services.update_local_user") as update_local_user:
+            result = update_user_for_actor(
+                actor=self.manager,
+                payload={
+                    "user_id": self.customer.id,
+                    "is_active": True,
+                    "department_id": new_department.id,
+                },
+            )
+
+        self.assertTrue(result["ok"])
+        update_local_user.assert_called_once_with(
+            actor=self.manager,
+            user=self.customer,
+            cleaned_data={"department_id": new_department.id},
+        )
+
+    def test_access_users_update_rejects_quarantine_department(self):
+        from apps.accounts.department_policy import get_unassigned_user_department
+        from apps.ai.services import update_user_for_actor
+
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        quarantine = get_unassigned_user_department()
+
+        with self.assertRaisesMessage(ValidationError, "недоступное"):
+            update_user_for_actor(
+                actor=self.manager,
+                payload={
+                    "user_id": self.customer.id,
+                    "department_id": quarantine.id,
+                },
+            )
+
+    def test_access_users_update_uses_lifecycle_service_for_disable(self):
+        from apps.ai.services import update_user_for_actor
+
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+
+        with patch("apps.accounts.services.disable_local_user") as disable_local_user:
+            result = update_user_for_actor(
+                actor=self.manager,
+                payload={"user_id": self.customer.id, "is_active": False},
+            )
+
+        self.assertTrue(result["ok"])
+        disable_local_user.assert_called_once_with(actor=self.manager, user=self.customer)
+
+    def test_access_users_update_preserves_roles_and_technical_groups_after_confirmation(self):
+        self.manager.is_superuser = True
+        self.manager.save(update_fields=["is_superuser"])
+        technical_group, _ = Group.objects.get_or_create(name="memory_auditor")
+        self.customer.groups.add(technical_group)
+        new_department = Department.objects.create(name="Подразделение после AI")
+        before = set(self.customer.groups.values_list("name", flat=True))
+
+        pending_result = execute_tool(
+            tool_code="access.users.update",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            payload={
+                "user_id": self.customer.id,
+                "department_id": new_department.id,
+            },
+            request_id="req-ai-profile-update",
+        )
+        self.assertTrue(pending_result["ok"], pending_result)
+        self.assertTrue(pending_result["meta"]["awaiting_confirmation"])
+
+        confirmed = execute_pending_action(
+            token=pending_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            request_id="req-ai-profile-update-confirm",
+        )
+        self.assertTrue(confirmed["ok"], confirmed)
+
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.department_id, new_department.id)
+        self.assertEqual(
+            set(self.customer.groups.values_list("name", flat=True)),
+            before,
+        )
+
+    def test_execute_tool_rejects_confirmed_token_before_dispatch(self):
+        with patch("apps.ai.tooling._dispatch_tool") as dispatch:
+            with self.assertRaisesMessage(ValidationError, "только через сохранённое ожидающее действие"):
+                execute_tool(
+                    tool_code="workorders.create",
+                    actor_context={"user_id": self.customer.id, "channel": "internal"},
+                    payload={
+                        "department_id": self.department.id,
+                        "subject": "Не должно выполниться",
+                        "description": "Невалидное подтверждение",
+                    },
+                    confirmed_token=uuid.uuid4(),
+                )
+
+        dispatch.assert_not_called()
+        self.assertFalse(WorkOrder.objects.filter(title="Не должно выполниться").exists())
+
+    def test_execute_tool_rejects_inactive_actor_before_dispatch(self):
+        inactive_root = User.objects.create_superuser(username="inactive-ai-root")
+        inactive_root.is_active = False
+        inactive_root.save(update_fields=["is_active"])
+
+        with patch("apps.ai.tooling._dispatch_tool") as dispatch:
+            with self.assertRaisesMessage(PermissionDenied, "отключена"):
+                execute_tool(
+                    tool_code="access.users.list",
+                    actor_context={"user_id": inactive_root.id, "channel": "internal"},
+                    payload={},
+                )
+
+        dispatch.assert_not_called()
+
+    def test_access_users_update_contract_has_no_group_names_input(self):
+        from apps.ai.tool_definitions import get_tool_registry
+
+        tool = get_tool_registry()["access.users.update"]
+        self.assertNotIn("group_names", tool["inputs"])
+        contract = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
+        contract_tool = next(item for item in contract["tools"] if item["id"] == "access.users.update")
+        self.assertNotIn("group_names", contract_tool["inputs"])
+
     def test_non_admin_cannot_confirm_runtime_skill_creation(self):
         with TemporaryDirectory() as tmpdir:
             runtime_contracts = Path(tmpdir) / "contracts"

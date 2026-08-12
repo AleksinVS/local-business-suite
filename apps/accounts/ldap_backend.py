@@ -83,6 +83,9 @@ class LDAPBackend(BaseBackend):
             user, _created = UserModel.objects.get_or_create(
                 username=username, defaults={"is_active": True}
             )
+            if not user.is_active:
+                logger.warning("LDAP login rejected for disabled local user %s", username)
+                return None
             sync_user_from_ad(user, attributes, config.group_role_map)
             return user
         except ImproperlyConfigured as exc:
@@ -95,9 +98,10 @@ class LDAPBackend(BaseBackend):
     def get_user(self, user_id):
         UserModel = get_user_model()
         try:
-            return UserModel.objects.get(pk=user_id)
+            user = UserModel.objects.get(pk=user_id)
         except UserModel.DoesNotExist:
             return None
+        return user if user.is_active else None
 
 
 class RemoteUserLDAPBackend(RemoteUserBackend):
@@ -250,12 +254,16 @@ def sync_user_from_ad(user, attributes, group_role_map):
     elif display_name:
         user.first_name = display_name
 
-    user.save()
+    # Не сохраняем загруженный целиком User: параллельное отключение или снятие
+    # privileged-флага не должно быть перезаписано устаревшим LDAP-снимком.
+    user.save(update_fields=["email", "first_name", "last_name"])
     upsert_ad_identity_from_attributes(
         user=user,
         attributes=attributes,
         domain=getattr(settings, "AD_LDAP_DOMAIN", ""),
     )
+    if not get_user_model().objects.filter(pk=user.pk, is_active=True).exists():
+        return
     sync_user_groups(user, attributes.get("memberOf", []), group_role_map)
 
 
@@ -298,23 +306,66 @@ def _find_department_for_ou(ou):
 
 
 def sync_user_groups(user, member_of, group_role_map):
+    from django.conf import settings
+
+    if not getattr(settings, "ACCOUNTS_AD_GROUP_ROLE_SYNC", False):
+        return
+
     if not group_role_map:
         return
 
-    ad_managed_roles = set(group_role_map.values())
-    desired_roles = {
-        role
-        for ad_group in member_of
-        for role in _roles_for_ad_group(ad_group, group_role_map)
-    }
+    try:
+        mapped_role_names = _validated_ad_role_names(group_role_map)
+    except Exception as exc:
+        logger.error("AD role sync skipped because its mapping is unsafe: %s", exc)
+        return
 
-    groups = [
-        Group.objects.get_or_create(name=role)[0] for role in sorted(desired_roles)
-    ]
-    current_ad_groups = Group.objects.filter(name__in=ad_managed_roles)
-    user.groups.remove(*[group for group in current_ad_groups if group.name not in desired_roles])
-    if groups:
-        user.groups.add(*groups)
+    # The current assignment service requires a human actor and an interactive
+    # preview/apply authorization flow. It has no supported system-actor semantics
+    # for AD. A direct M2M update here would therefore be an unaudited access write.
+    # Keep authentication/profile synchronization working, but fail closed for role
+    # membership until an audited AD assignment service is available.
+    logger.error(
+        "AD role sync is enabled for user_id=%s but role changes were skipped: "
+        "an audited AD assignment service is not available (validated roles: %s).",
+        user.pk,
+        ", ".join(mapped_role_names),
+    )
+
+
+def _validated_ad_role_names(group_role_map):
+    from apps.accounts.selectors import contract_role_configs
+
+    if not isinstance(group_role_map, dict):
+        raise ImproperlyConfigured("AD_GROUP_ROLE_MAP must be a mapping")
+
+    mapped_role_names = set()
+    for role_name in group_role_map.values():
+        if not isinstance(role_name, str) or not role_name or role_name.startswith("$"):
+            raise ImproperlyConfigured(
+                "AD_GROUP_ROLE_MAP contains an invalid contract role identifier"
+            )
+        mapped_role_names.add(role_name)
+
+    contract_role_names = set(contract_role_configs())
+    unknown_role_names = sorted(mapped_role_names - contract_role_names)
+    if unknown_role_names:
+        raise ImproperlyConfigured(
+            "AD_GROUP_ROLE_MAP references unknown contract roles: "
+            + ", ".join(unknown_role_names)
+        )
+
+    existing_role_names = set(
+        Group.objects.filter(name__in=mapped_role_names).values_list("name", flat=True)
+    )
+    missing_role_names = sorted(mapped_role_names - existing_role_names)
+    if missing_role_names:
+        raise ImproperlyConfigured(
+            "AD_GROUP_ROLE_MAP references contract groups that are not seeded: "
+            + ", ".join(missing_role_names)
+        )
+
+    return sorted(mapped_role_names)
 
 
 def _roles_for_ad_group(ad_group, group_role_map):

@@ -96,9 +96,72 @@ def _validate_capability_metadata(metadata):
 
 def validate_role_rules_payload(payload, workflow_payload=None):
     _ensure_non_empty_mapping(payload, "Конфигурация ролей")
+    unknown_service_keys = sorted(
+        key
+        for key in payload
+        if isinstance(key, str)
+        and key.startswith("$")
+        and key not in {"$schema", CAPABILITY_METADATA_KEY, "$administration"}
+    )
+    if unknown_service_keys:
+        raise ValidationError(
+            "Конфигурация ролей содержит неизвестные служебные блоки: "
+            + ", ".join(unknown_service_keys)
+            + "."
+        )
     known_statuses = set()
     if workflow_payload:
         known_statuses = set(workflow_payload.get("statuses", []))
+
+    role_names = {
+        role
+        for role, config in payload.items()
+        if isinstance(role, str) and not role.startswith("$") and isinstance(config, dict)
+    }
+    administration = payload.get("$administration", {})
+    if not isinstance(administration, dict):
+        raise ValidationError("Блок $administration должен быть JSON-объектом.")
+    allowlist = administration.get("role_assignment_allowlist", {})
+    if not isinstance(allowlist, dict):
+        raise ValidationError(
+            "Поле $administration.role_assignment_allowlist должно быть JSON-объектом."
+        )
+    capability_metadata = payload.get(CAPABILITY_METADATA_KEY, {})
+    if capability_metadata:
+        _validate_capability_metadata(capability_metadata)
+    for actor_role, target_roles in allowlist.items():
+        if actor_role not in role_names:
+            raise ValidationError(
+                f"Allowlist назначения ссылается на неизвестную роль актора '{actor_role}'."
+            )
+        if not isinstance(target_roles, list) or not all(
+            isinstance(role, str) and role for role in target_roles
+        ):
+            raise ValidationError(
+                f"Allowlist роли '{actor_role}' должен содержать список непустых кодов ролей."
+            )
+        if len(target_roles) != len(set(target_roles)):
+            raise ValidationError(
+                f"Allowlist роли '{actor_role}' содержит повторяющиеся роли."
+            )
+        unknown_targets = sorted(set(target_roles) - role_names)
+        if unknown_targets:
+            raise ValidationError(
+                f"Allowlist роли '{actor_role}' содержит неизвестные роли: "
+                + ", ".join(unknown_targets)
+                + "."
+            )
+        critical_targets = [
+            role
+            for role in target_roles
+            if _role_has_critical_capability(payload[role], capability_metadata)
+        ]
+        if critical_targets:
+            raise ValidationError(
+                f"Allowlist роли '{actor_role}' содержит критичные роли: "
+                + ", ".join(sorted(critical_targets))
+                + ". Их может назначать только суперпользователь."
+            )
 
     for role, config in payload.items():
         if role.startswith("$"):
@@ -107,9 +170,27 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             continue
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")
-        legacy_admin_value = bool(config.get("manage_inventory"))
-        for key in BACKWARD_COMPAT_ROLE_DEFAULT_KEYS:
-            config.setdefault(key, legacy_admin_value)
+        if capability_metadata:
+            allowed_role_keys = set(capability_metadata) | {"display_name", "description"}
+            unknown_role_keys = sorted(set(config) - allowed_role_keys)
+            if unknown_role_keys:
+                raise ValidationError(
+                    f"Роль '{role}' содержит неизвестные права: "
+                    + ", ".join(unknown_role_keys)
+                    + "."
+                )
+            missing_capabilities = sorted(set(capability_metadata) - set(config))
+            if missing_capabilities:
+                raise ValidationError(
+                    f"Роль '{role}' не содержит права из справочника: "
+                    + ", ".join(missing_capabilities)
+                    + "."
+                )
+            _validate_role_capability_values(role, config, capability_metadata)
+        else:
+            legacy_admin_value = bool(config.get("manage_inventory"))
+            for key in BACKWARD_COMPAT_ROLE_DEFAULT_KEYS:
+                config.setdefault(key, legacy_admin_value)
         missing = REQUIRED_ROLE_KEYS - set(config.keys())
         if missing:
             raise ValidationError(
@@ -140,6 +221,41 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             raise ValidationError(
                 f"У роли '{role}' указаны неизвестные статусы перехода: {invalid}."
             )
+
+
+def _role_has_critical_capability(config, metadata):
+    if not isinstance(config, dict) or not isinstance(metadata, dict):
+        return False
+    for capability, value in config.items():
+        definition = metadata.get(capability)
+        if not isinstance(definition, dict) or definition.get("risk") != "critical":
+            continue
+        if value not in (None, False, "", "none", [], {}):
+            return True
+    return False
+
+
+def _validate_role_capability_values(role, config, metadata):
+    for capability, definition in metadata.items():
+        value = config.get(capability)
+        capability_type = definition.get("type")
+        if capability_type == "flag" and type(value) is not bool:
+            raise ValidationError(
+                f"У роли '{role}' флаг '{capability}' должен быть логическим значением."
+            )
+        if capability_type == "scope" and value not in ROLE_SCOPE_VALUES:
+            raise ValidationError(
+                f"У роли '{role}' поле '{capability}' содержит недопустимую область доступа."
+            )
+        if capability_type == "targets":
+            if value == "*":
+                continue
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) and item for item in value
+            ):
+                raise ValidationError(
+                    f"У роли '{role}' поле '{capability}' должно быть списком строк или '*'."
+                )
 
 
 def validate_workflow_rules_payload(payload):

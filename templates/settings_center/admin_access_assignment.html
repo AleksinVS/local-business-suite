@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <div id="content-main">
+    <p>
+      Это резервный путь на случай недоступности продуктовой страницы. Он использует
+      тот же серверный предпросмотр, проверки и аудит. Прямые Django permissions и
+      технические группы здесь не изменяются.
+    </p>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      {{ form.preview_token }}
+      <fieldset class="module aligned">
+        <h2>Контрактные роли и технические флаги</h2>
+        <div class="form-row">{{ form.roles.errors }}{{ form.roles.label_tag }} {{ form.roles }}</div>
+        <div class="form-row">{{ form.is_staff.errors }}{{ form.is_staff }} {{ form.is_staff.label_tag }}</div>
+        <div class="form-row">{{ form.is_superuser.errors }}{{ form.is_superuser }} {{ form.is_superuser.label_tag }}</div>
+        <div class="form-row">
+          {{ form.reason.errors }}
+          {{ form.reason.label_tag }}
+          {{ form.reason }}
+          <div class="help">Укажите проверяемую эксплуатационную причину резервного изменения.</div>
+        </div>
+      </fieldset>
+
+      <div class="submit-row">
+        <button type="submit" name="action" value="preview" class="default">Проверить изменения</button>
+        <a href="{% url 'admin:accounts_user_change' original.pk %}" class="closelink">Отмена</a>
+      </div>
+
+      {% if preview %}
+        <fieldset class="module">
+          <h2>Предпросмотр</h2>
+          <p><strong>Добавятся роли:</strong> {{ preview.added|join:", "|default:"нет" }}</p>
+          <p><strong>Удалятся роли:</strong> {{ preview.removed|join:", "|default:"нет" }}</p>
+          <p>
+            <strong>Изменятся технические флаги:</strong>
+            {% for change in preview.flags_changed %}
+              {{ change.label }}: {% if change.before %}включён{% else %}выключен{% endif %}
+              → {% if change.after %}включён{% else %}выключен{% endif %}{% if not forloop.last %}; {% endif %}
+            {% empty %}нет{% endfor %}
+          </p>
+          <p><strong>Новые возможности:</strong> {{ preview.consequences.added|join:", "|default:"нет" }}</p>
+          <p><strong>Утраченные возможности:</strong> {{ preview.consequences.removed|join:", "|default:"нет" }}</p>
+          {% if preview.risk_markers %}
+            <div class="messagelist"><div class="warning"><strong>Риски:</strong> {{ preview.risk_markers|join:"; " }}</div></div>
+          {% endif %}
+          <p>{{ form.confirm_risk.errors }}{{ form.confirm_risk }} {{ form.confirm_risk.label_tag }}</p>
+          <div class="submit-row">
+            <button type="submit" name="action" value="apply" class="default">Применить показанные изменения</button>
+          </div>
+        </fieldset>
+      {% endif %}
+    </form>
+  </div>
+{% endblock %}

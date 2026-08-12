@@ -9,6 +9,7 @@
   "user_list.html": "Локальное управление пользователями портала",
   "user_form.html": "Создание пользователя, отдельное изменение учётной записи и карточка доступа",
   "ad_link_form.html": "Форма явной привязки локального пользователя к AD identity",
+  "admin_access_assignment.html": "Резервный Django Admin preview/apply для контрактных ролей и технических флагов",
   "partials/help_panel.html": "Плавающее окно contextual help mini-chat",
   "partials/help_answer.html": "Ответ contextual help mini-chat"
 }

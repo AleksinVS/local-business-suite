@@ -11,6 +11,7 @@
   "env_services.py": ".env effective status and proposal generation service",
   "help_services.py": "Contextual help context and mini-chat response service",
   "forms.py": "Forms for contracts, env proposals, help and user workflows",
+  "access_filters.py": "Server-side search, role, department branch and attention filters for access administration",
   "views.py": "Django template/HTMX views for Settings Center",
   "urls.py": "URL routes for Settings Center",
   "tests.py": "Settings Center tests",

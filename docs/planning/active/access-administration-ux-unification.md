@@ -1,6 +1,7 @@
 # Единый UX администрирования доступа
 
-Статус: исследование и план готовы; ADR-0040 принят, реализация разрешена владельцем.
+Статус: ADR-0040 принят; первый безопасный срез 00a/00b и компактная часть 01/02
+реализованы, следующие пакеты остаются активными.
 
 Дата анализа: 2026-08-12.
 
@@ -69,6 +70,22 @@ backlog. Здесь рассматриваются административн�
 Django Admin, ИИ и AD. Django Admin остаётся резервным интерфейсом, но пишет через
 тот же доменный сервис. Иначе новый «единый центр» будет только фасадом над
 несогласованными контурами.
+
+### Реализовано в первом срезе (2026-08-12)
+
+- единый assignment service с privilege ceiling, superuser self-assignment,
+  одноразовым preview и расширенным source/reason audit;
+- резервный Django Admin adapter и защита стандартных access-полей;
+- закрытие прямых group writes через AI и LDAP, lifecycle guards и active-actor
+  checks;
+- строгая типизация role contract и superuser-only определения ролей;
+- один пункт «Доступ», серверный поиск/фильтры, компактная таблица, прямой переход
+  после создания и progressive disclosure технических источников;
+- management-command e2e и Playwright desktop/320px smoke.
+
+Не реализованы и не должны считаться завершёнными: staged file/audit protocol,
+AD system actor, доменные write-сервисы Board/memory groups, отдельный общий журнал,
+role impact editor и explain adapters.
 
 ## 4. Карта текущего состояния
 

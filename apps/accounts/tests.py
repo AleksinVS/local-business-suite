@@ -19,11 +19,14 @@ from .department_policy import (
     ORGANIZATION_ROOT_DEPARTMENT_NAME,
     UNASSIGNED_USER_DEPARTMENT_NAME,
 )
-from .selectors import effective_access_for_user, role_risk_markers
+from .selectors import effective_access_for_user, role_risk_markers, selected_role_names_for_user
 from .services import (
     apply_role_assignment,
+    create_local_user,
+    disable_local_user,
     preview_role_assignment,
     scope_tokens_for_principal,
+    update_local_user,
     upsert_ad_identity_from_attributes,
 )
 from .views import MANUAL_AUTH_SESSION_KEY
@@ -71,7 +74,8 @@ class LDAPConfigParsingTests(SimpleTestCase):
 
 @pytest.mark.integration
 class LDAPAuthConfigTests(TestCase):
-    def test_ad_group_sync_removes_only_ad_managed_missing_roles(self):
+    @override_settings(ACCOUNTS_AD_GROUP_ROLE_SYNC=False)
+    def test_disabled_ad_group_sync_preserves_all_memberships(self):
         User = get_user_model()
         user = User.objects.create_user(username="ldap-user")
         technician, _ = Group.objects.get_or_create(name="technician")
@@ -85,7 +89,7 @@ class LDAPAuthConfigTests(TestCase):
         )
 
         group_names = set(user.groups.values_list("name", flat=True))
-        self.assertNotIn("technician", group_names)
+        self.assertIn("technician", group_names)
         self.assertIn("local-only", group_names)
 
     def test_ad_identity_link_stores_allowlisted_attributes_and_maps_scope_token(self):
@@ -285,8 +289,9 @@ class AccessAssignmentServiceTests(TestCase):
         self.target.groups.add(self.customer_group, self.technical_group)
 
     def test_risky_assignment_requires_bound_preview_and_preserves_technical_group(self):
+        root = get_user_model().objects.create_superuser(username="access-risk-root")
         preview = preview_role_assignment(
-            actor=self.actor,
+            actor=root,
             target_user=self.target,
             selected_role_names=["manager"],
         )
@@ -294,7 +299,7 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertTrue(preview["requires_confirmation"])
         with self.assertRaisesMessage(ValidationError, "явного подтверждения"):
             apply_role_assignment(
-                actor=self.actor,
+                actor=root,
                 target_user=self.target,
                 selected_role_names=["manager"],
                 preview_token=preview["preview_token"],
@@ -302,7 +307,7 @@ class AccessAssignmentServiceTests(TestCase):
             )
 
         target, audit = apply_role_assignment(
-            actor=self.actor,
+            actor=root,
             target_user=self.target,
             selected_role_names=["manager"],
             preview_token=preview["preview_token"],
@@ -349,43 +354,78 @@ class AccessAssignmentServiceTests(TestCase):
                         selected_role_names=[role_name],
                     )
 
-    def test_self_escalation_uses_same_risk_confirmation(self):
+    def test_non_superuser_cannot_self_assign(self):
+        Group.objects.get_or_create(name="admin")
+
+        with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
+            preview_role_assignment(
+                actor=self.actor,
+                target_user=self.actor,
+                selected_role_names=["admin"],
+            )
+
+    def test_superuser_self_assignment_requires_dedicated_risk_confirmation(self):
         admin_group, _ = Group.objects.get_or_create(name="admin")
+        root = get_user_model().objects.create_superuser(username="access-self-root")
         preview = preview_role_assignment(
-            actor=self.actor,
-            target_user=self.actor,
+            actor=root,
+            target_user=root,
             selected_role_names=["admin"],
         )
 
         self.assertTrue(preview["requires_confirmation"])
+        self.assertTrue(any("Самоназначение" in marker for marker in preview["risk_markers"]))
         with self.assertRaises(ValidationError):
             apply_role_assignment(
-                actor=self.actor,
-                target_user=self.actor,
+                actor=root,
+                target_user=root,
                 selected_role_names=["admin"],
                 preview_token=preview["preview_token"],
-                risk_confirmed=False,
             )
-        actor, audit = apply_role_assignment(
-            actor=self.actor,
-            target_user=self.actor,
+        updated, audit = apply_role_assignment(
+            actor=root,
+            target_user=root,
             selected_role_names=["admin"],
             preview_token=preview["preview_token"],
             risk_confirmed=True,
         )
-        self.assertIn(admin_group, actor.groups.all())
+        self.assertIn(admin_group, updated.groups.all())
         self.assertEqual(audit.actor_id, audit.target_user_id)
 
-    def test_preview_is_bound_to_actor_target_selection_and_current_roles(self):
+    def test_manager_assignment_is_limited_by_contract_allowlist(self):
+        technician, _ = Group.objects.get_or_create(name="technician")
         preview = preview_role_assignment(
             actor=self.actor,
+            target_user=self.target,
+            selected_role_names=["technician"],
+        )
+        updated, _audit = apply_role_assignment(
+            actor=self.actor,
+            target_user=self.target,
+            selected_role_names=["technician"],
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+        )
+        self.assertIn(technician, updated.groups.all())
+
+        with self.assertRaisesMessage(PermissionDenied, "Недостаточно прав"):
+            preview_role_assignment(
+                actor=self.actor,
+                target_user=self.target,
+                selected_role_names=["admin"],
+            )
+
+    def test_preview_is_bound_to_actor_target_selection_and_current_roles(self):
+        root = get_user_model().objects.create_superuser(username="access-binding-root")
+        preview = preview_role_assignment(
+            actor=root,
             target_user=self.target,
             selected_role_names=["manager"],
         )
         other = get_user_model().objects.create_user(username="other-target")
         with self.assertRaisesMessage(ValidationError, "другому пользователю"):
             apply_role_assignment(
-                actor=self.actor,
+                actor=root,
                 target_user=other,
                 selected_role_names=["manager"],
                 preview_token=preview["preview_token"],
@@ -394,7 +434,7 @@ class AccessAssignmentServiceTests(TestCase):
 
         with self.assertRaisesMessage(ValidationError, "изменились после предпросмотра"):
             apply_role_assignment(
-                actor=self.actor,
+                actor=root,
                 target_user=self.target,
                 selected_role_names=["customer"],
                 preview_token=preview["preview_token"],
@@ -404,13 +444,69 @@ class AccessAssignmentServiceTests(TestCase):
         self.target.groups.remove(self.customer_group)
         with self.assertRaisesMessage(ValidationError, "уже изменены"):
             apply_role_assignment(
-                actor=self.actor,
+                actor=root,
                 target_user=self.target,
                 selected_role_names=["manager"],
                 preview_token=preview["preview_token"],
                 risk_confirmed=True,
             )
         self.assertFalse(AccessAssignmentAudit.objects.exists())
+
+    def test_break_glass_preview_binds_reason_source_and_is_single_use(self):
+        root = get_user_model().objects.create_superuser(username="access-break-glass-root")
+        preview = preview_role_assignment(
+            actor=root,
+            target_user=self.target,
+            selected_role_names=["customer"],
+            source=AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS,
+            reason="Восстановление доступа после отказа продуктовой страницы",
+        )
+
+        with self.assertRaisesMessage(ValidationError, "причина изменились"):
+            apply_role_assignment(
+                actor=root,
+                target_user=self.target,
+                selected_role_names=["customer"],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+                source=AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS,
+                reason="Другая причина",
+            )
+
+        _updated, audit = apply_role_assignment(
+            actor=root,
+            target_user=self.target,
+            selected_role_names=["customer"],
+            preview_token=preview["preview_token"],
+            risk_confirmed=True,
+            source=AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS,
+            reason="Восстановление доступа после отказа продуктовой страницы",
+        )
+        self.assertTrue(audit.is_break_glass)
+        self.assertEqual(audit.source, AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS)
+
+        with self.assertRaises(ValidationError):
+            apply_role_assignment(
+                actor=root,
+                target_user=self.target,
+                selected_role_names=["customer"],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+                source=AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS,
+                reason="Восстановление доступа после отказа продуктовой страницы",
+            )
+
+    def test_system_audit_sources_cannot_be_forged_by_interactive_actor(self):
+        Group.objects.get_or_create(name="technician")
+        for source in (AccessAssignmentAudit.Source.AI, AccessAssignmentAudit.Source.AD_SYNC):
+            with self.subTest(source=source):
+                with self.assertRaisesMessage(PermissionDenied, "системному сервису"):
+                    preview_role_assignment(
+                        actor=self.actor,
+                        target_user=self.target,
+                        selected_role_names=["technician"],
+                        source=source,
+                    )
 
     def test_only_superuser_can_change_technical_flags_even_with_valid_role_permission(self):
         with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
@@ -474,6 +570,184 @@ class AccessAssignmentServiceTests(TestCase):
                 is_staff=False,
                 is_superuser=False,
             )
+
+    def test_profile_service_rejects_self_disable_and_last_superuser_disable(self):
+        root = get_user_model().objects.create_superuser(username="lifecycle-root")
+
+        with self.assertRaisesMessage(ValidationError, "собственную"):
+            update_local_user(
+                actor=root,
+                user=root,
+                cleaned_data={"is_active": False},
+            )
+
+        operator = get_user_model().objects.create_superuser(username="lifecycle-operator")
+        disable_local_user(actor=operator, user=root)
+        operator.refresh_from_db()
+        root.refresh_from_db()
+        self.assertFalse(root.is_active)
+        with self.assertRaisesMessage(ValidationError, "собственную"):
+            disable_local_user(actor=operator, user=operator)
+
+    def test_profile_service_rejects_access_fields(self):
+        root = get_user_model().objects.create_superuser(username="profile-service-root")
+        with self.assertRaisesMessage(ValidationError, "управляемое назначение"):
+            update_local_user(
+                actor=root,
+                user=self.target,
+                cleaned_data={"is_staff": True},
+            )
+
+    def test_create_local_user_rejects_privileged_fields_without_assignment_audit(self):
+        from apps.core.models import Department
+
+        root = get_user_model().objects.create_superuser(username="create-user-root")
+        department = Department.objects.create(name="Подразделение безопасного создания")
+        for field_name in ("is_staff", "is_superuser", "user_permissions", "groups"):
+            with self.subTest(field_name=field_name):
+                with self.assertRaisesMessage(ValidationError, "управляемое назначение"):
+                    create_local_user(
+                        actor=root,
+                        cleaned_data={
+                            "username": f"forbidden-{field_name}",
+                            "department": department,
+                            field_name: True,
+                        },
+                    )
+        self.assertFalse(AccessAssignmentAudit.objects.filter(actor=root).exists())
+
+    def test_profile_service_rejects_quarantine_department(self):
+        from .department_policy import get_unassigned_user_department
+
+        root = get_user_model().objects.create_superuser(username="department-service-root")
+        quarantine = get_unassigned_user_department()
+
+        with self.assertRaisesMessage(ValidationError, "рабочее подразделение"):
+            update_local_user(
+                actor=root,
+                user=self.target,
+                cleaned_data={"department_id": quarantine.pk},
+            )
+
+    def test_django_admin_fallback_uses_preview_apply_and_domain_audit(self):
+        root = get_user_model().objects.create_superuser(username="admin-fallback-root")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        self.client.force_login(root)
+        url = reverse("admin:accounts_user_access_assignment", args=[self.target.pk])
+
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Резервное изменение доступа")
+
+        preview_response = self.client.post(
+            url,
+            {
+                "action": "preview",
+                "roles": [technician.pk],
+                "reason": "Основная страница доступа временно недоступна",
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+        preview = preview_response.context["preview"]
+        self.assertTrue(preview["is_break_glass"])
+
+        apply_response = self.client.post(
+            url,
+            {
+                "action": "apply",
+                "roles": [technician.pk],
+                "reason": "Основная страница доступа временно недоступна",
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+            },
+        )
+        self.assertEqual(apply_response.status_code, 302)
+        self.target.refresh_from_db()
+        self.assertEqual(selected_role_names_for_user(self.target), ["technician"])
+        audit = AccessAssignmentAudit.objects.get(target_user=self.target)
+        self.assertTrue(audit.is_break_glass)
+        self.assertEqual(audit.source, AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS)
+
+    def test_django_admin_standard_form_excludes_access_fields(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from apps.accounts.admin import CustomUserAdmin
+
+        root = get_user_model().objects.create_superuser(username="admin-form-root")
+        request = RequestFactory().get("/admin/accounts/user/")
+        request.user = root
+
+        form_class = CustomUserAdmin(get_user_model(), admin.site).get_form(
+            request,
+            obj=self.target,
+        )
+
+        for field_name in (
+            "groups",
+            "user_permissions",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+            "department",
+        ):
+            self.assertNotIn(field_name, form_class.base_fields)
+
+    def test_django_admin_bulk_delete_cannot_remove_superuser(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from apps.accounts.admin import CustomUserAdmin
+
+        root = get_user_model().objects.create_superuser(username="admin-delete-root")
+        request = RequestFactory().post("/admin/accounts/user/")
+        request.user = root
+        model_admin = CustomUserAdmin(get_user_model(), admin.site)
+
+        with self.assertRaisesMessage(PermissionDenied, "Нельзя удалить суперпользователя"):
+            model_admin.delete_queryset(
+                request,
+                get_user_model().objects.filter(pk=root.pk),
+            )
+
+    def test_delegated_django_admin_cannot_change_superuser_password(self):
+        delegated = get_user_model().objects.create_user(
+            username="delegated-user-admin",
+            is_staff=True,
+        )
+        delegated.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="accounts",
+                codename="change_user",
+            )
+        )
+        root = get_user_model().objects.create_superuser(username="password-target-root")
+        self.client.force_login(delegated)
+
+        response = self.client.get(
+            reverse("admin:auth_user_password_change", args=[root.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_django_admin_cannot_rename_or_delete_existing_group(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        from apps.accounts.admin import GroupAdminWithProfile
+
+        root = get_user_model().objects.create_superuser(username="group-admin-root")
+        technical = Group.objects.create(name="technical-cannot-become-role")
+        request = RequestFactory().get("/admin/auth/group/")
+        request.user = root
+        model_admin = GroupAdminWithProfile(Group, admin.site)
+
+        change_form = model_admin.get_form(request, obj=technical)
+        add_form = model_admin.get_form(request, obj=None)
+
+        self.assertNotIn("name", change_form.base_fields)
+        self.assertIn("name", add_form.base_fields)
+        self.assertFalse(model_admin.has_delete_permission(request, obj=technical))
 
     def test_effective_access_explains_all_supported_sources(self):
         permission = Permission.objects.select_related("content_type").first()

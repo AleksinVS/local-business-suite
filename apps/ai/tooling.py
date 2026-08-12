@@ -269,6 +269,16 @@ def execute_tool(
     origin_channel="",
     actor_version="",
 ):
+    # Confirmation is an explicit state transition handled by
+    # execute_pending_action().  This legacy argument is retained only for
+    # callers that still pass it; it must never turn an arbitrary request
+    # payload into an approved write.  In particular, a missing/invalid token
+    # fails closed before creating a session, audit record, or pending action.
+    if confirmed_token:
+        raise ValidationError(
+            "Подтверждение выполняется только через сохранённое ожидающее действие."
+        )
+
     registry = tool_registry()
     if tool_code not in registry:
         raise UnknownToolError(tool_code)
@@ -314,18 +324,6 @@ def execute_tool(
         )
 
     requires_confirmation = tool.get("requires_confirmation", False)
-
-    # Handle explicit token replay for confirmed pending actions
-    if confirmed_token:
-        pending = PendingAction.objects.filter(
-            token=confirmed_token,
-            tool_code=tool_code,
-            actor=actor,
-            status=PendingAction.Status.PENDING,
-            expires_at__gt=timezone.now(),
-        ).first()
-        if pending:
-            requires_confirmation = False  # replay confirmed pending action
 
     confirmation_state = "not_required"
     if requires_confirmation and not confirmed_token:

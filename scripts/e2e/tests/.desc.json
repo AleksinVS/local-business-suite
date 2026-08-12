@@ -6,5 +6,6 @@
   "portal_smoke.spec.ts": "Checks authenticated login and the main portal shell in a real browser",
   "right_panel_ai_navigation.spec.ts": "Checks opening module objects in the shared right panel from the AI chat page",
   "kanban_department_filter.spec.ts": "Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar",
-  "notifications.spec.ts": "Checks PWA manifest, root service worker and authenticated notification center behavior"
+  "notifications.spec.ts": "Checks PWA manifest, root service worker and authenticated notification center behavior",
+  "access_administration.spec.ts": "Checks the compact access list, user card, reserve Django Admin route and narrow viewport"
 }

@@ -390,17 +390,17 @@ def build_tools(
         return result
 
     @tool("access.users.update")
-    def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None, group_names: list[str] | None = None) -> dict:
-        """Updates user details. Requires administrator privileges."""
+    def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None) -> dict:
+        """Updates lifecycle/profile fields. Roles and groups use the access card."""
+        payload = {"user_id": user_id}
+        if is_active is not None:
+            payload["is_active"] = is_active
+        if department_id is not None:
+            payload["department_id"] = department_id
         result = gateway_client.execute_tool(
             tool_code="access.users.update",
             actor=actor,
-            payload={
-                "user_id": user_id,
-                "is_active": is_active,
-                "department_id": department_id,
-                "group_names": group_names
-            },
+            payload=payload,
             session_id=session_id,
             conversation_id=conversation_id,
             request_id=request_id,

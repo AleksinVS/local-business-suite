@@ -6,13 +6,14 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
     department_policy.py: file # Fail-closed политика обязательного подразделения и карантинной записи
-    ldap_backend.py: file # LDAP-бэкенд аутентификации
+    ldap_backend.py: file # LDAP-бэкенд аутентификации с fail-closed синхронизацией контрактных ролей
     middleware.py: file # Middleware для согласования ручного входа с REMOTE_USER
     models.py: file # Пользователи, профили групп и журнал назначения доступа
     selectors.py: file # Селекторы контрактных ролей, технических групп и итогового доступа
     services.py: file # Транзакционные сервисы назначения ролей, локальных пользователей и AD identity link
     settings_descriptors.py: file # Доменные descriptors для Settings Center по пользователям и AD link
     signals.py: file # Сигналы Django (пост-сохранение пользователя)
+    test_ldap_role_sync.py: file # Матрица выключателя, валидации и fail-closed поведения синхронизации ролей AD
     tests.py: file # Тесты приложения
     views.py: file # Представления аутентификации
   ai: # Панель управления чат-агентом, шлюз инструментов и аудит AI
@@ -140,6 +141,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты центра уведомлений и API
     views.py: file # JSON API уведомлений, страница центра уведомлений и корневой service worker
   settings_center: # Reusable Settings Center: descriptors, registry, UI, audit, runtime contract apply, env proposals and contextual help
+    access_filters.py: file # Server-side search, role, department branch and attention filters for access administration
     admin.py: file # Django Admin registration for Settings Center audit models
     apps.py: file # Django AppConfig for Settings Center
     contract_services.py: file # Runtime contract preview/apply service with validation and atomic writes
@@ -413,6 +415,7 @@ scripts: # Скрипты и инструменты разработки
     reset-test-database.py: file # Безопасное удаление только локальных файлов повторно используемой тестовой SQLite-базы
   e2e: # Playwright e2e configuration and tests
     tests: # Permanent Playwright e2e scenarios
+      access_administration.spec.ts: file # Checks the compact access list, user card, reserve Django Admin route and narrow viewport
       copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
       health.spec.ts: file # Checks that the Django health endpoint is reachable without starting a browser
       kanban_department_filter.spec.ts: file # Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar
@@ -514,6 +517,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
       help_answer.html: file # Частичный ответ миничата
       help_panel.html: file # Плавающее окно справки и миничата по конкретному setting_id
     ad_link_form.html: file # Форма явной привязки локального пользователя к AD identity
+    admin_access_assignment.html: file # Резервный Django Admin preview/apply для контрактных ролей и технических флагов
     dashboard.html: file # Дашборд зарегистрированных settings descriptors и audit
     env_proposal.html: file # Форма создания .env proposal в data/
     env_status.html: file # Статус bootstrap .env настроек
@@ -559,6 +563,8 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения и рекомендуемое распределение задач
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
+      EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
+      TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

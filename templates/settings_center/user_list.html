@@ -1,75 +1,117 @@
 {% extends "base.html" %}
 
-{% block title %}Пользователи{% endblock %}
+{% block title %}Доступ{% endblock %}
 
 {% block content %}
-<section class="panel">
+<section class="panel access-user-list">
   <div class="section-head">
     <div>
-      <p class="eyebrow">Пользователи и доступ</p>
-      <h1>Пользователи портала</h1>
+      <p class="eyebrow">Администрирование доступа</p>
+      <h1>Доступ сотрудников</h1>
     </div>
-    <div class="header-actions">
-      {% if request.user.is_staff or request.user.is_superuser %}
-        <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
-      {% else %}
-        <a class="button-link" href="{% url 'core:dashboard' %}">На главную</a>
-      {% endif %}
-      {% if request.user.is_superuser %}<a class="button" href="{% url 'settings_center:user_create' %}">Создать пользователя</a>{% endif %}
-    </div>
+    {% if request.user.is_superuser %}
+      <div class="header-actions">
+        <a class="button-link" href="{% url 'core:role_rules' %}">Настроить роли</a>
+        <a class="button" href="{% url 'settings_center:user_create' %}">Создать пользователя</a>
+      </div>
+    {% endif %}
   </div>
+
+  <form method="get" class="access-user-filters" aria-label="Поиск и фильтры пользователей">
+    <label class="access-filter-search" for="access-user-query">
+      <span>Поиск</span>
+      <input
+        id="access-user-query"
+        name="q"
+        type="search"
+        value="{{ access_filter_state.query }}"
+        placeholder="ФИО, логин, email или AD"
+      >
+    </label>
+    <label>
+      <span>Роль</span>
+      <select name="role">
+        <option value="">Все роли</option>
+        {% for role in role_filter_options %}
+          <option value="{{ role.code }}"{% if access_filter_state.role == role.code %} selected{% endif %}>{{ role.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Подразделение</span>
+      <select name="department">
+        <option value="">Все подразделения</option>
+        {% for department in department_filter_options %}
+          <option value="{{ department.pk }}"{% if access_filter_state.department_id == department.pk %} selected{% endif %}>{{ department.full_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="access-attention-filter">
+      <input type="checkbox" name="attention" value="{{ attention_value }}"{% if access_filter_state.attention %} checked{% endif %}>
+      <span>Требует внимания</span>
+    </label>
+    <div class="access-filter-actions">
+      <button type="submit" class="button">Найти</button>
+      {% if access_filter_state.query or access_filter_state.role or access_filter_state.department_id or access_filter_state.attention %}
+        <a class="button-link" href="{% url 'settings_center:user_list' %}">Сбросить</a>
+      {% endif %}
+    </div>
+  </form>
+  <p class="muted access-filter-hint">Внимание: нет роли или подразделения, отключённая учётная запись с назначениями, ошибка AD либо привилегированный доступ.</p>
+
   <div class="table-container">
-    <table class="data-table">
+    <table class="data-table access-user-table">
       <thead>
         <tr>
-          <th>Логин</th>
-          <th>ФИО</th>
+          <th>Сотрудник</th>
           <th>Подразделение</th>
-          <th>Роли доступа</th>
-          <th>Технические группы</th>
-          <th>Связь с AD</th>
-          <th>Статус</th>
-          <th></th>
+          <th>Доступ</th>
+          <th>Источник и статус</th>
+          <th><span class="visually-hidden">Действие</span></th>
         </tr>
       </thead>
       <tbody>
         {% for portal_user in portal_users %}
           <tr>
-            <td>{{ portal_user.username }}</td>
-            <td>{{ portal_user.get_full_name }}</td>
             <td>
-              {{ portal_user.department|default:"" }}
+              <strong>{{ portal_user.get_full_name|default:portal_user.username }}</strong>
+              {% if portal_user.get_full_name %}<span class="muted">{{ portal_user.username }}</span>{% endif %}
+            </td>
+            <td>
+              {{ portal_user.department }}
               {% if portal_user.requires_department_assignment %}<span class="risk-marker risk-marker-critical">Требует назначения</span>{% endif %}
             </td>
-            <td>{{ portal_user.access_overview.roles|join:", "|default:"нет" }}</td>
-            <td>{{ portal_user.access_overview.technical_groups|join:", "|default:"нет" }}</td>
+            <td>
+              {{ portal_user.access_overview.roles|join:", "|default:"Базовый профиль" }}
+              {% if portal_user.access_overview.has_technical_groups %}<span class="muted">Есть технические назначения</span>{% endif %}
+            </td>
             <td>
               {% for identity in portal_user.external_identities.all %}
-                {{ identity.domain }}\{{ identity.username }}
+                <span>AD: {{ identity.get_sync_status_display }}</span>
               {% empty %}
-                <span class="muted">нет</span>
+                <span>Локальная учётная запись</span>
               {% endfor %}
+              <span class="muted">{% if portal_user.is_active %}Активен{% else %}Отключён{% endif %}{% if portal_user.is_superuser %} · Суперпользователь{% elif portal_user.is_staff %} · Администрирование Django{% endif %}</span>
             </td>
-            <td>{% if portal_user.is_active %}Активен{% else %}Отключен{% endif %}</td>
-            <td class="row-actions">
-              <a href="{% url 'settings_center:user_edit' portal_user.pk %}">Доступ</a>
-              {% if request.user.is_superuser %}<a href="{% url 'settings_center:user_profile_edit' portal_user.pk %}">Учётная запись</a>{% endif %}
-              {% if request.user.is_superuser %}<a href="{% url 'settings_center:user_ad_link' portal_user.pk %}">AD</a>{% endif %}
-              {% if request.user.is_superuser and portal_user.is_active %}
-                <form method="post" action="{% url 'settings_center:user_disable' portal_user.pk %}">
-                  {% csrf_token %}
-                  <button type="submit">Отключить</button>
-                </form>
-              {% endif %}
-            </td>
+            <td class="row-actions"><a href="{% url 'settings_center:user_edit' portal_user.pk %}">Открыть</a></td>
           </tr>
+        {% empty %}
+          <tr><td colspan="5" class="muted">Пользователи по заданным условиям не найдены.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  {% if is_paginated %}
+    <nav class="access-pagination" aria-label="Страницы списка пользователей">
+      {% if page_obj.has_previous %}
+        <a class="button-link" href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Назад</a>
+      {% endif %}
+      <span>Страница {{ page_obj.number }} из {{ paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a class="button-link" href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Далее</a>
+      {% endif %}
+    </nav>
+  {% endif %}
 </section>
-<style>
-  .row-actions { display: flex; gap: 0.5rem; align-items: center; }
-  .row-actions button { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 0.35rem 0.5rem; cursor: pointer; }
-</style>
 {% endblock %}

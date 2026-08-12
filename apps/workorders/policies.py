@@ -83,6 +83,8 @@ def status_transitions():
 
 
 def active_role_rules(user):
+    if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
+        return []
     if getattr(user, "is_superuser", False):
         return [{"name": "superuser", **superuser_rules()}]
     rules = role_rules()

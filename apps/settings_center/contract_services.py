@@ -4,7 +4,8 @@ import copy
 import json
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from apps.core.contract_store import normalized_hash
 from apps.core.json_utils import (
@@ -84,6 +85,7 @@ def apply_contract_payload(
     *, actor, setting_id: str, raw_payload: str, confirmed: bool, base_hash: str | None = None
 ):
     descriptor = get_registry().get(setting_id)
+    _require_contract_editor(actor=actor, setting_id=setting_id)
     if descriptor.storage_kind != "runtime_contract":
         raise ValidationError("Настройка не связана с рабочим контрактом.")
     if not descriptor.is_editable:
@@ -111,6 +113,23 @@ def apply_contract_payload(
         after=after,
         validation_result={"valid": True},
     )
+
+
+def _require_contract_editor(*, actor, setting_id):
+    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
+        raise PermissionDenied("Требуется вход в систему.")
+    actor_state = (
+        get_user_model()
+        .objects.filter(pk=actor.pk)
+        .values("is_active", "is_staff", "is_superuser")
+        .first()
+    )
+    if not actor_state or not actor_state["is_active"]:
+        raise PermissionDenied("Требуется активная учетная запись.")
+    if setting_id == "core.contract.role_rules" and not actor_state["is_superuser"]:
+        raise PermissionDenied("Определения ролей может изменять только суперпользователь.")
+    if not (actor_state["is_staff"] or actor_state["is_superuser"]):
+        raise PermissionDenied("Изменять рабочие настройки может только администратор настроек.")
 
 
 def parse_and_validate_payload(descriptor, raw_payload: str):

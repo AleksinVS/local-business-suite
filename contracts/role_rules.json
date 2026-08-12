@@ -1,5 +1,10 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
+  "$administration": {
+    "role_assignment_allowlist": {
+      "manager": ["customer", "technician"]
+    }
+  },
   "$capabilities": {
     "view_scope": {
       "type": "scope",

@@ -26,8 +26,11 @@
         Пользователь временно помещён в подразделение «Не назначено». Суперпользователь должен выбрать реальное подразделение в разделе «Учётная запись».
       </div>
     {% endif %}
+    {% if request.GET.focus == "assign" %}
+      <div class="message success" role="status">Пользователь создан. Теперь назначьте ему роль.</div>
+    {% endif %}
 
-    <form method="post" class="settings-small-form">
+    <form method="post" class="settings-small-form" id="assign">
       {% csrf_token %}
       {{ form.non_field_errors }}
       {{ form.preview_token }}
@@ -35,16 +38,26 @@
         <legend>{{ form.roles.label }}</legend>
         {{ form.roles.errors }}
         {{ form.roles }}
+        {% if form.protected_role_groups %}
+          <p class="muted">Сохраняются без изменения:</p>
+          <ul class="compact-list">
+            {% for group in form.protected_role_groups %}
+              <li>{{ group.profile.title|default:group.name }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
         <p class="muted">{{ form.roles.help_text }}</p>
       </fieldset>
-      <fieldset>
-        <legend>Технические флаги</legend>
-        <label class="access-flag-option">{{ form.is_superuser }} <span><strong>{{ form.is_superuser.label }}</strong><small>{{ form.is_superuser.help_text }}</small></span></label>
-        {{ form.is_superuser.errors }}
-        <label class="access-flag-option">{{ form.is_staff }} <span><strong>{{ form.is_staff.label }}</strong><small>{{ form.is_staff.help_text }}</small></span></label>
-        {{ form.is_staff.errors }}
-        {% if not form.can_manage_privileged_flags %}<p class="muted">Изменение технических флагов доступно только супер-пользователю.</p>{% endif %}
-      </fieldset>
+      {% if form.can_manage_privileged_flags %}
+        <details class="access-danger-zone">
+          <summary>Технические флаги</summary>
+          <p class="muted">Используйте только для системного администрирования. Обычный доступ назначается ролями.</p>
+          <label class="access-flag-option">{{ form.is_superuser }} <span><strong>{{ form.is_superuser.label }}</strong><small>{{ form.is_superuser.help_text }}</small></span></label>
+          {{ form.is_superuser.errors }}
+          <label class="access-flag-option">{{ form.is_staff }} <span><strong>{{ form.is_staff.label }}</strong><small>{{ form.is_staff.help_text }}</small></span></label>
+          {{ form.is_staff.errors }}
+        </details>
+      {% endif %}
       <div class="table-actions">
         <button type="submit" name="action" value="preview" class="button-link">Предпросмотр изменений</button>
       </div>
@@ -82,53 +95,57 @@
         {% for role in effective_access.roles %}
           <dt>{{ role.label }} <code>{{ role.code }}</code></dt>
           <dd>{{ role.description|default:"Описание не заполнено." }}</dd>
-        {% empty %}<p class="muted">Роли доступа не назначены.</p>{% endfor %}
+        {% empty %}<dt class="muted">Роли доступа не назначены.</dt><dd></dd>{% endfor %}
       </dl>
 
-      <h3>Технические и специальные группы</h3>
-      <dl>
-        {% for group in effective_access.technical_groups %}
-          <dt>{{ group.label }} <code>{{ group.code }}</code> <span class="muted">Источник: спецгруппа</span></dt>
-          <dd>{{ group.description|default:"Описание не заполнено." }}</dd>
-        {% empty %}<p class="muted">Технических групп нет.</p>{% endfor %}
-      </dl>
+      <details class="access-expert-details">
+        <summary>Возможности и технические источники</summary>
 
-      <h3>Технические флаги</h3>
-      <ul>
-        {% for flag in effective_access.flags %}
-          <li>{{ flag.label }} <span class="muted">Источник: {{ flag.source }}</span></li>
-        {% empty %}<li class="muted">Флаги is_staff/is_superuser не установлены.</li>{% endfor %}
-      </ul>
+        <h3>Возможности</h3>
+        <dl>
+          {% for capability in effective_access.capabilities %}
+            <dt>{{ capability.label }} <code>{{ capability.code }}</code></dt>
+            <dd>
+              {{ capability.description }}
+              <ul>
+                {% for source in capability.sources %}
+                  <li>Источник: {{ source.type }} — {{ source.label }}; значение: {{ source.value }}</li>
+                {% endfor %}
+              </ul>
+            </dd>
+          {% empty %}<dt class="muted">Возможности из ролей не найдены.</dt><dd></dd>{% endfor %}
+        </dl>
 
-      <h3>Возможности</h3>
-      <dl>
-        {% for capability in effective_access.capabilities %}
-          <dt>{{ capability.label }} <code>{{ capability.code }}</code></dt>
-          <dd>
-            {{ capability.description }}
-            <ul>
-              {% for source in capability.sources %}
-                <li>Источник: {{ source.type }} — {{ source.label }}; значение: {{ source.value }}</li>
-              {% endfor %}
-            </ul>
-          </dd>
-        {% empty %}<p class="muted">Возможности из ролей не найдены.</p>{% endfor %}
-      </dl>
+        <h3>Технические и специальные группы</h3>
+        <dl>
+          {% for group in effective_access.technical_groups %}
+            <dt>{{ group.label }} <code>{{ group.code }}</code> <span class="muted">Источник: спецгруппа</span></dt>
+            <dd>{{ group.description|default:"Описание не заполнено." }}</dd>
+          {% empty %}<dt class="muted">Технических групп нет.</dt><dd></dd>{% endfor %}
+        </dl>
 
-      <h3>Django permissions</h3>
-      <dl>
-        {% for permission in effective_access.django_permissions %}
-          <dt>{{ permission.label }} <code>{{ permission.code }}</code></dt>
-          <dd>Источник: Django permission — {{ permission.sources|join:", " }}</dd>
-        {% empty %}<p class="muted">Отдельные Django permissions не назначены.</p>{% endfor %}
-      </dl>
+        <h3>Технические флаги</h3>
+        <ul>
+          {% for flag in effective_access.flags %}
+            <li>{{ flag.label }} <span class="muted">Источник: {{ flag.source }}</span></li>
+          {% empty %}<li class="muted">Флаги is_staff/is_superuser не установлены.</li>{% endfor %}
+        </ul>
+
+        <h3>Django permissions</h3>
+        <dl>
+          {% for permission in effective_access.django_permissions %}
+            <dt>{{ permission.label }} <code>{{ permission.code }}</code></dt>
+            <dd>Источник: Django permission — {{ permission.sources|join:", " }}</dd>
+          {% empty %}<dt class="muted">Отдельные Django permissions не назначены.</dt><dd></dd>{% endfor %}
+        </dl>
+      </details>
     </section>
 
     <details>
       <summary>Последние изменения доступа</summary>
       <ul>
         {% for audit in access_audits %}
-          <li>#{{ audit.pk }}, {{ audit.created_at }}: роли {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}{% if audit.flags_changed %}; флаги: {% for change in audit.flags_changed %}{{ change.label }} ({% if change.before %}вкл.{% else %}выкл.{% endif %} → {% if change.after %}вкл.{% else %}выкл.{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}; администратор ID {{ audit.actor_id }}</li>
+          <li>#{{ audit.pk }}, {{ audit.created_at }}: роли {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}{% if audit.flags_changed %}; флаги: {% for change in audit.flags_changed %}{{ change.label }} ({% if change.before %}вкл.{% else %}выкл.{% endif %} → {% if change.after %}вкл.{% else %}выкл.{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}; источник: {{ audit.get_source_display }}; администратор ID {{ audit.actor_id }}{% if audit.reason %}; причина: {{ audit.reason }}{% endif %}</li>
         {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
       </ul>
     </details>
@@ -153,6 +170,7 @@
   .access-summary { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
   .access-summary p { margin: 0; }
   .access-preview, .effective-access { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .access-danger-zone, .access-expert-details { margin-top: 1rem; }
   .effective-access dt { margin-top: 0.75rem; font-weight: 600; }
   .effective-access dd { margin: 0.2rem 0 0 1rem; }
   .message.warning { padding: 0.75rem; border: 1px solid #d97706; border-radius: 6px; }

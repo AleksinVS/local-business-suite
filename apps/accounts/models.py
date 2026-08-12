@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db import models
 
@@ -93,6 +95,12 @@ class GroupProfile(models.Model):
 class AccessAssignmentAudit(models.Model):
     """Журнал атомарного изменения ролей и технических флагов доступа."""
 
+    class Source(models.TextChoices):
+        SETTINGS_CENTER = "settings_center", "Раздел доступа"
+        DJANGO_ADMIN_BREAK_GLASS = "django_admin_break_glass", "Резервный Django Admin"
+        AI = "ai", "ИИ-инструмент"
+        AD_SYNC = "ad_sync", "Синхронизация Active Directory"
+
     actor = models.ForeignKey(
         "accounts.User",
         on_delete=models.PROTECT,
@@ -114,6 +122,23 @@ class AccessAssignmentAudit(models.Model):
     flags_changed = models.JSONField("Изменённые технические флаги", default=list)
     risk_markers = models.JSONField("Маркеры риска", default=list)
     risk_confirmed = models.BooleanField("Риск подтверждён", default=False)
+    source = models.CharField(
+        "Источник изменения",
+        max_length=48,
+        choices=Source.choices,
+        default=Source.SETTINGS_CENTER,
+        db_index=True,
+    )
+    is_break_glass = models.BooleanField("Резервное изменение", default=False)
+    reason = models.TextField("Причина", blank=True)
+    correlation_id = models.UUIDField("Идентификатор операции", default=uuid.uuid4, editable=False)
+    preview_fingerprint = models.CharField(
+        "Отпечаток предпросмотра",
+        max_length=64,
+        unique=True,
+        null=True,
+        editable=False,
+    )
     created_at = models.DateTimeField("Создано", auto_now_add=True, db_index=True)
 
     class Meta:

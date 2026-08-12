@@ -74,6 +74,38 @@ class Command(BaseCommand):
             if {item["code"] for item in audit.flags_changed} != {"is_staff", "is_superuser"}:
                 raise CommandError("Audit не содержит изменения технических флагов.")
 
+            # Решение владельца: активный superuser может назначить роль себе,
+            # но только через отдельный рискованный preview/apply и аудит.
+            Group.objects.get_or_create(name="admin")
+            self_preview = preview_role_assignment(
+                actor=actor,
+                target_user=actor,
+                selected_role_names=["admin"],
+            )
+            if not any("Самоназначение" in marker for marker in self_preview["risk_markers"]):
+                raise CommandError("Самоназначение superuser не помечено отдельным риском.")
+            actor, self_audit = apply_role_assignment(
+                actor=actor,
+                target_user=actor,
+                selected_role_names=["admin"],
+                preview_token=self_preview["preview_token"],
+                risk_confirmed=True,
+            )
+            if self_audit.actor_id != self_audit.target_user_id:
+                raise CommandError("Audit самоназначения не связывает actor и target.")
+            try:
+                apply_role_assignment(
+                    actor=actor,
+                    target_user=actor,
+                    selected_role_names=["admin"],
+                    preview_token=self_preview["preview_token"],
+                    risk_confirmed=True,
+                )
+            except ValidationError:
+                pass
+            else:
+                raise CommandError("Один предпросмотр удалось применить повторно.")
+
             transaction.set_rollback(True)
 
         self.stdout.write(self.style.SUCCESS("access_management_e2e: OK (тестовые данные откатились)"))

@@ -96,3 +96,26 @@ Workflow transitions are defined in [contracts/workflow_rules.json](../../contra
 This allows policy changes without rewriting view logic and keeps UI conditions
 secondary to server-side checks (см. также ADR-0023: доступ применяется в
 селекторах и endpoints, а не только скрытием элементов интерфейса).
+
+## Администрирование доступа (ADR-0040)
+
+- Политика делегированного назначения хранится в
+  `$administration.role_assignment_allowlist`. Отсутствующий блок означает пустой
+  allowlist и закрытый режим.
+- Non-superuser не меняет собственные роли и не изменяет существующие роли цели,
+  которые не входят в его allowlist. Активный superuser может назначать любую
+  контрактную роль, включая себе, но self-assignment всегда получает отдельный
+  risk marker.
+- Подписанный preview связан с actor, target, ролями, техническими флагами,
+  состоянием actor, хешем контракта, источником, причиной и одноразовым nonce.
+- Django Admin является резервным клиентом того же assignment service. Стандартные
+  формы не пишут access-поля напрямую; системные источники `ai` и `ad_sync` нельзя
+  указать интерактивным вызовом.
+- ИИ не меняет группы общим user-update инструментом. LDAP role sync закрыт до
+  появления отдельного аудируемого системного сервиса; выключатель `false` даёт
+  ноль записей групп.
+- Неактивная учётная запись не получает capability-роли, Settings Center или AI
+  actor context и не восстанавливается через LDAP backend.
+- Технические группы и прямые Django permissions показываются как источники, но не
+  редактируются в общей карточке. `Board.allowed_groups` защищён от прямой записи
+  через Django Admin до появления доменного preview/apply-сервиса workorders.

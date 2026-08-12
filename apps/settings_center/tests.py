@@ -7,11 +7,11 @@ import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from apps.accounts.models import AccessAssignmentAudit, GroupProfile
+from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity, GroupProfile
 from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
 
@@ -110,8 +110,22 @@ class SettingsCenterRegistryTests(TestCase):
 
 
 class SettingsCenterContractTests(TestCase):
+    def test_role_contract_service_rejects_non_superuser_direct_call(self):
+        actor = User.objects.create_user(username="settings-role-manager")
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager_group)
+        payload = load_json_file("contracts/role_rules.json")
+
+        with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
+            apply_contract_payload(
+                actor=actor,
+                setting_id="core.contract.role_rules",
+                raw_payload=json.dumps(payload, ensure_ascii=False),
+                confirmed=True,
+            )
+
     def test_runtime_contract_apply_validates_writes_atomically_and_audits(self):
-        actor = User.objects.create_user(username="settings-admin", password="pass", is_staff=True)
+        actor = User.objects.create_superuser(username="settings-admin", password="pass")
         with TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             payload = load_json_file("contracts/role_rules.json")
@@ -138,7 +152,7 @@ class SettingsCenterContractTests(TestCase):
     def test_apply_with_stale_base_hash_is_rejected(self):
         from apps.core.contract_store import _reset_for_tests
 
-        actor = User.objects.create_user(username="stale-admin", password="pass", is_staff=True)
+        actor = User.objects.create_superuser(username="stale-admin", password="pass")
         with TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             payload = load_json_file("contracts/role_rules.json")
@@ -318,6 +332,13 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(username="operator-1")
         self.assertFalse(user.groups.exists())
+        self.assertEqual(
+            response["Location"],
+            f"{reverse('settings_center:user_edit', kwargs={'pk': user.pk})}?focus=assign#assign",
+        )
+        assignment_page = self.client.get(response["Location"])
+        self.assertContains(assignment_page, 'id="assign"', html=False)
+        self.assertContains(assignment_page, "Теперь назначьте ему роль")
 
         response = self.client.post(
             reverse("settings_center:user_ad_link", kwargs={"pk": user.pk}),
@@ -340,6 +361,79 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertFalse(user.is_active)
         self.assertEqual(SettingsChange.objects.filter(action=SettingsChange.Action.AD_LINK).count(), 1)
 
+    def test_user_list_searches_and_filters_on_the_server(self):
+        from apps.core.models import Department
+
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        actor = User.objects.create_user(username="access-filter-manager")
+        actor.groups.add(manager_group)
+        department = Department.objects.create(name="Фильтруемое подразделение")
+        child_department = Department.objects.create(
+            name="Дочернее фильтруемое подразделение",
+            parent=department,
+        )
+        target = User.objects.create_user(
+            username="access-filter-target",
+            first_name="Ирина",
+            last_name="Фильтрова",
+            email="filter-target@example.test",
+            department=child_department,
+        )
+        technical_group, _ = Group.objects.get_or_create(name="memory_observer")
+        target.groups.add(customer_group, technical_group)
+        ExternalIdentity.objects.create(
+            user=target,
+            subject_id="S-1-5-21-filter-target",
+            username="ad-filter-target",
+            upn="ad-filter-target@example.test",
+            domain="EXAMPLE",
+        )
+        inactive_target = User.objects.create_user(
+            username="access-filter-inactive",
+            department=department,
+            is_active=False,
+        )
+        inactive_target.groups.add(customer_group)
+        self.client.force_login(actor)
+        url = reverse("settings_center:user_list")
+
+        for query in ("Ирина", "access-filter-target", "filter-target@example.test", "ad-filter-target"):
+            with self.subTest(query=query):
+                response = self.client.get(url, {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    [user.pk for user in response.context["portal_users"]], [target.pk]
+                )
+
+        role_response = self.client.get(url, {"role": "customer"})
+        self.assertIn(target.pk, [user.pk for user in role_response.context["portal_users"]])
+        self.assertNotIn(actor.pk, [user.pk for user in role_response.context["portal_users"]])
+
+        department_response = self.client.get(url, {"department": department.pk})
+        self.assertIn(target.pk, [user.pk for user in department_response.context["portal_users"]])
+        self.assertNotIn(actor.pk, [user.pk for user in department_response.context["portal_users"]])
+
+        attention_response = self.client.get(url, {"attention": "attention"})
+        self.assertIn(inactive_target.pk, [user.pk for user in attention_response.context["portal_users"]])
+        self.assertNotIn(target.pk, [user.pk for user in attention_response.context["portal_users"]])
+
+    def test_user_list_keeps_filters_when_paginating_and_has_one_access_entrypoint(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        actor = User.objects.create_user(username="access-pagination-manager")
+        actor.groups.add(manager_group)
+        for number in range(51):
+            User.objects.create_user(username=f"access-page-{number:02d}")
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:user_list"), {"q": "access-page-"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_paginated"])
+        self.assertContains(response, "?q=access-page-&amp;page=2", html=False)
+        self.assertContains(response, '<span class="nav-text">Доступ</span>', html=False)
+        self.assertNotContains(response, '<span class="nav-text">Роли доступа</span>', html=False)
+
     def test_manage_roles_user_can_open_list_and_access_card_but_regular_user_cannot(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         manager = User.objects.create_user(username="role-manager")
@@ -361,7 +455,7 @@ class SettingsCenterUserViewsTests(TestCase):
         self.client.force_login(manager)
         user_list_response = self.client.get(reverse("settings_center:user_list"))
         self.assertEqual(user_list_response.status_code, 200)
-        self.assertContains(user_list_response, "Роли доступа")
+        self.assertContains(user_list_response, "Доступ сотрудников")
         response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Итоговый доступ и источники")
@@ -371,6 +465,30 @@ class SettingsCenterUserViewsTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_staff_only_and_inactive_superuser_cannot_open_access_administration(self):
+        staff = User.objects.create_user(
+            username="access-staff-only",
+            is_staff=True,
+        )
+        inactive_root = User.objects.create_superuser(username="access-inactive-root")
+        inactive_root.is_active = False
+        inactive_root.save(update_fields=["is_active"])
+        target = User.objects.create_user(username="inactive-access-target")
+
+        for actor in (staff, inactive_root):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                self.assertIn(
+                    self.client.get(reverse("settings_center:user_list")).status_code,
+                    {302, 403},
+                )
+                self.assertIn(
+                    self.client.get(
+                        reverse("settings_center:user_edit", kwargs={"pk": target.pk})
+                    ).status_code,
+                    {302, 403},
+                )
 
     def test_superuser_profile_update_preserves_roles_groups_and_technical_flags(self):
         from apps.core.models import Department
@@ -414,6 +532,7 @@ class SettingsCenterUserViewsTests(TestCase):
     def test_access_card_preview_confirm_apply_preserves_technical_groups_and_flags(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         customer_group, _ = Group.objects.get_or_create(name="customer")
+        technician_group, _ = Group.objects.get_or_create(name="technician")
         technical_group, _ = Group.objects.get_or_create(name="memory_observer")
         actor = User.objects.create_user(username="assignment-manager")
         actor.groups.add(manager_group)
@@ -422,12 +541,12 @@ class SettingsCenterUserViewsTests(TestCase):
         self.client.force_login(actor)
         url = reverse("settings_center:user_edit", kwargs={"pk": target.pk})
 
-        direct_apply = self.client.post(url, {"action": "apply", "roles": [manager_group.pk]})
+        direct_apply = self.client.post(url, {"action": "apply", "roles": [technician_group.pk]})
         self.assertEqual(direct_apply.status_code, 200)
         self.assertContains(direct_apply, "Сначала выполните предпросмотр")
         self.assertEqual(set(target.groups.values_list("name", flat=True)), {"customer", "memory_observer"})
 
-        response = self.client.post(url, {"action": "preview", "roles": [manager_group.pk]})
+        response = self.client.post(url, {"action": "preview", "roles": [technician_group.pk]})
         self.assertEqual(response.status_code, 200)
         preview = response.context["preview"]
         self.assertTrue(preview["requires_confirmation"])
@@ -436,7 +555,7 @@ class SettingsCenterUserViewsTests(TestCase):
             url,
             {
                 "action": "apply",
-                "roles": [manager_group.pk],
+                "roles": [technician_group.pk],
                 "preview_token": preview["preview_token"],
                 "confirm_risk": "on",
             },
@@ -445,7 +564,7 @@ class SettingsCenterUserViewsTests(TestCase):
         target.refresh_from_db()
         self.assertTrue(target.is_staff)
         self.assertFalse(target.is_superuser)
-        self.assertEqual(set(target.groups.values_list("name", flat=True)), {"manager", "memory_observer"})
+        self.assertEqual(set(target.groups.values_list("name", flat=True)), {"technician", "memory_observer"})
         self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
 
     def test_superuser_access_card_changes_technical_flags_with_preview(self):
@@ -487,7 +606,7 @@ class SettingsCenterUserViewsTests(TestCase):
         audit = AccessAssignmentAudit.objects.get(target_user=target)
         self.assertEqual({item["code"] for item in audit.flags_changed}, {"is_staff", "is_superuser"})
 
-    def test_role_manager_sees_read_only_technical_flags(self):
+    def test_role_manager_does_not_see_technical_flag_controls(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         actor = User.objects.create_user(username="flags-role-manager")
         actor.groups.add(manager_group)
@@ -497,9 +616,31 @@ class SettingsCenterUserViewsTests(TestCase):
         response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'name="is_staff"', html=False)
-        self.assertContains(response, "disabled", html=False)
-        self.assertContains(response, "только супер-пользователю")
+        self.assertNotContains(response, 'name="is_staff"', html=False)
+        self.assertNotContains(response, 'name="is_superuser"', html=False)
+
+    def test_role_manager_sees_own_and_privileged_target_roles_as_read_only(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        actor = User.objects.create_user(username="protected-role-manager")
+        actor.groups.add(manager_group)
+        privileged_target = User.objects.create_user(username="protected-role-target")
+        privileged_target.groups.add(admin_group, customer_group)
+        self.client.force_login(actor)
+
+        own_response = self.client.get(
+            reverse("settings_center:user_edit", kwargs={"pk": actor.pk})
+        )
+        target_response = self.client.get(
+            reverse("settings_center:user_edit", kwargs={"pk": privileged_target.pk})
+        )
+
+        self.assertContains(own_response, "Сохраняются без изменения")
+        self.assertNotContains(own_response, f'value="{manager_group.pk}"')
+        self.assertContains(target_response, "Сохраняются без изменения")
+        self.assertNotContains(target_response, f'value="{admin_group.pk}"')
+        self.assertContains(target_response, f'value="{customer_group.pk}"')
 
     def test_profile_form_does_not_expose_privileged_flags(self):
         form = PortalUserProfileUpdateForm()

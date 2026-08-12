@@ -34,83 +34,34 @@
             </button>
             <div class="all-functions-dropdown" id="all-functions-dropdown" hidden>
               <nav class="all-functions-list" aria-label="Все функции">
-                <a href="{% url 'workorders:board' %}">
-                  <span class="nav-icon">📋</span>
-                  <span class="nav-text">Доска</span>
-                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button>
-                </a>
-                <a href="{% url 'inventory:list' %}">
-                  <span class="nav-icon">📦</span>
-                  <span class="nav-text">Медизделия</span>
-                  <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button>
-                </a>
+                <div class="all-functions-item"><a href="{% url 'workorders:board' %}"><span class="nav-icon">📋</span><span class="nav-text">Доска</span></a><button type="button" class="favorite-toggle" data-favorite-label="Доска" aria-label="Добавить в избранное: Доска" aria-pressed="false" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button></div>
+                <div class="all-functions-item"><a href="{% url 'inventory:list' %}"><span class="nav-icon">📦</span><span class="nav-text">Медизделия</span></a><button type="button" class="favorite-toggle" data-favorite-label="Медизделия" aria-label="Добавить в избранное: Медизделия" aria-pressed="false" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button></div>
                 {% if show_department_nav %}
-                  <a href="{% url 'core:department_list' %}">
-                    <span class="nav-icon">🏢</span>
-                    <span class="nav-text">Подразделения</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'core:department_list' %}"><span class="nav-icon">🏢</span><span class="nav-text">Подразделения</span></a><button type="button" class="favorite-toggle" data-favorite-label="Подразделения" aria-label="Добавить в избранное: Подразделения" aria-pressed="false" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button></div>
                 {% endif %}
                 {% if show_access_nav %}
-                  <a href="{% url 'settings_center:user_list' %}">
-                    <span class="nav-icon">🔐</span>
-                    <span class="nav-text">Пользователи и доступ</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'user-access', 'Пользователи и доступ', '🔐', '{% url 'settings_center:user_list' %}')">☆</button>
-                  </a>
-                  <a href="{% url 'core:role_rules' %}">
-                    <span class="nav-icon">👥</span>
-                    <span class="nav-text">Роли доступа</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'roles', 'Роли доступа', '👥', '{% url 'core:role_rules' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'settings_center:user_list' %}"><span class="nav-icon">🔐</span><span class="nav-text">Доступ</span></a><button type="button" class="favorite-toggle" data-favorite-label="Доступ" aria-label="Добавить в избранное: Доступ" aria-pressed="false" onclick="toggleFavorite(event, 'user-access', 'Доступ', '🔐', '{% url 'settings_center:user_list' %}')">☆</button></div>
                 {% endif %}
                 {% if show_ai_nav %}
-                  <a href="{% url 'ai:chat_index' %}">
-                    <span class="nav-icon">🤖</span>
-                    <span class="nav-text">ИИ-чат</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'chat', 'ИИ-чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'ai:chat_index' %}"><span class="nav-icon">🤖</span><span class="nav-text">ИИ-чат</span></a><button type="button" class="favorite-toggle" data-favorite-label="ИИ-чат" aria-label="Добавить в избранное: ИИ-чат" aria-pressed="false" onclick="toggleFavorite(event, 'chat', 'ИИ-чат', '🤖', '{% url 'ai:chat_index' %}')">☆</button></div>
                 {% endif %}
                 {% if show_ai_admin_nav %}
-                  <a href="{% url 'ai:hub' %}">
-                    <span class="nav-icon">⚙️</span>
-                    <span class="nav-text">ИИ-центр</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'ai-hub', 'ИИ-центр', '⚙️', '{% url 'ai:hub' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'ai:hub' %}"><span class="nav-icon">⚙️</span><span class="nav-text">ИИ-центр</span></a><button type="button" class="favorite-toggle" data-favorite-label="ИИ-центр" aria-label="Добавить в избранное: ИИ-центр" aria-pressed="false" onclick="toggleFavorite(event, 'ai-hub', 'ИИ-центр', '⚙️', '{% url 'ai:hub' %}')">☆</button></div>
                 {% endif %}
                 {% if show_settings_center_nav %}
-                  <a href="{% url 'settings_center:dashboard' %}">
-                    <span class="nav-icon">⚙️</span>
-                    <span class="nav-text">Настройки</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'settings_center:dashboard' %}"><span class="nav-icon">⚙️</span><span class="nav-text">Настройки</span></a><button type="button" class="favorite-toggle" data-favorite-label="Настройки" aria-label="Добавить в избранное: Настройки" aria-pressed="false" onclick="toggleFavorite(event, 'settings-center', 'Настройки', '⚙️', '{% url 'settings_center:dashboard' %}')">☆</button></div>
                 {% endif %}
                 {% if show_memory_review_nav %}
-                  <a href="{% url 'memory:review_dashboard' %}">
-                    <span class="nav-icon">🧠</span>
-                    <span class="nav-text">Ревью памяти</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', '🧠', '{% url 'memory:review_dashboard' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'memory:review_dashboard' %}"><span class="nav-icon">🧠</span><span class="nav-text">Ревью памяти</span></a><button type="button" class="favorite-toggle" data-favorite-label="Ревью памяти" aria-label="Добавить в избранное: Ревью памяти" aria-pressed="false" onclick="toggleFavorite(event, 'memory-review', 'Ревью памяти', '🧠', '{% url 'memory:review_dashboard' %}')">☆</button></div>
                 {% endif %}
                 {% if show_admin_nav %}
-                  <a href="{% url 'admin:index' %}">
-                    <span class="nav-icon">🛠️</span>
-                    <span class="nav-text">Администрирование Django</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'admin', 'Администрирование Django', '🛠️', '{% url 'admin:index' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'admin:index' %}"><span class="nav-icon">🛠️</span><span class="nav-text">Администрирование Django</span></a><button type="button" class="favorite-toggle" data-favorite-label="Администрирование Django" aria-label="Добавить в избранное: Администрирование Django" aria-pressed="false" onclick="toggleFavorite(event, 'admin', 'Администрирование Django', '🛠️', '{% url 'admin:index' %}')">☆</button></div>
                 {% endif %}
                 {% if show_analytics_nav %}
-                  <a href="{% url 'analytics:dashboard' %}">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-text">Аналитика</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'analytics:dashboard' %}"><span class="nav-icon">📊</span><span class="nav-text">Аналитика</span></a><button type="button" class="favorite-toggle" data-favorite-label="Аналитика" aria-label="Добавить в избранное: Аналитика" aria-pressed="false" onclick="toggleFavorite(event, 'analytics', 'Аналитика', '📊', '{% url 'analytics:dashboard' %}')">☆</button></div>
                 {% endif %}
                 {% if show_waiting_list_nav %}
-                  <a href="{% url 'waiting_list:dashboard' %}">
-                    <span class="nav-icon">⏳</span>
-                    <span class="nav-text">Лист ожидания</span>
-                    <button type="button" class="favorite-toggle" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button>
-                  </a>
+                  <div class="all-functions-item"><a href="{% url 'waiting_list:dashboard' %}"><span class="nav-icon">⏳</span><span class="nav-text">Лист ожидания</span></a><button type="button" class="favorite-toggle" data-favorite-label="Лист ожидания" aria-label="Добавить в избранное: Лист ожидания" aria-pressed="false" onclick="toggleFavorite(event, 'waiting-list', 'Лист ожидания', '⏳', '{% url 'waiting_list:dashboard' %}')">☆</button></div>
                 {% endif %}
                 {% if user.is_authenticated %}
                   <form action="{% url 'logout' %}" method="post" class="logout-form">
@@ -293,19 +244,24 @@
           if (match && favoriteIds.includes(match[1])) {
             btn.innerText = '★';
             btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
+            btn.setAttribute('aria-label', `Убрать из избранного: ${btn.dataset.favoriteLabel || ''}`);
           } else {
             btn.innerText = '☆';
             btn.classList.remove('active');
+            btn.setAttribute('aria-pressed', 'false');
+            btn.setAttribute('aria-label', `Добавить в избранное: ${btn.dataset.favoriteLabel || ''}`);
           }
         });
       }
 
-      function closeAllFunctionsMenu() {
+      function closeAllFunctionsMenu({ returnFocus = false } = {}) {
         const button = document.getElementById('all-functions-button');
         const dropdown = document.getElementById('all-functions-dropdown');
         if (!button || !dropdown) return;
         dropdown.hidden = true;
         button.setAttribute('aria-expanded', 'false');
+        if (returnFocus) button.focus();
       }
 
       function toggleAllFunctionsMenu() {
@@ -316,14 +272,18 @@
         closeHeaderUserMenu();
         dropdown.hidden = !nextOpen;
         button.setAttribute('aria-expanded', String(nextOpen));
+        if (nextOpen) {
+          requestAnimationFrame(() => dropdown.querySelector('a, button')?.focus());
+        }
       }
 
-      function closeHeaderUserMenu() {
+      function closeHeaderUserMenu({ returnFocus = false } = {}) {
         const button = document.getElementById('header-user-button');
         const dropdown = document.getElementById('header-user-dropdown');
         if (!button || !dropdown) return;
         dropdown.hidden = true;
         button.setAttribute('aria-expanded', 'false');
+        if (returnFocus) button.focus();
       }
 
       function toggleHeaderUserMenu() {
@@ -334,6 +294,9 @@
         closeAllFunctionsMenu();
         dropdown.hidden = !nextOpen;
         button.setAttribute('aria-expanded', String(nextOpen));
+        if (nextOpen) {
+          requestAnimationFrame(() => dropdown.querySelector('a, button')?.focus());
+        }
       }
 
       // Initialize favorites on page load
@@ -353,7 +316,9 @@
             }
           });
           document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') closeAllFunctionsMenu();
+            if (event.key === 'Escape' && !allFunctionsDropdown.hidden) {
+              closeAllFunctionsMenu({ returnFocus: true });
+            }
           });
         }
         const headerUserButton = document.getElementById('header-user-button');
@@ -369,7 +334,9 @@
             }
           });
           document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') closeHeaderUserMenu();
+            if (event.key === 'Escape' && !headerUserDropdown.hidden) {
+              closeHeaderUserMenu({ returnFocus: true });
+            }
           });
         }
       });

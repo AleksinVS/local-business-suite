@@ -13,7 +13,6 @@ from apps.core.contract_store import get_contract, normalized_hash
 from apps.workorders.policies import (
     can_manage_departments,
     can_manage_inventory,
-    can_manage_roles,
     capability_definitions,
 )
 from .forms import DepartmentForm
@@ -189,7 +188,11 @@ class RoleRulesUpdateView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
     template_name = "core/role_rules_form.html"
 
     def test_func(self):
-        return can_manage_roles(self.request.user)
+        return bool(
+            self.request.user.is_authenticated
+            and self.request.user.is_active
+            and self.request.user.is_superuser
+        )
 
     def get_context_data(self, **kwargs):
         role_rules = kwargs.pop("role_rules", None)

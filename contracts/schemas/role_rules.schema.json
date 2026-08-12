@@ -4,11 +4,27 @@
   "type": "object",
   "properties": {
     "$schema": { "type": "string" },
+    "$administration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role_assignment_allowlist": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "required": ["role_assignment_allowlist"]
+    },
     "$capabilities": {
       "type": "object",
       "description": "Справочник прав: понятные названия и комментарии для нетехнических пользователей.",
       "additionalProperties": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "type": { "enum": ["flag", "scope", "targets"] },
           "label": { "type": "string", "minLength": 1 },
@@ -23,6 +39,7 @@
   "patternProperties": {
     "^[a-zA-Z0-9_]+$": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "display_name": { "type": "string" },
         "description": { "type": "string" },
@@ -69,8 +86,15 @@
         "manage_assignments",
         "view_analytics",
         "manage_departments",
-        "manage_roles"
+        "manage_roles",
+        "manage_ai_skills",
+        "memory_organization_write",
+        "memory_organization_review",
+        "view_waiting_list",
+        "create_waiting_list"
       ]
     }
-  }
+  },
+  "required": ["$schema", "$capabilities"],
+  "additionalProperties": false
 }

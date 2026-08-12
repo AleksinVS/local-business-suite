@@ -4,6 +4,23 @@
 
 ## Active
 
+### Единый UX администрирования доступа
+
+ADR-0040 принят. Первый безопасный срез реализован: канонический preview/apply с
+privilege ceiling и self-assignment для active superuser, резервный Django Admin,
+закрытие обходов AI/LDAP, active-account guards, строгий role contract, один пункт
+«Доступ», поиск/фильтры и компактная карточка источников.
+
+Остаются пакеты: staged file/audit protocol и межпроцессная блокировка; доменные
+write-сервисы Board и memory groups; общий журнал; role impact editor; explain
+adapters; итоговая usability-приёмка.
+
+Контекст:
+
+- план: `docs/planning/active/access-administration-ux-unification.md`;
+- ADR: `docs/adr/ADR-0040-unified-access-administration-control-plane.md`;
+- workflow: `workflow/active/access-administration-ux-unification/`.
+
 ### Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат
 
 Пакеты 01-04 и уточнения 06-08, 10 выполнены: медизделия стали листьями дерева, добавлены
@@ -120,45 +137,6 @@ MVP vertical slice реализован: контракты аналитики, 
 - после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
 
 ## Next
-
-### Единый UX администрирования доступа
-
-Исследование 2026-08-12 показало: основной сценарий назначения ролей уже имеет
-подписанный preview, транзакцию и аудит, но административный контур остаётся
-фрагментированным, а Django Admin, ИИ `access.users.update` и LDAP/AD создают
-альтернативные пути изменения. Дополнительно `manage_roles` сейчас позволяет
-обычному менеджеру назначить себе `admin`, а запись файла role contract и
-`SettingsChange` не образует восстанавливаемую единую операцию. Self-assignment
-контрактной роли для действующего superuser сохранён решением владельца.
-
-Предлагаемый порядок:
-
-- реализовать принятый ADR-0040: стандартные access-поля Django Admin защищены от
-  прямой записи, а отдельный резервный superuser-маршрут использует общий
-  preview/apply; AD ownership, privilege ceiling и разделение
-  назначения/определения ролей;
-- закрыть обходные write-paths, усилить строгую валидацию контракта и staged
-  policy/audit write;
-- собрать единый раздел «Доступ»: пользователи, роли и журнал; технические источники
-  раскрывать только в контексте;
-- добавить business diff, серверный impact preview роли и контекстные доменные
-  объяснения по подтверждённым сценариям;
-- выполнить role/path security matrix, e2e, WCAG и usability-приёмку.
-
-Контекст:
-
-- план: `docs/planning/active/access-administration-ux-unification.md`;
-- Accepted ADR:
-  `docs/adr/ADR-0040-unified-access-administration-control-plane.md`;
-- workflow:
-  `workflow/active/access-administration-ux-unification/`.
-
-Владелец подтвердил решения: self-assignment контрактной роли сохраняется для
-superuser; Django Admin остаётся резервным write-интерфейсом через канонический
-сервис; AD-authoritative только для явно mapped roles; в первый срез не входят
-JIT/approval/access review; `manage_roles` разделяется; стартовый allowlist не
-содержит critical roles; технические и ресурсные назначения остаются у доменных
-владельцев.
 
 ### Row-level доступ: закрытие пробелов ревью прав 2026-07-30
 

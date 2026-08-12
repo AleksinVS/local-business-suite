@@ -596,12 +596,11 @@ TOOLS = [
         "domain": "access",
         "mode": "write",
         "execution_mode": "service_layer",
-        "description": "Обновить данные пользователя: активность, подразделение и группы. Только для администраторов.",
+        "description": "Обновить активность и подразделение пользователя через сервис учетных записей. Роли и группы меняются в карточке доступа.",
         "inputs": [
             "user_id",
             "is_active",
             "department_id",
-            "group_names",
         ],
         "outputs": [
             "user",

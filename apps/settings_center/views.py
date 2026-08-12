@@ -59,7 +59,11 @@ class UserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 class SuperuserUserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return bool(self.request.user.is_authenticated and self.request.user.is_superuser)
+        return bool(
+            self.request.user.is_authenticated
+            and self.request.user.is_active
+            and self.request.user.is_superuser
+        )
 
 
 class SettingsDashboardView(SettingsManagementMixin, TemplateView):
@@ -360,14 +364,38 @@ class UserListView(UserManagementMixin, ListView):
     paginate_by = 50
 
     def get_queryset(self):
-        return self.model.objects.select_related("department__parent").prefetch_related(
+        from .access_filters import filter_user_queryset
+
+        queryset = self.model.objects.select_related("department__parent").prefetch_related(
             "groups__profile", "external_identities"
         ).order_by("username")
+        queryset, self.access_filter_state = filter_user_queryset(queryset, self.request.GET)
+        return queryset
 
     def get_context_data(self, **kwargs):
+        from .access_filters import ATTENTION_VALUE, user_filter_options
+
         context = super().get_context_data(**kwargs)
         for portal_user in context["portal_users"]:
+            role_groups, technical_groups = split_user_groups(portal_user)
             portal_user.access_overview = user_access_overview(portal_user)
+            portal_user.access_overview["roles"] = [
+                getattr(getattr(group, "profile", None), "title", "") or group.name
+                for group in role_groups
+            ]
+            portal_user.access_overview["has_technical_groups"] = bool(technical_groups)
+        filter_options = user_filter_options()
+        query_params = self.request.GET.copy()
+        query_params.pop("page", None)
+        context.update(
+            {
+                "access_filter_state": self.access_filter_state,
+                "attention_value": ATTENTION_VALUE,
+                "role_filter_options": filter_options["roles"],
+                "department_filter_options": filter_options["departments"],
+                "pagination_query": query_params.urlencode(),
+            }
+        )
         return context
 
 
@@ -375,7 +403,9 @@ class UserCreateView(SuperuserUserManagementMixin, CreateView):
     model = get_user_model()
     form_class = PortalUserCreateForm
     template_name = "settings_center/user_form.html"
-    success_url = reverse_lazy("settings_center:user_list")
+
+    def get_success_url(self):
+        return f"{reverse('settings_center:user_edit', kwargs={'pk': self.object.pk})}?focus=assign#assign"
 
     def form_valid(self, form):
         user = create_local_user(actor=self.request.user, cleaned_data=form.cleaned_data.copy())

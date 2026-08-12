@@ -36,7 +36,7 @@ class KanbanColumnConfigInline(admin.TabularInline):
 class BoardAdmin(admin.ModelAdmin):
     list_display = ("title", "slug", "created_at")
     prepopulated_fields = {"slug": ("title",)}
-    filter_horizontal = ("allowed_groups",)
+    readonly_fields = ("allowed_groups",)
     inlines = [KanbanColumnConfigInline]
     actions = ["clone_boards"]
 

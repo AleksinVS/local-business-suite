@@ -1,0 +1,42 @@
+{
+  "task_id": "03-role-catalog-impact-editor",
+  "title": "Каталог ролей и серверный impact editor",
+  "goal": "Редактировать одну роль с точным до/после и массовым влиянием до записи.",
+  "depends_on": ["02-user-access-workspace"],
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/access_role_impact.py",
+    "apps/accounts/selectors.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/access_role_views.py",
+    "apps/settings_center/urls.py",
+    "apps/core/views.py",
+    "templates/core/role_rules_form.html",
+    "templates/settings_center/access_role_list.html",
+    "templates/settings_center/access_role_detail.html",
+    "static/src/js/access_role_editor.js",
+    "static/src/css/app.css",
+    "apps/accounts/tests.py",
+    "apps/core/tests.py",
+    "apps/settings_center/tests.py"
+  ],
+  "implementation_notes": [
+    "Каталог → страница одной роли; comparison is deferred until usage proves a need.",
+    "Server preview, а не только JS, вычисляет exact values and affected users.",
+    "Targets — structured multiselect, scopes — business labels.",
+    "Sticky action bar: reset, preview, change count, affected count, apply.",
+    "Revocation and scope reduction classified as impact, not automatically normal risk.",
+    "Capability descriptions are validated system metadata and are not edited in the normal product UI.",
+    "Rollback is a new previewed/audited change, not silent file restore."
+  ],
+  "acceptance_checks": [
+    "Role editor rejects stale and invalid contract.",
+    "Impact counts unique affected users with multi-role behavior.",
+    "Preview shows before/after for flag/scope/targets.",
+    "Privilege ceiling applies to definition changes.",
+    "E2E role scope change validates two affected user HTTP outcomes.",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=ui"
+  ],
+  "independent_review": "Независимо оценить полноту impact analysis, mass revoke и multi-role cases."
+}

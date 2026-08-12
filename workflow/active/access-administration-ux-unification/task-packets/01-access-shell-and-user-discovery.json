@@ -1,0 +1,41 @@
+{
+  "task_id": "01-access-shell-and-user-discovery",
+  "title": "Единый раздел доступа и поиск пользователей",
+  "goal": "Заменить разрозненные точки входа одним рабочим разделом и быстрым поиском.",
+  "depends_on": ["00d-special-assignment-ownership"],
+  "write_scope": [
+    "apps/settings_center/urls.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/access_views.py",
+    "apps/settings_center/access_filters.py",
+    "apps/settings_center/forms.py",
+    "templates/settings_center/access_base.html",
+    "templates/settings_center/user_list.html",
+    "templates/settings_center/user_form.html",
+    "templates/base.html",
+    "static/src/css/app.css",
+    "apps/settings_center/tests.py",
+    "scripts/e2e/tests/access_administration.spec.ts"
+  ],
+  "non_goals": [
+    "Не менять effective access algorithm.",
+    "Не реализовывать массовое назначение.",
+    "Не добавлять decorative dashboard cards."
+  ],
+  "implementation_notes": [
+    "Один глобальный пункт Доступ; старые URLs сохраняются как redirects.",
+    "Внутренние страницы первого среза: Пользователи, Роли, Журнал; источники раскрываются контекстно.",
+    "User table has five semantic columns and one Open action; technical groups and row action clusters are removed.",
+    "Primary server-side controls: name/login/email/AD search, role, department branch and one Requires attention slice; rare filters are secondary.",
+    "После создания открыть карточку нового пользователя и сфокусировать одно сообщение Назначьте роль без отдельного checklist.",
+    "Исправить nested button-inside-link и table/dl semantics."
+  ],
+  "acceptance_checks": [
+    "HTTP matrix для regular/manage_roles/staff/superuser.",
+    "Фильтры не раскрывают пользователей неавторизованному актору.",
+    "Pagination сохраняет query parameters.",
+    "Keyboard navigation и visible focus.",
+    "Responsive 320/768/1440 CSS/browser checks.",
+    "make verify-profile PROFILE=ui"
+  ]
+}

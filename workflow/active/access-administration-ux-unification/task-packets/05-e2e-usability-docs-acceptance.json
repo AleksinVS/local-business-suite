@@ -1,0 +1,48 @@
+{
+  "task_id": "05-e2e-usability-docs-acceptance",
+  "title": "Сквозная приемка, usability и документация",
+  "goal": "Доказать безопасность всех путей и понятность основных сценариев.",
+  "depends_on": ["04-audit-troubleshooter-and-sources"],
+  "write_scope": [
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "apps/accounts/management/commands/access_management_e2e.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/tests.py",
+    "apps/ai/tests/test_views.py",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md",
+    "README.md",
+    "workflow/active/access-administration-ux-unification/EXECUTOR_REPORT.*.md",
+    "workflow/active/access-administration-ux-unification/TASK_ACCEPTANCE.*.md",
+    "workflow/active/access-administration-ux-unification/RETROSPECTIVE.md",
+    "docs/planning/backlog.md",
+    "docs/planning/active/.desc.json",
+    "workflow/active/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance_matrix": [
+    "regular, manage_roles/assigner, role-definition admin, superuser, staff-only",
+    "local, no-explicit-role, quarantine, AD-managed, technical-group, direct-permission users",
+    "web, Admin, AI execute/confirm, LDAP sync, direct service",
+    "desktop and mobile keyboard paths"
+  ],
+  "usability_tasks": [
+    "Найти причину доступа.",
+    "Назначить типовую роль.",
+    "Отозвать рискованную роль.",
+    "Оценить последствия изменения общей роли.",
+    "Найти автора изменения."
+  ],
+  "acceptance_checks": [
+    "Не менее 90% usability tasks completed without prompts on agreed sample.",
+    "WCAG 2.2 AA keyboard/focus/semantics/contrast checks.",
+    "python manage.py access_management_e2e",
+    "python manage.py validate_architecture_contracts",
+    "make verify-profile PROFILE=ai",
+    "make verify-profile PROFILE=ui",
+    "make verify-full",
+    "git diff --check"
+  ],
+  "report_format": "Executed actions, totals, first substantive failure, unresolved risk, documentation updates. Long output remains in .local/."
+}

@@ -1,0 +1,40 @@
+{
+  "task_id": "00b-administration-policy-and-ceiling",
+  "title": "Политика назначения ролей и privilege ceiling",
+  "goal": "Разделить просмотр, назначение, изменение определений и privileged access без сравнения несопоставимых scopes.",
+  "depends_on": ["00a-direct-write-path-containment"],
+  "write_scope": [
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "data/contracts/role_rules.json",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/accounts/services.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "apps/core/views.py",
+    "apps/core/tests.py"
+  ],
+  "implementation_notes": [
+    "apps.accounts owns role/capability catalog composition and assignment policy; domains retain enforcement.",
+    "Add validated $administration.role_assignment_allowlist mapping actor role to target roles.",
+    "Critical-effective roles absent from normal allowlist and superuser-only.",
+    "Interactive self-assignment forbidden for non-superuser.",
+    "Active superuser assigns any existing contract role to another user or self; self-assignment always requires risk confirmation and audit.",
+    "Self-assignment exception does not cover technical groups, direct permissions, is_active or own is_superuser; role definitions remain superuser-only.",
+    "Recommended initial manager allowlist is customer and technician; owner approves exact values."
+  ],
+  "acceptance_checks": [
+    "Manager can assign only approved standard roles.",
+    "Manager cannot assign manager/admin/doctor to self or others unless explicitly and safely approved.",
+    "Critical role cannot appear in non-superuser allowlist.",
+    "Active superuser can self-assign an existing contract role only through signed preview/apply with a dedicated risk marker.",
+    "Non-superuser self-assignment is rejected.",
+    "Only superuser changes role definitions.",
+    "Schema rejects unknown actor/target role codes."
+  ],
+  "independent_review": "Independent privilege-escalation analysis and role/target matrix."
+}

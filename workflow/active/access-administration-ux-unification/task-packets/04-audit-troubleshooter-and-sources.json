@@ -1,0 +1,46 @@
+{
+  "task_id": "04-audit-troubleshooter-and-sources",
+  "title": "Общий журнал и контекстные объяснения доступа",
+  "goal": "Объяснить текущее и историческое решение без создания второй policy/audit истины.",
+  "depends_on": [
+    "02-user-access-workspace",
+    "03-role-catalog-impact-editor"
+  ],
+  "write_scope": [
+    "apps/accounts/access_audit.py",
+    "apps/accounts/access_explain.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/access_audit_views.py",
+    "apps/settings_center/urls.py",
+    "apps/settings_center/tests.py",
+    "apps/workorders/access_explain.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/access_explain.py",
+    "apps/waiting_list/tests.py",
+    "apps/memory/access_explain.py",
+    "apps/memory/tests.py",
+    "apps/ai/access_explain.py",
+    "apps/ai/tests/test_views.py",
+    "templates/settings_center/access_audit.html"
+  ],
+  "non_goals": [
+    "Не переносить все журналы в новую каноническую таблицу без отдельного ADR.",
+    "Не интерпретировать произвольный Python policy код.",
+    "Не раскрывать существование невидимого объекта."
+  ],
+  "implementation_notes": [
+    "Projection normalizes AccessAssignmentAudit, SettingsChange, AgentActionLog and AD sync audit.",
+    "Filters: time, actor, target, role, source, risk, result, correlation id.",
+    "No universal troubleshooter page is created; contextual Why actions are added only for confirmed support scenarios.",
+    "Explicit domain adapters return allow, deny or unknown/incomplete with source and scope.",
+    "Technical source owner, provenance and editability are shown inside user/role details."
+  ],
+  "acceptance_checks": [
+    "Projection pagination/filtering and no secret/PII leakage.",
+    "Object not visible returns safe denial without existence disclosure.",
+    "Positive and negative explanations for each supported domain.",
+    "AD/local/system/default sources distinguishable.",
+    "Audit correlation from AI pending action to applied domain event."
+  ],
+  "independent_review": "Обязателен privacy/security review объяснений и audit projection."
+}

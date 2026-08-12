@@ -310,6 +310,7 @@ docs: # Документация проекта
     ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md: file # ADR: Дерево подразделений как фильтр канбана и сворачиваемый ИИ-чат
     ADR-0038-privileged-flags-access-assignment.md: file # ADR: Технические флаги в управляемом назначении доступа
     ADR-0039-default-board-view-access.md: file # ADR: Базовый просмотр канбан-доски без назначенной роли
+    ADR-0040-unified-access-administration-control-plane.md: file # Принятый ADR: единый контур администрирования доступа и канонические пути изменения
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -384,6 +385,7 @@ docs: # Документация проекта
     MVP_Implementation_Plan.md: file # План реализации MVP
   planning: # Планирование работ: backlog, активные планы и архив планов
     active: # Активные планы крупных направлений
+      access-administration-ux-unification.md: file # Активный план единого UX администрирования доступа и канонических путей изменения
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
@@ -553,6 +555,10 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
   base.html: file # Базовый шаблон (navbar, sidebar, общий правый сайдбар, HTMX скрипты)
 workflow: # Исполнительные workflow-пакеты для сложных работ
   active: # Активные workflow-блоки
+    access-administration-ux-unification: # Workflow: единый UX администрирования доступа
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения и рекомендуемое распределение задач
+      BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов

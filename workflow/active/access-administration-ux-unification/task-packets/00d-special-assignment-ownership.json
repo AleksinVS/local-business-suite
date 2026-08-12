@@ -1,0 +1,45 @@
+{
+  "task_id": "00d-special-assignment-ownership",
+  "title": "Владение техническими и ресурсными назначениями",
+  "goal": "После защиты стандартных Django Admin форм сохранить поддерживаемые, доменно корректные пути изменения специальных источников доступа; резервный Admin-адаптер 00a ограничен контрактными ролями и флагами.",
+  "depends_on": ["00c-contract-write-integrity"],
+  "write_scope": [
+    "apps/workorders/services.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/views.py",
+    "apps/workorders/urls.py",
+    "apps/workorders/models.py",
+    "apps/workorders/migrations/",
+    "apps/workorders/tests.py",
+    "apps/workorders/admin.py",
+    "templates/settings_center/board_access_form.html",
+    "apps/settings_center/urls.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "apps/memory/access_services.py",
+    "apps/memory/models.py",
+    "apps/memory/migrations/",
+    "apps/memory/policies.py",
+    "apps/memory/tests.py",
+    "templates/settings_center/memory_group_membership_form.html",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md"
+  ],
+  "implementation_notes": [
+    "apps.workorders owns Board.allowed_groups service, preview, authorization and domain audit model/event.",
+    "Settings Center view is a client of workorders service and does not define board policy.",
+    "Memory technical groups use a superuser-only apps.memory signed preview/apply service and domain audit; common user card remains read-only.",
+    "Settings Center expert view calls apps.memory service; seed/bootstrap commands create group definitions but do not replace membership audit.",
+    "Direct Django permissions remain system exception with no manual UI; document owner/source.",
+    "If a new manual technical-group or direct-permission requirement appears, stop for ADR instead of extending generic accounts UI."
+  ],
+  "acceptance_checks": [
+    "Board.allowed_groups cannot change through Django Admin.",
+    "Authorized workorders service preview/apply changes board access and records audit.",
+    "Unknown/technical group not permitted by board policy is rejected.",
+    "Memory technical groups and direct permissions visible with source but not editable in common UI.",
+    "Expert memory-group membership preview/apply preserves contract roles and records domain audit.",
+    "No loss of supported operational board-access path."
+  ],
+  "independent_review": "Domain-boundary and board visibility regression review."
+}

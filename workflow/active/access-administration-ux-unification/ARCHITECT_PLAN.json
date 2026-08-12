@@ -1,0 +1,36 @@
+{
+  "block_id": "access-administration-ux-unification",
+  "goal": "Создать единый объяснимый UX администрирования доступа поверх канонических безопасных write-paths.",
+  "adr": "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+  "execution_order": [
+    "00a-direct-write-path-containment",
+    "00b-administration-policy-and-ceiling",
+    "00c-contract-write-integrity",
+    "00d-special-assignment-ownership",
+    "01-access-shell-and-user-discovery",
+    "02-user-access-workspace",
+    "03-role-catalog-impact-editor",
+    "04-audit-troubleshooter-and-sources",
+    "05-e2e-usability-docs-acceptance"
+  ],
+  "constraints": [
+    "Серверная policy, а не видимость элемента UI, определяет доступ.",
+    "UI, AI, AD и резервный Django Admin адаптер не дублируют бизнес-правила записи и вызывают доменные сервисы.",
+    "Технические группы и роли доступа показываются раздельно.",
+    "Новая audit UI является read-only projection, а не второй базой истины.",
+    "Row-level hardening 2026-07-30 не поглощается этим блоком.",
+    "AG-UI/CopilotKit версии не обновляются без отдельного согласования.",
+    "Временные артефакты создаются только в .local/."
+  ],
+  "recommended_assignment": {
+    "00a-direct-write-path-containment": "основной агент или gpt-5.6-sol/high; независимое security review обязательно",
+    "00b-administration-policy-and-ceiling": "gpt-5.6-sol/high; security model и contract требуют контроля основного агента",
+    "00c-contract-write-integrity": "gpt-5.6-sol/high; fault injection и multi-process checks обязательны",
+    "00d-special-assignment-ownership": "gpt-5.6-sol/high; затрагивает accounts/workorders/memory boundaries",
+    "01-access-shell-and-user-discovery": "gpt-5.6-terra/high; backend query scope отдельно контролирует основной агент",
+    "02-user-access-workspace": "gpt-5.6-sol/high для service/read model; UI-срез gpt-5.6-terra/high только после стабилизации серверного контракта",
+    "03-role-catalog-impact-editor": "gpt-5.6-sol/high из-за массового security impact",
+    "04-audit-troubleshooter-and-sources": "gpt-5.6-sol/high; доменные адаптеры требуют независимой проверки",
+    "05-e2e-usability-docs-acceptance": "основной агент; дешёвый субагент допустим для механической browser matrix"
+  }
+}

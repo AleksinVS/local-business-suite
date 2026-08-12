@@ -1,0 +1,12 @@
+{
+  ".": "Пакеты задач единого UX администрирования доступа",
+  "00a-direct-write-path-containment.json": "Закрытие прямых обходов Django Admin, ИИ, профиля и выключенного AD sync",
+  "00b-administration-policy-and-ceiling.json": "Разделение административных полномочий, allowlist и запрет самоэскалации",
+  "00c-contract-write-integrity.json": "Строгая схема, service authorization, CAS и восстанавливаемая запись policy/audit",
+  "00d-special-assignment-ownership.json": "Канонические владельцы технических групп, прямых permissions и доступа к доскам",
+  "01-access-shell-and-user-discovery.json": "Единая навигация, поиск, фильтры и очереди внимания",
+  "02-user-access-workspace.json": "Карточка пользователя, business diff и источники назначений",
+  "03-role-catalog-impact-editor.json": "Каталог ролей и серверный анализ массового влияния",
+  "04-audit-troubleshooter-and-sources.json": "Общий журнал, технические источники и проверка доступа",
+  "05-e2e-usability-docs-acceptance.json": "Матрица путей, e2e, usability, документация и приемка"
+}

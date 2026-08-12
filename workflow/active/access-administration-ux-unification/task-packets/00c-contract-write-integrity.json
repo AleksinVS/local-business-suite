@@ -1,0 +1,38 @@
+{
+  "task_id": "00c-contract-write-integrity",
+  "title": "Строгий role contract и восстанавливаемая запись",
+  "goal": "Исключить типовые ошибки policy, конкурентную потерю обновления и применённый контракт без аудита.",
+  "depends_on": ["00b-administration-policy-and-ceiling"],
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/models.py",
+    "apps/settings_center/services.py",
+    "apps/settings_center/tests.py",
+    "apps/settings_center/migrations/",
+    "apps/settings_center/management/commands/reconcile_settings_changes.py",
+    "apps/core/contract_store.py",
+    "apps/core/tests.py",
+    "contracts/schemas/role_rules.schema.json",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md"
+  ],
+  "implementation_notes": [
+    "Contract service enforces descriptor permission and domain policy itself.",
+    "Flags require bool; scopes/targets exact types; unknown/unregistered capabilities rejected.",
+    "Use process-safe lock/CAS around hash check and atomic replace.",
+    "Use pending audit → atomic write → applied audit; failure remains detectable and reconcilable.",
+    "Reconciliation command is idempotent, dry-run capable and never exposes contract secrets.",
+    "Rollback is a new authorized previewed change from stored normalized snapshot."
+  ],
+  "acceptance_checks": [
+    "String false, unknown capability and incomplete role rejected.",
+    "Actor without required permission rejected by direct service call.",
+    "Two same-base concurrent writers yield one success and one stale conflict.",
+    "Fault injection before/after atomic replace yields recoverable status.",
+    "Reconcile dry-run reports and apply repairs only known incomplete state.",
+    "Rollback passes authorization, preview and audit."
+  ],
+  "independent_review": "Fault-injection and concurrency review; reproduce first inconsistent transition."
+}
+

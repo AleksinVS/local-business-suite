@@ -1,0 +1,46 @@
+{
+  "task_id": "00a-direct-write-path-containment",
+  "title": "Закрытие прямых обходных путей изменения доступа",
+  "goal": "Запретить прямую ORM-запись доступа из стандартных Django Admin форм, generic AI update, профиля и выключенного AD sync, сохранив резервный Admin-адаптер к каноническому сервису.",
+  "write_scope": [
+    "apps/accounts/admin.py",
+    "apps/accounts/models.py",
+    "apps/accounts/migrations/",
+    "apps/accounts/services.py",
+    "apps/accounts/ldap_backend.py",
+    "apps/accounts/tests.py",
+    "apps/accounts/tests_ldap.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "apps/ai/services.py",
+    "apps/ai/tooling.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tests/test_views.py",
+    "contracts/ai/tools.json",
+    "apps/workorders/admin.py",
+    "apps/workorders/tests.py",
+    "templates/admin/accounts/user/access_assignment.html",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md"
+  ],
+  "implementation_notes": [
+    "Standard UserAdmin fields groups, user_permissions, is_staff, is_superuser, is_active are read-only/removed; forged POST cannot change them.",
+    "Separate active-superuser-only Admin route calls preview_role_assignment/apply_role_assignment, requires non-empty reason and server-owned django_admin_break_glass source.",
+    "Admin self-assignment is allowed only for active superuser and is always high-risk; direct permissions and technical groups are outside this route.",
+    "GroupAdmin permissions/membership read-only; Board.allowed_groups temporarily read-only until 00d.",
+    "access.users.update no longer accepts group_names and uses account lifecycle service for status/department.",
+    "Profile is_active uses the same disable/enable invariants; self-disable and last-superuser disable rejected.",
+    "LDAP checks ACCOUNTS_AD_GROUP_ROLE_SYNC before any role diff, rejects unknown mapping and never get_or_create unknown role.",
+    "Unused execute_tool confirmed_token path removed or invalid token fails closed."
+  ],
+  "acceptance_checks": [
+    "Admin standard access fields cannot be submitted by forged POST.",
+    "Admin fallback preview/apply succeeds through the canonical service and records source, break-glass reason, actor/target and diff.",
+    "AI generic update preserves groups and technical groups.",
+    "AD sync false produces zero group writes.",
+    "Unknown AD mapping is rejected and audited safely.",
+    "Self-disable and last-superuser disable rejected from every profile/AI path.",
+    "AI confirmation executes only stored PendingAction payload."
+  ],
+  "independent_review": "Security review of Admin/AI/profile/LDAP/direct-service matrix without write scope."
+}

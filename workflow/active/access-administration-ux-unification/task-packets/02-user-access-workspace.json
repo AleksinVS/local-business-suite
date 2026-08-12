@@ -1,0 +1,37 @@
+{
+  "task_id": "02-user-access-workspace",
+  "title": "Карточка пользователя и объяснимое назначение",
+  "goal": "Показывать итог, источник и business diff без технического шума.",
+  "depends_on": ["01-access-shell-and-user-discovery"],
+  "write_scope": [
+    "apps/accounts/selectors.py",
+    "apps/accounts/services.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "templates/settings_center/user_form.html",
+    "templates/settings_center/access_user_overview.html",
+    "templates/settings_center/access_user_assignments.html",
+    "templates/settings_center/access_user_history.html",
+    "static/src/css/app.css",
+    "apps/accounts/tests.py",
+    "apps/settings_center/tests.py"
+  ],
+  "implementation_notes": [
+    "Use one sequential page: concise state, Assignments, collapsed Profile and identity, recent History; no tab shell.",
+    "Preview возвращает label/code, scope до/после, additions, revocations, risk, source и stability.",
+    "Технические флаги — отдельная danger zone только для разрешенного актора.",
+    "Technical groups и direct Django permissions read-only в expert details.",
+    "Default board viewer отображается как системная базовая политика, а не назначенная роль.",
+    "AD-owned назначения имеют явный owner и предупреждение о sync.",
+    "History shows 3–5 events and a link to the global journal with a pre-applied filter."
+  ],
+  "acceptance_checks": [
+    "Preview/apply binding and stale-state tests остаются зелеными.",
+    "Business labels используются в preview и audit.",
+    "Technical groups сохраняются при role change.",
+    "Обычный role manager не меняет flags/technical groups.",
+    "E2E create user → assign → effective access → history.",
+    "make verify-fast TEST_SCOPE=apps/accounts/tests.py",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py"
+  ]
+}

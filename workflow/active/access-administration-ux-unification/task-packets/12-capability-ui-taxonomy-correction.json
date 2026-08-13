@@ -1,0 +1,80 @@
+{
+  "task_id": "12-capability-ui-taxonomy-correction",
+  "goal": "Исправить классификацию прав роли так, чтобы группы соответствовали реальным пользовательским разделам сайта, а не техническим моделям и именам capability.",
+  "depends_on": ["11-role-capability-section-editor"],
+  "read_scope": [
+    "contracts/role_rules.json",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/tests.py",
+    "templates/base.html",
+    "templates/workorders/**",
+    "docs/adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md"
+  ],
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/tests.py",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "workflow/active/access-administration-ux-unification/**",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "canonical_mapping": {
+    "kanban": [
+      "view_scope",
+      "create_workorder",
+      "edit_scope",
+      "comment_scope",
+      "upload_attachment_scope",
+      "confirm_closure_scope",
+      "rate_scope",
+      "transition_scope",
+      "transition_targets",
+      "manage_board_columns",
+      "manage_assignments"
+    ],
+    "inventory": ["manage_inventory"],
+    "waiting_list": ["view_waiting_list", "create_waiting_list"],
+    "analytics": ["view_analytics"],
+    "departments": ["manage_departments"],
+    "access": ["manage_roles"],
+    "ai": ["manage_ai_skills"],
+    "memory": ["memory_organization_write", "memory_organization_review"]
+  },
+  "group_labels": {
+    "kanban": "Канбан-доска",
+    "inventory": "Медизделия",
+    "waiting_list": "Лист ожидания",
+    "analytics": "Аналитика",
+    "departments": "Подразделения",
+    "access": "Доступ",
+    "ai": "ИИ-центр",
+    "memory": "Память организации",
+    "other": "Прочие права"
+  },
+  "constraints": [
+    "Все текущие capability должны иметь явное сопоставление; полнота проверяется равенством множеств с capability_catalog().",
+    "Штатная классификация не использует startswith('manage_'), тип scope/targets или старое широкое metadata.section.",
+    "Неизвестное runtime-право не скрывается и попадает в other, но тест полноты обязан потребовать явной классификации нового контрактного права.",
+    "Группировка является UI-проекцией и не меняет role_rules, authorization policies, preview/apply, аудит или технические группы памяти.",
+    "Базовый просмотр активного пользователя без роли относится к Канбан-доске.",
+    "Единый классификатор используют редактор ролей, пользователи и разрез Разделы сайта."
+  ],
+  "acceptance_checks": [
+    "Unit: множества явной карты и capability_catalog совпадают; каждое право встречается ровно один раз.",
+    "Unit: manage_board_columns, manage_assignments и все workorder capabilities относятся к kanban; manage_roles к access.",
+    "Django: редактор роли показывает одну группу Канбан-доска и не показывает старые группы Заявки/Доски.",
+    "Django: проекция пользователя и разрез разделов используют те же названия.",
+    "Playwright: в правом редакторе роли видна Канбан-доска и внутри неё оба названных права.",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "make verify-profile PROFILE=ui"
+  ],
+  "non_goals": [
+    "Изменение доступа к ИИ-центру, который сейчас дополнительно связан с manage_inventory.",
+    "Изменение технических групп, открывающих очередь ревью памяти.",
+    "Добавление ui_section в runtime-контракт role_rules.",
+    "Изменение схемы или значений прав роли."
+  ]
+}

@@ -17,7 +17,8 @@
     "08-responsive-e2e-and-acceptance",
     "09-htmx-sidebar-navigation",
     "10-composite-user-draft-and-sidebar-shell",
-    "11-role-capability-section-editor"
+    "11-role-capability-section-editor",
+    "12-capability-ui-taxonomy-correction"
   ],
   "constraints": [
     "Серверная policy, а не видимость элемента UI, определяет доступ.",
@@ -43,6 +44,7 @@
     "08-responsive-e2e-and-acceptance": "gpt-5.6-luna/high для CSS/JS/e2e; отдельная Luna xhigh критика; итоговая приемка основным агентом",
     "09-htmx-sidebar-navigation": "gpt-5.6-luna/high для шаблонных фрагментов, HTMX и тестов; отдельная Luna-критика; итоговая приемка основным агентом",
     "10-composite-user-draft-and-sidebar-shell": "основной агент/Sol high для атомарного bundle-координатора; gpt-5.6-luna/high для шаблонов, CSS/JS и e2e; отдельная Luna-критика; визуальная приемка основным агентом",
-    "11-role-capability-section-editor": "основной агент/Sol high задаёт каноническую UI-группировку; gpt-5.6-luna/high реализует read model, шаблоны, CSS/JS и тесты; отдельная Luna-критика; финальная визуальная приёмка основным агентом"
+    "11-role-capability-section-editor": "основной агент/Sol high задаёт каноническую UI-группировку; gpt-5.6-luna/high реализует read model, шаблоны, CSS/JS и тесты; отдельная Luna-критика; финальная визуальная приёмка основным агентом",
+    "12-capability-ui-taxonomy-correction": "основной агент/Sol high проверяет таксономию по реальным экранам; gpt-5.6-luna/high реализует явную карту и тесты; отдельная Luna-критика; финальная приемка основным агентом"
   }
 }

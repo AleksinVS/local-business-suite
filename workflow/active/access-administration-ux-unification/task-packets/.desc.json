@@ -12,5 +12,6 @@
   "06-workspace-read-model-and-shell.json": "Единый access workspace, read model, таблицы и боковые панели",
   "07-context-editors-and-role-membership.json": "Контекстные редакторы и безопасное пакетное изменение состава роли",
   "08-responsive-e2e-and-acceptance.json": "Адаптивность, доступность, browser e2e и итоговая приемка",
-  "09-htmx-sidebar-navigation.json": "Частичная HTMX-навигация левого редактора и правого инспектора"
+  "09-htmx-sidebar-navigation.json": "Частичная HTMX-навигация левого редактора и правого инспектора",
+  "10-composite-user-draft-and-sidebar-shell.json": "Единый черновик карточки пользователя и общая оболочка левой панели"
 }

@@ -1,0 +1,50 @@
+{
+  "task_id": "10-composite-user-draft-and-sidebar-shell",
+  "goal": "Исправить оболочку левой панели и превратить правую карточку пользователя в единый сохраняемый черновик без навигации между редакторами.",
+  "depends_on": ["09-htmx-sidebar-navigation"],
+  "read_scope": [
+    "apps/accounts/services.py",
+    "apps/memory/access_services.py",
+    "apps/settings_center/**",
+    "templates/base.html",
+    "templates/workorders/partials/board_sidebar.html",
+    "templates/settings_center/**",
+    "static/src/js/access_workspace.js",
+    "static/src/js/workorder_department_filter.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/access_administration.spec.ts"
+  ],
+  "write_scope": [
+    "apps/accounts/services.py",
+    "apps/memory/access_services.py",
+    "apps/settings_center/**",
+    "templates/settings_center/**",
+    "static/src/js/access_workspace.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "workflow/active/access-administration-ux-unification/**"
+  ],
+  "constraints": [
+    "Имя пользователя открывает правую карточку, AD-логин во второй строке имени — левый редактор; отдельного AD-столбца нет.",
+    "Левая панель использует ту же сохраняемую ширину и нижний launcher ИИ-чата, что канбан; закрытие восстанавливает чат на всю ширину.",
+    "Переключение поля внутри правой карточки не выполняет HTMX-запрос и не показывает dirty-confirm; подтверждение появляется только при закрытии или уходе со страницы.",
+    "Все изменённые поля пользователя проходят один preview и одну атомарную apply-операцию поверх канонических доменных сервисов и аудита.",
+    "Разделы сайта и технические группы без доменного редактора остаются read-only.",
+    "Обычный Django fallback, session auth, CSRF, stale-check, privilege ceiling и superuser self-role exception сохраняются."
+  ],
+  "acceptance_checks": [
+    "Django tests: bundle preview/apply, rollback on late failure, stale token, permissions and unchanged form.",
+    "Playwright: sidebar drag/keyboard/persist, compact AI launcher, full-width chat restore, two-line name cell, draft retention, one save and close-only warning.",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "make verify-profile PROFILE=ui",
+    "node --check static/src/js/access_workspace.js"
+  ],
+  "non_goals": [
+    "Изменение действующих capability или серверных правил доступа к разделам.",
+    "Прямая запись данных во внешний Active Directory.",
+    "Универсальный редактор технических групп без доменного владельца."
+  ]
+}

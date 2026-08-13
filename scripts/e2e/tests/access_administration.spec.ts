@@ -138,6 +138,55 @@ test("@smoke HTMX panel navigation preserves document, AI root and table scroll 
   expect(await page.evaluate(() => document.querySelector("#access-ai-chat-host > *") === (window as Window & { __accessAiNode?: Element }).__accessAiNode)).toBe(true);
 });
 
+test("@smoke composite user draft saves profile and role together and can be reverted", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.getByRole("searchbox", { name: "Поиск" }).fill(targetUsername || "");
+  await page.getByRole("button", { name: "Найти" }).click();
+  await page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first().locator(".access-object-link").click();
+
+  let form = page.locator("[data-access-bundle-form]");
+  const originalFirstName = await form.locator('input[name="first_name"]').inputValue();
+  const changedFirstName = `${originalFirstName || "Проверка"} e2e`;
+  await form.locator('input[name="first_name"]').fill(changedFirstName);
+  await form.locator("[data-editor-tab='department']").click();
+  const department = form.locator('select[name="department"]');
+  if (!(await department.inputValue())) await department.selectOption({ index: 1 });
+  const departmentValue = await department.inputValue();
+  await form.locator("[data-editor-tab='roles']").click();
+  const role = form.locator('input[name="roles"]:not(:checked)').first();
+  await expect(role).toBeVisible();
+  const roleValue = await role.getAttribute("value");
+  await role.check();
+  await form.getByLabel("Причина всех изменений").fill("Сквозная проверка единого сохранения карточки.");
+  const navigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+  await form.getByRole("button", { name: "Проверить изменения" }).click();
+  await expect(page.getByText("Предпросмотр изменений")).toBeVisible();
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(navigationBaseline);
+  form = page.locator("[data-access-bundle-form]");
+  const riskConfirmation = form.locator('input[name="confirm_risk"]');
+  if (await riskConfirmation.count()) await riskConfirmation.check();
+  await form.getByRole("button", { name: "Сохранить все" }).click();
+  await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
+
+  form = page.locator("[data-access-bundle-form]");
+  await expect(form.locator('input[name="first_name"]')).toHaveValue(changedFirstName);
+  await expect(form.locator('select[name="department"]')).toHaveValue(departmentValue);
+  await expect(form.locator(`input[name="roles"][value="${roleValue}"]`)).toBeChecked();
+  await form.locator('input[name="first_name"]').fill(originalFirstName);
+  await form.locator("[data-editor-tab='roles']").click();
+  await form.locator(`input[name="roles"][value="${roleValue}"]`).uncheck();
+  await form.getByLabel("Причина всех изменений").fill("Возврат данных после сквозной проверки.");
+  await form.getByRole("button", { name: "Проверить изменения" }).click();
+  await expect(page.getByText("Предпросмотр изменений")).toBeVisible();
+  form = page.locator("[data-access-bundle-form]");
+  const revertRiskConfirmation = form.locator('input[name="confirm_risk"]');
+  if (await revertRiskConfirmation.count()) await revertRiskConfirmation.check();
+  await form.getByRole("button", { name: "Сохранить все" }).click();
+  await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
+  await expect(page.locator("[data-access-bundle-form] input[name='first_name']")).toHaveValue(originalFirstName);
+});
+
 test("@smoke access workspace uses a single dialog layer on 320px and Escape follows close href", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 760 });
   await login(page);

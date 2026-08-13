@@ -198,7 +198,7 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
         for role_code in role_codes:
             sections.update(section_by_role.get(role_code, ()))
         if not role_codes and user.is_active:
-            sections.add(SECTION_LABELS["workorders"])
+            sections.add(SECTION_LABELS["kanban"])
         if user.is_superuser:
             sections.update(_section_labels(catalog))
         rows.append(

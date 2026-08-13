@@ -57,41 +57,100 @@ pytestmark = pytest.mark.integration
 
 class AccessWorkspaceTests(TestCase):
     def test_capability_groups_are_complete_and_use_user_facing_sections(self):
-        from apps.accounts.access_contracts import capability_group_code, capability_groups
+        from apps.accounts.access_contracts import (
+            CAPABILITY_GROUP_BY_CAPABILITY,
+            capability_group_code,
+            capability_groups,
+        )
         from apps.accounts.selectors import capability_catalog
 
         catalog = capability_catalog()
+        expected = {
+            "view_scope": "kanban",
+            "create_workorder": "kanban",
+            "edit_scope": "kanban",
+            "comment_scope": "kanban",
+            "upload_attachment_scope": "kanban",
+            "manage_assignments": "kanban",
+            "transition_scope": "kanban",
+            "transition_targets": "kanban",
+            "confirm_closure_scope": "kanban",
+            "rate_scope": "kanban",
+            "manage_board_columns": "kanban",
+            "manage_inventory": "inventory",
+            "view_waiting_list": "waiting_list",
+            "create_waiting_list": "waiting_list",
+            "view_analytics": "analytics",
+            "manage_departments": "departments",
+            "manage_roles": "access",
+            "manage_ai_skills": "ai",
+            "memory_organization_write": "memory",
+            "memory_organization_review": "memory",
+        }
+        self.assertEqual(CAPABILITY_GROUP_BY_CAPABILITY, expected)
+        self.assertEqual(set(CAPABILITY_GROUP_BY_CAPABILITY), set(catalog))
         groups = capability_groups(catalog)
         grouped = [code for group in groups for code, _metadata in group["capabilities"]]
         self.assertEqual(sorted(grouped), sorted(catalog))
         self.assertEqual(len(grouped), len(set(grouped)))
         grouped_map = {code: group["code"] for group in groups for code, _ in group["capabilities"]}
-        self.assertEqual(grouped_map["view_scope"], "workorders")
-        self.assertEqual(grouped_map["transition_targets"], "workorders")
-        self.assertEqual(grouped_map["manage_assignments"], "workorders")
-        self.assertEqual(grouped_map["manage_board_columns"], "boards")
+        self.assertEqual(grouped_map["view_scope"], "kanban")
+        self.assertEqual(grouped_map["transition_targets"], "kanban")
+        self.assertEqual(grouped_map["manage_assignments"], "kanban")
+        self.assertEqual(grouped_map["manage_board_columns"], "kanban")
         self.assertEqual(grouped_map["manage_inventory"], "inventory")
-        self.assertEqual(grouped_map["manage_roles"], "system")
-        self.assertEqual(capability_group_code("manage_future", {"type": "flag"}), "administration")
-        self.assertEqual(capability_group_code("future_scope", {"type": "scope"}), "access_scopes")
-        self.assertEqual(capability_group_code("future_targets", {"type": "targets"}), "access_scopes")
+        self.assertEqual(grouped_map["manage_roles"], "access")
+        self.assertEqual(
+            [code for code, _metadata in next(group for group in groups if group["code"] == "kanban")["capabilities"]],
+            list(expected)[:11],
+        )
+        custom_groups = capability_groups({
+            "view_scope": catalog["view_scope"],
+            "unknown_runtime_permission": {"type": "flag", "label": "Runtime"},
+        })
+        other_groups = [group for group in custom_groups if group["code"] == "other"]
+        self.assertEqual(len(other_groups), 1)
+        self.assertEqual(
+            [code for code, _metadata in other_groups[0]["capabilities"]],
+            ["unknown_runtime_permission"],
+        )
+        self.assertEqual(capability_group_code("manage_future", {"type": "flag", "section": "organization"}), "other")
+        self.assertEqual(capability_group_code("future_scope", {"type": "scope", "section": "workorders"}), "other")
+        self.assertEqual(capability_group_code("future_targets", {"type": "targets"}), "other")
         self.assertEqual(capability_group_code("future_flag", {"type": "flag"}), "other")
 
     def test_role_inspector_definition_uses_grouped_editor_and_one_active_panel(self):
         actor = User.objects.create_superuser(username="role-group-root", password="pass")
-        from apps.accounts.selectors import contract_role_names
 
-        role_name = contract_role_names()[0]
         self.client.force_login(actor)
         response = self.client.get(
             reverse("settings_center:access_workspace"),
-            {"view": "roles", "object": role_name, "field": "definition", "panel": "inspector"},
+            {"view": "roles", "object": "admin", "field": "definition", "panel": "inspector"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "role-capability-editor")
         self.assertContains(response, "role-capability-tab")
         self.assertContains(response, 'name="active_group"', html=False)
         self.assertContains(response, "Технические группы памяти назначаются отдельно")
+        group_labels = [group["label"] for group in response.context["field_form"].capability_groups]
+        self.assertIn("Канбан-доска", group_labels)
+        self.assertNotIn("Заявки", group_labels)
+        self.assertNotIn("Доски", group_labels)
+        site_section_names = {section["name"] for section in response.context["site_sections"]}
+        self.assertTrue({
+            "Канбан-доска",
+            "Медизделия",
+            "Лист ожидания",
+            "Аналитика",
+            "Подразделения",
+            "Доступ",
+            "ИИ-центр",
+            "Память организации",
+        } <= site_section_names)
+        self.assertFalse(site_section_names & {"Заявки", "Доски", "Система"})
+        actor_row = next(row for row in response.context["users"] if row["id"] == actor.pk)
+        self.assertIn("Канбан-доска", actor_row["site_sections"])
+        self.assertFalse(set(actor_row["site_sections"]) & {"Заявки", "Доски", "Система"})
         self.assertGreaterEqual(len(response.context["field_form"].capability_groups), 1)
 
     def test_role_definition_form_preserves_active_group_and_all_capabilities(self):
@@ -213,6 +272,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(row["department_full"], "Центр / Поддержка")
         self.assertEqual([group["code"] for group in row["technical_groups"]], [technical.name])
         self.assertEqual([group["code"] for group in row["memory_groups"]], [memory.name])
+        self.assertIn("Канбан-доска", row["site_sections"])
         for heading in ("Имя", "Подразделение", "Статус", "Роли", "Разделы сайта", "Технические группы", "Группы памяти"):
             self.assertContains(response, heading)
         self.assertNotContains(response, "<th scope=\"col\">Пользователь AD</th>", html=False)
@@ -607,6 +667,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(row["role_codes"], [])
         self.assertEqual(row["roles"], ["Базовый просмотр канбана"])
         self.assertTrue(row["role_sources"][0]["read_only"])
+        self.assertEqual(row["site_sections"], ["Канбан-доска"])
 
     def test_profile_editor_requires_signed_preview_and_keeps_inspector_panel(self):
         from apps.core.models import Department

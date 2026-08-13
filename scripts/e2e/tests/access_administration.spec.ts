@@ -417,6 +417,39 @@ test("@smoke role definition groups switch locally and retain draft", async ({ p
   await expect(editor.locator("input[name='active_group']")).not.toHaveValue("");
 });
 
+test("@smoke admin role uses one kanban capability group", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/?view=roles");
+  const adminRow = page.locator(".access-roles-table tbody tr").filter({ hasText: "Администратор портала" });
+  await adminRow.locator(".access-object-link").click();
+  const editor = page.locator(".role-capability-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor.locator('[data-role-editor-tab="kanban"]')).toHaveText("Канбан-доска");
+  await expect(editor.locator('[data-role-editor-tab="workorders"]')).toHaveCount(0);
+  await expect(editor.locator('[data-role-editor-tab="boards"]')).toHaveCount(0);
+  await expect(editor.locator('[data-role-editor-tab="system"]')).toHaveCount(0);
+  await expect(editor.locator('[data-role-editor-tab="access_scopes"]')).toHaveCount(0);
+  await expect(editor.locator('[data-role-editor-tab="administration"]')).toHaveCount(0);
+  await editor.locator('[data-role-editor-tab="kanban"]').click();
+  const panel = editor.locator('[data-role-editor-panel="kanban"]:not([hidden])');
+  await expect(panel).toHaveCount(1);
+  for (const label of [
+    "Область видимости заявок",
+    "Создание заявок",
+    "Редактирование заявок",
+    "Комментирование заявок",
+    "Загрузка файлов к заявкам",
+    "Подтверждение закрытия",
+    "Оценка выполненной работы",
+    "Смена статусов заявок",
+    "Доступные статусы",
+    "Управление досками",
+    "Управление назначениями",
+  ]) {
+    await expect(panel).toContainText(label);
+  }
+});
+
 test("@smoke role inspector preview renders impact and diff without navigation", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/?view=roles");

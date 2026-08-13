@@ -31,17 +31,14 @@ SCOPE_LABELS = {
 }
 
 CAPABILITY_GROUP_LABELS = {
-    "workorders": "Заявки",
-    "boards": "Доски",
+    "kanban": "Канбан-доска",
     "inventory": "Медизделия",
     "waiting_list": "Лист ожидания",
     "analytics": "Аналитика",
     "departments": "Подразделения",
-    "ai": "ИИ",
-    "memory": "Память",
-    "system": "Система",
-    "access_scopes": "Области доступа",
-    "administration": "Администрирование",
+    "access": "Доступ",
+    "ai": "ИИ-центр",
+    "memory": "Память организации",
     "other": "Прочие права",
 }
 CAPABILITY_GROUP_DESCRIPTIONS = {
@@ -52,43 +49,53 @@ CAPABILITY_RISK_LABELS = {
     "critical": "Критический риск",
 }
 
-_EXPLICIT_CAPABILITY_GROUPS = {
-    "manage_board_columns": "boards",
+CAPABILITY_GROUP_BY_CAPABILITY = {
+    "view_scope": "kanban",
+    "create_workorder": "kanban",
+    "edit_scope": "kanban",
+    "comment_scope": "kanban",
+    "upload_attachment_scope": "kanban",
+    "manage_assignments": "kanban",
+    "transition_scope": "kanban",
+    "transition_targets": "kanban",
+    "confirm_closure_scope": "kanban",
+    "rate_scope": "kanban",
+    "manage_board_columns": "kanban",
     "manage_inventory": "inventory",
     "view_waiting_list": "waiting_list",
     "create_waiting_list": "waiting_list",
     "view_analytics": "analytics",
     "manage_departments": "departments",
+    "manage_roles": "access",
     "manage_ai_skills": "ai",
     "memory_organization_write": "memory",
     "memory_organization_review": "memory",
-    "manage_roles": "system",
 }
 
 
-def capability_group_code(code, metadata=None):
-    """Return the single UI group for a capability without changing its contract meaning."""
-    if code in _EXPLICIT_CAPABILITY_GROUPS:
-        return _EXPLICIT_CAPABILITY_GROUPS[code]
-    metadata = metadata if isinstance(metadata, dict) else {}
-    section = str(metadata.get("section", ""))
-    if section == "workorders" or code == "manage_assignments":
-        return "workorders"
-    capability_type = str(metadata.get("type", ""))
-    if code.startswith("manage_"):
-        return "administration"
-    if capability_type in {"scope", "targets"}:
-        return "access_scopes"
-    return "other"
+def capability_group_code(code, _metadata=None):
+    """Return the explicit user-facing group; unknown runtime rights stay visible in ``other``."""
+    return CAPABILITY_GROUP_BY_CAPABILITY.get(code, "other")
 
 
 def capability_groups(catalog=None):
-    """Build stable user-facing groups; every catalog capability appears once."""
+    """Build stable user-facing groups from the explicit map, then unknown rights."""
     catalog = catalog if isinstance(catalog, dict) else capability_catalog()
-    groups = {code: {"code": code, "label": label, "description": CAPABILITY_GROUP_DESCRIPTIONS.get(code, ""), "capabilities": []} for code, label in CAPABILITY_GROUP_LABELS.items()}
+    groups = {
+        code: {
+            "code": code,
+            "label": label,
+            "description": CAPABILITY_GROUP_DESCRIPTIONS.get(code, ""),
+            "capabilities": [],
+        }
+        for code, label in CAPABILITY_GROUP_LABELS.items()
+    }
+    for code, group in CAPABILITY_GROUP_BY_CAPABILITY.items():
+        if code in catalog:
+            groups[group]["capabilities"].append((code, catalog[code]))
     for code, metadata in catalog.items():
-        group = capability_group_code(code, metadata)
-        groups.setdefault(group, {"code": group, "label": group, "description": "", "capabilities": []})["capabilities"].append((code, metadata))
+        if code not in CAPABILITY_GROUP_BY_CAPABILITY:
+            groups["other"]["capabilities"].append((code, metadata))
     return [group for group in groups.values() if group["capabilities"]]
 
 

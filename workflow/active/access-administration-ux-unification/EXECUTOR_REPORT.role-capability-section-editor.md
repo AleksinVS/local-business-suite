@@ -3,10 +3,9 @@
 ## Реализовано
 
 - Добавлена единая классификация возможностей в `apps.accounts.access_contracts`.
-  Текущие workorder scope/targets и `manage_assignments` относятся к заявкам;
-  специальные capability-коды распределены по разделам; будущие `manage_*`
-  попадают в администрирование, неизвестные scope/targets — в области доступа,
-  остальные — в прочие права.
+  Текущая явная карта распределяет все права канбан-доски, включая доски и
+  назначения, в одну группу; остальные capability-коды распределены по
+  пользовательским разделам, а неизвестные runtime-права — в прочие права.
 - Read model роли и таблица разделов сайта используют одну классификацию без
   изменения role_rules и runtime-контракта.
 - `RoleDefinitionForm` предоставляет `capability_groups`, связанные BoundField
@@ -48,3 +47,38 @@
 ## Остаточный риск
 
 Остаточный риск ограничен браузерами, не входящими в Chromium smoke-профиль.
+
+## Исправление таксономии (пакет 12)
+
+Классификация переведена на явную карту `CAPABILITY_GROUP_BY_CAPABILITY` в
+`apps/accounts/access_contracts.py`. В ней ровно все текущие права из
+`capability_catalog()` (20 кодов), каждое ровно один раз:
+
+- `kanban`: `view_scope`, `create_workorder`, `edit_scope`, `comment_scope`,
+  `upload_attachment_scope`, `manage_assignments`, `transition_scope`,
+  `transition_targets`, `confirm_closure_scope`, `rate_scope`,
+  `manage_board_columns`;
+- `inventory`: `manage_inventory`;
+- `waiting_list`: `view_waiting_list`, `create_waiting_list`;
+- `analytics`: `view_analytics`;
+- `departments`: `manage_departments`;
+- `access`: `manage_roles`;
+- `ai`: `manage_ai_skills`;
+- `memory`: `memory_organization_write`, `memory_organization_review`.
+
+Группы получили пользовательские названия «Канбан-доска», «Медизделия»,
+«Лист ожидания», «Аналитика», «Подразделения», «Доступ», «ИИ-центр», «Память
+организации» и «Прочие права». Эвристики по `manage_*`, `scope/targets` и
+старому `metadata.section` удалены; неизвестное runtime-право попадает в
+`other`, а в тесте custom catalog проверяется, что оно не теряется и создаёт
+ровно одну дополнительную группу. Базовый активный пользователь без роли теперь
+относится к «Канбан-доске». Обновлены unit/Django/e2e проверки, руководство и
+активный план.
+
+Для пакета 12 выполнены `make verify-fast
+TEST_SCOPE=apps/settings_center/tests.py` (74 теста и 9 подслучаев) и, после
+сброса только загрязнённой тестовой БД, `make verify-profile PROFILE=ui`
+(269 тестов, 18 подслучаев и 17 браузерных сценариев). Браузерный сценарий
+проверяет, что у роли администратора видна одна вкладка «Канбан-доска», все
+одиннадцать прав находятся в одной видимой панели, а старые технические вкладки
+отсутствуют. Основной агент визуально проверил интерфейс на 1440×1000 и 390×844.

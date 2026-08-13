@@ -16,7 +16,8 @@
     "07-context-editors-and-role-membership",
     "08-responsive-e2e-and-acceptance",
     "09-htmx-sidebar-navigation",
-    "10-composite-user-draft-and-sidebar-shell"
+    "10-composite-user-draft-and-sidebar-shell",
+    "11-role-capability-section-editor"
   ],
   "constraints": [
     "Серверная policy, а не видимость элемента UI, определяет доступ.",
@@ -41,6 +42,7 @@
     "07-context-editors-and-role-membership": "основной агент/Sol high для пакетного security-сервиса; gpt-5.6-luna/high для шаблонных адаптеров",
     "08-responsive-e2e-and-acceptance": "gpt-5.6-luna/high для CSS/JS/e2e; отдельная Luna xhigh критика; итоговая приемка основным агентом",
     "09-htmx-sidebar-navigation": "gpt-5.6-luna/high для шаблонных фрагментов, HTMX и тестов; отдельная Luna-критика; итоговая приемка основным агентом",
-    "10-composite-user-draft-and-sidebar-shell": "основной агент/Sol high для атомарного bundle-координатора; gpt-5.6-luna/high для шаблонов, CSS/JS и e2e; отдельная Luna-критика; визуальная приемка основным агентом"
+    "10-composite-user-draft-and-sidebar-shell": "основной агент/Sol high для атомарного bundle-координатора; gpt-5.6-luna/high для шаблонов, CSS/JS и e2e; отдельная Luna-критика; визуальная приемка основным агентом",
+    "11-role-capability-section-editor": "основной агент/Sol high задаёт каноническую UI-группировку; gpt-5.6-luna/high реализует read model, шаблоны, CSS/JS и тесты; отдельная Luna-критика; финальная визуальная приёмка основным агентом"
   }
 }

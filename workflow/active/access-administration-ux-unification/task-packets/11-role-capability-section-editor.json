@@ -1,0 +1,53 @@
+{
+  "task_id": "11-role-capability-section-editor",
+  "goal": "Сгруппировать возможности роли по пользовательским разделам сайта и показать в правом инспекторе список групп слева, а права выбранной группы справа.",
+  "depends_on": ["10-composite-user-draft-and-sidebar-shell"],
+  "read_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "templates/settings_center/**",
+    "static/src/js/access_workspace.js",
+    "static/src/css/app.css",
+    "apps/settings_center/tests.py",
+    "scripts/e2e/tests/access_administration.spec.ts"
+  ],
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/**",
+    "static/src/js/access_workspace.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "workflow/active/access-administration-ux-unification/**",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "constraints": [
+    "Группировка является UI-проекцией и не меняет role_rules schema, значения возможностей, preview/apply, privilege ceiling или аудит.",
+    "Основные группы: workorders, boards, inventory, waiting_list, analytics, departments, ai, memory, system; подписи должны быть пользовательскими, не кодами.",
+    "manage_assignments относится к заявкам, manage_board_columns к доскам, manage_roles к системе; memory_organization_* относится к памяти с пояснением об отдельности технических групп памяти.",
+    "Неизвестные будущие возможности не исчезают: manage_* попадает в администрацию, scope/targets — в области доступа, остальные — в прочие права.",
+    "Правый инспектор роли содержит локальный двухпанельный редактор: список групп слева, права активной группы справа; переключение type=button не делает HTMX/navigation и сохраняет dirty draft.",
+    "Standalone-редактор использует ту же серверную группировку, без дублирования классификации.",
+    "На узком экране список групп становится горизонтальным прокручиваемым рядом над правами; одна активная группа и корректные tab/tabpanel semantics обязательны."
+  ],
+  "acceptance_checks": [
+    "Unit: каждая capability присутствует ровно один раз; известные коды попадают в ожидаемые группы; неизвестные коды попадают в логические fallback-группы.",
+    "Django: правый inspector рендерит список групп и только одну активную панель, preview сохраняет active_group и все поля формы.",
+    "Playwright: переключение групп без navigation/reload, черновик сохраняется, preview работает, мобильный layout доступен.",
+    "node --check static/src/js/access_workspace.js",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "make verify-profile PROFILE=ui"
+  ],
+  "non_goals": [
+    "Изменение прав роли или выдача технических групп памяти через роль.",
+    "Изменение схемы или runtime-контракта role_rules.",
+    "Новая персональная матрица разделов сайта."
+  ]
+}

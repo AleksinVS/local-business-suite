@@ -13,5 +13,6 @@
   "07-context-editors-and-role-membership.json": "Контекстные редакторы и безопасное пакетное изменение состава роли",
   "08-responsive-e2e-and-acceptance.json": "Адаптивность, доступность, browser e2e и итоговая приемка",
   "09-htmx-sidebar-navigation.json": "Частичная HTMX-навигация левого редактора и правого инспектора",
-  "10-composite-user-draft-and-sidebar-shell.json": "Единый черновик карточки пользователя и общая оболочка левой панели"
+  "10-composite-user-draft-and-sidebar-shell.json": "Единый черновик карточки пользователя и общая оболочка левой панели",
+  "11-role-capability-section-editor.json": "Группировка прав роли по разделам сайта и двухпанельный редактор"
 }

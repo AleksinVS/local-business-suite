@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
 from apps.accounts.selectors import capability_catalog, contract_role_configs, role_risk_markers, split_user_groups
+from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code
 from apps.core.models import Department
 from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES, MEMORY_REVIEW_GROUP_PROFILES
 from apps.workorders.models import Board
@@ -58,13 +59,7 @@ KIND_LABELS = {
     "technical-group": "Техническая группа",
     "memory-group": "Группа памяти",
 }
-SECTION_LABELS = {
-    "workorders": "Заявки и доски",
-    "organization": "Организация",
-    "ai_memory": "ИИ и память",
-    "personal_data": "Персональные данные",
-    "other": "Другие возможности",
-}
+SECTION_LABELS = dict(CAPABILITY_GROUP_LABELS)
 
 
 def workspace_context(*, query_params=None):
@@ -246,14 +241,13 @@ def _sections_by_role(role_configs, catalog):
             if code in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(code) or {}
-            section = metadata.get("section")
-            if section:
-                result[role_code].add(SECTION_LABELS.get(section, section))
+            section = capability_group_code(code, metadata)
+            result[role_code].add(SECTION_LABELS.get(section, section))
     return result
 
 
 def _section_labels(catalog):
-    return {SECTION_LABELS.get((metadata or {}).get("section", "other"), "Другие возможности") for metadata in catalog.values() if isinstance(metadata, dict)}
+    return {SECTION_LABELS.get(capability_group_code(code, metadata), "Прочие права") for code, metadata in catalog.items() if isinstance(metadata, dict)}
 
 
 def _role_rows(users, role_configs):
@@ -312,7 +306,7 @@ def _section_rows(users, role_configs, catalog):
             if capability in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(capability) or {}
-            section = metadata.get("section", "other")
+            section = capability_group_code(capability, metadata)
             sections[section].add(code)
     return [
         {
@@ -324,7 +318,7 @@ def _section_rows(users, role_configs, catalog):
             "description": "Раздел сайта, собранный из возможностей контракта ролей.",
             "roles": sorted(roles),
             "roles_text": ", ".join(sorted(roles)),
-            "capability_count": sum(1 for metadata in catalog.values() if isinstance(metadata, dict) and metadata.get("section", "other") == code),
+            "capability_count": sum(1 for capability, metadata in catalog.items() if isinstance(metadata, dict) and capability_group_code(capability, metadata) == code),
         }
         for code, roles in sorted(sections.items(), key=lambda item: SECTION_LABELS.get(item[0], item[0]))
     ]

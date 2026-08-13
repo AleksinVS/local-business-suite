@@ -1,0 +1,51 @@
+<form class="access-context-form role-capability-editor" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
+  {% csrf_token %}
+  <input type="hidden" name="view" value="roles">
+  <input type="hidden" name="object" value="{{ selected.object }}">
+  <input type="hidden" name="field" value="definition">
+  <input type="hidden" name="panel" value="inspector">
+  <input type="hidden" name="filter_q" value="{{ access_filter_state.query }}">
+  <input type="hidden" name="filter_role" value="{{ access_filter_state.role }}">
+  <input type="hidden" name="filter_department" value="{{ access_filter_state.department_id|default:'' }}">
+  {% for hidden in field_form.hidden_fields %}{{ hidden }}{% endfor %}
+  {{ field_form.non_field_errors }}
+  <div class="role-capability-editor-layout">
+    <aside class="role-capability-groups" aria-label="Редактор роли">
+      <div class="role-capability-meta">
+        <div class="access-form-field">{{ field_form.display_name.label_tag }}{{ field_form.display_name }}{{ field_form.display_name.errors }}</div>
+        <div class="access-form-field role-description-compact">{{ field_form.description.label_tag }}{{ field_form.description }}{{ field_form.description.errors }}</div>
+        <a class="access-inspector-field-link" href="?view=roles&amp;object={{ selected.object }}&amp;field=users&amp;panel=inspector" hx-get="?view=roles&amp;object={{ selected.object }}&amp;field=users&amp;panel=inspector" hx-target="#access-inspector-host" hx-swap="innerHTML" hx-push-url="true">Пользователи роли: {{ selected.users|length }}</a>
+      </div>
+      <div class="role-capability-tablist" aria-label="Группы прав роли" role="tablist">
+        {% for group in field_form.capability_groups %}
+          <button type="button" class="role-capability-tab" id="role-capability-tab-{{ group.code }}" role="tab" data-role-editor-tab="{{ group.code }}" aria-selected="{% if field_form.active_group.value == group.code %}true{% else %}false{% endif %}" aria-controls="role-capability-panel-{{ group.code }}">{{ group.label }}</button>
+        {% endfor %}
+      </div>
+    </aside>
+    <div class="role-capability-panels">
+      {% for group in field_form.capability_groups %}
+        <section class="role-capability-panel" id="role-capability-panel-{{ group.code }}" data-role-editor-panel="{{ group.code }}" role="tabpanel" aria-labelledby="role-capability-tab-{{ group.code }}"{% if field_form.active_group.value != group.code %} hidden{% endif %}>
+          <h3>{{ group.label }}</h3>
+          {% if group.description %}<p class="access-readonly-explanation">{{ group.description }}</p>{% endif %}
+          {% for item in group.items %}{% with field=item.field capability=item.capability %}
+            <div class="capability-row">
+              <div><label for="{{ field.id_for_label }}">{{ field.label }}</label><p>{{ capability.description }}</p>{% if capability.risk_label %}<span class="risk-label">{{ capability.risk_label }}</span>{% endif %}</div>
+              <div>{{ field }}{{ field.errors }}</div>
+            </div>
+          {% endwith %}{% endfor %}
+        </section>
+      {% endfor %}
+    </div>
+  </div>
+  {% if field_preview %}
+    <section class="role-preview" aria-live="polite"><h3>Предпросмотр изменений</h3><p><strong>{{ field_preview.changes|length }}</strong> изменений · участников роли: <strong>{{ field_preview.impact.role_member_count }}</strong> · фактически изменится доступ: <strong>{{ field_preview.impact.effective_change_count }}</strong></p>
+      {% if field_preview.impact.unchanged_by_other_role_count %}<p class="muted">Сохранят эквивалентный доступ через другие роли: {{ field_preview.impact.unchanged_by_other_role_count }}</p>{% endif %}
+      {% if field_preview.impact.system_override_count %}<p class="muted">Системный обход superuser: {{ field_preview.impact.system_override_count }}</p>{% endif %}
+      {% if field_preview.impact.requires_object_check_count %}<p class="muted">Для областей доступа итог зависит от конкретной заявки: {{ field_preview.impact.requires_object_check_count }}</p>{% endif %}
+      <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Сравнение изменений роли"><table class="data-table" aria-label="Сравнение изменений роли"><thead><tr><th>Право</th><th>Было</th><th>Станет</th><th>Риск</th></tr></thead><tbody>{% for item in field_preview.changes %}<tr><td>{{ item.label }}</td><td>{{ item.before }}</td><td>{{ item.after }}</td><td>{{ item.risk_label }}</td></tr>{% endfor %}</tbody></table></div>
+      {% if field_preview.requires_confirmation %}<label class="checkbox-row">{{ field_form.risk_confirmed }} {{ field_form.risk_confirmed.label }}</label>{% endif %}
+    </section>
+  {% endif %}
+  {% if editor_error %}<p class="form-error">{{ editor_error }}</p>{% endif %}
+  <div class="role-definition-actions"><button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>{% if field_preview or field_form.preview_token.value %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}</div>
+</form>

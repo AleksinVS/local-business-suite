@@ -12,5 +12,7 @@
   "EXECUTOR_REPORT.htmx-sidebar-navigation.md": "Отчёт реализации частичной HTMX-навигации панелей",
   "TASK_ACCEPTANCE.htmx-sidebar-navigation.md": "Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата",
   "EXECUTOR_REPORT.composite-user-draft-and-sidebar-shell.md": "Отчёт реализации единого черновика пользователя и оболочки сайдбаров",
-  "TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md": "Техническая и визуальная приёмка пакета 10"
+  "TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md": "Техническая и визуальная приёмка пакета 10",
+  "TASK_ACCEPTANCE.role-capability-section-editor.md": "Техническая и визуальная приёмка группового редактора прав роли",
+  "EXECUTOR_REPORT.role-capability-section-editor.md": "Отчёт группировки возможностей роли и локального редактора разделов"
 }

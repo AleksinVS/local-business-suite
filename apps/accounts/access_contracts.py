@@ -30,6 +30,67 @@ SCOPE_LABELS = {
     "none": "Нет доступа",
 }
 
+CAPABILITY_GROUP_LABELS = {
+    "workorders": "Заявки",
+    "boards": "Доски",
+    "inventory": "Медизделия",
+    "waiting_list": "Лист ожидания",
+    "analytics": "Аналитика",
+    "departments": "Подразделения",
+    "ai": "ИИ",
+    "memory": "Память",
+    "system": "Система",
+    "access_scopes": "Области доступа",
+    "administration": "Администрирование",
+    "other": "Прочие права",
+}
+CAPABILITY_GROUP_DESCRIPTIONS = {
+    "memory": "Права памяти организации. Технические группы памяти назначаются отдельно в карточке пользователя.",
+}
+CAPABILITY_RISK_LABELS = {
+    "elevated": "Повышенный риск",
+    "critical": "Критический риск",
+}
+
+_EXPLICIT_CAPABILITY_GROUPS = {
+    "manage_board_columns": "boards",
+    "manage_inventory": "inventory",
+    "view_waiting_list": "waiting_list",
+    "create_waiting_list": "waiting_list",
+    "view_analytics": "analytics",
+    "manage_departments": "departments",
+    "manage_ai_skills": "ai",
+    "memory_organization_write": "memory",
+    "memory_organization_review": "memory",
+    "manage_roles": "system",
+}
+
+
+def capability_group_code(code, metadata=None):
+    """Return the single UI group for a capability without changing its contract meaning."""
+    if code in _EXPLICIT_CAPABILITY_GROUPS:
+        return _EXPLICIT_CAPABILITY_GROUPS[code]
+    metadata = metadata if isinstance(metadata, dict) else {}
+    section = str(metadata.get("section", ""))
+    if section == "workorders" or code == "manage_assignments":
+        return "workorders"
+    capability_type = str(metadata.get("type", ""))
+    if code.startswith("manage_"):
+        return "administration"
+    if capability_type in {"scope", "targets"}:
+        return "access_scopes"
+    return "other"
+
+
+def capability_groups(catalog=None):
+    """Build stable user-facing groups; every catalog capability appears once."""
+    catalog = catalog if isinstance(catalog, dict) else capability_catalog()
+    groups = {code: {"code": code, "label": label, "description": CAPABILITY_GROUP_DESCRIPTIONS.get(code, ""), "capabilities": []} for code, label in CAPABILITY_GROUP_LABELS.items()}
+    for code, metadata in catalog.items():
+        group = capability_group_code(code, metadata)
+        groups.setdefault(group, {"code": group, "label": group, "description": "", "capabilities": []})["capabilities"].append((code, metadata))
+    return [group for group in groups.values() if group["capabilities"]]
+
 
 def role_catalog_rows():
     counts = {
@@ -63,24 +124,24 @@ def role_definition_read_model(role_code):
         raise ValidationError("Роль не найдена.")
     catalog = capability_catalog()
     sections = []
-    section_map = {}
-    for code, metadata in catalog.items():
-        if not isinstance(metadata, dict):
-            continue
-        section = metadata.get("section", "other")
-        if section not in section_map:
-            section_map[section] = {"code": section, "label": _section_label(section), "capabilities": []}
-            sections.append(section_map[section])
-        section_map[section]["capabilities"].append(
-            {
-                "code": code,
-                "label": metadata.get("label", code),
-                "description": metadata.get("description", ""),
-                "type": metadata.get("type", ""),
-                "risk": metadata.get("risk", "normal"),
-                "value": copy.deepcopy(config.get(code)),
-            }
-        )
+    for group in capability_groups(catalog):
+        sections.append({
+            "code": group["code"],
+            "label": group["label"],
+            "description": group.get("description", ""),
+            "capabilities": [
+                {
+                    "code": code,
+                    "label": metadata.get("label", code),
+                    "description": metadata.get("description", ""),
+                    "type": metadata.get("type", ""),
+                    "risk": metadata.get("risk", "normal"),
+                    "risk_label": CAPABILITY_RISK_LABELS.get(metadata.get("risk", "normal"), ""),
+                    "value": copy.deepcopy(config.get(code)),
+                }
+                for code, metadata in group["capabilities"]
+            ],
+        })
     return {
         "code": role_code,
         "label": config.get("display_name", role_code),
@@ -300,7 +361,10 @@ def _role_definition_changes(*, before, after):
             {
                 "code": capability,
                 "label": metadata.get("label", capability),
-                "section": _section_label(metadata.get("section", "other")),
+                "section": CAPABILITY_GROUP_LABELS.get(
+                    capability_group_code(capability, metadata),
+                    capability_group_code(capability, metadata),
+                ),
                 "type": metadata.get("type", ""),
                 "risk": risk,
                 "direction": direction,
@@ -485,9 +549,4 @@ def _display_capability_value(value):
 
 
 def _section_label(code):
-    return {
-        "workorders": "Заявки",
-        "organization": "Организация и настройки",
-        "ai_memory": "ИИ и память",
-        "personal_data": "Персональные данные",
-    }.get(code, code)
+    return CAPABILITY_GROUP_LABELS.get(code, code)

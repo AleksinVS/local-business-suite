@@ -43,6 +43,7 @@ from .forms import (
     PortalUserCreateForm,
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
+    RoleDefinitionForm,
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, build_help_context
@@ -55,6 +56,103 @@ pytestmark = pytest.mark.integration
 
 
 class AccessWorkspaceTests(TestCase):
+    def test_capability_groups_are_complete_and_use_user_facing_sections(self):
+        from apps.accounts.access_contracts import capability_group_code, capability_groups
+        from apps.accounts.selectors import capability_catalog
+
+        catalog = capability_catalog()
+        groups = capability_groups(catalog)
+        grouped = [code for group in groups for code, _metadata in group["capabilities"]]
+        self.assertEqual(sorted(grouped), sorted(catalog))
+        self.assertEqual(len(grouped), len(set(grouped)))
+        grouped_map = {code: group["code"] for group in groups for code, _ in group["capabilities"]}
+        self.assertEqual(grouped_map["view_scope"], "workorders")
+        self.assertEqual(grouped_map["transition_targets"], "workorders")
+        self.assertEqual(grouped_map["manage_assignments"], "workorders")
+        self.assertEqual(grouped_map["manage_board_columns"], "boards")
+        self.assertEqual(grouped_map["manage_inventory"], "inventory")
+        self.assertEqual(grouped_map["manage_roles"], "system")
+        self.assertEqual(capability_group_code("manage_future", {"type": "flag"}), "administration")
+        self.assertEqual(capability_group_code("future_scope", {"type": "scope"}), "access_scopes")
+        self.assertEqual(capability_group_code("future_targets", {"type": "targets"}), "access_scopes")
+        self.assertEqual(capability_group_code("future_flag", {"type": "flag"}), "other")
+
+    def test_role_inspector_definition_uses_grouped_editor_and_one_active_panel(self):
+        actor = User.objects.create_superuser(username="role-group-root", password="pass")
+        from apps.accounts.selectors import contract_role_names
+
+        role_name = contract_role_names()[0]
+        self.client.force_login(actor)
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "object": role_name, "field": "definition", "panel": "inspector"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-capability-editor")
+        self.assertContains(response, "role-capability-tab")
+        self.assertContains(response, 'name="active_group"', html=False)
+        self.assertContains(response, "Технические группы памяти назначаются отдельно")
+        self.assertGreaterEqual(len(response.context["field_form"].capability_groups), 1)
+
+    def test_role_definition_form_preserves_active_group_and_all_capabilities(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.accounts.selectors import contract_role_names
+
+        model = role_definition_read_model(contract_role_names()[0])
+        data = {
+            "base_hash": model["base_hash"],
+            "active_group": "memory",
+            "display_name": model["label"],
+            "description": model["description"],
+        }
+        for section in model["sections"]:
+            for capability in section["capabilities"]:
+                value = capability["value"]
+                if value is True:
+                    data[f"capability__{capability['code']}"] = "on"
+                elif value not in (False, None):
+                    data[f"capability__{capability['code']}"] = ["*"] if value == "*" else value
+        form = RoleDefinitionForm(data, role_read_model=model)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["active_group"], "memory")
+        self.assertEqual(form.proposed_config(), model["config"])
+
+    def test_role_definition_form_normalizes_invalid_active_group_and_preserves_valid(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.accounts.selectors import contract_role_names
+
+        model = role_definition_read_model(contract_role_names()[0])
+        first = model["sections"][0]["code"]
+        valid = RoleDefinitionForm({"active_group": first}, role_read_model=model)
+        invalid = RoleDefinitionForm({"active_group": "not-a-group"}, role_read_model=model)
+        self.assertEqual(valid["active_group"].value(), first)
+        self.assertEqual(invalid["active_group"].value(), first)
+
+    def test_standalone_preview_form_preserves_changed_metadata_in_proposed_config(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.accounts.selectors import contract_role_names
+
+        model = role_definition_read_model(contract_role_names()[0])
+        proposed = dict(model["config"])
+        proposed.update({"display_name": "Новое название роли", "description": "Новое описание роли"})
+        preview_form = RoleDefinitionForm(
+            role_read_model=model,
+            initial={
+                "base_hash": model["base_hash"],
+                "active_group": model["sections"][0]["code"],
+                "display_name": proposed["display_name"],
+                "description": proposed["description"],
+                **{
+                    f"capability__{code}": (["*"] if value == "*" else value)
+                    for code, value in proposed.items()
+                    if code not in {"display_name", "description"}
+                },
+            },
+        )
+        self.assertEqual(preview_form["display_name"].value(), proposed["display_name"])
+        self.assertEqual(preview_form["description"].value(), proposed["description"])
+        self.assertEqual(preview_form.proposed_config(), proposed)
+
     def _bundle_payload(self, *, target, role, memory_group, **overrides):
         payload = {
             "view": "users",
@@ -832,6 +930,8 @@ class SettingsCenterRegistryTests(TestCase):
                 post_data = {
                     "action": "preview",
                     "base_hash": response.context["role"]["base_hash"],
+                    "display_name": "Роль после предпросмотра",
+                    "description": "Описание, сохранённое между проверкой и применением.",
                 }
                 changed_code = "create_workorder"
                 for field_name, field in form.fields.items():
@@ -854,7 +954,18 @@ class SettingsCenterRegistryTests(TestCase):
                 self.assertEqual(preview_response.status_code, 200)
                 preview = preview_response.context["preview"]
                 self.assertEqual(preview["impact"]["role_member_count"], 1)
-                self.assertEqual([item["code"] for item in preview["changes"]], [changed_code])
+                self.assertEqual(
+                    {item["code"] for item in preview["changes"]},
+                    {"display_name", "description", changed_code},
+                )
+                self.assertEqual(
+                    preview_response.context["form"]["display_name"].value(),
+                    "Роль после предпросмотра",
+                )
+                self.assertEqual(
+                    preview_response.context["form"]["description"].value(),
+                    "Описание, сохранённое между проверкой и применением.",
+                )
 
                 post_data.update(
                     action="apply",
@@ -865,6 +976,11 @@ class SettingsCenterRegistryTests(TestCase):
                 self.assertEqual(apply_response.status_code, 302)
                 saved = load_json_file(role_file)
                 self.assertEqual(saved[role_code][changed_code], not role_rules[role_code][changed_code])
+                self.assertEqual(saved[role_code]["display_name"], "Роль после предпросмотра")
+                self.assertEqual(
+                    saved[role_code]["description"],
+                    "Описание, сохранённое между проверкой и применением.",
+                )
                 self.assertEqual(saved[sibling_code], role_rules[sibling_code])
 
     def test_role_editor_service_rejects_unknown_proposed_capability(self):

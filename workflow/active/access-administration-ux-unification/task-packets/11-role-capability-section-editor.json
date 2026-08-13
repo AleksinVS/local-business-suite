@@ -18,6 +18,7 @@
     "apps/accounts/access_contracts.py",
     "apps/settings_center/access_workspace.py",
     "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
     "apps/settings_center/tests.py",
     "templates/settings_center/**",
     "static/src/js/access_workspace.js",

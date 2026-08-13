@@ -381,6 +381,59 @@ test("@smoke role sidebar adds a user through preview and confirmation", async (
   await expect(page.getByText(/Состав роли изменён/)).toBeVisible();
 });
 
+test("@smoke role definition groups switch locally and retain draft", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/?view=roles");
+  const pageIdentity = await page.evaluate(() => {
+    const identity = crypto.randomUUID();
+    (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity = identity;
+    return identity;
+  });
+  await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
+  const editor = page.locator(".role-capability-editor");
+  await expect(editor).toBeVisible();
+  const name = editor.locator('input[name="display_name"]');
+  const draft = `${await name.inputValue()} draft`;
+  await name.fill(draft);
+  const tabs = editor.locator("[data-role-editor-tab]");
+  const tabCount = await tabs.count();
+  expect(tabCount).toBeGreaterThan(1);
+  await tabs.first().focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.nth(1)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(tabs.first()).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(tabs.nth(tabCount - 1)).toBeFocused();
+  await tabs.nth(1).click();
+  await tabs.first().click();
+  await expect(editor.locator("[data-role-editor-panel]:not([hidden])")).toHaveCount(1);
+  if (tabCount > 2) {
+    await tabs.nth(2).click();
+    await expect(editor.locator("[data-role-editor-panel]:not([hidden])")).toHaveCount(1);
+  }
+  await expect(name).toHaveValue(draft);
+  expect(await page.evaluate(() => (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity)).toBe(pageIdentity);
+  await expect(editor.locator("input[name='active_group']")).not.toHaveValue("");
+});
+
+test("@smoke role inspector preview renders impact and diff without navigation", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/?view=roles");
+  const pageIdentity = await page.evaluate(() => {
+    const identity = crypto.randomUUID();
+    (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity = identity;
+    return identity;
+  });
+  await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
+  const editor = page.locator(".role-capability-editor");
+  await editor.locator('input[name="display_name"]').fill(`${await editor.locator('input[name="display_name"]').inputValue()} preview`);
+  await editor.getByRole("button", { name: "Проверить изменение" }).click();
+  await expect(editor.getByRole("table", { name: "Сравнение изменений роли" })).toBeVisible();
+  await expect(editor.getByText(/фактически изменится доступ/)).toBeVisible();
+  expect(await page.evaluate(() => (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity)).toBe(pageIdentity);
+});
+
 test("@smoke Django Admin reserve remains available from the workspace standalone action", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/");

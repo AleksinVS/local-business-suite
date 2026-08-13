@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Роль {{ role.label }}{% endblock %}
 
@@ -14,32 +15,31 @@
     <a class="button-link" href="{% url 'settings_center:user_list' %}?role={{ role.code }}">Сотрудники этой роли</a>
   </div>
 
-  <form method="post" class="role-definition-form">
+  <form method="post" class="role-definition-form" data-role-definition-form data-access-dirty="false">
     {% csrf_token %}
     {{ form.non_field_errors }}
     {{ form.base_hash }}
     {{ form.preview_token }}
-    {% for section in role.sections %}
-      <fieldset>
-        <legend>{{ section.label }}</legend>
-        {% for capability in section.capabilities %}
-          {% with field_name="capability__"|add:capability.code %}
-            {% for field in form.visible_fields %}
-              {% if field.name == field_name %}
-                <div class="capability-row">
-                  <div>
-                    <label for="{{ field.id_for_label }}">{{ capability.label }}</label>
-                    <p>{{ capability.description }}</p>
-                    {% if capability.risk != "normal" %}<span class="risk-label">{{ capability.risk }}</span>{% endif %}
-                  </div>
-                  <div>{{ field }}{{ field.errors }}</div>
-                </div>
-              {% endif %}
-            {% endfor %}
-          {% endwith %}
-        {% endfor %}
-      </fieldset>
-    {% endfor %}
+    {{ form.active_group }}
+    <div class="role-capability-editor-layout" data-standalone-role-editor>
+      <aside class="role-capability-groups" aria-label="Редактор роли">
+        <div class="role-capability-meta">
+          <div class="access-form-field">{{ form.display_name.label_tag }}{{ form.display_name }}{{ form.display_name.errors }}</div>
+          <div class="access-form-field role-description-compact">{{ form.description.label_tag }}{{ form.description }}{{ form.description.errors }}</div>
+          <a class="access-inspector-field-link" href="{% url 'settings_center:user_list' %}?role={{ role.code }}">Сотрудники этой роли: {{ role.member_count }}</a>
+        </div>
+        <div class="role-capability-tablist" aria-label="Группы прав роли" role="tablist">
+          {% for group in form.capability_groups %}<button type="button" class="role-capability-tab" id="standalone-role-tab-{{ group.code }}" role="tab" data-role-editor-tab="{{ group.code }}" aria-selected="{% if form.active_group.value == group.code %}true{% else %}false{% endif %}" aria-controls="standalone-role-panel-{{ group.code }}">{{ group.label }}</button>{% endfor %}
+        </div>
+      </aside>
+      <div class="role-capability-panels">
+        {% for group in form.capability_groups %}<section class="role-capability-panel" id="standalone-role-panel-{{ group.code }}" data-role-editor-panel="{{ group.code }}" role="tabpanel" aria-labelledby="standalone-role-tab-{{ group.code }}"{% if form.active_group.value != group.code %} hidden{% endif %}>
+          <h2>{{ group.label }}</h2>
+          {% if group.description %}<p class="access-readonly-explanation">{{ group.description }}</p>{% endif %}
+          {% for item in group.items %}{% with field=item.field capability=item.capability %}<div class="capability-row"><div><label for="{{ field.id_for_label }}">{{ field.label }}</label><p>{{ capability.description }}</p>{% if capability.risk_label %}<span class="risk-label">{{ capability.risk_label }}</span>{% endif %}</div><div>{{ field }}{{ field.errors }}</div></div>{% endwith %}{% endfor %}
+        </section>{% endfor %}
+      </div>
+    </div>
 
     {% if preview %}
       <section class="role-preview" aria-labelledby="role-preview-title">
@@ -69,18 +69,24 @@
   .role-definition-form { display: grid; gap: 1rem; }
   .role-definition-form fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 0; overflow: hidden; }
   .role-definition-form legend { margin-left: 0.75rem; padding: 0 0.35rem; font-weight: 700; }
-  .capability-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr); gap: 1rem; align-items: center; padding: 0.85rem 1rem; border-top: 1px solid var(--border); }
-  .capability-row:first-of-type { border-top: 0; }
-  .capability-row label { font-weight: 700; }
-  .capability-row p { margin: 0.2rem 0 0; color: var(--text-muted); }
-  .capability-row select, .capability-row input[type="text"] { width: 100%; min-height: 44px; }
-  .capability-row ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
-  .capability-row ul label { display: flex; gap: 0.5rem; align-items: center; min-height: 44px; }
-  .risk-label { display: inline-block; margin-top: 0.35rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
   .role-preview { border-top: 1px solid var(--border); padding-top: 1rem; }
   .checkbox-row { display: flex; gap: 0.6rem; align-items: center; min-height: 44px; }
   .role-definition-actions { display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; padding: 0.75rem 0; background: var(--surface); }
-  @media (max-width: 700px) { .capability-row { grid-template-columns: 1fr; } .role-definition-actions { position: static; flex-direction: column; } }
+  @media (max-width: 700px) { .role-definition-actions { position: static; flex-direction: column; } }
 </style>
-{% if preview %}<script>document.getElementById("role-preview-title")?.focus();</script>{% endif %}
+<script src="{% static 'src/js/role_capability_editor.js' %}?v=role-capability-v1"></script>
+<script>
+  (() => {
+    const root = document.querySelector("[data-standalone-role-editor]");
+    if (!root) return;
+    const hidden = root.closest("form")?.querySelector("input[name='active_group']");
+    window.SharedRoleCapabilityEditor?.init(root);
+    const form = root.closest("form");
+    form?.addEventListener("input", () => { form.dataset.accessDirty = "true"; });
+    form?.addEventListener("change", () => { form.dataset.accessDirty = "true"; });
+    form?.addEventListener("submit", () => { form.dataset.accessDirty = "false"; });
+    window.addEventListener("beforeunload", (event) => { if (form?.dataset.accessDirty === "true") { event.preventDefault(); event.returnValue = ""; } });
+  })();
+  {% if preview %}document.getElementById("role-preview-title")?.focus();{% endif %}
+</script>
 {% endblock %}

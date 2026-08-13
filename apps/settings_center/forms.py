@@ -32,10 +32,12 @@ class RoleDefinitionForm(forms.Form):
         label="Подтверждаю изменение чувствительных прав",
         required=False,
     )
+    active_group = forms.CharField(widget=forms.HiddenInput, required=False)
 
     def __init__(self, *args, role_read_model, **kwargs):
         super().__init__(*args, **kwargs)
         self.role_read_model = role_read_model
+        self.capability_groups = []
         self.fields["display_name"].initial = role_read_model["label"]
         self.fields["description"].initial = role_read_model["description"]
         for section in role_read_model["sections"]:
@@ -87,17 +89,39 @@ class RoleDefinitionForm(forms.Form):
                 field.initial = value
                 field.help_text = field.help_text or capability["description"]
                 self.fields[field_name] = field
+        for group in role_read_model.get("sections", []):
+            self.capability_groups.append({
+                "code": group["code"],
+                "label": group["label"],
+                "description": group.get("description", ""),
+                "items": [
+                    {
+                        "field": self[f"capability__{capability['code']}"],
+                        "capability": capability,
+                    }
+                    for capability in group["capabilities"]
+                    if f"capability__{capability['code']}" in self.fields
+                ],
+            })
+        group_codes = {group["code"] for group in self.capability_groups}
+        requested_group = self.data.get("active_group", "") if self.is_bound else self.initial.get("active_group", "")
+        self.initial["active_group"] = requested_group if requested_group in group_codes else (
+            self.capability_groups[0]["code"] if self.capability_groups else ""
+        )
+        if self.is_bound:
+            self.data = self.data.copy()
+            self.data["active_group"] = self.initial["active_group"]
 
     def proposed_config(self):
         display_name = (
             self.cleaned_data.get("display_name", "")
             if self.is_bound and "display_name" in self.data
-            else self.role_read_model["label"]
+            else self.initial.get("display_name", self.role_read_model["label"])
         )
         description = (
             self.cleaned_data.get("description", "")
             if self.is_bound and "description" in self.data
-            else self.role_read_model["description"]
+            else self.initial.get("description", self.role_read_model["description"])
         )
         proposed = {
             "display_name": display_name,
@@ -107,9 +131,7 @@ class RoleDefinitionForm(forms.Form):
             for capability in section["capabilities"]:
                 code = capability["code"]
                 field_name = f"capability__{code}"
-                if field_name not in self.cleaned_data:
-                    continue
-                value = self.cleaned_data[field_name]
+                value = self.cleaned_data[field_name] if self.is_bound and field_name in self.cleaned_data else self.fields[field_name].initial
                 if capability["type"] == "targets":
                     value = "*" if "*" in value else list(value)
                 proposed[code] = value

@@ -710,9 +710,13 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
                     initial={
                         "base_hash": preview["base_hash"],
                         "preview_token": preview["preview_token"],
+                        "active_group": form.cleaned_data.get("active_group", ""),
+                        "display_name": preview["proposed_config"].get("display_name", ""),
+                        "description": preview["proposed_config"].get("description", ""),
                         **{
                             f"capability__{code}": (["*"] if value == "*" else value)
                             for code, value in preview["proposed_config"].items()
+                            if code not in {"display_name", "description"}
                         },
                     },
                 )

@@ -149,6 +149,9 @@
       var active = bundle.querySelector("input[name='active_editor']");
       setActiveEditor(bundle, active && active.value ? active.value : "roles");
     });
+    document.querySelectorAll(".role-capability-editor").forEach(function (editor) {
+      window.SharedRoleCapabilityEditor?.init(editor);
+    });
     revealFieldSidebar();
     window.SharedSidebarResize?.init({
       handle: document.querySelector("[data-access-sidebar-resize]"),

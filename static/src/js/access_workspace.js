@@ -3,33 +3,53 @@
 
   var root = document.querySelector("[data-access-workspace]");
   if (!root) return;
-  var compact = window.matchMedia("(max-width: 1499px)");
-  var panel = root.querySelector("[data-access-panel]");
+  var compact = window.matchMedia("(max-width: 1200px)");
   var focusKey = "access-workspace-focus";
+  var activePanel = null;
+
+  function revealFieldSidebar() {
+    var field = document.querySelector(".access-sidebar-editor[data-access-panel='field']");
+    var sidebar = field && field.closest(".sidebar-nav--access");
+    if (!sidebar) return;
+    sidebar.classList.remove("collapsed");
+    var toggle = document.querySelector('.sidebar-toggle[aria-controls="sidebar"]');
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.setAttribute("aria-label", "Свернуть боковую панель");
+    }
+  }
 
   function isCompact() { return compact.matches; }
+
+  function findActivePanel() {
+    var inspector = document.querySelector(".access-inspector.drawer.active");
+    var field = document.querySelector(".access-sidebar-editor[data-access-panel='field']");
+    return field && isCompact() ? field : (inspector || field);
+  }
+
+  function isModalPanel(panel) {
+    return Boolean(panel && (panel.classList.contains("access-inspector") || isCompact()));
+  }
 
   function focusables(container) {
     return Array.from(container.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"));
   }
 
-  function setPanelMode() {
-    panel = root.querySelector("[data-access-panel]");
-    var backgroundRegions = root.querySelectorAll(".access-workspace-head, .access-tabs, .access-table-panel, [data-access-panel]");
-    if (!panel) {
-      backgroundRegions.forEach(function (region) { region.removeAttribute("inert"); });
-      return;
-    }
-    if (isCompact()) {
-      panel.setAttribute("role", "dialog");
-      panel.setAttribute("aria-modal", "true");
-      backgroundRegions.forEach(function (region) {
-        if (region !== panel) region.setAttribute("inert", "");
-      });
-    } else {
-      panel.removeAttribute("role");
-      panel.removeAttribute("aria-modal");
-      backgroundRegions.forEach(function (region) { region.removeAttribute("inert"); });
+  function markBackground() {
+    activePanel = findActivePanel();
+    var modal = isModalPanel(activePanel);
+    var background = document.querySelectorAll("[data-access-workspace], .access-workspace-head, .access-tabs, .access-table-panel, .site-header, .sidebar-nav");
+    background.forEach(function (region) {
+      if (!modal || region === activePanel || region.contains(activePanel)) region.removeAttribute("inert");
+      else region.setAttribute("inert", "");
+    });
+    if (activePanel && modal) {
+      activePanel.setAttribute("role", "dialog");
+      activePanel.setAttribute("aria-modal", "true");
+      activePanel.removeAttribute("aria-hidden");
+    } else if (activePanel) {
+      activePanel.removeAttribute("role");
+      activePanel.removeAttribute("aria-modal");
     }
   }
 
@@ -39,25 +59,40 @@
   }
 
   function restoreFocus() {
-    if (panel) return;
     var href;
-    try { href = sessionStorage.getItem(focusKey); sessionStorage.removeItem(focusKey); } catch (_) { return; }
-    if (!href) return;
+    try { href = sessionStorage.getItem(focusKey); } catch (_) { return true; }
+    if (!href) return true;
+    // Keep the source reference while a server-rendered panel is open.  The
+    // next close navigation will render the list and only then consume it.
+    if (activePanel) return false;
     var target = Array.from(root.querySelectorAll("a[href]")).find(function (link) { return link.getAttribute("href") === href; });
-    if (target) target.focus();
+    if (!target) {
+      try { sessionStorage.removeItem(focusKey); } catch (_) {}
+      return true;
+    }
+    try { sessionStorage.removeItem(focusKey); } catch (_) {}
+    target.focus();
+    return true;
   }
 
   function dirtyForms() {
-    return Array.from(root.querySelectorAll("form[data-access-dirty='true']"));
+    return Array.from(document.querySelectorAll(".access-context-form[data-access-dirty='true']"));
   }
 
   function canLeave() {
-    return !dirtyForms().length || window.confirm("Есть несохранённые изменения. Покинуть редактор?");
+    var dirty = dirtyForms();
+    if (!dirty.length) return true;
+    if (!window.confirm("Есть несохранённые изменения. Покинуть редактор?")) return false;
+    // Confirmation means that the current draft is intentionally discarded.
+    // Clearing the marker also prevents a second beforeunload prompt while the
+    // accepted link or form navigation is being completed.
+    dirty.forEach(function (form) { form.dataset.accessDirty = "false"; });
+    return true;
   }
 
   function trapFocus(event) {
-    if (!panel || !isCompact() || event.key !== "Tab") return;
-    var items = focusables(panel);
+    if (!isModalPanel(activePanel) || event.key !== "Tab") return;
+    var items = focusables(activePanel);
     if (!items.length) return;
     var first = items[0];
     var last = items[items.length - 1];
@@ -73,36 +108,60 @@
     form.addEventListener("submit", function () { form.dataset.accessDirty = "false"; });
   }
 
-  root.addEventListener("click", function (event) {
+  document.addEventListener("click", function (event) {
+    var sidebarToggle = event.target.closest(".sidebar-toggle");
+    if (sidebarToggle && !canLeave()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     var link = event.target.closest("a");
-    if (!link || !root.contains(link)) return;
-    if (!canLeave()) { event.preventDefault(); return; }
-    if (link.closest(".access-object-link, .access-cell-link, .access-status-link")) rememberFocus(link);
-    // Close buttons navigate through their explicit safe href.  Do not mutate
-    // the DOM with pushState: the server remains the source of URL state.
-  });
+    if (!link) return;
+    var sameOrigin = link.origin === window.location.origin;
+    if (!sameOrigin || !canLeave()) {
+      if (!sameOrigin) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (link.closest(".access-panel-close, .access-inspector-overlay")) return;
+    var source = link.closest(".access-object-link, .access-cell-link, .access-status-link");
+    if (source && !findActivePanel()) rememberFocus(source);
+  }, true);
+
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!form || form.matches(".access-context-form") || canLeave()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
 
   document.addEventListener("keydown", function (event) {
-    if (!panel || !root.contains(panel)) return;
+    activePanel = findActivePanel();
+    if (!activePanel) return;
     if (event.key === "Tab") { trapFocus(event); return; }
-    if (event.key !== "Escape") return;
-    var close = panel.querySelector(".access-panel-close");
-    if (!close || !canLeave()) return;
+    if (event.key !== "Escape" || !canLeave()) return;
+    var close = activePanel.querySelector(".access-panel-close");
+    if (!close) return;
     event.preventDefault();
     close.click();
   });
 
-  root.querySelectorAll("form").forEach(markDirty);
+  document.querySelectorAll(".access-context-form").forEach(markDirty);
   window.addEventListener("beforeunload", function (event) {
     if (!dirtyForms().length) return;
     event.preventDefault();
     event.returnValue = "";
   });
-  setPanelMode();
-  compact.addEventListener?.("change", setPanelMode);
-  restoreFocus();
-  if (panel) {
-    var initial = focusables(panel)[0];
-    if (initial && isCompact()) initial.focus();
+  compact.addEventListener?.("change", markBackground);
+  revealFieldSidebar();
+  markBackground();
+  if (!restoreFocus()) {
+    window.requestAnimationFrame(restoreFocus);
+    document.addEventListener("DOMContentLoaded", restoreFocus, { once: true });
+  }
+  if (isModalPanel(activePanel)) {
+    var initial = focusables(activePanel)[0];
+    if (initial) initial.focus();
   }
 })();

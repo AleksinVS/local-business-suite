@@ -37,13 +37,16 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
 
   await targetRow.locator(".access-object-link").click();
   await expect(page.locator(".access-inspector")).toBeVisible();
+  await expect(page.locator(".access-inspector")).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator(".access-table-panel")).toHaveAttribute("inert", "");
   await expect(page.getByText("Текущие значения")).toBeVisible();
 
   await page.locator(".access-inspector .access-panel-close").click();
   const reopenedTargetRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
   await reopenedTargetRow.locator(".access-cell-link").nth(0).click();
-  await expect(page.locator(".access-field-dock")).toBeVisible();
-  await expect(page.locator(".access-field-dock").getByRole("heading", { name: /Связь с Active Directory|Поле объекта/ })).toBeVisible();
+  await expect(page.locator(".access-sidebar-editor")).toBeVisible();
+  await expect(page.locator("#sidebar")).not.toHaveClass(/collapsed/);
+  await expect(page.locator(".access-sidebar-editor").getByRole("heading", { name: /Связь с Active Directory|Поле объекта/ })).toBeVisible();
 
   await closeAccessPanels(page);
   await page.getByRole("link", { name: "Роли", exact: true }).click();
@@ -53,7 +56,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   await expect(page.locator(".access-inspector")).toBeVisible();
   await page.locator(".access-inspector .access-panel-close").click();
   await page.locator(".access-roles-table tbody tr").first().locator(".access-cell-link").last().click();
-  await expect(page.locator(".access-field-dock")).toBeVisible();
+  await expect(page.locator(".access-sidebar-editor")).toBeVisible();
 
   await closeAccessPanels(page);
   await page.getByRole("link", { name: "Группы памяти", exact: true }).click();
@@ -69,15 +72,15 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   const userRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
   await userRow.locator('.access-cell-link[href*="field=memory-groups"]').click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
-  const memoryForm = page.locator(".access-field-dock .access-context-form");
+  const memoryForm = page.locator(".access-sidebar-editor .access-context-form");
   const firstMemoryGroup = memoryForm.locator('input[name="group_names"]').first();
   if (await firstMemoryGroup.isChecked()) await firstMemoryGroup.uncheck();
   else await firstMemoryGroup.check();
   await memoryForm.getByLabel("Причина").fill("Сквозная проверка назначения группы памяти.");
   await memoryForm.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Предпросмотр изменения")).toBeVisible();
-  await page.locator('.access-field-dock input[name="confirmed"]').check();
-  await page.locator(".access-field-dock").getByRole("button", { name: "Применить" }).click();
+  await page.locator('.access-sidebar-editor input[name="confirmed"]').check();
+  await page.locator(".access-sidebar-editor").getByRole("button", { name: "Применить" }).click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
 });
 
@@ -105,8 +108,11 @@ test("@smoke access workspace uses one modal editor on tablet and isolates the t
   await expect(inspector).toHaveAttribute("role", "dialog");
   await expect(inspector).toHaveAttribute("aria-modal", "true");
   await expect(page.locator(".access-table-panel")).toHaveAttribute("inert", "");
-  const backdrop = await page.evaluate(() => getComputedStyle(document.body, "::before").backgroundColor);
-  expect(backdrop).not.toBe("rgba(0, 0, 0, 0)");
+  const backdrop = page.locator(".access-inspector-overlay.is-active");
+  await expect(backdrop).toBeVisible();
+  expect(await backdrop.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+  await backdrop.click({ position: { x: 10, y: 300 } });
+  await expect(page.locator(".access-inspector.active")).toHaveCount(0);
 });
 
 test("@smoke access workspace warns before browser reload with dirty editor data", async ({ page }) => {
@@ -136,20 +142,57 @@ test("@smoke access workspace warns before browser reload with dirty editor data
   await expect(page.locator(".access-inspector")).toBeVisible();
 });
 
+test("@smoke access workspace protects dirty sidebar from toggle and header navigation", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.locator(".access-users-table tbody tr").first().locator('.access-cell-link[href*="field=ad"]').click();
+  const editor = page.locator(".access-sidebar-editor");
+  await expect(editor).toBeVisible();
+  await editor.locator("textarea").last().fill("dirty-sidebar-value");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.type()).toBe("confirm");
+    await dialog.dismiss();
+  });
+  await page.locator('.sidebar-toggle[aria-controls="sidebar"]').click();
+  await expect(page.locator("#sidebar")).not.toHaveClass(/collapsed/);
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.type()).toBe("confirm");
+    await dialog.dismiss();
+  });
+  await page.locator(".brand").click();
+  await expect(page).toHaveURL(/\/settings\/access\//);
+  await expect(editor).toBeVisible();
+});
+
+test("@smoke access workspace restores source focus after drawer close at layout boundaries", async ({ page }) => {
+  await login(page);
+  for (const width of [1200, 767]) {
+    await page.setViewportSize({ width, height: 760 });
+    await page.goto("/settings/access/");
+    const source = page.locator(".access-users-table tbody tr").first().locator(".access-object-link");
+    await source.click();
+    await expect(page.locator(".access-inspector.active")).toBeVisible();
+    await page.locator(".access-inspector .access-panel-close").click();
+    await expect(source).toBeFocused();
+  }
+});
+
 test("@smoke role sidebar adds a user through preview and confirmation", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/?view=roles");
   const roleRow = page.locator(".access-roles-table tbody tr").first();
   await roleRow.locator('.access-cell-link[href*="field=users"]').click();
-  const roleForm = page.locator(".access-field-dock .access-context-form");
+  const roleForm = page.locator(".access-sidebar-editor .access-context-form");
   const targetMembership = roleForm.getByLabel(targetUsername || "", { exact: true });
   if (await targetMembership.isChecked()) await targetMembership.uncheck();
   else await targetMembership.check();
   await roleForm.getByLabel("Причина изменения состава").fill("Сквозная проверка состава роли.");
   await roleForm.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Предпросмотр изменения")).toBeVisible();
-  await page.locator('.access-field-dock input[name="risk_confirmed"]').check();
-  await page.locator(".access-field-dock").getByRole("button", { name: "Применить" }).click();
+  await page.locator('.access-sidebar-editor input[name="risk_confirmed"]').check();
+  await page.locator(".access-sidebar-editor").getByRole("button", { name: "Применить" }).click();
   await expect(page.getByText(/Состав роли изменён/)).toBeVisible();
 });
 

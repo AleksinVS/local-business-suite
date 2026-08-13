@@ -3,9 +3,22 @@
 
 {% block title %}Доступ — единое окно{% endblock %}
 
+{% block sidebar_extra_class %} sidebar-nav--access{% endblock %}
+{% block sidebar_panel_label %}{% if selected and selected_panel == "field" %}Редактор {{ selected_field_label }}{% else %}Встроенный ИИ-чат{% endif %}{% endblock %}
+{% block sidebar_panel %}
+  {% if selected and selected_panel == "field" %}
+    <div class="access-sidebar-editor" data-access-panel="field" aria-label="Редактор {{ selected_field_label }} для {{ selected.name }}">
+      <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected_field_label }}</h2><p class="muted">{{ selected.name }}</p></div><a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть редактор поля">×</a></div>
+      {% if field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="access-readonly-explanation">{{ selected_kind_label }} «{{ selected.name }}»: поле «{{ selected_field_label }}» доступно только для просмотра. Оно вычисляется предметным сервисом, поэтому универсальное прямое изменение запрещено.</p>{% endif %}
+    </div>
+  {% else %}
+    {{ block.super }}
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <section class="access-workspace" data-access-workspace data-active-tab="{{ active_tab }}">
-  <header class="access-workspace-head">
+  <header class="access-workspace-head"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
     <div>
       <p class="eyebrow">Администрирование доступа</p>
       <h1>Доступ</h1>
@@ -14,19 +27,13 @@
     <a class="button-link" href="{% url 'settings_center:dashboard' %}">Настройки</a>
   </header>
 
-  <nav class="access-tabs" aria-label="Разрез доступа">
+  <nav class="access-tabs" aria-label="Разрез доступа"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
     {% for tab in tabs %}
       <a class="access-tab{% if tab.active %} is-active{% endif %}" href="?view={{ tab.code }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
     {% endfor %}
   </nav>
 
-  <div class="access-workspace-grid">
-    {% if selected and selected_panel == "field" %}
-      <aside class="access-field-dock" data-access-panel="field" aria-label="Редактор {{ selected_field_label }} для {{ selected.name }}">
-        <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected_field_label }}</h2><p class="muted">{{ selected.name }}</p></div><a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object|urlencode }}&amp;field={{ selected_field|urlencode }}&amp;panel=inspector" aria-label="Закрыть редактор поля">×</a></div>
-        {% if field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="access-readonly-explanation">{{ selected_kind_label }} «{{ selected.name }}»: поле «{{ selected_field_label }}» доступно только для просмотра. Оно вычисляется предметным сервисом, поэтому универсальное прямое изменение запрещено.</p>{% endif %}
-      </aside>
-    {% endif %}
+  <div class="access-workspace-grid"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
     <div class="access-table-panel">
       {% if active_tab == "users" %}
         <div class="access-panel-heading">
@@ -91,8 +98,11 @@
       {% endif %}
     </div>
 
+  </div>
+
     {% if selected %}
-      <aside class="access-inspector" data-access-panel="{{ selected_panel }}" aria-label="Карточка {{ selected.name }}">
+      <a class="access-inspector-overlay{% if selected_panel == 'inspector' %} is-active{% endif %}" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть карточку"></a>
+      <aside class="drawer drawer-large access-inspector{% if selected_panel == 'inspector' %} active{% endif %}" data-access-panel="inspector" aria-label="Карточка {{ selected.name }}" aria-hidden="{% if selected_panel == 'inspector' %}false{% else %}true{% endif %}"{% if selected_panel == 'inspector' %} role="dialog" aria-modal="true"{% endif %}>
         <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected.name }}</h2></div><a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть карточку">×</a></div>
         {% if selected.kind == "user" %}
           <div class="access-inspector-columns">
@@ -122,10 +132,9 @@
         {% if standalone_target %}<a class="access-standalone-link" href="{{ standalone_target }}" target="_blank" rel="noopener">Открыть в отдельном окне ↗</a>{% endif %}
       </aside>
     {% endif %}
-  </div>
 </section>
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v1"></script>
+  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v2"></script>
 {% endblock %}

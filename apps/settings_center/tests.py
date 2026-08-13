@@ -104,6 +104,34 @@ class AccessWorkspaceTests(TestCase):
         self.assertContains(response, "Редактор поля")
         self.assertContains(response, "workspace-deep-target")
 
+    def test_workspace_panels_use_left_sidebar_and_right_overlay_drawer(self):
+        actor = User.objects.create_superuser(username="workspace-panel-root", password="pass")
+        target = User.objects.create_user(username="workspace-panel-target")
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+
+        inspector_response = self.client.get(
+            url,
+            {"view": "users", "object": target.pk, "panel": "inspector"},
+        )
+        self.assertEqual(inspector_response.status_code, 200)
+        self.assertContains(inspector_response, "access-inspector-overlay is-active")
+        self.assertContains(inspector_response, "drawer drawer-large access-inspector active")
+        self.assertContains(inspector_response, 'role="dialog" aria-modal="true"')
+        self.assertContains(inspector_response, 'class="access-workspace-grid" inert')
+        self.assertNotContains(inspector_response, "access-field-dock")
+
+        field_response = self.client.get(
+            url,
+            {"view": "users", "object": target.pk, "field": "roles", "panel": "field"},
+        )
+        self.assertEqual(field_response.status_code, 200)
+        self.assertContains(field_response, 'class="access-sidebar-editor"')
+        self.assertContains(field_response, 'class="access-context-form"')
+        self.assertContains(field_response, 'aria-label="Закрыть редактор поля"')
+        self.assertContains(field_response, "sidebar-nav--access")
+        self.assertNotContains(field_response, "access-field-dock")
+
     def test_inline_role_assignment_uses_preview_then_apply_service(self):
         from apps.accounts.selectors import contract_role_names
 

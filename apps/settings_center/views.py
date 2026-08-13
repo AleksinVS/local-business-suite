@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 
 from django.contrib import messages
+from django.contrib.messages import get_messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import Http404
+from django.http import Http404, HttpResponseBadRequest
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -127,6 +128,36 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     """
 
     template_name = "settings_center/access_workspace.html"
+    _HX_TARGETS = {
+        "access-field-sidebar-host",
+        "access-inspector-host",
+        "access-table-panel",
+    }
+
+    @staticmethod
+    def _is_htmx(request):
+        return request.headers.get("HX-Request") == "true"
+
+    @staticmethod
+    def _is_history_restore(request):
+        return request.headers.get("HX-History-Restore-Request") == "true"
+
+    def _hx_target(self, request):
+        target = request.headers.get("HX-Target", "").lstrip("#")
+        return f"#{target}" if target in self._HX_TARGETS else ""
+
+    def get(self, request, *args, **kwargs):
+        if self._is_htmx(request):
+            # htmx history cache misses request the canonical document shell;
+            # there is no target header to validate in this mode.
+            if self._is_history_restore(request):
+                return super().get(request, *args, **kwargs)
+            target = self._hx_target(request)
+            if not target:
+                return HttpResponseBadRequest("Unknown HTMX target.")
+            context = self.get_context_data(**kwargs)
+            return self._render_hx_panel(context, target)
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -159,7 +190,37 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         except (PermissionDenied, ValidationError) as exc:
             state["editor_error"] = str(exc)
             state["field_form"] = self._build_editor_form(request, state)
+            return self._response_for_editor(request, state)
+
+    def _render_hx_panel(self, state, target, *, applied=False):
+        if target == "#access-field-sidebar-host":
+            template = "settings_center/partials/access_workspace/field_apply_response.html" if applied else "settings_center/partials/access_workspace/field_sidebar_response.html"
+        elif target == "#access-inspector-host":
+            template = "settings_center/partials/access_workspace/inspector_apply_response.html" if applied else "settings_center/partials/access_workspace/inspector_response.html"
+        else:
+            template = "settings_center/partials/access_workspace/table_panel.html"
+        return render(self.request, template, state)
+
+    def _response_for_editor(self, request, state, *, applied=False):
+        if not self._is_htmx(request):
             return self.render_to_response(state)
+        target = self._hx_target(request)
+        if not target:
+            return HttpResponseBadRequest("Unknown HTMX target.")
+        return self._render_hx_panel(state, target, applied=applied)
+
+    def _success_response(self, request, view, object_id, field):
+        if not self._is_htmx(request):
+            return redirect(self._workspace_url(view, object_id, field, request=request))
+        params = request.POST.copy()
+        params.update({"view": view, "object": object_id, "field": field, "panel": self._requested_panel(request)})
+        state = workspace_context(query_params=params)
+        state["field_form"] = self._build_editor_form(request, state, use_post=False)
+        state["inline_messages"] = list(get_messages(request))
+        target = self._hx_target(request)
+        if not target:
+            return HttpResponseBadRequest("Unknown HTMX target.")
+        return self._render_hx_panel(state, target, applied=True)
 
     def _post_user(self, request, selected, field, action):
         user = selected["user"]
@@ -213,7 +274,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 audit_callback=audit_callback,
             )
             messages.success(request, "Данные пользователя обновлены.")
-            return redirect(self._workspace_url("users", user.pk, field, request=request))
+            return self._success_response(request, "users", user.pk, field)
         if field == "ad":
             form = AccessExternalIdentityForm(request.POST, instance=selected["ad_identity"])
             if not form.is_valid():
@@ -252,7 +313,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 audit_callback=audit_callback,
             )
             messages.success(request, "Связь с AD обновлена.")
-            return redirect(self._workspace_url("users", user.pk, field, request=request))
+            return self._success_response(request, "users", user.pk, field)
         if field == "roles":
             form = PortalUserUpdateForm(request.POST, portal_user=user, actor=request.user)
             return self._post_role_assignment(request, selected, form, action)
@@ -267,7 +328,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 return self._editor_response(request, form, selected, preview=preview)
             target, audit = apply_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"], preview_token=form.cleaned_data["preview_token"], confirmed=form.cleaned_data["confirmed"])
             messages.success(request, f"Группы памяти пользователя изменены. Аудит #{audit.pk}.")
-            return redirect(self._workspace_url("users", target.pk, field, request=request))
+            return self._success_response(request, "users", target.pk, field)
         raise ValidationError("Это поле доступно только для просмотра.")
 
     def _post_role_assignment(self, request, selected, form, action):
@@ -281,7 +342,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             return self._editor_response(request, form, selected, preview=preview)
         updated, audit = apply_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["confirm_risk"], is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
         messages.success(request, f"Доступ пользователя сохранён. Аудит #{audit.pk}.")
-        return redirect(self._workspace_url("users", updated.pk, "roles", request=request))
+        return self._success_response(request, "users", updated.pk, "roles")
 
     def _post_role(self, request, selected, field, action):
         if field in {"definition", "description"}:
@@ -298,7 +359,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 return self._editor_response(request, form, selected, preview=preview)
             change = apply_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"])
             messages.success(request, f"Роль изменена. Аудит #{change.pk}.")
-            return redirect(self._workspace_url("roles", selected["code"], field, request=request))
+            return self._success_response(request, "roles", selected["code"], field)
         if field == "users":
             form = AccessRoleMembershipForm(request.POST, role_name=selected["code"])
             if not form.is_valid():
@@ -311,7 +372,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 return self._editor_response(request, form, selected, preview=preview)
             audits = apply_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
             messages.success(request, f"Состав роли изменён. Аудитов: {len(audits)}.")
-            return redirect(self._workspace_url("roles", selected["code"], "users", request=request))
+            return self._success_response(request, "roles", selected["code"], "users")
         raise ValidationError("Это поле доступно только для просмотра.")
 
     def _post_board(self, request, selected, action):
@@ -324,12 +385,12 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             return self._editor_response(request, form, selected, preview=preview)
         board, audit = apply_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
         messages.success(request, f"Доступ к доске изменён. Аудит #{audit.pk}.")
-        return redirect(self._workspace_url("boards", board.pk, "groups", request=request))
+        return self._success_response(request, "boards", board.pk, "groups")
 
     def _editor_response(self, request, form, selected, preview=None):
         state = workspace_context(query_params=request.POST)
         state.update({"selected": selected, "selected_field": request.POST.get("field", state["selected_field"]), "selected_panel": self._requested_panel(request), "field_form": form, "field_preview": preview})
-        return self.render_to_response(state)
+        return self._response_for_editor(request, state)
 
     @staticmethod
     def _set_form_value(form, name, value):
@@ -340,14 +401,14 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         else:
             form.initial[name] = value
 
-    def _build_editor_form(self, request, state):
+    def _build_editor_form(self, request, state, *, use_post=True):
         selected = state.get("selected")
         if not selected:
             return None
         field = state.get("selected_field", "")
         if not self._can_edit_field(request, selected, field):
             return None
-        bound_data = request.POST if request.method == "POST" else None
+        bound_data = request.POST if request.method == "POST" and use_post else None
         if selected["kind"] == "user":
             user = selected["user"]
             if field == "profile":

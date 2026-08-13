@@ -6,135 +6,26 @@
 {% block sidebar_extra_class %} sidebar-nav--access{% endblock %}
 {% block sidebar_panel_label %}{% if selected and selected_panel == "field" %}Редактор {{ selected_field_label }}{% else %}Встроенный ИИ-чат{% endif %}{% endblock %}
 {% block sidebar_panel %}
-  {% if selected and selected_panel == "field" %}
-    <div class="access-sidebar-editor" data-access-panel="field" aria-label="Редактор {{ selected_field_label }} для {{ selected.name }}">
-      <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected_field_label }}</h2><p class="muted">{{ selected.name }}</p></div><a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть редактор поля">×</a></div>
-      {% if field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="access-readonly-explanation">{{ selected_kind_label }} «{{ selected.name }}»: поле «{{ selected_field_label }}» доступно только для просмотра. Оно вычисляется предметным сервисом, поэтому универсальное прямое изменение запрещено.</p>{% endif %}
-    </div>
-  {% else %}
-    {{ block.super }}
-  {% endif %}
+  <div class="access-sidebar-panel-stack">
+    <div id="access-field-sidebar-host" class="access-field-sidebar-host" aria-live="polite">{% include "settings_center/partials/access_workspace/field_sidebar_host.html" %}</div>
+    <div id="access-ai-chat-host" class="access-ai-chat-host{% if selected and selected_panel == 'field' %} is-hidden{% endif %}"{% if selected and selected_panel == 'field' %} aria-hidden="true"{% endif %} hx-preserve="true">{{ block.super }}</div>
+  </div>
 {% endblock %}
 
 {% block content %}
 <section class="access-workspace" data-access-workspace data-active-tab="{{ active_tab }}">
   <header class="access-workspace-head"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
-    <div>
-      <p class="eyebrow">Администрирование доступа</p>
-      <h1>Доступ</h1>
-      <p class="description">Один рабочий экран для пользователей, ролей и источников доступа.</p>
-    </div>
+    <div><p class="eyebrow">Администрирование доступа</p><h1>Доступ</h1><p class="description">Один рабочий экран для пользователей, ролей и источников доступа.</p></div>
     <a class="button-link" href="{% url 'settings_center:dashboard' %}">Настройки</a>
   </header>
-
   <nav class="access-tabs" aria-label="Разрез доступа"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
-    {% for tab in tabs %}
-      <a class="access-tab{% if tab.active %} is-active{% endif %}" href="?view={{ tab.code }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
-    {% endfor %}
+    {% for tab in tabs %}<a class="access-tab{% if tab.active %} is-active{% endif %}" href="?view={{ tab.code }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}
   </nav>
-
-  <div class="access-workspace-grid"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
-    <div class="access-table-panel">
-      {% if active_tab == "users" %}
-        <div class="access-panel-heading">
-          <div><h2>Пользователи</h2><p class="muted">Имя открывает карточку пользователя. Значения открывают редактор поля.</p></div>
-          {% if request.user.is_superuser %}<a class="button" href="{% url 'settings_center:user_create' %}">Создать</a>{% endif %}
-        </div>
-        <form method="get" class="access-user-filters" aria-label="Поиск и фильтры пользователей">
-          <input type="hidden" name="view" value="users">
-          <label class="access-filter-search"><span>Поиск</span><input type="search" name="q" value="{{ access_filter_state.query }}" placeholder="ФИО, логин, email или AD"></label>
-          <label><span>Роль</span><select name="role"><option value="">Все роли</option>{% for role in role_filter_options %}<option value="{{ role.code }}"{% if access_filter_state.role == role.code %} selected{% endif %}>{{ role.label }}</option>{% endfor %}</select></label>
-          <label><span>Подразделение</span><select name="department"><option value="">Все подразделения</option>{% for department in department_filter_options %}<option value="{{ department.pk }}"{% if access_filter_state.department_id == department.pk %} selected{% endif %}>{{ department.full_name }}</option>{% endfor %}</select></label>
-          <label class="access-attention-filter"><input type="checkbox" name="attention" value="{{ attention_value }}"{% if access_filter_state.attention %} checked{% endif %}><span>Требует внимания</span></label>
-          <button type="submit" class="button">Найти</button>
-          {% if access_filter_state.query or access_filter_state.role or access_filter_state.department_id or access_filter_state.attention %}<a class="button-link" href="?view=users">Сбросить</a>{% endif %}
-        </form>
-        <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Пользователи и доступ">
-          <table class="data-table access-workspace-table access-users-table">
-            <thead><tr>
-              <th scope="col">Имя</th><th scope="col">Пользователь AD</th><th scope="col">Подразделение</th><th scope="col">Статус</th>
-              <th scope="col">Роли</th><th scope="col">Разделы сайта</th><th scope="col">Технические группы</th><th scope="col">Группы памяти</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th>
-            </tr></thead>
-            <tbody>
-              {% for row in users %}
-                <tr{% if selected.object == row.object %} class="is-selected"{% endif %}>
-                  <td><a class="access-object-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.name }}" aria-label="Открыть карточку пользователя {{ row.name }}"><strong class="access-truncate">{{ row.name|truncatechars:28 }}</strong><span class="muted access-truncate">{{ row.username|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=ad&amp;panel=field" title="{{ row.ad }}" aria-label="AD: {{ row.ad }}"><span class="access-truncate">{{ row.ad|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=department&amp;panel=field" title="{{ row.department_full }}" aria-label="Подразделение: {{ row.department_full }}"><span class="access-truncate">{{ row.department|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-status-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=status&amp;panel=field" aria-label="{{ row.status.label }}" title="{{ row.status.label }}"><span class="access-status-icon {{ row.status.class }}" aria-hidden="true">{{ row.status.icon }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=roles&amp;panel=field" title="{{ row.roles_text|default:'Нет ролей' }}" aria-label="Роли: {{ row.roles_text|default:'Нет ролей' }}"><span class="access-truncate">{{ row.roles_text|default:"Нет ролей"|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=site-sections&amp;panel=field" title="{{ row.site_sections_text|default:'Нет разделов' }}" aria-label="Разделы сайта: {{ row.site_sections_text|default:'Нет разделов' }}"><span class="access-truncate">{{ row.site_sections_text|default:"Нет разделов"|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=technical-groups&amp;panel=field" title="{{ row.technical_groups_text|default:'Нет групп' }}" aria-label="Технические группы: {{ row.technical_groups_text|default:'Нет групп' }}"><span class="access-truncate">{{ row.technical_groups_text|default:"Нет групп"|truncatechars:28 }}</span></a></td>
-                  <td><a class="access-cell-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ row.object|urlencode }}&amp;field=memory-groups&amp;panel=field" title="{{ row.memory_groups_text|default:'Нет групп' }}" aria-label="Группы памяти: {{ row.memory_groups_text|default:'Нет групп' }}"><span class="access-truncate">{{ row.memory_groups_text|default:"Нет групп"|truncatechars:28 }}</span></a></td>
-                  <td class="access-standalone"><a href="{% url 'settings_center:user_edit' row.id %}" target="_blank" rel="noopener" aria-label="Открыть {{ row.name }} в отдельном окне" title="Открыть в отдельном окне">↗</a></td>
-                </tr>
-              {% empty %}<tr><td colspan="9" class="muted">Пользователи не найдены.</td></tr>{% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% elif active_tab == "roles" %}
-        <div class="access-panel-heading"><div><h2>Роли</h2><p class="muted">Изменение определения и состава роли подключается через контекстный редактор.</p></div></div>
-        <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Роли доступа">
-          <table class="data-table access-workspace-table access-roles-table">
-            <thead><tr><th scope="col">Роль</th><th scope="col">Описание</th><th scope="col">Пользователи</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th></tr></thead>
-            <tbody>{% for row in roles %}<tr{% if selected.object == row.object %} class="is-selected"{% endif %}>
-              <td><a class="access-object-link" href="?view=roles&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.label }} ({{ row.code }})"><strong class="access-truncate">{{ row.label|truncatechars:28 }}</strong><span class="muted access-truncate"><code>{{ row.code|truncatechars:28 }}</code></span></a></td>
-              <td><a class="access-cell-link" href="?view=roles&amp;object={{ row.object|urlencode }}&amp;field=description&amp;panel=field" title="{{ row.description }}" aria-label="Описание роли: {{ row.description }}"><span class="access-truncate">{{ row.description|default:"Описание не задано"|truncatechars:56 }}</span></a></td>
-              <td><a class="access-cell-link" href="?view=roles&amp;object={{ row.object|urlencode }}&amp;field=users&amp;panel=field" title="{{ row.users_text|default:'Нет пользователей' }}" aria-label="Пользователи роли: {{ row.users_text|default:'Нет пользователей' }}"><span class="access-truncate">{{ row.users_text|default:"Нет пользователей"|truncatechars:28 }}</span></a></td>
-              <td class="access-standalone"><a href="{% url 'settings_center:role_definition' row.code %}" target="_blank" rel="noopener" aria-label="Открыть роль {{ row.label }} в отдельном окне" title="Открыть в отдельном окне">↗</a></td>
-            </tr>{% empty %}<tr><td colspan="4" class="muted">Роли не найдены.</td></tr>{% endfor %}</tbody>
-          </table>
-        </div>
-      {% else %}
-        <div class="access-panel-heading"><div><h2>{% for tab in tabs %}{% if tab.code == active_tab %}{{ tab.label }}{% endif %}{% endfor %}</h2><p class="muted">Проекция источника доступа. Откройте значение для объяснения и доступных действий.</p></div></div>
-        <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="{{ active_tab }}">
-          <table class="data-table access-workspace-table access-generic-table">
-            {% if active_tab == "boards" %}<thead><tr><th scope="col">Доска</th><th scope="col">Группы доступа</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th></tr></thead><tbody>{% for row in boards %}<tr{% if selected.object == row.object %} class="is-selected"{% endif %}><td><a class="access-object-link" href="?view=boards&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.title }} ({{ row.slug }})"><strong class="access-truncate">{{ row.title|truncatechars:28 }}</strong><span class="muted access-truncate">{{ row.slug|truncatechars:28 }}</span></a></td><td><a class="access-cell-link" href="?view=boards&amp;object={{ row.object|urlencode }}&amp;field=groups&amp;panel=field" title="{{ row.groups_text|default:'Нет групп' }}" aria-label="Группы доступа: {{ row.groups_text|default:'Нет групп' }}"><span class="access-truncate">{{ row.groups_text|default:"Нет групп"|truncatechars:28 }}</span></a></td><td class="access-standalone"><a href="{% url 'settings_center:board_access' row.id %}" target="_blank" rel="noopener" aria-label="Открыть доску отдельно" title="Открыть в отдельном окне">↗</a></td></tr>{% empty %}<tr><td colspan="3" class="muted">Доски не найдены.</td></tr>{% endfor %}</tbody>
-            {% elif active_tab == "site-sections" %}<thead><tr><th scope="col">Раздел сайта</th><th scope="col">Роли</th><th scope="col">Возможности</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th></tr></thead><tbody>{% for row in site_sections %}<tr{% if selected.object == row.object %} class="is-selected"{% endif %}><td><a class="access-object-link" href="?view=site-sections&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.name }} ({{ row.code }})"><strong class="access-truncate">{{ row.name|truncatechars:28 }}</strong><span class="muted access-truncate">{{ row.code|truncatechars:28 }}</span></a></td><td><a class="access-cell-link" href="?view=site-sections&amp;object={{ row.object|urlencode }}&amp;field=roles&amp;panel=field" title="{{ row.roles_text|default:'Нет ролей' }}" aria-label="Роли раздела: {{ row.roles_text|default:'Нет ролей' }}"><span class="access-truncate">{{ row.roles_text|default:"Нет ролей"|truncatechars:28 }}</span></a></td><td>{{ row.capability_count }}</td><td class="access-standalone"><a href="?view=site-sections&amp;object={{ row.object|urlencode }}" target="_blank" rel="noopener" aria-label="Открыть раздел отдельно" title="Открыть в отдельном окне">↗</a></td></tr>{% empty %}<tr><td colspan="4" class="muted">Разделы не найдены.</td></tr>{% endfor %}</tbody>
-            {% elif active_tab == "technical-groups" %}<thead><tr><th scope="col">Группа</th><th scope="col">Описание</th><th scope="col">Пользователи</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th></tr></thead><tbody>{% for row in technical_groups %}<tr{% if selected.object == row.object %} class="is-selected"{% endif %}><td><a class="access-object-link" href="?view=technical-groups&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.name }} ({{ row.code }})"><strong class="access-truncate">{{ row.name|truncatechars:28 }}</strong><span class="muted access-truncate">{{ row.code|truncatechars:28 }}</span></a></td><td><a class="access-cell-link" href="?view=technical-groups&amp;object={{ row.object|urlencode }}&amp;field=description&amp;panel=field" title="{{ row.description }}" aria-label="Описание технической группы: {{ row.description }}"><span class="access-truncate">{{ row.description|truncatechars:56 }}</span></a></td><td><a class="access-cell-link" href="?view=technical-groups&amp;object={{ row.object|urlencode }}&amp;field=users&amp;panel=field" title="{{ row.users_text|default:'Нет пользователей' }}" aria-label="Пользователи технической группы: {{ row.users_text|default:'Нет пользователей' }}"><span class="access-truncate">{{ row.users_text|default:"Нет пользователей"|truncatechars:28 }}</span></a></td><td class="access-standalone"><a href="?view=technical-groups&amp;object={{ row.object|urlencode }}" target="_blank" rel="noopener" aria-label="Открыть группу отдельно" title="Открыть в отдельном окне">↗</a></td></tr>{% empty %}<tr><td colspan="4" class="muted">Технические группы не найдены.</td></tr>{% endfor %}</tbody>
-            {% else %}<thead><tr><th scope="col">Группа памяти</th><th scope="col">Описание</th><th scope="col">Пользователи</th><th scope="col"><span class="visually-hidden">Отдельное окно</span></th></tr></thead><tbody>{% for row in memory_groups %}<tr{% if selected.object == row.object %} class="is-selected"{% endif %}><td><a class="access-object-link" href="?view=memory-groups&amp;object={{ row.object|urlencode }}&amp;panel=inspector" title="{{ row.name }} ({{ row.code }})"><strong class="access-truncate">{{ row.name|truncatechars:28 }}</strong><span class="muted access-truncate">{{ row.code|truncatechars:28 }}</span></a></td><td><a class="access-cell-link" href="?view=memory-groups&amp;object={{ row.object|urlencode }}&amp;field=description&amp;panel=field" title="{{ row.description }}" aria-label="Описание группы памяти: {{ row.description }}"><span class="access-truncate">{{ row.description|truncatechars:56 }}</span></a></td><td><a class="access-cell-link" href="?view=memory-groups&amp;object={{ row.object|urlencode }}&amp;field=users&amp;panel=field" title="{{ row.users_text|default:'Нет пользователей' }}" aria-label="Пользователи группы памяти: {{ row.users_text|default:'Нет пользователей' }}"><span class="access-truncate">{{ row.users_text|default:"Нет пользователей"|truncatechars:28 }}</span></a></td><td class="access-standalone"><a href="?view=memory-groups&amp;object={{ row.object|urlencode }}" target="_blank" rel="noopener" aria-label="Открыть группу памяти отдельно" title="Открыть в отдельном окне">↗</a></td></tr>{% empty %}<tr><td colspan="4" class="muted">Группы памяти не найдены.</td></tr>{% endfor %}</tbody>{% endif %}
-          </table>
-        </div>
-      {% endif %}
-    </div>
-
-  </div>
-
-    {% if selected %}
-      <a class="access-inspector-overlay{% if selected_panel == 'inspector' %} is-active{% endif %}" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть карточку"></a>
-      <aside class="drawer drawer-large access-inspector{% if selected_panel == 'inspector' %} active{% endif %}" data-access-panel="inspector" aria-label="Карточка {{ selected.name }}" aria-hidden="{% if selected_panel == 'inspector' %}false{% else %}true{% endif %}"{% if selected_panel == 'inspector' %} role="dialog" aria-modal="true"{% endif %}>
-        <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected.name }}</h2></div><a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть карточку">×</a></div>
-        {% if selected.kind == "user" %}
-          <div class="access-inspector-columns">
-            <div class="access-current-fields"><h3>Текущие значения</h3>
-              <dl>
-                <dt>Имя</dt><dd>{{ selected.name }}</dd>
-                <dt>Имя пользователя</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=profile&amp;panel=inspector">{{ selected.username }}</a></dd>
-                <dt>Email</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=profile&amp;panel=inspector">{{ selected.email|default:"Не указан" }}</a></dd>
-                <dt>AD</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=ad&amp;panel=inspector">{{ selected.ad }}</a>{% if selected.ad_identity %}<small class="muted">Последняя синхронизация: {{ selected.ad_identity.last_synced_at|default:"нет данных" }}</small>{% endif %}</dd>
-                <dt>Подразделение</dt><dd title="{{ selected.department_full }}"><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=department&amp;panel=inspector">{{ selected.department }}</a></dd>
-                <dt>Статус</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=status&amp;panel=inspector">{{ selected.status.label }}</a></dd>
-                <dt>Роли</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=roles&amp;panel=inspector">{{ selected.roles|join:", "|default:"Нет явных ролей" }}</a>{% if selected.role_sources %}<small class="muted">Источник: {{ selected.role_sources.0.label }} (только чтение)</small>{% endif %}</dd>
-                <dt>Разделы сайта</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=site-sections&amp;panel=inspector">{{ selected.site_sections|join:", "|default:"Нет разделов" }}</a></dd>
-                <dt>Технические группы</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=technical-groups&amp;panel=inspector">{% for group in selected.technical_groups %}{{ group.label }}{% if not forloop.last %}, {% endif %}{% empty %}Нет групп{% endfor %}</a></dd>
-                <dt>Группы памяти</dt><dd><a class="access-inspector-field-link" href="?view=users{% if filter_query %}&amp;{{ filter_query }}{% endif %}&amp;object={{ selected.object }}&amp;field=memory-groups&amp;panel=inspector">{% for group in selected.memory_groups %}{{ group.label }}{% if not forloop.last %}, {% endif %}{% empty %}Нет групп{% endfor %}</a></dd>
-              </dl>
-            </div>
-            <div class="access-field-editor"><h3>Редактор поля: {{ selected_field_label|default:"Профиль пользователя" }}</h3>{% if selected_panel == "field" %}<p class="muted">Редактор открыт в левой панели.</p>{% elif field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="access-readonly-explanation">Это поле доступно только для просмотра и вычисляется из других назначений.</p>{% endif %}</div>
-          </div>
-        {% elif selected.kind == "role" %}
-          <div class="access-inspector-columns"><div class="access-current-fields"><h3>Текущие значения</h3><dl><dt>Описание</dt><dd><a class="access-inspector-field-link" href="?view=roles&amp;object={{ selected.object }}&amp;field=description&amp;panel=inspector">{{ selected.description|default:"Не задано" }}</a></dd><dt>Пользователи</dt><dd><a class="access-inspector-field-link" href="?view=roles&amp;object={{ selected.object }}&amp;field=users&amp;panel=inspector">{{ selected.users|join:", "|default:"Нет пользователей" }}</a></dd></dl></div><div class="access-field-editor"><h3>Редактор поля: {{ selected_field_label|default:"Определение роли" }}</h3>{% if selected_panel == "field" %}<p class="muted">Редактор открыт в левой панели.</p>{% elif field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="muted">Выберите поле для редактирования.</p>{% endif %}</div></div>
-        {% else %}
-          <div class="access-current-fields"><h3>Текущие значения</h3><dl><dt>Описание</dt><dd>{{ selected.description|default:"Не задано" }}</dd>{% if selected.roles %}<dt>Роли</dt><dd>{{ selected.roles|join:", " }}</dd>{% endif %}{% if selected.groups %}<dt>Группы</dt><dd>{{ selected.groups|join:", " }}</dd>{% endif %}<dt>Пользователи</dt><dd>{{ selected.users|join:", "|default:"Нет пользователей" }}</dd></dl></div>
-          <div class="access-field-editor"><h3>Редактор значения</h3><p class="muted">Этот источник доступен только для чтения. Изменение выполняется через предметный сервис владельца доступа и требует явного имени пользователя.</p></div>
-        {% endif %}
-        {% if selected_field %}<p class="access-selected-field">Выбрано поле: <strong>{{ selected_field_label }}</strong></p>{% endif %}
-        {% if standalone_target %}<a class="access-standalone-link" href="{{ standalone_target }}" target="_blank" rel="noopener">Открыть в отдельном окне ↗</a>{% endif %}
-      </aside>
-    {% endif %}
+  <div id="access-table-panel" class="access-table-host"{% if selected and selected_panel == "inspector" %} inert{% endif %} aria-live="polite">{% include "settings_center/partials/access_workspace/table_panel.html" %}</div>
+  <div id="access-inspector-host" class="access-inspector-host" aria-live="polite">{% include "settings_center/partials/access_workspace/inspector_host.html" %}</div>
 </section>
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v2"></script>
+  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v3"></script>
 {% endblock %}

@@ -1,0 +1,46 @@
+{
+  "task_id": "09-htmx-sidebar-navigation",
+  "goal": "Открывать и обновлять левый редактор и правый инспектор без полной перезагрузки страницы, сохраняя серверный URL-контракт и обычную Django-навигацию как резерв.",
+  "depends_on": ["08-responsive-e2e-and-acceptance"],
+  "read_scope": [
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "templates/base.html",
+    "templates/settings_center/**",
+    "static/src/js/access_workspace.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/access_administration.spec.ts"
+  ],
+  "write_scope": [
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/access_workspace.html",
+    "templates/settings_center/partials/access_workspace/**",
+    "static/src/js/access_workspace.js",
+    "static/src/css/app.css",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "workflow/active/access-administration-ux-unification/EXECUTOR_REPORT.htmx-sidebar-navigation.md"
+  ],
+  "constraints": [
+    "Обычный GET/POST без HX-Request продолжает возвращать полный документ или безопасный redirect.",
+    "HTMX получает только устойчивые DOM-регионы; серверные permissions, preview/apply, stale-check, аудит и CSRF не дублируются в JavaScript.",
+    "Открытие панели обновляет URL через history push и сохраняет Back/Forward и прямую ссылку.",
+    "Левый редактор заменяет дерево/ИИ-чат визуально, но частичная навигация не уничтожает состояние уже созданного ИИ-чата.",
+    "Preview и ошибки обновляют только активную панель; успешный apply также обновляет изменившуюся таблицу.",
+    "Dirty guard, inert, focus trap, Escape и возврат фокуса остаются корректными после каждого swap.",
+    "Не вводить SPA, JSON API, новую зависимость или новый runtime-сервис."
+  ],
+  "acceptance_checks": [
+    "Django test различает полный и HTMX-ответы для обеих панелей и POST preview/apply.",
+    "Browser e2e доказывает отсутствие document navigation при открытии/закрытии обеих панелей и при preview.",
+    "Browser e2e проверяет URL, Back/Forward, dirty guard, focus и обновление таблицы после apply.",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "node --check static/src/js/access_workspace.js",
+    "целевой Playwright сценарий access_administration.spec.ts"
+  ],
+  "non_goals": [
+    "Изменение доменных сервисов доступа или модели прав.",
+    "Обновление HTMX, AG-UI или CopilotKit.",
+    "Перевод всех вкладок и фильтров окна доступа на частичную навигацию."
+  ]
+}

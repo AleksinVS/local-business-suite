@@ -1,0 +1,9 @@
+{% if selected and selected_panel == "field" %}
+  <div class="access-sidebar-editor" data-access-panel="field" aria-label="Редактор {{ selected_field_label }} для {{ selected.name }}">
+    <div class="access-panel-title">
+      <div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected_field_label }}</h2><p class="muted">{{ selected.name }}</p></div>
+      <a class="access-panel-close" href="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" aria-label="Закрыть редактор поля" hx-get="?view={{ active_tab }}{% if filter_query %}&amp;{{ filter_query }}{% endif %}" hx-target="#access-field-sidebar-host" hx-swap="innerHTML" hx-push-url="true">×</a>
+    </div>
+    {% if field_form %}{% include "settings_center/partials/access_workspace/field_editor.html" %}{% else %}<p class="access-readonly-explanation">{{ selected_kind_label }} «{{ selected.name }}»: поле «{{ selected_field_label }}» доступно только для просмотра. Оно вычисляется предметным сервисом, поэтому универсальное прямое изменение запрещено.</p>{% endif %}
+  </div>
+{% endif %}

@@ -4871,6 +4871,13 @@ body.is-resizing-sidebar .sidebar-nav {
 .access-inspector.drawer,
 .access-inspector-overlay { transition: right .28s cubic-bezier(.4, 0, .2, 1), opacity .25s ease, visibility .25s ease; }
 .access-inspector.drawer .access-inspector-columns { min-height: 0; }
+.access-sidebar-panel-stack { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.access-field-sidebar-host, .access-ai-chat-host { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.access-ai-chat-host.is-hidden { display: none; }
+.access-field-sidebar-host:empty { display: none; }
+.access-table-host { min-width: 0; }
+.access-inspector-host { display: contents; }
+[aria-busy="true"] { cursor: progress; }
 @media (max-width: 1200px) {
   .access-inspector.drawer { width: 95vw; right: -100vw; }
   .sidebar-nav--access:has(.access-sidebar-editor) .sidebar-ai-panel {

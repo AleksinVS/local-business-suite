@@ -1,4 +1,4 @@
-<form class="access-context-form" method="post" action="{% url 'settings_center:access_workspace' %}" data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
+<form class="access-context-form" method="post" action="{% url 'settings_center:access_workspace' %}"{% if selected_panel == "inspector" %} hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host"{% else %} hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-field-sidebar-host"{% endif %} hx-swap="innerHTML" data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
   {% csrf_token %}
   <input type="hidden" name="view" value="{{ active_tab }}">
   <input type="hidden" name="object" value="{{ selected.object }}">

@@ -576,9 +576,11 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
       EXECUTOR_REPORT.contract-board-role-memory-slice.md: file # Отчёт реализации пакетов 00c, 00d и 03
       EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
+      EXECUTOR_REPORT.htmx-sidebar-navigation.md: file # Отчёт реализации частичной HTMX-навигации панелей
       EXECUTOR_REPORT.workspace-ux-critique-cycle.md: file # Отчёт цикла критики и исправлений единого окна workspace
       TASK_ACCEPTANCE.contract-board-role-memory-slice.md: file # Техническая приёмка пакетов 00c, 00d и 03
       TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
+      TASK_ACCEPTANCE.htmx-sidebar-navigation.md: file # Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата
       TASK_ACCEPTANCE.workspace-ux-critique-cycle.md: file # Техническая приёмка пакетов 06–08 единого окна доступа
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file

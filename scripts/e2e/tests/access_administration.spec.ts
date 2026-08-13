@@ -19,6 +19,7 @@ async function closeAccessPanels(page: Page) {
     const close = page.locator("[data-access-panel]:not([inert]) .access-panel-close").first();
     if (await close.count() === 0) return;
     await close.click();
+    await expect(page.locator("[data-access-panel]:not([inert]) .access-panel-close")).toHaveCount(0);
   }
 }
 
@@ -32,6 +33,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
 
   await page.getByRole("searchbox", { name: "Поиск" }).fill(targetUsername || "");
   await page.getByRole("button", { name: "Найти" }).click();
+  let documentNavigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
   const targetRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
   await expect(targetRow).toBeVisible();
 
@@ -69,6 +71,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   await page.getByRole("link", { name: "Пользователи", exact: true }).click();
   await page.getByRole("searchbox", { name: "Поиск" }).fill(targetUsername || "");
   await page.getByRole("button", { name: "Найти" }).click();
+  documentNavigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
   const userRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
   await userRow.locator('.access-cell-link[href*="field=memory-groups"]').click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
@@ -77,11 +80,52 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   if (await firstMemoryGroup.isChecked()) await firstMemoryGroup.uncheck();
   else await firstMemoryGroup.check();
   await memoryForm.getByLabel("Причина").fill("Сквозная проверка назначения группы памяти.");
+  const previewUrl = page.url();
+  const previewHistoryLength = await page.evaluate(() => history.length);
   await memoryForm.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Предпросмотр изменения")).toBeVisible();
+  await expect(memoryForm.getByRole("button", { name: "Проверить" })).toBeFocused();
+  expect(page.url()).toBe(previewUrl);
+  expect(await page.evaluate(() => history.length)).toBe(previewHistoryLength);
   await page.locator('.access-sidebar-editor input[name="confirmed"]').check();
   await page.locator(".access-sidebar-editor").getByRole("button", { name: "Применить" }).click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
+  await expect(page.locator("#access-field-sidebar-host .flash[role='status'][tabindex='-1']")).toBeFocused();
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(documentNavigationBaseline);
+});
+
+test("@smoke HTMX panel navigation preserves document, AI root and table scroll state", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  const documentNavigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+  await page.evaluate(() => {
+    (window as Window & { __accessAiNode?: Element }).__accessAiNode = document.querySelector("#access-ai-chat-host > *");
+  });
+  const tableScroll = page.locator(".access-table-scroll").first();
+  await tableScroll.evaluate((element) => { element.scrollLeft = 37; });
+  const source = page.locator(".access-users-table tbody tr").first().locator(".access-object-link");
+
+  await source.click();
+  await expect(page.locator(".access-inspector.active")).toBeVisible();
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(documentNavigationBaseline);
+  expect(await page.evaluate(() => document.querySelector("#access-ai-chat-host > *") === (window as Window & { __accessAiNode?: Element }).__accessAiNode)).toBe(true);
+  await page.locator(".access-inspector .access-panel-close").click();
+  await expect(page.locator(".access-inspector.active")).toHaveCount(0);
+  await expect(page.locator("[data-access-workspace][inert]")).toHaveCount(0);
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(documentNavigationBaseline);
+  expect(await page.evaluate(() => document.querySelector("#access-ai-chat-host > *") === (window as Window & { __accessAiNode?: Element }).__accessAiNode)).toBe(true);
+  expect(await tableScroll.evaluate((element) => element.scrollLeft)).toBe(37);
+
+  await source.click();
+  await expect(page.locator(".access-inspector.active")).toBeVisible();
+  await page.goBack({ waitUntil: "commit" });
+  await expect(page).toHaveURL(/\/settings\/access\/\?view=users$/);
+  await page.waitForFunction(() => !document.querySelector(".access-inspector.active"));
+  await expect(page.locator(".access-inspector.active")).toHaveCount(0);
+  expect(await page.evaluate(() => document.querySelector("#access-ai-chat-host > *") === (window as Window & { __accessAiNode?: Element }).__accessAiNode)).toBe(true);
+  await page.goForward();
+  await expect(page.locator(".access-inspector.active")).toBeVisible();
+  expect(await page.evaluate(() => document.querySelector("#access-ai-chat-host > *") === (window as Window & { __accessAiNode?: Element }).__accessAiNode)).toBe(true);
 });
 
 test("@smoke access workspace uses a single dialog layer on 320px and Escape follows close href", async ({ page }) => {
@@ -163,6 +207,36 @@ test("@smoke access workspace protects dirty sidebar from toggle and header navi
   });
   await page.locator(".brand").click();
   await expect(page).toHaveURL(/\/settings\/access\//);
+  await expect(editor).toBeVisible();
+});
+
+test("@smoke access workspace restores dirty marker after failed HTMX editor request", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.locator(".access-users-table tbody tr").first().locator('.access-cell-link[href*="field=ad"]').click();
+  const editor = page.locator(".access-sidebar-editor");
+  const form = editor.locator(".access-context-form");
+  await expect(editor).toBeVisible();
+  await editor.locator("textarea").last().fill("dirty-after-failed-request");
+  await page.route("**/*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.pathname === "/settings/access/" && route.request().method() === "POST") {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  await form.getByRole("button", { name: "Проверить" }).click();
+  await expect(form).toHaveAttribute("data-access-dirty", "true");
+  await page.unroute("**/*");
+
+  let confirmed = false;
+  page.once("dialog", async (dialog) => {
+    confirmed = dialog.type() === "confirm";
+    await dialog.dismiss();
+  });
+  await editor.locator(".access-panel-close").click();
+  expect(confirmed).toBe(true);
   await expect(editor).toBeVisible();
 });
 

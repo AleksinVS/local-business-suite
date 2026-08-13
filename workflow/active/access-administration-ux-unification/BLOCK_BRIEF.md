@@ -40,6 +40,7 @@ service layer, а не прямым ORM-путём; AD ownership и раздел
 10. `06-workspace-read-model-and-shell`.
 11. `07-context-editors-and-role-membership`.
 12. `08-responsive-e2e-and-acceptance`.
+13. `09-htmx-sidebar-navigation`.
 
 ## Приемка
 
@@ -59,6 +60,8 @@ service layer, а не прямым ORM-путём; AD ownership и раздел
 - выбранный объект и поле всегда явно подписаны;
 - мобильный стек не теряет фильтры, выбранную строку и фокус;
 - состав роли изменяется без прямой M2M-записи и с аудитом каждого пользователя.
+- боковые панели открываются и сохраняют изменения без полной перезагрузки документа;
+  история не уничтожает состояние встроенного ИИ-чата.
 
 Пакеты 02/03 выполняются последовательно: они используют общий effective-access
 read model, Settings Center views/tests и CSS.

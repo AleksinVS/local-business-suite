@@ -14,7 +14,8 @@
     "05-e2e-usability-docs-acceptance",
     "06-workspace-read-model-and-shell",
     "07-context-editors-and-role-membership",
-    "08-responsive-e2e-and-acceptance"
+    "08-responsive-e2e-and-acceptance",
+    "09-htmx-sidebar-navigation"
   ],
   "constraints": [
     "Серверная policy, а не видимость элемента UI, определяет доступ.",
@@ -37,6 +38,7 @@
     "05-e2e-usability-docs-acceptance": "основной агент; дешёвый субагент допустим для механической browser matrix",
     "06-workspace-read-model-and-shell": "gpt-5.6-luna/high для Django/HTMX/read model по точному пакету; архитектурная приемка основным агентом",
     "07-context-editors-and-role-membership": "основной агент/Sol high для пакетного security-сервиса; gpt-5.6-luna/high для шаблонных адаптеров",
-    "08-responsive-e2e-and-acceptance": "gpt-5.6-luna/high для CSS/JS/e2e; отдельная Luna xhigh критика; итоговая приемка основным агентом"
+    "08-responsive-e2e-and-acceptance": "gpt-5.6-luna/high для CSS/JS/e2e; отдельная Luna xhigh критика; итоговая приемка основным агентом",
+    "09-htmx-sidebar-navigation": "gpt-5.6-luna/high для шаблонных фрагментов, HTMX и тестов; отдельная Luna-критика; итоговая приемка основным агентом"
   }
 }

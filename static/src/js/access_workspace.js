@@ -6,6 +6,7 @@
   var compact = window.matchMedia("(max-width: 1200px)");
   var focusKey = "access-workspace-focus";
   var activePanel = null;
+  var pendingNavigation = null;
 
   function revealFieldSidebar() {
     var field = document.querySelector(".access-sidebar-editor[data-access-panel='field']");
@@ -59,6 +60,8 @@
   }
 
   function restoreFocus() {
+    root = document.querySelector("[data-access-workspace]");
+    if (!root) return true;
     var href;
     try { href = sessionStorage.getItem(focusKey); } catch (_) { return true; }
     if (!href) return true;
@@ -105,7 +108,49 @@
     form.dataset.accessDirtyBound = "true";
     form.addEventListener("input", function () { form.dataset.accessDirty = "true"; });
     form.addEventListener("change", function () { form.dataset.accessDirty = "true"; });
-    form.addEventListener("submit", function () { form.dataset.accessDirty = "false"; });
+    form.addEventListener("submit", function (event) {
+      form.dataset.accessSubmittedDirty = form.dataset.accessDirty === "true" ? "true" : "false";
+      var submitter = event.submitter;
+      if (submitter) {
+        form.dataset.accessSubmitterName = submitter.name || "";
+        form.dataset.accessSubmitterValue = submitter.value || "";
+      }
+      form.dataset.accessDirty = "false";
+    });
+  }
+
+  function refreshPanels() {
+    root = document.querySelector("[data-access-workspace]");
+    var navigation = pendingNavigation;
+    pendingNavigation = null;
+    var fieldHost = document.getElementById("access-field-sidebar-host");
+    var chatHost = document.getElementById("access-ai-chat-host");
+    var hasField = Boolean(fieldHost && fieldHost.querySelector("[data-access-panel='field']"));
+    if (chatHost) {
+      chatHost.classList.toggle("is-hidden", hasField);
+      chatHost.setAttribute("aria-hidden", hasField ? "true" : "false");
+    }
+    document.querySelectorAll(".access-context-form").forEach(markDirty);
+    revealFieldSidebar();
+    markBackground();
+    if (navigation && navigation.isClose) {
+      restoreFocus();
+    } else if (navigation && navigation.isForm) {
+      var form = document.querySelector(".access-context-form");
+      if (navigation.submitterValue === "apply") {
+        var status = document.querySelector(".access-field-sidebar-host .flash[role='status'][tabindex='-1'], .access-inspector-host .flash[role='status'][tabindex='-1']");
+        if (status) { status.focus(); return; }
+      }
+      var submitter = form && Array.from(form.querySelectorAll("button, input[type='submit']")).find(function (candidate) {
+        return candidate.name === navigation.submitterName && candidate.value === navigation.submitterValue;
+      });
+      var target = submitter || (form && focusables(form)[0]);
+      if (target) target.focus();
+    } else if (navigation && !navigation.isForm) {
+      activePanel = findActivePanel();
+      var initial = activePanel && focusables(activePanel)[0];
+      if (initial) initial.focus();
+    }
   }
 
   document.addEventListener("click", function (event) {
@@ -148,6 +193,65 @@
   });
 
   document.querySelectorAll(".access-context-form").forEach(markDirty);
+  document.body.addEventListener("htmx:beforeRequest", function (event) {
+    var detail = event.detail || {};
+    var element = detail.elt;
+    var isForm = Boolean(element && element.matches(".access-context-form"));
+    var isClose = Boolean(element && element.closest(".access-panel-close, .access-inspector-overlay"));
+    var triggeringEvent = detail.triggeringEvent;
+    var submitter = triggeringEvent && triggeringEvent.submitter;
+    if (!submitter && isForm && document.activeElement && element.contains(document.activeElement) && document.activeElement.matches("button, input[type='submit']")) {
+      submitter = document.activeElement;
+    }
+    var wasDirty = Boolean(isForm && (element.dataset.accessDirty === "true" || element.dataset.accessSubmittedDirty === "true"));
+    if (element && !isForm && !canLeave()) {
+      event.preventDefault();
+      return;
+    }
+    pendingNavigation = {
+      isForm: isForm,
+      isClose: isClose,
+      form: isForm ? element : null,
+      wasDirty: wasDirty,
+      submitterName: submitter ? submitter.name || "" : element && element.dataset.accessSubmitterName || "",
+      submitterValue: submitter ? submitter.value || "" : element && element.dataset.accessSubmitterValue || "",
+    };
+    var target = detail.target;
+    if (target) target.setAttribute("aria-busy", "true");
+  });
+  document.body.addEventListener("htmx:afterSwap", function (event) {
+    var target = event.detail && event.detail.target;
+    if (target) target.removeAttribute("aria-busy");
+    refreshPanels();
+  });
+  function restoreFailedEditor() {
+    var navigation = pendingNavigation;
+    if (!navigation || !navigation.isForm || !navigation.wasDirty) return;
+    var form = navigation.form && navigation.form.isConnected ? navigation.form : document.querySelector(".access-context-form");
+    if (form) form.dataset.accessDirty = "true";
+  }
+  document.body.addEventListener("htmx:beforeSwap", function (event) {
+    var xhr = event.detail && event.detail.xhr;
+    if (xhr && xhr.status >= 400) {
+      event.detail.shouldSwap = false;
+      event.detail.isError = true;
+      restoreFailedEditor();
+    }
+  });
+  function clearHtmxBusy(event) {
+    var target = event.detail && event.detail.target;
+    if (target) target.removeAttribute("aria-busy");
+    if (["htmx:responseError", "htmx:sendError", "htmx:timeout"].indexOf(event.type) !== -1) {
+      restoreFailedEditor();
+      pendingNavigation = null;
+    }
+  }
+  document.body.addEventListener("htmx:afterRequest", clearHtmxBusy);
+  document.body.addEventListener("htmx:responseError", clearHtmxBusy);
+  document.body.addEventListener("htmx:sendError", clearHtmxBusy);
+  document.body.addEventListener("htmx:timeout", clearHtmxBusy);
+  document.body.addEventListener("htmx:afterSettle", refreshPanels);
+  document.body.addEventListener("htmx:historyRestore", refreshPanels);
   window.addEventListener("beforeunload", function (event) {
     if (!dirtyForms().length) return;
     event.preventDefault();
@@ -156,6 +260,7 @@
   compact.addEventListener?.("change", markBackground);
   revealFieldSidebar();
   markBackground();
+  refreshPanels();
   if (!restoreFocus()) {
     window.requestAnimationFrame(restoreFocus);
     document.addEventListener("DOMContentLoaded", restoreFocus, { once: true });

@@ -132,6 +132,74 @@ class AccessWorkspaceTests(TestCase):
         self.assertContains(field_response, "sidebar-nav--access")
         self.assertNotContains(field_response, "access-field-dock")
 
+    def test_workspace_htmx_gets_return_only_panel_fragments_and_reject_unknown_target(self):
+        actor = User.objects.create_superuser(username="workspace-htmx-root", password="pass")
+        target = User.objects.create_user(username="workspace-htmx-target")
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        headers = {"HTTP_HX_REQUEST": "true", "HTTP_HX_TARGET": "access-inspector-host"}
+
+        response = self.client.get(url, {"view": "users", "object": target.pk, "panel": "inspector"}, **headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<!doctype html>")
+        self.assertContains(response, "access-inspector active")
+        self.assertContains(response, 'id="access-field-sidebar-host" hx-swap-oob="innerHTML"')
+
+        headers["HTTP_HX_TARGET"] = "unknown-host"
+        response = self.client.get(url, {"view": "users"}, **headers)
+        self.assertEqual(response.status_code, 400)
+
+    def test_workspace_htmx_history_restore_without_target_returns_full_shell(self):
+        actor = User.objects.create_superuser(username="workspace-htmx-history-root", password="pass")
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+
+        response = self.client.get(
+            url,
+            {"view": "users"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_HISTORY_RESTORE_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<!doctype html>", html=False)
+        self.assertContains(response, 'data-access-workspace')
+
+    def test_workspace_htmx_preview_and_apply_refresh_panel_and_table(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-htmx-apply-root", password="pass")
+        target = User.objects.create_user(username="workspace-htmx-apply-target")
+        role_name = contract_role_names()[0]
+        role, _ = Group.objects.get_or_create(name=role_name)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        payload = {
+            "view": "users", "object": target.pk, "field": "roles", "panel": "field",
+            "action": "preview", "roles": [role.pk], "is_staff": "", "is_superuser": "",
+            "reason": "HTMX-проверка назначения роли.",
+        }
+        headers = {"HTTP_HX_REQUEST": "true", "HTTP_HX_TARGET": "access-field-sidebar-host"}
+
+        preview_response = self.client.post(url, payload, **headers)
+
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertNotContains(preview_response, "<!doctype html>")
+        self.assertContains(preview_response, "Предпросмотр изменения")
+        self.assertContains(preview_response, 'data-access-dirty="true"')
+        self.assertContains(preview_response, 'id="access-inspector-host" hx-swap-oob="innerHTML"')
+        payload.update(action="apply", preview_token=preview_response.context["field_preview"]["preview_token"], confirm_risk="on")
+        apply_response = self.client.post(url, payload, **headers)
+
+        self.assertEqual(apply_response.status_code, 200)
+        self.assertNotIn("HX-Redirect", apply_response.headers)
+        self.assertContains(apply_response, 'id="access-table-panel" hx-swap-oob="innerHTML"')
+        self.assertContains(apply_response, "Доступ пользователя сохранён")
+        self.assertTrue(target.groups.filter(pk=role.pk).exists())
+        next_full_response = self.client.get(url)
+        self.assertNotContains(next_full_response, "Доступ пользователя сохранён")
+
     def test_inline_role_assignment_uses_preview_then_apply_service(self):
         from apps.accounts.selectors import contract_role_names
 

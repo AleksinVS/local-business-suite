@@ -58,6 +58,7 @@ from .forms import (
     MemoryGroupMembershipForm,
     AccessRoleMembershipForm,
     AccessUserDepartmentForm,
+    AccessUserBundleForm,
     AccessUserProfileForm,
     AccessUserStatusForm,
     PortalUserCreateForm,
@@ -67,6 +68,7 @@ from .forms import (
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, initial_help_text
+from .access_bundle_services import apply_user_access_bundle, preview_user_access_bundle
 from .models import SettingsChange
 from .policies import can_manage_settings
 from .registry import get_registry
@@ -169,13 +171,19 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         """Dispatch one context editor while preserving the signed service flow."""
-        state = workspace_context(query_params=request.POST)
+        state = workspace_context(query_params=self._post_workspace_params(request))
         try:
             selected = state["selected"]
             if not selected:
                 raise ValidationError("Выберите объект доступа.")
             field = state["selected_field"]
             action = request.POST.get("action", "preview")
+            if (
+                selected["kind"] == "user"
+                and self._requested_panel(request) == "inspector"
+                and action in {"bundle_preview", "bundle_apply"}
+            ):
+                return self._post_user_bundle(request, selected, action)
             if action not in {"preview", "apply"}:
                 raise ValidationError("Неизвестное действие редактора.")
             if selected["kind"] == "user":
@@ -191,6 +199,72 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             state["editor_error"] = str(exc)
             state["field_form"] = self._build_editor_form(request, state)
             return self._response_for_editor(request, state)
+
+    def _post_user_bundle(self, request, selected, action):
+        user = selected["user"]
+        form = AccessUserBundleForm(
+            request.POST,
+            portal_user=user,
+            actor=request.user,
+            ad_identity=selected.get("ad_identity"),
+        )
+        if not form.is_valid():
+            return self._editor_response(request, form, selected)
+        cleaned = form.cleaned_data.copy()
+        if action == "bundle_preview":
+            preview = preview_user_access_bundle(
+                actor=request.user,
+                target_user=user,
+                cleaned_data=cleaned,
+            )
+            self._set_form_value(form, "preview_token", preview["preview_token"])
+            return self._editor_response(request, form, selected, preview=preview)
+        reason = cleaned["reason"]
+        profile_descriptor = get_registry().get("accounts.users.local_management")
+        ad_descriptor = get_registry().get("accounts.user.ad_identity_link")
+
+        def profile_audit_callback(before, after):
+            record_settings_change(
+                actor=request.user,
+                descriptor=profile_descriptor,
+                action=SettingsChange.Action.USER_UPDATE,
+                status=SettingsChange.Status.APPLIED,
+                before=user_profile_audit_snapshot(before),
+                after=user_profile_audit_snapshot(after),
+                validation_result={"valid": True, "field": "bundle", "reason": reason},
+            )
+
+        def ad_audit_callback(before, after):
+            record_settings_change(
+                actor=request.user,
+                descriptor=ad_descriptor,
+                action=SettingsChange.Action.AD_LINK,
+                status=SettingsChange.Status.APPLIED,
+                before=external_identity_audit_snapshot(before),
+                after=external_identity_audit_snapshot(after),
+                validation_result={"valid": True, "field": "bundle", "reason": reason},
+            )
+
+        updated, results = apply_user_access_bundle(
+            actor=request.user,
+            target_user=user,
+            cleaned_data=cleaned,
+            preview_token=cleaned["preview_token"],
+            risk_confirmed=cleaned["confirm_risk"],
+            memory_confirmed=cleaned["confirm_memory"],
+            profile_audit_callback=profile_audit_callback,
+            ad_audit_callback=ad_audit_callback,
+        )
+        messages.success(
+            request,
+            f"Карточка пользователя сохранена. Изменено разделов: {len(results)}.",
+        )
+        return self._success_response(
+            request,
+            "users",
+            updated.pk,
+            cleaned.get("active_editor") or "profile",
+        )
 
     def _render_hx_panel(self, state, target, *, applied=False):
         if target == "#access-field-sidebar-host":
@@ -212,7 +286,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     def _success_response(self, request, view, object_id, field):
         if not self._is_htmx(request):
             return redirect(self._workspace_url(view, object_id, field, request=request))
-        params = request.POST.copy()
+        params = self._post_workspace_params(request)
         params.update({"view": view, "object": object_id, "field": field, "panel": self._requested_panel(request)})
         state = workspace_context(query_params=params)
         state["field_form"] = self._build_editor_form(request, state, use_post=False)
@@ -388,7 +462,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         return self._success_response(request, "boards", board.pk, "groups")
 
     def _editor_response(self, request, form, selected, preview=None):
-        state = workspace_context(query_params=request.POST)
+        state = workspace_context(query_params=self._post_workspace_params(request))
         state.update({"selected": selected, "selected_field": request.POST.get("field", state["selected_field"]), "selected_panel": self._requested_panel(request), "field_form": form, "field_preview": preview})
         return self._response_for_editor(request, state)
 
@@ -406,11 +480,23 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if not selected:
             return None
         field = state.get("selected_field", "")
-        if not self._can_edit_field(request, selected, field):
-            return None
         bound_data = request.POST if request.method == "POST" and use_post else None
         if selected["kind"] == "user":
             user = selected["user"]
+            if state.get("selected_panel") == "inspector":
+                if not can_manage_roles(request.user):
+                    return None
+                form = AccessUserBundleForm(
+                    bound_data,
+                    portal_user=user,
+                    actor=request.user,
+                    ad_identity=selected.get("ad_identity"),
+                )
+                if not form.is_bound:
+                    form.initial["active_editor"] = field or "roles"
+                return form
+            if not self._can_edit_field(request, selected, field):
+                return None
             if field == "profile":
                 return AccessUserProfileForm(bound_data, instance=user)
             if field == "status":
@@ -424,6 +510,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             if field == "memory-groups":
                 current = [group["code"] for group in selected["memory_groups"]]
                 return MemoryGroupMembershipForm(bound_data, initial={"group_names": current})
+        if not self._can_edit_field(request, selected, field):
+            return None
         if selected["kind"] == "role":
             if field == "definition":
                 model = role_definition_read_model(selected["code"])
@@ -441,6 +529,18 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     @staticmethod
     def _requested_panel(request):
         return "inspector" if request.POST.get("panel") == "inspector" else "field"
+
+    @staticmethod
+    def _post_workspace_params(request):
+        params = {
+            name: request.POST.get(name, "")
+            for name in ("view", "object", "field", "panel")
+        }
+        for name in ("q", "role", "department", "attention"):
+            value = request.POST.get(f"filter_{name}", "")
+            if value:
+                params[name] = value
+        return params
 
     @staticmethod
     def _can_edit_field(request, selected, field):
@@ -464,7 +564,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if request is not None:
             params["panel"] = cls._requested_panel(request)
             for name in ("q", "role", "department", "attention"):
-                value = request.POST.get(name)
+                value = request.POST.get(f"filter_{name}")
                 if value:
                     params[name] = value
         else:

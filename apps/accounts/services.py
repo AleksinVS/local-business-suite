@@ -557,6 +557,25 @@ def apply_user_profile_change(
 ):
     """Применить профиль только к версии, показанной в подписанном preview."""
 
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _apply_user_profile_change_locked(
+                actor=actor,
+                target_user=target_user,
+                cleaned_data=cleaned_data,
+                preview_token=preview_token,
+                reason=reason,
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+def _apply_user_profile_change_locked(
+    *, actor, target_user, cleaned_data, preview_token, reason="", audit_callback=None
+):
+    """Внутренний apply при уже удерживаемой общей блокировке доступа."""
+
     signed = _load_account_data_preview(
         preview_token,
         salt=USER_PROFILE_PREVIEW_SIGNING_SALT,
@@ -581,10 +600,13 @@ def apply_user_profile_change(
         ):
             raise ValidationError("Данные пользователя уже изменились. Выполните предпросмотр снова.")
 
-    return update_local_user(
+    payload = dict(cleaned_data)
+    password = payload.pop("password", "")
+    return _update_local_user_locked(
         actor=actor,
         user=target_user,
-        cleaned_data=dict(cleaned_data),
+        cleaned_data=payload,
+        password=password,
         locked_precondition=locked_precondition,
         audit_callback=audit_callback,
     )
@@ -632,6 +654,25 @@ def apply_external_identity_change(
 ):
     """Применить AD identity только после свежего подписанного preview."""
 
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            return _apply_external_identity_change_locked(
+                actor=actor,
+                target_user=target_user,
+                cleaned_data=cleaned_data,
+                preview_token=preview_token,
+                reason=reason,
+                audit_callback=audit_callback,
+            )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+def _apply_external_identity_change_locked(
+    *, actor, target_user, cleaned_data, preview_token, reason="", audit_callback=None
+):
+    """Внутренний apply AD-связи при уже удерживаемой общей блокировке."""
+
     signed = _load_account_data_preview(
         preview_token,
         salt=EXTERNAL_IDENTITY_PREVIEW_SIGNING_SALT,
@@ -658,7 +699,7 @@ def apply_external_identity_change(
         ):
             raise ValidationError("Связь с AD уже изменена. Выполните предпросмотр снова.")
 
-    return link_ad_identity(
+    return _link_ad_identity_locked(
         actor=actor,
         user=target_user,
         cleaned_data=proposed,

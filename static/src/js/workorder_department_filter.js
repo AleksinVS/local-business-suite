@@ -3,9 +3,6 @@
 
   const MOBILE_BREAKPOINT = 960;
   const DEPARTMENT_TREE_EXPANDED_KEY = "workorders_department_tree_expanded_v1";
-  const SIDEBAR_WIDTH_KEY = "workorders_sidebar_width";
-  const SIDEBAR_MIN_WIDTH = 280;
-  const SIDEBAR_MAX_WIDTH = 560;
 
   function filterForm() {
     return document.querySelector("[data-workorder-filter-form]");
@@ -251,80 +248,6 @@
     });
   }
 
-  function initSidebarResize(shell) {
-    const handle = shell.querySelector("[data-workorders-sidebar-resize]");
-    const sidebar = document.getElementById("sidebar");
-    if (!handle || !sidebar || handle.dataset.ready === "true") return;
-    handle.dataset.ready = "true";
-    const clamp = (width) => Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width));
-    const syncRightPanelConstraint = () => {
-      const occupiedWidth = window.innerWidth <= MOBILE_BREAKPOINT
-        ? 0
-        : Math.round(sidebar.getBoundingClientRect().width);
-      document.body.classList.add("workorders-sidebar-layout");
-      document.body.style.setProperty("--workorders-sidebar-occupied-width", `${occupiedWidth}px`);
-    };
-    const setWidth = (width, persist = true) => {
-      if (window.innerWidth <= MOBILE_BREAKPOINT) return;
-      const value = clamp(width);
-      sidebar.style.setProperty("--workorders-sidebar-width", `${value}px`);
-      handle.setAttribute("aria-valuenow", String(value));
-      syncRightPanelConstraint();
-      if (persist) {
-        try {
-          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(value));
-        } catch (_error) {
-          // Изменение ширины остается рабочим, даже если хранилище запрещено браузером.
-        }
-      }
-    };
-    let storedValue = null;
-    try {
-      storedValue = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    } catch (_error) {
-      // Используем ширину по умолчанию при недоступном localStorage.
-    }
-    const storedWidth = Number.parseInt(storedValue, 10);
-    setWidth(Number.isFinite(storedWidth) ? storedWidth : 320, false);
-    syncRightPanelConstraint();
-    new MutationObserver(syncRightPanelConstraint).observe(sidebar, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    window.addEventListener("resize", syncRightPanelConstraint);
-    handle.addEventListener("pointerdown", (event) => {
-      if (window.innerWidth <= MOBILE_BREAKPOINT || sidebar.classList.contains("collapsed") || event.button !== 0) return;
-      event.preventDefault();
-      document.body.classList.add("is-resizing-sidebar");
-      const sidebarLeft = sidebar.getBoundingClientRect().left;
-      const move = (moveEvent) => {
-        if (moveEvent.pointerId !== event.pointerId) return;
-        setWidth(moveEvent.clientX - sidebarLeft);
-      };
-      const end = () => {
-        document.body.classList.remove("is-resizing-sidebar");
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", end);
-        window.removeEventListener("pointercancel", end);
-        window.removeEventListener("blur", end);
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", end);
-      window.addEventListener("pointercancel", end);
-      window.addEventListener("blur", end);
-    });
-    handle.addEventListener("keydown", (event) => {
-      if (window.innerWidth <= MOBILE_BREAKPOINT) return;
-      const current = Number.parseInt(handle.getAttribute("aria-valuenow"), 10) || SIDEBAR_MIN_WIDTH;
-      if (event.key === "ArrowLeft") setWidth(current - 16);
-      else if (event.key === "ArrowRight") setWidth(current + 16);
-      else if (event.key === "Home") setWidth(SIDEBAR_MIN_WIDTH);
-      else if (event.key === "End") setWidth(SIDEBAR_MAX_WIDTH);
-      else return;
-      event.preventDefault();
-    });
-  }
-
   function initSidebarShell(shell) {
     if (!shell || shell.dataset.ready === "true") return;
     shell.dataset.ready = "true";
@@ -386,7 +309,15 @@
   function init() {
     document.querySelectorAll("[data-department-filter]").forEach(initDepartmentFilter);
     initFilterForm();
-    document.querySelectorAll("[data-workorders-sidebar-shell]").forEach((shell) => { initSidebarShell(shell); initSidebarResize(shell); });
+    document.querySelectorAll("[data-workorders-sidebar-shell]").forEach((shell) => {
+      initSidebarShell(shell);
+      window.SharedSidebarResize?.init({
+        handle: shell.querySelector("[data-workorders-sidebar-resize]"),
+        sidebar: document.getElementById("sidebar"),
+        layoutClass: "workorders-sidebar-layout",
+        occupiedVar: "--workorders-sidebar-occupied-width",
+      });
+    });
   }
   document.addEventListener("DOMContentLoaded", init);
   document.addEventListener("htmx:afterSwap", init);

@@ -1,0 +1,73 @@
+<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
+  {% csrf_token %}
+  <input type="hidden" name="view" value="users">
+  <input type="hidden" name="object" value="{{ selected.object }}">
+  <input type="hidden" name="field" value="{{ selected_field|default:'roles' }}">
+  <input type="hidden" name="panel" value="inspector">
+  <input type="hidden" name="filter_q" value="{{ access_filter_state.query }}">
+  <input type="hidden" name="filter_role" value="{{ access_filter_state.role }}">
+  <input type="hidden" name="filter_department" value="{{ access_filter_state.department_id|default:'' }}">
+  {% if access_filter_state.attention %}<input type="hidden" name="filter_attention" value="{{ attention_value }}">{% endif %}
+  {{ field_form.non_field_errors }}
+  {% for hidden in field_form.hidden_fields %}{{ hidden }}{% endfor %}
+
+  <div class="access-inspector-columns access-user-bundle-columns">
+    <section class="access-current-fields" aria-labelledby="access-user-inline-title">
+      <h3 id="access-user-inline-title">Основные данные</h3>
+      <p class="muted access-bundle-hint">Изменения запоминаются в форме и применяются одной кнопкой.</p>
+      {% for field in field_form.visible_fields %}{% if field.name == 'username' or field.name == 'first_name' or field.name == 'last_name' or field.name == 'email' or field.name == 'password' or field.name == 'is_active' %}
+        <div class="access-form-field access-inline-field{% if field.errors %} has-error{% endif %}">{{ field.label_tag }}{{ field }}{% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>
+      {% endif %}{% endfor %}
+      <dl class="access-user-editor-links">
+        <dt>Подразделение</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="department">{{ selected.department|default:'Не указано' }}</button></dd>
+        <dt>AD</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="ad">{{ selected.ad|default:'Не связана' }}</button></dd>
+        <dt>Роли</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="roles">{{ selected.roles|join:', '|default:'Нет явных ролей' }}</button></dd>
+        <dt>Группы памяти</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="memory-groups">{% for group in selected.memory_groups %}{{ group.label }}{% if not forloop.last %}, {% endif %}{% empty %}Нет групп{% endfor %}</button></dd>
+        <dt>Разделы сайта</dt><dd class="muted">{% for section in selected.site_sections %}{{ section }}{% if not forloop.last %}, {% endif %}{% empty %}Нет разделов{% endfor %}</dd>
+        <dt>Технические группы</dt><dd class="muted">{% for group in selected.technical_groups %}{{ group.label }}{% if not forloop.last %}, {% endif %}{% empty %}Нет групп{% endfor %}</dd>
+      </dl>
+    </section>
+
+    <section class="access-field-editor access-user-editor" aria-labelledby="access-user-editor-title">
+      <h3 id="access-user-editor-title">Редактор значения</h3>
+      <div class="access-editor-group-nav" role="tablist" aria-label="Группы полей пользователя">
+        <button type="button" role="tab" data-editor-tab="department" aria-controls="access-editor-department">Подразделение</button>
+        <button type="button" role="tab" data-editor-tab="ad" aria-controls="access-editor-ad">AD</button>
+        <button type="button" role="tab" data-editor-tab="roles" aria-controls="access-editor-roles">Роли</button>
+        <button type="button" role="tab" data-editor-tab="memory-groups" aria-controls="access-editor-memory-groups">Группы памяти</button>
+      </div>
+
+      <div class="access-editor-group" id="access-editor-department" data-editor-group="department" role="tabpanel">
+        <div class="access-form-field{% if field_form.department.errors %} has-error{% endif %}">{{ field_form.department.label_tag }}{{ field_form.department }}{{ field_form.department.errors }}</div>
+      </div>
+      <div class="access-editor-group" id="access-editor-ad" data-editor-group="ad" role="tabpanel" hidden>
+        {% for field in field_form.visible_fields %}{% if field.name == 'ad_provider' or field.name == 'ad_subject_id' or field.name == 'ad_username' or field.name == 'ad_upn' or field.name == 'ad_distinguished_name' or field.name == 'ad_domain' or field.name == 'ad_sync_status' %}<div class="access-form-field{% if field.errors %} has-error{% endif %}">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endif %}{% endfor %}
+      </div>
+      <div class="access-editor-group" id="access-editor-roles" data-editor-group="roles" role="tabpanel" hidden>
+        <div class="access-form-field{% if field_form.roles.errors %} has-error{% endif %}">{{ field_form.roles.label_tag }}{{ field_form.roles }}{% if field_form.roles.help_text %}<small class="muted">{{ field_form.roles.help_text }}</small>{% endif %}{{ field_form.roles.errors }}</div>
+        {% if field_form.protected_role_groups %}<p class="muted">Защищённые роли сохраняются автоматически:</p><ul class="access-protected-role-list">{% for group in field_form.protected_role_groups %}<li>{{ group.name }}</li>{% endfor %}</ul>{% endif %}
+        {% if field_form.can_edit_account %}<div class="access-form-field">{{ field_form.is_staff.label_tag }}{{ field_form.is_staff }}{{ field_form.is_staff.errors }}</div>
+        <div class="access-form-field">{{ field_form.is_superuser.label_tag }}{{ field_form.is_superuser }}{{ field_form.is_superuser.errors }}</div>{% endif %}
+      </div>
+      <div class="access-editor-group" id="access-editor-memory-groups" data-editor-group="memory-groups" role="tabpanel" hidden>
+        <div class="access-form-field{% if field_form.memory_group_names.errors %} has-error{% endif %}">{{ field_form.memory_group_names.label_tag }}{{ field_form.memory_group_names }}{{ field_form.memory_group_names.errors }}</div>
+      </div>
+    </section>
+  </div>
+
+  {% if field_preview %}
+    <div class="access-preview-box" role="status" aria-live="polite">
+      <strong>Предпросмотр изменений</strong>
+      {% if field_preview.changes %}<ul>{% for item in field_preview.changes %}<li><strong>{{ item.label }}</strong>{% if item.details %}: {{ item.details|join:', ' }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% if field_preview.risk_markers %}<p class="risk-marker risk-marker-critical">{{ field_preview.risk_markers|join:', ' }}</p>{% endif %}
+    </div>
+    {% if field_preview.requires_risk_confirmation %}<div class="access-form-field access-confirmation-field">{{ field_form.confirm_risk }}{{ field_form.confirm_risk.label_tag }}{{ field_form.confirm_risk.errors }}</div>{% endif %}
+    {% if field_preview.requires_memory_confirmation %}<div class="access-form-field access-confirmation-field">{{ field_form.confirm_memory }}{{ field_form.confirm_memory.label_tag }}{{ field_form.confirm_memory.errors }}</div>{% endif %}
+  {% endif %}
+  {% if editor_error %}<p class="form-error">{{ editor_error }}</p>{% endif %}
+  <div class="access-form-field access-bundle-reason{% if field_form.reason.errors %} has-error{% endif %}">{{ field_form.reason.label_tag }}{{ field_form.reason }}{{ field_form.reason.errors }}</div>
+  <div class="access-form-actions">
+    <button class="button" type="submit" name="action" value="bundle_preview">Проверить изменения</button>
+    {% if field_preview or field_form.preview_token.value %}<button class="button" type="submit" name="action" value="bundle_apply">Сохранить все</button>{% endif %}
+  </div>
+</form>

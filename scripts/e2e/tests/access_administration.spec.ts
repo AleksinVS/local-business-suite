@@ -29,23 +29,33 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
 
   await expect(page).toHaveURL(/\/settings\/access\//);
   await expect(page.locator(".access-tab")).toHaveCount(6);
-  await expect(page.locator(".access-users-table thead th")).toHaveCount(9);
+  await expect(page.locator(".access-users-table thead th")).toHaveCount(8);
+  await expect(page.locator(".access-users-table thead")).not.toContainText("Пользователь AD");
 
   await page.getByRole("searchbox", { name: "Поиск" }).fill(targetUsername || "");
   await page.getByRole("button", { name: "Найти" }).click();
   let documentNavigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
   const targetRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
   await expect(targetRow).toBeVisible();
+  await expect(targetRow.locator(".access-user-identity .access-object-link strong")).toBeVisible();
+  await expect(targetRow.locator(".access-user-identity .access-ad-identity")).toBeVisible();
 
   await targetRow.locator(".access-object-link").click();
   await expect(page.locator(".access-inspector")).toBeVisible();
   await expect(page.locator(".access-inspector")).toHaveAttribute("aria-modal", "true");
   await expect(page.locator(".access-table-panel")).toHaveAttribute("inert", "");
-  await expect(page.getByText("Текущие значения")).toBeVisible();
+  await expect(page.getByText("Основные данные")).toBeVisible();
+  await expect(page.locator("[data-access-bundle-form]")).toBeVisible();
+  const baselineNavigation = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+  await page.locator("[data-access-bundle-form] [data-editor-tab='ad']").click();
+  await expect(page.locator("[data-access-bundle-form] [data-editor-group='ad']")).toBeVisible();
+  await page.locator("[data-access-bundle-form] [data-editor-tab='roles']").click();
+  await expect(page.locator("[data-access-bundle-form] [data-editor-group='roles']")).toBeVisible();
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(baselineNavigation);
 
   await page.locator(".access-inspector .access-panel-close").click();
   const reopenedTargetRow = page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first();
-  await reopenedTargetRow.locator(".access-cell-link").nth(0).click();
+  await reopenedTargetRow.locator(".access-ad-identity").click();
   await expect(page.locator(".access-sidebar-editor")).toBeVisible();
   await expect(page.locator("#sidebar")).not.toHaveClass(/collapsed/);
   await expect(page.locator(".access-sidebar-editor").getByRole("heading", { name: /Связь с Active Directory|Поле объекта/ })).toBeVisible();
@@ -140,6 +150,58 @@ test("@smoke access workspace uses a single dialog layer on 320px and Escape fol
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/settings\/access\/\?view=users/);
   await expect(page.locator(".access-inspector")).toHaveCount(0);
+});
+
+test("@smoke access left sidebar keeps its width and restores the full AI chat", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/settings/access/");
+
+  const sidebar = page.locator("#sidebar");
+  const handle = page.locator("[data-access-sidebar-resize]");
+  await handle.focus();
+  await page.keyboard.press("End");
+  await expect(handle).toHaveAttribute("aria-valuenow", "560");
+  await expect(sidebar).toHaveCSS("width", "560px");
+  await page.reload();
+  await expect(handle).toHaveAttribute("aria-valuenow", "560");
+  await expect(sidebar).toHaveCSS("width", "560px");
+
+  await page.locator(".access-users-table tbody tr").first().locator(".access-ad-identity").click();
+  const editor = page.locator("#access-field-sidebar-host");
+  const chat = page.locator("#access-ai-chat-host");
+  const launcher = page.locator("[data-access-ai-launcher]");
+  await expect(editor).toBeVisible();
+  await expect(chat).toHaveAttribute("aria-hidden", "true");
+  await expect(launcher).toBeVisible();
+
+  await editor.locator(".access-panel-close").click();
+  await expect(editor).toBeHidden();
+  await expect(chat).toHaveAttribute("aria-hidden", "false");
+  await expect(chat).toHaveClass(/is-expanded/);
+  const geometry = await page.evaluate(() => {
+    const sidebarBox = document.querySelector("#sidebar")?.getBoundingClientRect();
+    const chatBox = document.querySelector("#access-ai-chat-host")?.getBoundingClientRect();
+    return {
+      sidebarWidth: sidebarBox?.width || 0,
+      chatWidth: chatBox?.width || 0,
+      chatHeight: chatBox?.height || 0,
+    };
+  });
+  expect(geometry.chatWidth).toBeGreaterThan(geometry.sidebarWidth * 0.9);
+  expect(geometry.chatHeight).toBeGreaterThan(400);
+});
+
+test("@smoke access field editor is visible over the workspace on a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 760 });
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.locator(".access-users-table tbody tr").first().locator(".access-ad-identity").click();
+  const editor = page.locator(".access-sidebar-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveAttribute("role", "dialog");
+  await expect(editor).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator("[data-access-ai-launcher]")).toBeVisible();
 });
 
 test("@smoke access workspace uses one modal editor on tablet and isolates the table", async ({ page }) => {

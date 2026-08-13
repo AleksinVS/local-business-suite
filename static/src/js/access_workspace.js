@@ -125,13 +125,37 @@
     pendingNavigation = null;
     var fieldHost = document.getElementById("access-field-sidebar-host");
     var chatHost = document.getElementById("access-ai-chat-host");
+    var launcher = document.querySelector("[data-access-ai-launcher]");
     var hasField = Boolean(fieldHost && fieldHost.querySelector("[data-access-panel='field']"));
+    fieldHost?.classList.toggle("is-empty", !hasField);
     if (chatHost) {
-      chatHost.classList.toggle("is-hidden", hasField);
-      chatHost.setAttribute("aria-hidden", hasField ? "true" : "false");
+      if (!hasField) {
+        fieldHost?.classList.remove("is-collapsed");
+        chatHost.classList.remove("is-collapsed");
+        chatHost.classList.add("is-expanded");
+        chatHost.setAttribute("aria-hidden", "false");
+        launcher?.setAttribute("aria-expanded", "false");
+      } else if (!chatHost.classList.contains("is-expanded")) {
+        fieldHost?.classList.remove("is-collapsed");
+        chatHost.classList.add("is-collapsed");
+        chatHost.classList.remove("is-expanded");
+        chatHost.setAttribute("aria-hidden", "true");
+        launcher?.setAttribute("aria-expanded", "false");
+      }
+      launcher?.toggleAttribute("hidden", !hasField || chatHost.classList.contains("is-expanded"));
     }
     document.querySelectorAll(".access-context-form").forEach(markDirty);
+    document.querySelectorAll("[data-access-bundle-form]").forEach(function (bundle) {
+      var active = bundle.querySelector("input[name='active_editor']");
+      setActiveEditor(bundle, active && active.value ? active.value : "roles");
+    });
     revealFieldSidebar();
+    window.SharedSidebarResize?.init({
+      handle: document.querySelector("[data-access-sidebar-resize]"),
+      sidebar: document.getElementById("sidebar"),
+      layoutClass: "access-sidebar-layout",
+      occupiedVar: "--access-sidebar-occupied-width",
+    });
     markBackground();
     if (navigation && navigation.isClose) {
       restoreFocus();
@@ -154,6 +178,21 @@
   }
 
   document.addEventListener("click", function (event) {
+    var editorLink = event.target.closest("[data-editor-target]");
+    if (editorLink) {
+      event.preventDefault();
+      var target = editorLink.getAttribute("data-editor-target");
+      var bundle = editorLink.closest("[data-access-bundle-form]") || document.querySelector("[data-access-bundle-form]");
+      if (bundle && target) setActiveEditor(bundle, target);
+      return;
+    }
+    var editorTab = event.target.closest("[data-editor-tab]");
+    if (editorTab) {
+      event.preventDefault();
+      var tabBundle = editorTab.closest("[data-access-bundle-form]");
+      if (tabBundle) setActiveEditor(tabBundle, editorTab.getAttribute("data-editor-tab"));
+      return;
+    }
     var sidebarToggle = event.target.closest(".sidebar-toggle");
     if (sidebarToggle && !canLeave()) {
       event.preventDefault();
@@ -172,6 +211,42 @@
     if (link.closest(".access-panel-close, .access-inspector-overlay")) return;
     var source = link.closest(".access-object-link, .access-cell-link, .access-status-link");
     if (source && !findActivePanel()) rememberFocus(source);
+  }, true);
+
+  function setActiveEditor(bundle, target) {
+    var allowed = ["department", "ad", "roles", "memory-groups"];
+    if (!bundle || allowed.indexOf(target) === -1) return;
+    var active = bundle.querySelector("input[name='active_editor']");
+    if (active) active.value = target;
+    bundle.querySelectorAll("[data-editor-group]").forEach(function (group) {
+      var selected = group.getAttribute("data-editor-group") === target;
+      group.hidden = !selected;
+      group.setAttribute("aria-hidden", String(!selected));
+    });
+    bundle.querySelectorAll("[data-editor-tab]").forEach(function (tab) {
+      var selected = tab.getAttribute("data-editor-tab") === target;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    });
+  }
+
+  document.addEventListener("click", function (event) {
+    var launcher = event.target.closest("[data-access-ai-launcher]");
+    var collapse = event.target.closest("[data-access-ai-collapse]");
+    if (!launcher && !collapse) return;
+    var fieldHost = document.getElementById("access-field-sidebar-host");
+    var chatHost = document.getElementById("access-ai-chat-host");
+    if (!fieldHost || !chatHost || !fieldHost.querySelector("[data-access-panel='field']")) return;
+    var expanded = Boolean(launcher);
+    fieldHost.classList.toggle("is-collapsed", expanded);
+    chatHost.classList.toggle("is-expanded", expanded);
+    chatHost.classList.toggle("is-collapsed", !expanded);
+    chatHost.setAttribute("aria-hidden", String(!expanded));
+    launcher = document.querySelector("[data-access-ai-launcher]");
+    launcher?.toggleAttribute("hidden", expanded);
+    launcher?.setAttribute("aria-expanded", String(expanded));
+    if (expanded) chatHost.querySelector("textarea, input, button")?.focus();
+    else fieldHost.querySelector("input, select, textarea, button")?.focus();
   }, true);
 
   document.addEventListener("submit", function (event) {
@@ -217,6 +292,14 @@
       submitterValue: submitter ? submitter.value || "" : element && element.dataset.accessSubmitterValue || "",
     };
     var target = detail.target;
+    if (target && target.id === "access-field-sidebar-host" && !isForm) {
+      var chatHost = document.getElementById("access-ai-chat-host");
+      var launcher = document.querySelector("[data-access-ai-launcher]");
+      chatHost?.classList.remove("is-expanded");
+      chatHost?.classList.add("is-collapsed");
+      chatHost?.setAttribute("aria-hidden", "true");
+      launcher?.setAttribute("aria-expanded", "false");
+    }
     if (target) target.setAttribute("aria-busy", "true");
   });
   document.body.addEventListener("htmx:afterSwap", function (event) {

@@ -7,8 +7,28 @@
 {% block sidebar_panel_label %}{% if selected and selected_panel == "field" %}Редактор {{ selected_field_label }}{% else %}Встроенный ИИ-чат{% endif %}{% endblock %}
 {% block sidebar_panel %}
   <div class="access-sidebar-panel-stack">
+    <div
+      class="access-sidebar-resize-handle"
+      data-access-sidebar-resize
+      role="separator"
+      aria-label="Изменить ширину боковой панели"
+      aria-orientation="vertical"
+      aria-valuemin="280"
+      aria-valuemax="560"
+      aria-valuenow="320"
+      tabindex="0"
+    ></div>
     <div id="access-field-sidebar-host" class="access-field-sidebar-host" aria-live="polite">{% include "settings_center/partials/access_workspace/field_sidebar_host.html" %}</div>
-    <div id="access-ai-chat-host" class="access-ai-chat-host{% if selected and selected_panel == 'field' %} is-hidden{% endif %}"{% if selected and selected_panel == 'field' %} aria-hidden="true"{% endif %} hx-preserve="true">{{ block.super }}</div>
+    <button type="button" class="access-ai-launcher" data-access-ai-launcher aria-controls="access-ai-chat-host" aria-expanded="false">
+      <span aria-hidden="true">✦</span>
+      <span>Сообщение ИИ...</span>
+    </button>
+    <div id="access-ai-chat-host" class="access-ai-chat-host" hx-preserve="true">
+      <div class="access-ai-chat-toolbar">
+        <button type="button" class="access-ai-collapse" data-access-ai-collapse aria-label="Вернуться к редактору">Вернуться к редактору</button>
+      </div>
+      {{ block.super }}
+    </div>
   </div>
 {% endblock %}
 
@@ -27,5 +47,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v3"></script>
+  <script src="{% static 'src/js/access_workspace.js' %}?v=access-workspace-v5"></script>
 {% endblock %}

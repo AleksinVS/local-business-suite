@@ -10,5 +10,7 @@
   "EXECUTOR_REPORT.workspace-ux-critique-cycle.md": "Отчёт цикла критики и исправлений единого окна workspace",
   "TASK_ACCEPTANCE.workspace-ux-critique-cycle.md": "Техническая приёмка пакетов 06–08 единого окна доступа",
   "EXECUTOR_REPORT.htmx-sidebar-navigation.md": "Отчёт реализации частичной HTMX-навигации панелей",
-  "TASK_ACCEPTANCE.htmx-sidebar-navigation.md": "Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата"
+  "TASK_ACCEPTANCE.htmx-sidebar-navigation.md": "Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата",
+  "EXECUTOR_REPORT.composite-user-draft-and-sidebar-shell.md": "Отчёт реализации единого черновика пользователя и оболочки сайдбаров",
+  "TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md": "Техническая и визуальная приёмка пакета 10"
 }

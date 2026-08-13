@@ -7,6 +7,7 @@
   "inspector_host.html": "Содержимое постоянного host правого инспектора",
   "inspector_response.html": "HTMX-ответ правого инспектора с очисткой левого host",
   "inspector_apply_response.html": "HTMX-ответ успешного применения инспектора и обновления таблицы",
+  "user_bundle_editor.html": "Единая форма черновика пользователя с локальными группами редактора",
   "table_panel.html": "Содержимое постоянного host таблицы доступа",
   "inline_messages.html": "Одноразовые сообщения успешного HTMX apply внутри активной панели"
 }

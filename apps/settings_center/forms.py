@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 
 from apps.accounts.department_policy import available_user_departments
 from apps.accounts.models import ExternalIdentity
@@ -303,7 +304,6 @@ class PortalUserUpdateForm(forms.Form):
             )
         return cleaned_data
 
-
 class ExternalIdentityForm(forms.ModelForm):
     class Meta:
         model = ExternalIdentity
@@ -358,6 +358,146 @@ class AccessExternalIdentityForm(ExternalIdentityForm):
         widget=forms.Textarea(attrs={"rows": 2}),
     )
     preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+
+
+class AccessUserBundleForm(forms.Form):
+    """Один черновик карточки пользователя с предметными группами полей."""
+
+    username = forms.CharField(label="Логин", max_length=150)
+    first_name = forms.CharField(label="Имя", max_length=150, required=False)
+    last_name = forms.CharField(label="Фамилия", max_length=150, required=False)
+    email = forms.EmailField(label="Email", required=False)
+    department = forms.ModelChoiceField(
+        label="Подразделение",
+        queryset=available_user_departments(),
+        required=True,
+    )
+    is_active = forms.BooleanField(label="Активная учетная запись", required=False)
+    password = forms.CharField(
+        label="Новый пароль",
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Оставьте пустым, чтобы не менять пароль.",
+    )
+    ad_provider = forms.ChoiceField(label="Поставщик", choices=ExternalIdentity.Provider.choices)
+    ad_subject_id = forms.CharField(label="Идентификатор субъекта", max_length=255, required=False)
+    ad_username = forms.CharField(label="Логин AD", max_length=255, required=False)
+    ad_upn = forms.CharField(label="UPN", max_length=255, required=False)
+    ad_distinguished_name = forms.CharField(label="Distinguished name", required=False)
+    ad_domain = forms.CharField(label="Домен", max_length=255, required=False)
+    ad_sync_status = forms.ChoiceField(label="Статус синхронизации", choices=ExternalIdentity.SyncStatus.choices)
+    roles = GroupWithProfileChoiceField(
+        label="Должностные функции",
+        queryset=Group.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Роли определяют рабочие функции; разделы сайта вычисляются из их возможностей.",
+    )
+    is_superuser = forms.BooleanField(label="Супер-пользователь", required=False)
+    is_staff = forms.BooleanField(label="Доступ к Django Admin", required=False)
+    memory_group_names = forms.MultipleChoiceField(
+        label="Технические группы памяти",
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    reason = forms.CharField(
+        label="Причина всех изменений",
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
+    confirm_risk = forms.BooleanField(
+        label="Подтверждаю риск изменения привилегированного доступа",
+        required=False,
+    )
+    confirm_memory = forms.BooleanField(
+        label="Подтверждаю изменение технических полномочий памяти",
+        required=False,
+    )
+    active_editor = forms.CharField(widget=forms.HiddenInput, required=False)
+
+    def __init__(self, *args, portal_user, actor, ad_identity=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.portal_user = portal_user
+        self.actor = actor
+        role_names = assignable_role_names_for_actor(actor=actor, target_user=portal_user)
+        current_role_names = set(selected_role_names_for_user(portal_user))
+        self.fields["roles"].queryset = (
+            Group.objects.filter(name__in=role_names)
+            .select_related("profile")
+            .order_by("name")
+        )
+        protected_role_names = current_role_names - set(role_names)
+        self._protected_role_names = protected_role_names
+        self.protected_role_groups = list(
+            Group.objects.filter(name__in=protected_role_names)
+            .select_related("profile")
+            .order_by("name")
+        )
+        from apps.memory.access_services import memory_group_choices
+
+        self.fields["memory_group_names"].choices = [
+            (item["code"], f"{item['label']} ({item['code']}) — {item['description']}")
+            for item in memory_group_choices()
+        ]
+        can_edit_account = bool(actor.is_active and actor.is_superuser)
+        for name in (
+            "username", "first_name", "last_name", "email", "department", "is_active",
+            "password", "ad_provider", "ad_subject_id", "ad_username", "ad_upn",
+            "ad_distinguished_name", "ad_domain", "ad_sync_status", "memory_group_names",
+        ):
+            self.fields[name].disabled = not can_edit_account
+        self.fields["is_staff"].disabled = not can_edit_account
+        self.fields["is_superuser"].disabled = not can_edit_account
+        self.can_edit_account = can_edit_account
+        identity = ad_identity
+        self.initial.update({
+                "username": portal_user.username,
+                "first_name": portal_user.first_name,
+                "last_name": portal_user.last_name,
+                "email": portal_user.email,
+                "department": portal_user.department_id,
+                "is_active": portal_user.is_active,
+                "ad_provider": getattr(identity, "provider", ExternalIdentity.Provider.ACTIVE_DIRECTORY),
+                "ad_subject_id": getattr(identity, "subject_id", ""),
+                "ad_username": getattr(identity, "username", ""),
+                "ad_upn": getattr(identity, "upn", ""),
+                "ad_distinguished_name": getattr(identity, "distinguished_name", ""),
+                "ad_domain": getattr(identity, "domain", ""),
+                "ad_sync_status": getattr(identity, "sync_status", ExternalIdentity.SyncStatus.MANUAL),
+                "roles": list(portal_user.groups.filter(name__in=role_names).values_list("pk", flat=True)),
+                "is_staff": portal_user.is_staff,
+                "is_superuser": portal_user.is_superuser,
+                "memory_group_names": list(
+                    portal_user.groups.filter(
+                        name__in=[choice[0] for choice in self.fields["memory_group_names"].choices]
+                    ).values_list("name", flat=True)
+                ),
+            "active_editor": "roles",
+        })
+
+    def clean(self):
+        cleaned_data = super().clean()
+        selected_roles = cleaned_data.get("roles")
+        if selected_roles is not None and self._protected_role_names:
+            selected_names = set(selected_roles.values_list("name", flat=True))
+            cleaned_data["roles"] = Group.objects.filter(
+                name__in=selected_names | self._protected_role_names
+            )
+        if cleaned_data.get("is_superuser") and not cleaned_data.get("is_staff"):
+            self.add_error(
+                "is_staff",
+                "Для супер-пользователя необходимо включить доступ к Django Admin.",
+            )
+        return cleaned_data
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip()
+        if username and get_user_model().objects.filter(username__iexact=username).exclude(
+            pk=self.portal_user.pk
+        ).exists():
+            raise ValidationError("Пользователь с таким логином уже существует.")
+        return username
 
 
 class AccessRoleMembershipForm(forms.Form):

@@ -29,6 +29,7 @@ from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
+from apps.memory.models import MemoryGroupMembershipAudit
 
 from .contract_services import (
     apply_contract_payload,
@@ -54,6 +55,36 @@ pytestmark = pytest.mark.integration
 
 
 class AccessWorkspaceTests(TestCase):
+    def _bundle_payload(self, *, target, role, memory_group, **overrides):
+        payload = {
+            "view": "users",
+            "object": target.pk,
+            "field": "roles",
+            "panel": "inspector",
+            "username": target.username,
+            "first_name": target.first_name,
+            "last_name": target.last_name,
+            "email": target.email,
+            "department": target.department_id,
+            "is_active": "on" if target.is_active else "",
+            "password": "",
+            "ad_provider": ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            "ad_subject_id": "",
+            "ad_username": "",
+            "ad_upn": "",
+            "ad_distinguished_name": "",
+            "ad_domain": "",
+            "ad_sync_status": ExternalIdentity.SyncStatus.MANUAL,
+            "roles": [role.pk] if role else [],
+            "is_staff": "on" if target.is_staff else "",
+            "is_superuser": "on" if target.is_superuser else "",
+            "memory_group_names": [memory_group.name] if memory_group else [],
+            "reason": "Пакетная проверка карточки пользователя.",
+            "active_editor": "roles",
+        }
+        payload.update(overrides)
+        return payload
+
     def test_canonical_workspace_exposes_six_tabs_and_user_projection(self):
         from apps.core.models import Department
 
@@ -84,8 +115,9 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(row["department_full"], "Центр / Поддержка")
         self.assertEqual([group["code"] for group in row["technical_groups"]], [technical.name])
         self.assertEqual([group["code"] for group in row["memory_groups"]], [memory.name])
-        for heading in ("Имя", "Пользователь AD", "Подразделение", "Статус", "Роли", "Разделы сайта", "Технические группы", "Группы памяти"):
+        for heading in ("Имя", "Подразделение", "Статус", "Роли", "Разделы сайта", "Технические группы", "Группы памяти"):
             self.assertContains(response, heading)
+        self.assertNotContains(response, "<th scope=\"col\">Пользователь AD</th>", html=False)
 
     def test_workspace_deep_link_selects_field_without_leaving_table(self):
         actor = User.objects.create_superuser(username="workspace-deep-root", password="pass")
@@ -100,8 +132,8 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["selected"]["id"], target.pk)
         self.assertEqual(response.context["selected_field"], "roles")
-        self.assertContains(response, "Текущие значения")
-        self.assertContains(response, "Редактор поля")
+        self.assertContains(response, "Основные данные")
+        self.assertContains(response, "Редактор значения")
         self.assertContains(response, "workspace-deep-target")
 
     def test_workspace_panels_use_left_sidebar_and_right_overlay_drawer(self):
@@ -131,6 +163,44 @@ class AccessWorkspaceTests(TestCase):
         self.assertContains(field_response, 'aria-label="Закрыть редактор поля"')
         self.assertContains(field_response, "sidebar-nav--access")
         self.assertNotContains(field_response, "access-field-dock")
+
+    def test_role_manager_inspector_uses_bundle_with_account_fields_read_only(self):
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        Group.objects.get_or_create(name="customer")
+        actor = User.objects.create_user(username="bundle-role-manager")
+        actor.groups.add(manager_group)
+        target = User.objects.create_user(username="bundle-role-target")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "users", "object": target.pk, "panel": "inspector"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "access-user-bundle-form")
+        self.assertContains(response, "name=\"roles\"", html=False)
+        form = response.context["field_form"]
+        self.assertFalse(form.fields["roles"].disabled)
+        self.assertTrue(form.fields["username"].disabled)
+        self.assertTrue(form.fields["department"].disabled)
+        self.assertTrue(form.fields["ad_username"].disabled)
+        self.assertNotContains(response, 'name="is_staff"', html=False)
+
+    def test_bundle_rejects_duplicate_username_without_writes(self):
+        actor = User.objects.create_superuser(username="bundle-duplicate-root", password="pass")
+        target = User.objects.create_user(username="bundle-duplicate-target", first_name="До")
+        User.objects.create_user(username="bundle-duplicate-existing")
+        self.client.force_login(actor)
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {**self._bundle_payload(target=target, role=None, memory_group=None),
+             "action": "bundle_preview", "username": " bundle-duplicate-existing "},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "уже существует")
+        target.refresh_from_db()
+        self.assertEqual(target.first_name, "До")
 
     def test_workspace_htmx_gets_return_only_panel_fragments_and_reject_unknown_target(self):
         actor = User.objects.create_superuser(username="workspace-htmx-root", password="pass")
@@ -165,6 +235,115 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<!doctype html>", html=False)
         self.assertContains(response, 'data-access-workspace')
+
+    def test_user_inspector_bundle_previews_and_applies_all_components_atomically(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="bundle-root", password="pass")
+        department = Department.objects.create(name="Bundle before")
+        next_department = Department.objects.create(name="Bundle after")
+        target = User.objects.create_user(
+            username="bundle-target",
+            first_name="До",
+            department=department,
+        )
+        customer, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        technician, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        observer, _ = Group.objects.get_or_create(name="memory_observer")
+        target.groups.add(customer)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        payload = self._bundle_payload(
+            target=target,
+            role=technician,
+            memory_group=observer,
+            first_name="После",
+            department=next_department.pk,
+            ad_username="bundle-ad-user",
+            ad_upn="bundle-ad-user@example.test",
+        )
+
+        preview_response = self.client.post(url, {**payload, "action": "bundle_preview"})
+        self.assertEqual(preview_response.status_code, 200)
+        preview = preview_response.context["field_preview"]
+        self.assertEqual(
+            set(preview["components"]),
+            {"profile", "ad", "roles", "memory"},
+        )
+        apply_response = self.client.post(
+            url,
+            {
+                **payload,
+                "action": "bundle_apply",
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+                "confirm_memory": "on",
+            },
+        )
+
+        self.assertEqual(apply_response.status_code, 302)
+        target.refresh_from_db()
+        self.assertEqual(target.first_name, "После")
+        self.assertEqual(target.department_id, next_department.pk)
+        self.assertEqual(
+            set(target.groups.values_list("name", flat=True)),
+            {ROLE_TECHNICIAN, "memory_observer"},
+        )
+        self.assertEqual(target.external_identities.get().username, "bundle-ad-user")
+        self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
+        self.assertEqual(MemoryGroupMembershipAudit.objects.filter(target_user=target).count(), 1)
+        self.assertEqual(SettingsChange.objects.filter(actor=actor).count(), 2)
+
+    def test_user_inspector_bundle_rolls_back_earlier_components_when_late_ad_check_fails(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="bundle-rollback-root", password="pass")
+        department = Department.objects.create(name="Bundle rollback")
+        target = User.objects.create_user(
+            username="bundle-rollback-target",
+            first_name="До",
+            department=department,
+        )
+        customer, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        technician, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        observer, _ = Group.objects.get_or_create(name="memory_observer")
+        target.groups.add(customer)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        payload = self._bundle_payload(
+            target=target,
+            role=technician,
+            memory_group=observer,
+            first_name="После",
+            ad_username="bundle-before-preview",
+        )
+        preview_response = self.client.post(url, {**payload, "action": "bundle_preview"})
+        preview = preview_response.context["field_preview"]
+
+        apply_response = self.client.post(
+            url,
+            {
+                **payload,
+                "action": "bundle_apply",
+                "preview_token": preview["preview_token"],
+                "confirm_risk": "on",
+                "confirm_memory": "on",
+                "ad_username": "bundle-after-preview",
+            },
+        )
+
+        self.assertEqual(apply_response.status_code, 200)
+        self.assertContains(apply_response, "изменились после предпросмотра")
+        target.refresh_from_db()
+        self.assertEqual(target.first_name, "До")
+        self.assertEqual(
+            set(target.groups.values_list("name", flat=True)),
+            {ROLE_CUSTOMER},
+        )
+        self.assertFalse(target.external_identities.exists())
+        self.assertFalse(AccessAssignmentAudit.objects.filter(target_user=target).exists())
+        self.assertFalse(MemoryGroupMembershipAudit.objects.filter(target_user=target).exists())
+        self.assertFalse(SettingsChange.objects.filter(actor=actor).exists())
 
     def test_workspace_htmx_preview_and_apply_refresh_panel_and_table(self):
         from apps.accounts.selectors import contract_role_names

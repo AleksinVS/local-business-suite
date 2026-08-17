@@ -1,0 +1,36 @@
+{
+  "task_id": "17-administration-and-memory-boundaries",
+  "goal": "Разделить продуктовые, технические и резервные административные полномочия и закрыть cross-scope действия памяти/filehub.",
+  "write_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/policies.py",
+    "apps/settings_center/contract_services.py",
+    "apps/core/settings_descriptors.py",
+    "apps/ai/settings_descriptors.py",
+    "apps/memory/settings_descriptors.py",
+    "apps/memory/policies.py",
+    "apps/memory/review_services.py",
+    "apps/memory/review_selectors.py",
+    "apps/filehub/views.py",
+    "apps/filehub/file_organization_stats.py",
+    "apps/filehub/file_organization_move.py",
+    "apps/ai/skill_authoring.py",
+    "apps/settings_center/tests.py",
+    "apps/memory/tests",
+    "apps/filehub/tests.py"
+  ],
+  "invariants": [
+    "is_staff сохраняет Django Admin, но не выдаёт продуктовые настройки.",
+    "Superuser self-assignment и резервный Admin остаются.",
+    "Технические memory groups не подменяются должностными ролями, но всегда ограничиваются resource scope.",
+    "Non-superuser не может изменить собственную эффективную роль или critical definition."
+  ],
+  "acceptance": [
+    "Матрица descriptor capability × actor одинакова для HTTP и service.",
+    "Filehub proposal/move повторно проверяет actor и source scope после lock.",
+    "Inactive actor отклоняется AI/memory сервисами.",
+    "Staff-only actor не получает продуктовый role/settings editor."
+  ]
+}

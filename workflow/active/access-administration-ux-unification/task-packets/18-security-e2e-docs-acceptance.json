@@ -1,0 +1,24 @@
+{
+  "task_id": "18-security-e2e-docs-acceptance",
+  "goal": "Подтвердить новую модель прав сквозной матрицей, мигрировать runtime-контракт и обновить эксплуатационную документацию.",
+  "write_scope": [
+    "apps/settings_center/management/commands/access_administration_e2e.py",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md",
+    "docs/planning/backlog.md",
+    "workflow/active/access-administration-ux-unification"
+  ],
+  "invariants": [
+    "Runtime role_rules меняется только preview/apply протоколом.",
+    "Тестовые пользователи, роли и данные изолированы и очищаются.",
+    "Длинные логи и browser artifacts находятся только в .local."
+  ],
+  "acceptance": [
+    "Unit, integration, contracts, AI, UI и e2e профили проходят.",
+    "Независимый Luna-критик и Sol security reviewer не имеют S1/S2 findings.",
+    "Документация объясняет scopes, статусы, технические и резервные пути.",
+    "Сервис пересобран и smoke HTTP успешен."
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "task_id": "15-waiting-list-capability-model",
+  "goal": "Сделать видимость, редактирование и переходы листа ожидания явно настраиваемыми ролью и обязательными на сервисной границе.",
+  "write_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/workorders/contracts.py",
+    "apps/workorders/policies.py",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/forms.py",
+    "apps/waiting_list/policies.py",
+    "apps/waiting_list/selectors.py",
+    "apps/waiting_list/services.py",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/source_adapter.py",
+    "apps/waiting_list/tests.py",
+    "apps/ai/page_context.py"
+  ],
+  "invariants": [
+    "Авторство само по себе не является разрешением и учитывается только как scope.",
+    "Actor перечитывается и проверяется вместе с locked entry внутри сервиса.",
+    "Глобальный граф переходов и ролевые source/target ограничения применяются совместно.",
+    "Отсутствующее или неизвестное значение даёт none."
+  ],
+  "acceptance": [
+    "Матрица роль × авторство × исходный статус × целевой статус проходит для HTTP и service.",
+    "List/detail/source adapter используют один scoped selector.",
+    "Редактор роли показывает человекочитаемые scopes и статусы листа ожидания.",
+    "Рабочий role_rules мигрирован штатным preview/apply без скрытой перезаписи."
+  ]
+}

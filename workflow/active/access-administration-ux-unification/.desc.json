@@ -17,5 +17,7 @@
   "TASK_ACCEPTANCE.capability-ui-taxonomy-correction.md": "Приёмка пользовательской карты группировки прав роли",
   "EXECUTOR_REPORT.role-capability-section-editor.md": "Отчёт явной карты группировки возможностей и локального редактора разделов",
   "EXECUTOR_REPORT.delegated-role-definition-administration.md": "Отчёт делегированного редактирования определений ролей",
-  "TASK_ACCEPTANCE.delegated-role-definition-administration.md": "Приёмка делегированного редактирования определений ролей"
+  "TASK_ACCEPTANCE.delegated-role-definition-administration.md": "Приёмка делегированного редактирования определений ролей",
+  "EXECUTOR_REPORT.secret-status-containment.md": "Отчёт исключения сырых секретов из статуса env",
+  "TASK_ACCEPTANCE.secret-status-containment.md": "Приёмка защиты secret env status"
 }

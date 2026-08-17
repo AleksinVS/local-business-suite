@@ -13,7 +13,8 @@
 ## Границы
 
 - Сохраняются контрактные роли и доменные policies/selectors.
-- Row-level пробелы ревью 2026-07-30 не входят в этот блок.
+- По новому указанию владельца row-level и service-boundary пробелы, найденные
+  повторным аудитом 2026-08-17, входят в пакеты 14–18 этого блока.
 - JIT, approval, SoD workflow и регулярные access review не входят без отдельного
   решения. Privilege ceiling и запрет self-assignment для non-superuser входят как
   базовый инвариант; действующий superuser сохраняет рискованный self-assignment.
@@ -44,6 +45,12 @@ service layer, а не прямым ORM-путём; AD ownership и раздел
 14. `10-composite-user-draft-and-sidebar-shell`.
 15. `11-role-capability-section-editor`.
 16. `12-capability-ui-taxonomy-correction`.
+17. `13-delegated-role-definition-administration`.
+18. `14-secret-status-containment`.
+19. `15-waiting-list-capability-model`.
+20. `16-business-resource-boundaries`.
+21. `17-administration-and-memory-boundaries`.
+22. `18-security-e2e-docs-acceptance`.
 
 ## Приемка
 

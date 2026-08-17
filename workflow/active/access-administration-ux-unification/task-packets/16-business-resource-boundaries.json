@@ -1,0 +1,33 @@
+{
+  "task_id": "16-business-resource-boundaries",
+  "goal": "Устранить расширение области данных и обходы доменных правил в заявках, инвентаре, главной странице и AI.",
+  "write_scope": [
+    "apps/core/views.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/services.py",
+    "apps/workorders/policies.py",
+    "apps/inventory/selectors.py",
+    "apps/inventory/services.py",
+    "apps/inventory/views.py",
+    "apps/analytics/views.py",
+    "apps/ai/services.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "apps/core/tests.py",
+    "apps/workorders/tests.py",
+    "apps/inventory/tests.py",
+    "apps/analytics/tests.py",
+    "apps/ai/tests"
+  ],
+  "invariants": [
+    "HTTP и AI используют одинаковые scoped selectors и actor-aware commands.",
+    "Пользовательский hard delete заявки отсутствует; отмена сохраняет историю.",
+    "Board, department и device проверяются в области актора непосредственно перед записью.",
+    "Главный экран и аналитика не агрегируют невидимые записи."
+  ],
+  "acceptance": [
+    "Чужой pk и foreign department/device запрещены через HTTP, AI и service.",
+    "Счётчики и последние записи не раскрывают чужую ветку.",
+    "Прямой вызов команды после отзыва роли закрывается."
+  ]
+}

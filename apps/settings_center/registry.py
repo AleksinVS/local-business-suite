@@ -3,7 +3,12 @@ from __future__ import annotations
 import importlib
 from functools import lru_cache
 
-from .descriptors import SettingDescriptor
+from .descriptors import (
+    SECRET_STORAGE_KINDS,
+    SECRET_VALUE_TYPES,
+    SECRET_WIDGETS,
+    SettingDescriptor,
+)
 
 
 DESCRIPTOR_MODULES = (
@@ -17,6 +22,8 @@ DESCRIPTOR_MODULES = (
 
 class SettingsRegistry:
     def __init__(self, descriptors):
+        for descriptor in descriptors:
+            _validate_descriptor_security(descriptor)
         self._descriptors = {descriptor.setting_id: descriptor for descriptor in descriptors}
 
     def all(self):
@@ -54,3 +61,25 @@ def get_registry() -> SettingsRegistry:
             seen.add(descriptor.setting_id)
             descriptors.append(descriptor)
     return SettingsRegistry(descriptors)
+
+
+def _validate_descriptor_security(descriptor: SettingDescriptor) -> None:
+    """Fail closed when descriptor metadata disagrees about secret handling."""
+    secret_signal = bool(
+        descriptor.sensitivity == "secret"
+        or descriptor.value_type in SECRET_VALUE_TYPES
+        or descriptor.widget in SECRET_WIDGETS
+        or descriptor.storage_kind in SECRET_STORAGE_KINDS
+    )
+    if secret_signal and descriptor.sensitivity != "secret":
+        raise ValueError(
+            f"Descriptor '{descriptor.setting_id}' has secret metadata without sensitivity='secret'."
+        )
+    if descriptor.sensitivity == "secret" and not (
+        descriptor.value_type in SECRET_VALUE_TYPES
+        or descriptor.widget in SECRET_WIDGETS
+        or descriptor.storage_kind in SECRET_STORAGE_KINDS
+    ):
+        raise ValueError(
+            f"Descriptor '{descriptor.setting_id}' is marked secret without a secret value type, widget, or storage kind."
+        )

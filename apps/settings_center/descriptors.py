@@ -38,6 +38,10 @@ WRITE_POLICY_LABELS = {
     "secret_handle_only": "только ссылка на секрет",
 }
 
+SECRET_VALUE_TYPES = frozenset({"secret"})
+SECRET_WIDGETS = frozenset({"password", "secret", "secret_handle"})
+SECRET_STORAGE_KINDS = frozenset({"secret_handle"})
+
 
 @dataclass(frozen=True)
 class SettingDescriptor:
@@ -67,6 +71,16 @@ class SettingDescriptor:
     @property
     def is_proposal_only(self) -> bool:
         return self.write_policy == "proposal_only"
+
+    @property
+    def is_secret(self) -> bool:
+        """Whether this descriptor may carry a secret or secret handle."""
+        return bool(
+            self.sensitivity == "secret"
+            or self.value_type in SECRET_VALUE_TYPES
+            or self.widget in SECRET_WIDGETS
+            or self.storage_kind in SECRET_STORAGE_KINDS
+        )
 
     @property
     def domain_label(self) -> str:

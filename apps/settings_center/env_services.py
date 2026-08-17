@@ -38,18 +38,43 @@ def effective_env_value(descriptor):
     return os.environ.get(key, descriptor.metadata.get("default", ""))
 
 
+def _safe_secret_status(descriptor) -> tuple[bool, str]:
+    """Return only presence/status for a secret environment descriptor.
+
+    The environment value is intentionally reduced to a boolean before it is
+    put into the status projection.  This keeps raw credentials out of the
+    HTTP context, template rendering, and any serialized row payload.
+    """
+    key = descriptor.metadata.get("env_key")
+    if not key:
+        return False, "не настроено"
+    import os
+
+    configured = bool(os.environ.get(key, ""))
+    return configured, "***" if configured else "не настроено"
+
+
 def env_status_rows():
     rows = []
     for descriptor in get_registry().all():
         if descriptor.storage_kind == "env_var":
-            rows.append(
-                {
-                    "descriptor": descriptor,
-                    "effective_value": mask_sensitive({"value": effective_env_value(descriptor)})["value"],
-                    "apply_mode": env_apply_mode(),
-                    "apply_mode_label": env_apply_mode_label(),
-                }
-            )
+            row = {
+                "setting_id": descriptor.setting_id,
+                "title": descriptor.title,
+                "section": descriptor.section,
+                "env_key": descriptor.metadata.get("env_key", ""),
+                "requires_restart": bool(descriptor.requires_restart),
+                "apply_mode": env_apply_mode(),
+                "apply_mode_label": env_apply_mode_label(),
+                "is_secret": descriptor.is_secret,
+            }
+            if descriptor.is_secret:
+                is_configured, display_value = _safe_secret_status(descriptor)
+                row.update({"effective_value": display_value, "is_configured": is_configured})
+            else:
+                value = effective_env_value(descriptor)
+                row.update({"effective_value": value, "is_configured": bool(value)})
+            rows.append(row)
     return rows
 
 

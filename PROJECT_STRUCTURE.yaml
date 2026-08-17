@@ -583,6 +583,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
       EXECUTOR_REPORT.htmx-sidebar-navigation.md: file # Отчёт реализации частичной HTMX-навигации панелей
       EXECUTOR_REPORT.role-capability-section-editor.md: file # Отчёт явной карты группировки возможностей и локального редактора разделов
+      EXECUTOR_REPORT.secret-status-containment.md: file # Отчёт исключения сырых секретов из статуса env
       EXECUTOR_REPORT.workspace-ux-critique-cycle.md: file # Отчёт цикла критики и исправлений единого окна workspace
       TASK_ACCEPTANCE.capability-ui-taxonomy-correction.md: file # Приёмка пользовательской карты группировки прав роли
       TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md: file # Техническая и визуальная приёмка пакета 10
@@ -591,6 +592,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
       TASK_ACCEPTANCE.htmx-sidebar-navigation.md: file # Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата
       TASK_ACCEPTANCE.role-capability-section-editor.md: file # Техническая и визуальная приёмка группового редактора прав роли
+      TASK_ACCEPTANCE.secret-status-containment.md: file # Приёмка защиты secret env status
       TASK_ACCEPTANCE.workspace-ux-critique-cycle.md: file # Техническая приёмка пакетов 06–08 единого окна доступа
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file

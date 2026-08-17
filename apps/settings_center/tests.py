@@ -37,7 +37,7 @@ from .contract_services import (
     reconcile_pending_contract_changes,
     rollback_contract_change,
 )
-from .env_services import create_env_proposal
+from .env_services import create_env_proposal, env_status_rows
 from .forms import (
     AccessUserProfileForm,
     PortalUserCreateForm,
@@ -1832,6 +1832,141 @@ class SettingsContractRecoveryTests(TransactionTestCase):
 
 
 class SettingsCenterEnvAndHelpTests(TestCase):
+    def test_env_status_rows_contain_only_safe_secret_status(self):
+        ad_secret = "ad-password-status-unique-7f3a"
+        openai_secret = "openai-key-status-unique-91c2"
+        with patch.dict(
+            os.environ,
+            {
+                "AD_SERVICE_PASSWORD": ad_secret,
+                "OPENAI_API_KEY": openai_secret,
+                "DJANGO_AUTH_MODE": "local",
+            },
+            clear=False,
+        ):
+            rows = env_status_rows()
+
+        by_id = {row["setting_id"]: row for row in rows}
+        self.assertTrue(rows)
+        self.assertTrue(all(set(row) <= {
+            "setting_id",
+            "title",
+            "section",
+            "env_key",
+            "requires_restart",
+            "apply_mode",
+            "apply_mode_label",
+            "is_secret",
+            "effective_value",
+            "is_configured",
+        } for row in rows))
+        for setting_id, secret in (
+            ("settings_center.env.AD_SERVICE_PASSWORD", ad_secret),
+            ("settings_center.env.OPENAI_API_KEY", openai_secret),
+        ):
+            row = by_id[setting_id]
+            self.assertTrue(row["is_secret"])
+            self.assertTrue(row["is_configured"])
+            self.assertEqual(row["effective_value"], "***")
+            self.assertNotIn(secret, row)
+            self.assertNotIn(secret, str(row))
+
+        plain_row = by_id["settings_center.env.DJANGO_AUTH_MODE"]
+        self.assertFalse(plain_row["is_secret"])
+        self.assertEqual(plain_row["effective_value"], "local")
+
+        with patch.dict(
+            os.environ,
+            {"AD_SERVICE_PASSWORD": "", "OPENAI_API_KEY": ""},
+            clear=False,
+        ):
+            empty_rows = env_status_rows()
+        empty_by_id = {row["setting_id"]: row for row in empty_rows}
+        for setting_id in (
+            "settings_center.env.AD_SERVICE_PASSWORD",
+            "settings_center.env.OPENAI_API_KEY",
+        ):
+            self.assertFalse(empty_by_id[setting_id]["is_configured"])
+            self.assertEqual(empty_by_id[setting_id]["effective_value"], "не настроено")
+
+    def test_every_secret_env_descriptor_is_contained_in_rows_and_html(self):
+        from .descriptors import SettingDescriptor
+
+        descriptors = [
+            descriptor
+            for descriptor in get_registry().all()
+            if descriptor.storage_kind == "env_var" and descriptor.is_secret
+        ]
+        self.assertTrue(descriptors)
+        values = {
+            descriptor.metadata["env_key"]: f"unique-secret-{index}-{descriptor.setting_id}"
+            for index, descriptor in enumerate(descriptors, start=1)
+        }
+        with patch.dict(os.environ, values, clear=False):
+            rows = env_status_rows()
+            actor = User.objects.create_superuser(username="env-status-dynamic-root", password="pass")
+            self.client.force_login(actor)
+            response = self.client.get(reverse("settings_center:env_status"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        by_id = {row["setting_id"]: row for row in rows}
+        for descriptor in descriptors:
+            row = by_id[descriptor.setting_id]
+            self.assertNotIn("descriptor", row)
+            self.assertTrue(row["is_secret"])
+            self.assertTrue(row["is_configured"])
+            self.assertEqual(row["effective_value"], "***")
+            self.assertNotIn(values[descriptor.metadata["env_key"]], html)
+
+    def test_registry_rejects_inconsistent_secret_descriptor_metadata(self):
+        from .descriptors import SettingDescriptor
+        from .registry import SettingsRegistry
+
+        cases = (
+            {"value_type": "secret", "sensitivity": "internal"},
+            {"widget": "secret", "sensitivity": "internal"},
+            {"widget": "password", "sensitivity": "internal"},
+            {"storage_kind": "secret_handle", "sensitivity": "internal"},
+            {"sensitivity": "secret", "value_type": "string", "widget": "text"},
+        )
+        for index, overrides in enumerate(cases):
+            with self.subTest(overrides=overrides):
+                descriptor = SettingDescriptor(
+                    setting_id=f"test.inconsistent.secret.{index}",
+                    domain="test",
+                    section="Тест",
+                    title="Тест",
+                    description="Тест",
+                    help_topic_id="test.secret",
+                    storage_kind=overrides.get("storage_kind", "env_var"),
+                    value_type=overrides.get("value_type", "string"),
+                    widget=overrides.get("widget", "text"),
+                    sensitivity=overrides.get("sensitivity", "internal"),
+                )
+                with self.assertRaises(ValueError):
+                    SettingsRegistry([descriptor])
+
+    def test_env_status_http_never_renders_secret_values(self):
+        actor = User.objects.create_superuser(username="env-status-secret-root", password="pass")
+        ad_secret = "ad-http-secret-never-render-4c8b"
+        openai_secret = "openai-http-secret-never-render-8a21"
+        self.client.force_login(actor)
+        with patch.dict(
+            os.environ,
+            {"AD_SERVICE_PASSWORD": ad_secret, "OPENAI_API_KEY": openai_secret},
+            clear=False,
+        ):
+            response = self.client.get(reverse("settings_center:env_status"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertNotIn(ad_secret, html)
+        self.assertNotIn(openai_secret, html)
+        self.assertEqual(html.count("***"), 2)
+        self.assertNotIn("ad-http-secret", html)
+        self.assertNotIn("openai-http-secret", html)
+
     def test_env_proposal_masks_secret_values_and_writes_under_data(self):
         actor = User.objects.create_superuser(username="settings-root", password="pass")
         with TemporaryDirectory() as tmpdir:

@@ -78,7 +78,7 @@ Django Admin, ИИ и AD. Django Admin остаётся резервным ин�
 - резервный Django Admin adapter и защита стандартных access-полей;
 - закрытие прямых group writes через AI и LDAP, lifecycle guards и active-actor
   checks;
-- строгая типизация role contract и superuser-only определения ролей;
+- строгая типизация role contract и единый predicate редактора определений ролей;
 - один пункт «Доступ», серверный поиск/фильтры, компактная таблица, прямой переход
   после создания и progressive disclosure технических источников;
 - management-command e2e и Playwright desktop/320px smoke.
@@ -491,7 +491,8 @@ Preview назначения должен показывать бизнес-ре
 - интерактивное self-assignment запрещено всем non-superuser;
 - активный superuser назначает любую существующую контрактную роль другому или
   себе; self-assignment всегда требует риск-подтверждения и отдельного аудита;
-- определения ролей меняет только superuser.
+- определения ролей меняет активный superuser, администратор Django (`is_staff`)
+  или участник роли `admin`; одного `manage_roles` недостаточно.
 
 Рекомендуемый стартовый allowlist: `manager → [customer, technician]`. Точный набор
 утверждает владелец при принятии ADR; он не выводится автоматически из
@@ -536,7 +537,8 @@ AD sync не меняют доступ в обход сервисов; резе�
 ### Этап 0B. Разделить административные полномочия
 
 Результат: утверждён allowlist, self-assignment запрещён non-superuser, а
-определения и critical roles ограничены superuser.
+определения ролей ограничены единым predicate editor, а critical roles —
+superuser.
 
 ### Этап 0C. Усилить запись role contract
 
@@ -610,8 +612,9 @@ effective access read model и Settings Center UI.
   разрешённого service layer;
 - service layer самостоятельно отклоняет актора без нужного permission;
 - flag со значением `"false"`, неизвестное capability и неполная роль отклоняются;
-- non-superuser не меняет определение своей privilege-роли и не назначает себе
-  роли;
+- manager-only с одним `manage_roles` не меняет определения ролей и не назначает
+  себе роли; staff/admin-role actor может менять определения через тот же
+  preview/apply service;
 - активный superuser может назначить себе существующую контрактную роль только
   через рискованный preview/apply, а техническую группу или permission — не может;
 - неизвестная/отключённая AD mapping не меняет группы;
@@ -635,7 +638,7 @@ effective access read model и Settings Center UI.
 - обычный пользователь;
 - менеджер с `manage_roles`;
 - superuser;
-- staff без `manage_roles`;
+- staff без `manage_roles` (разрешён редактор определений ролей, но не назначение);
 - пользователь без явной роли с базовым профилем;
 - пользователь карантинного подразделения;
 - локальная роль;
@@ -850,3 +853,14 @@ hidden `active_group` сохраняет выбранную вкладку пр�
 агент/Sol high; однозначные Django/HTMX/CSS/template изменения — Luna high;
 браузерная матрица и независимая критика — отдельная Luna high/xhigh без write
 scope до выдачи пакета исправлений.
+
+### Делегированное редактирование определений ролей (пакет 13)
+
+Право изменения определения роли не следует автоматически из `manage_roles`.
+Единый predicate допускает активную аутентифицированную учётную запись, если
+она является superuser, имеет `is_staff` или состоит в контрактной роли `admin`.
+Он используется Access Workspace, standalone RoleDefinition, правым инспектором,
+core contract service и навигацией. Менеджер с одним `manage_roles` сохраняет
+доступ к рабочему окну назначения, но видит определение роли только для чтения.
+Состояние подписанного preview включает `is_staff`, поэтому изменение флага
+инвалидирует уже выданный предпросмотр.

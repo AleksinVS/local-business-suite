@@ -17,6 +17,7 @@ from django.views.generic import CreateView, FormView, ListView, TemplateView, U
 from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity
 from apps.accounts.access_contracts import (
     apply_role_definition_change,
+    can_edit_role_definitions,
     preview_role_definition_change,
     role_catalog_rows,
     role_definition_read_model,
@@ -102,11 +103,7 @@ class BoardAccessManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 class RoleDefinitionManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return bool(
-            self.request.user.is_authenticated
-            and self.request.user.is_active
-            and self.request.user.is_superuser
-        )
+        return can_edit_role_definitions(self.request.user)
 
 
 class SettingsDashboardView(SettingsManagementMixin, TemplateView):
@@ -135,6 +132,12 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         "access-inspector-host",
         "access-table-panel",
     }
+
+    def test_func(self):
+        return bool(
+            can_manage_roles(self.request.user)
+            or can_edit_role_definitions(self.request.user)
+        )
 
     @staticmethod
     def _is_htmx(request):
@@ -547,7 +550,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if selected["kind"] == "user" and field in {"profile", "status", "department", "ad", "memory-groups"}:
             return bool(request.user.is_active and request.user.is_superuser)
         if selected["kind"] == "role" and field in {"definition", "description"}:
-            return bool(request.user.is_active and request.user.is_superuser)
+            return can_edit_role_definitions(request.user)
         if selected["kind"] == "board" and field == "groups":
             return can_manage_board_access(request.user)
         if selected["kind"] == "user" and field == "roles":

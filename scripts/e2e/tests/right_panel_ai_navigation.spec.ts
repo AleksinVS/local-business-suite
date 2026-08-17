@@ -94,6 +94,56 @@ test.describe("@ai AI right panel navigation", () => {
     const context = await page.evaluate(() => window.LocalBusinessPageContext?.getCurrent());
     expect(context?.envelope?.selection?.object_type).toBe("waiting_list_entry");
   });
+
+  test("creates a waiting-list entry in the local drawer and preserves filter and sort", async ({ page }) => {
+    await login(page);
+    await page.goto("/waiting-list/");
+
+    const filter = page.locator("#filterService");
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes("/waiting-list/")
+        && response.request().method() === "GET"),
+      filter.selectOption("s2"),
+    ]);
+    const sortHeader = page.locator('th[data-sort="patient_name"]');
+    await Promise.all([
+      page.waitForResponse((response) => response.url().includes("/waiting-list/")
+        && response.request().method() === "GET"),
+      sortHeader.click(),
+    ]);
+
+    const initialUrl = page.url();
+    let mainFrameNavigations = 0;
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) mainFrameNavigations += 1;
+    });
+
+    await page.locator("#btnAddEntry").click();
+    const form = page.locator("#entry-detail-panel-content #waiting-list-form");
+    await expect(form).toBeVisible();
+    const marker = `E2E drawer ${Date.now()}`;
+    await form.locator('input[name="patient_name"]').fill(marker);
+    await form.locator('input[name="patient_dob"]').fill("20.05.1980");
+    await form.locator('input[name="patient_phone"]').fill("+7 (905) 123-45-67");
+    await form.locator('select[name="service_id"]').selectOption("s2");
+
+    const refreshRequest = page.waitForRequest((request) => {
+      if (request.method() !== "GET" || !request.url().includes("/waiting-list/")) return false;
+      const url = new URL(request.url());
+      return url.searchParams.get("service") === "s2"
+        && url.searchParams.get("sort") === "patient_name"
+        && url.searchParams.get("order") === "desc";
+    });
+    await page.locator('button[type="submit"][form="waiting-list-form"]').click();
+    const request = await refreshRequest;
+
+    expect(new URL(request.url()).searchParams.get("service")).toBe("s2");
+    await expect(page.locator("#entry-detail-panel")).not.toHaveClass(/active/);
+    await expect(page.locator("#entry-table")).toContainText(marker);
+    await expect(filter).toHaveValue("s2");
+    expect(page.url()).toBe(initialUrl);
+    expect(mainFrameNavigations).toBe(0);
+  });
 });
 
 declare global {

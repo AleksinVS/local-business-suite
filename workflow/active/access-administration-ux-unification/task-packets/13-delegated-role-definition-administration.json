@@ -1,0 +1,74 @@
+{
+  "task_id": "13-delegated-role-definition-administration",
+  "goal": "Сделать редактор определений ролей доступным активным суперпользователям и администраторам без расширения права до всех пользователей с manage_roles.",
+  "architecture_decision": {
+    "role_definition_editors": [
+      "active authenticated superuser",
+      "active authenticated is_staff user",
+      "active authenticated member of the contract role admin"
+    ],
+    "excluded": [
+      "regular user",
+      "manager or another role that only has manage_roles",
+      "inactive account"
+    ],
+    "invariants": [
+      "Одна предметная policy используется маршрутом, правым сайдбаром и service layer.",
+      "Подписанный preview, CAS, impact diff, risk confirmation и SettingsChange audit сохраняются.",
+      "Изменение статуса is_staff, is_superuser или состава ролей актора инвалидирует preview.",
+      "Политика назначения ролей и технических флагов не расширяется."
+    ]
+  },
+  "read_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/contract_services.py",
+    "apps/core/context_processors.py",
+    "apps/core/views.py",
+    "apps/core/tests.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "apps/ai/tests/test_views.py",
+    "apps/settings_center/tests.py",
+    "apps/settings_center/management/commands/access_administration_e2e.py",
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md"
+  ],
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/contract_services.py",
+    "apps/core/context_processors.py",
+    "apps/core/views.py",
+    "apps/core/tests.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "apps/ai/tests/test_views.py",
+    "apps/settings_center/tests.py",
+    "apps/settings_center/management/commands/access_administration_e2e.py",
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "workflow/active/access-administration-ux-unification/EXECUTOR_REPORT.delegated-role-definition-administration.md"
+  ],
+  "acceptance": [
+    "Клик по имени роли без явного field открывает полный редактор у superuser.",
+    "Superuser, is_staff и участник роли admin проходят HTTP и прямую service-проверку.",
+    "Manager с manage_roles без admin/is_staff получает read-only карточку и отказ прямого service-вызова.",
+    "Обычный и неактивный пользователь не получают редактор.",
+    "Legacy redirect и AI tool metadata используют ту же предметную семантику допуска.",
+    "Ошибка чтения role_rules приводит к закрытому отказу, а не к 500.",
+    "Навигация Доступ видна разрешённому is_staff/admin actor.",
+    "Целевые unit/integration тесты проходят.",
+    "Сквозная команда использует уникальную временную контрактную роль и не зависит от рабочих назначений."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "python manage.py access_administration_e2e",
+    "python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ]
+}

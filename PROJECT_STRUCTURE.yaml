@@ -579,6 +579,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
       EXECUTOR_REPORT.composite-user-draft-and-sidebar-shell.md: file # Отчёт реализации единого черновика пользователя и оболочки сайдбаров
       EXECUTOR_REPORT.contract-board-role-memory-slice.md: file # Отчёт реализации пакетов 00c, 00d и 03
+      EXECUTOR_REPORT.delegated-role-definition-administration.md: file # Отчёт делегированного редактирования определений ролей
       EXECUTOR_REPORT.first-safe-slice.md: file # Отчёт реализации первого безопасного среза ADR-0040
       EXECUTOR_REPORT.htmx-sidebar-navigation.md: file # Отчёт реализации частичной HTMX-навигации панелей
       EXECUTOR_REPORT.role-capability-section-editor.md: file # Отчёт явной карты группировки возможностей и локального редактора разделов
@@ -586,6 +587,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.capability-ui-taxonomy-correction.md: file # Приёмка пользовательской карты группировки прав роли
       TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md: file # Техническая и визуальная приёмка пакета 10
       TASK_ACCEPTANCE.contract-board-role-memory-slice.md: file # Техническая приёмка пакетов 00c, 00d и 03
+      TASK_ACCEPTANCE.delegated-role-definition-administration.md: file # Приёмка делегированного редактирования определений ролей
       TASK_ACCEPTANCE.first-safe-slice.md: file # Техническая приёмка первого безопасного среза и остаточные границы
       TASK_ACCEPTANCE.htmx-sidebar-navigation.md: file # Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата
       TASK_ACCEPTANCE.role-capability-section-editor.md: file # Техническая и визуальная приёмка группового редактора прав роли

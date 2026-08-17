@@ -560,7 +560,7 @@ TOOLS = [
             "message",
         ],
         "requires_confirmation": True,
-        "required_role_scope": "superuser",
+        "required_role_scope": "role_definition_editor",
     },
     {
         "id": "access.get_role_rules",

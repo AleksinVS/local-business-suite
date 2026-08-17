@@ -153,6 +153,117 @@ class AccessWorkspaceTests(TestCase):
         self.assertFalse(set(actor_row["site_sections"]) & {"Заявки", "Доски", "Система"})
         self.assertGreaterEqual(len(response.context["field_form"].capability_groups), 1)
 
+    def test_role_definition_administration_matrix_and_click_without_field(self):
+        from apps.accounts.access_contracts import (
+            apply_role_definition_change,
+            can_edit_role_definitions,
+            preview_role_definition_change,
+            role_definition_read_model,
+        )
+        from apps.settings_center.contract_services import _require_contract_editor
+
+        superuser = User.objects.create_superuser(username="delegated-root", password="pass")
+        staff = User.objects.create_user(username="delegated-staff", password="pass", is_staff=True)
+        admin = User.objects.create_user(username="delegated-admin", password="pass")
+        manager = User.objects.create_user(username="delegated-manager", password="pass")
+        regular = User.objects.create_user(username="delegated-regular", password="pass")
+        inactive = User.objects.create_user(
+            username="delegated-inactive", password="pass", is_staff=True, is_active=False
+        )
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        admin.groups.add(admin_group)
+        manager.groups.add(manager_group)
+        role_model = role_definition_read_model("admin")
+        allowed = (superuser, staff, admin)
+        denied = (manager, regular, inactive)
+
+        for actor in allowed:
+            with self.subTest(actor=actor.username):
+                self.assertTrue(can_edit_role_definitions(actor))
+                self.assertEqual(
+                    _require_contract_editor(actor=actor, setting_id="core.contract.role_rules").pk,
+                    actor.pk,
+                )
+                proposed = copy.deepcopy(role_model["config"])
+                proposed["display_name"] = f"Администратор {actor.username}"
+                preview = preview_role_definition_change(
+                    actor=actor,
+                    role_code="admin",
+                    proposed_config=proposed,
+                    base_hash=role_model["base_hash"],
+                )
+                self.assertTrue(preview["preview_token"])
+                self.client.force_login(actor)
+                response = self.client.get(
+                    reverse("settings_center:access_workspace"),
+                    {"view": "roles", "object": "admin", "panel": "inspector"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "role-capability-editor")
+                self.assertContains(response, '<span class="nav-text">Доступ</span>', html=False)
+                self.assertEqual(
+                    self.client.get(reverse("settings_center:role_definition", args=["admin"])).status_code,
+                    200,
+                )
+
+        for actor in denied:
+            with self.subTest(actor=actor.username):
+                self.assertFalse(can_edit_role_definitions(actor))
+                with self.assertRaises(PermissionDenied):
+                    _require_contract_editor(actor=actor, setting_id="core.contract.role_rules")
+                self.client.force_login(actor)
+                workspace_response = self.client.get(
+                    reverse("settings_center:access_workspace"),
+                    {"view": "roles", "object": "admin", "panel": "inspector"},
+                )
+                if actor is manager:
+                    self.assertEqual(workspace_response.status_code, 200)
+                    self.assertNotContains(workspace_response, "role-capability-editor")
+                else:
+                    self.assertIn(workspace_response.status_code, {302, 403})
+                self.assertIn(
+                    self.client.get(reverse("settings_center:role_definition", args=["admin"])).status_code,
+                    {302, 403},
+                )
+
+        staff_admin = User.objects.create_user(
+            username="delegated-staff-state", password="pass", is_staff=True
+        )
+        staff_admin.groups.add(admin_group)
+        proposed = copy.deepcopy(role_model["config"])
+        proposed["display_name"] = "Изменение до смены staff"
+        preview = preview_role_definition_change(
+            actor=staff_admin,
+            role_code="admin",
+            proposed_config=proposed,
+            base_hash=role_model["base_hash"],
+        )
+        staff_admin.is_staff = False
+        staff_admin.save(update_fields=["is_staff"])
+        with self.assertRaisesMessage(ValidationError, "Права администратора изменились"):
+            apply_role_definition_change(
+                actor=staff_admin,
+                role_code="admin",
+                proposed_config=proposed,
+                base_hash=role_model["base_hash"],
+                preview_token=preview["preview_token"],
+                risk_confirmed=True,
+            )
+
+    def test_role_definition_predicate_fails_closed_when_role_contract_is_unavailable(self):
+        from apps.accounts.access_contracts import can_edit_role_definitions
+        from apps.core.contract_store import ContractStoreError
+
+        actor = User.objects.create_user(username="contract-store-role-admin")
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        actor.groups.add(admin_group)
+        with patch(
+            "apps.accounts.access_contracts.contract_role_configs",
+            side_effect=ContractStoreError("role contract unavailable"),
+        ):
+            self.assertFalse(can_edit_role_definitions(actor))
+
     def test_role_definition_form_preserves_active_group_and_all_capabilities(self):
         from apps.accounts.access_contracts import role_definition_read_model
         from apps.accounts.selectors import contract_role_names
@@ -812,6 +923,33 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertIn("access_administration_e2e: OK", output.getvalue())
         self.assertFalse(User.objects.filter(username__startswith="__access_admin_e2e_").exists())
 
+    def test_access_administration_e2e_command_does_not_touch_live_role_memberships(self):
+        technician, _ = Group.objects.get_or_create(name="technician")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        technician_outsider = User.objects.create_user(username="live-technician-outsider")
+        manager_outsider = User.objects.create_user(username="live-manager-outsider")
+        technician_outsider.groups.add(technician)
+        manager_outsider.groups.add(manager)
+        before_technician_groups = set(technician_outsider.groups.values_list("name", flat=True))
+        before_manager_groups = set(manager_outsider.groups.values_list("name", flat=True))
+
+        call_command("access_administration_e2e", stdout=StringIO())
+
+        technician_outsider.refresh_from_db()
+        manager_outsider.refresh_from_db()
+        self.assertEqual(
+            set(technician_outsider.groups.values_list("name", flat=True)),
+            before_technician_groups,
+        )
+        self.assertEqual(
+            set(manager_outsider.groups.values_list("name", flat=True)),
+            before_manager_groups,
+        )
+        self.assertTrue(technician.user_set.filter(pk=technician_outsider.pk).exists())
+        self.assertTrue(manager.user_set.filter(pk=manager_outsider.pk).exists())
+        self.assertFalse(Group.objects.filter(name="__access_admin_e2e_technician__").exists())
+        self.assertFalse(Group.objects.filter(name="__access_admin_e2e_manager__").exists())
+
     def test_access_e2e_response_context_supports_context_list_and_checks_status(self):
         from .management.commands.access_administration_e2e import Command
 
@@ -890,7 +1028,9 @@ class SettingsCenterRegistryTests(TestCase):
         response = self.client.post(url, {"action": "apply", "payload": "{}", "confirm": "on"})
 
         self.assertRedirects(response, reverse("settings_center:role_catalog"), fetch_redirect_response=False)
-        self.assertEqual(self.client.get(response["Location"]).status_code, 403)
+        role_catalog = self.client.get(response["Location"])
+        self.assertEqual(role_catalog.status_code, 200)
+        self.assertContains(role_catalog, "Каталог ролей")
 
     def test_env_status_shows_russian_title_and_english_keys(self):
         staff = User.objects.create_user(username="settings-env-staff", password="pass", is_staff=True)
@@ -1229,7 +1369,7 @@ class SettingsCenterContractTests(TestCase):
         actor.groups.add(manager_group)
         payload = load_json_file("contracts/role_rules.json")
 
-        with self.assertRaisesMessage(PermissionDenied, "только суперпользователь"):
+        with self.assertRaisesMessage(PermissionDenied, "администратору Django (is_staff)"):
             apply_contract_payload(
                 actor=actor,
                 setting_id="core.contract.role_rules",

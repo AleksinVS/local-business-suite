@@ -11,7 +11,7 @@ from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count
 
-from apps.core.contract_store import get_contract, normalized_hash
+from apps.core.contract_store import ContractStoreError, get_contract, normalized_hash
 
 from .selectors import capability_catalog, contract_role_configs, role_risk_markers
 
@@ -48,6 +48,10 @@ CAPABILITY_RISK_LABELS = {
     "elevated": "Повышенный риск",
     "critical": "Критический риск",
 }
+ROLE_DEFINITION_EDITOR_DENIED_MESSAGE = (
+    "Определения ролей доступны активному суперпользователю, администратору Django "
+    "(is_staff) или участнику роли admin."
+)
 
 CAPABILITY_GROUP_BY_CAPABILITY = {
     "view_scope": "kanban",
@@ -71,6 +75,22 @@ CAPABILITY_GROUP_BY_CAPABILITY = {
     "memory_organization_write": "memory",
     "memory_organization_review": "memory",
 }
+
+
+def can_edit_role_definitions(actor):
+    """Return whether an active authenticated actor may edit role definitions."""
+    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
+        return False
+    current = get_user_model().objects.filter(pk=actor.pk, is_active=True).first()
+    if not current:
+        return False
+    if current.is_superuser or current.is_staff:
+        return True
+    try:
+        has_admin_role = "admin" in contract_role_configs()
+    except ContractStoreError:
+        return False
+    return has_admin_role and current.groups.filter(name="admin").exists()
 
 
 def capability_group_code(code, _metadata=None):
@@ -284,17 +304,18 @@ def apply_role_definition_change(
 
 
 def _require_role_definition_editor(actor):
-    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
+    if not getattr(actor, "is_authenticated", False):
         raise PermissionDenied("Требуется вход в систему.")
+    if not can_edit_role_definitions(actor):
+        raise PermissionDenied(ROLE_DEFINITION_EDITOR_DENIED_MESSAGE)
     current = get_user_model().objects.get(pk=actor.pk)
-    if not current.is_active or not current.is_superuser:
-        raise PermissionDenied("Определения ролей может изменять только активный суперпользователь.")
     return current
 
 
 def _role_editor_actor_state(actor):
     return {
         "is_active": bool(actor.is_active),
+        "is_staff": bool(actor.is_staff),
         "is_superuser": bool(actor.is_superuser),
         "roles": sorted(actor.groups.values_list("name", flat=True)),
     }

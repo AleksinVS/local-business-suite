@@ -701,6 +701,32 @@ class AIViewsTests(TestCase):
         self.assertEqual(action.request_payload["command"]["confirmation_state"], "pending_required")
         self.assertEqual(action.request_payload["command"]["tool_code"], "access.update_role_permissions")
 
+    def test_role_update_prepare_uses_delegated_role_definition_editor(self):
+        from apps.ai.tool_definitions import get_tool_registry
+        from apps.ai.services import prepare_role_permissions_change_for_actor
+
+        self.assertEqual(
+            get_tool_registry()["access.update_role_permissions"]["required_role_scope"],
+            "role_definition_editor",
+        )
+        staff = User.objects.create_user(username="staff-role-definition", is_staff=True)
+        delegated_admin = User.objects.create_user(username="admin-role-definition")
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        delegated_admin.groups.add(admin_group)
+        payload = {"role_name": "admin", "permissions_map": {"manage_roles": False}}
+
+        for actor in (staff, delegated_admin):
+            with self.subTest(actor=actor.username):
+                prepared, preview = prepare_role_permissions_change_for_actor(
+                    actor=actor,
+                    payload=payload,
+                )
+                self.assertEqual(prepared["role_name"], "admin")
+                self.assertTrue(preview["changes"])
+
+        with self.assertRaises(PermissionDenied):
+            prepare_role_permissions_change_for_actor(actor=self.manager, payload=payload)
+
     def test_role_update_tool_rejects_contract_metadata_keys(self):
         self.manager.is_superuser = True
         self.manager.save(update_fields=["is_superuser"])

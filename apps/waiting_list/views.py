@@ -3,7 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -169,12 +169,12 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
                 priority_cito=form.cleaned_data.get("priority_cito", False),
                 comment=form.cleaned_data.get("comment", ""),
             )
-            response = redirect("waiting_list:dashboard")
             if self.request.htmx:
-                response["HX-Redirect"] = self.get_success_url()
-            else:
-                messages.success(self.request, "Запись добавлена в лист ожидания.")
-            return response
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = "waitingListEntryCreated"
+                return response
+            messages.success(self.request, "Запись добавлена в лист ожидания.")
+            return redirect("waiting_list:dashboard")
         except WaitingListValidationError as e:
             form.add_error(None, str(e))
             return self.form_invalid(form)

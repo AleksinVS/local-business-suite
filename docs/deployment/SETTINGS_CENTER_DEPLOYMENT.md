@@ -140,7 +140,9 @@ python manage.py reconcile_ai_action --token <uuid> --outcome failed --operator 
 короче 32 символов; нельзя повторять `DJANGO_SECRET_KEY`. При ротации увеличьте
 версию ключа.
 
-Определения ролей меняет только активный superuser. Стандартные access-поля User,
+Определения ролей меняет активный аутентифицированный superuser, администратор
+Django (`is_staff`) или участник контрактной роли `admin`; одного `manage_roles`
+недостаточно. Стандартные access-поля User,
 permissions Group и `Board.allowed_groups` в Django Admin доступны только для
 чтения; резервное назначение открывается отдельной ссылкой в карточке User и
 обязательно требует причину, preview и подтверждение. В карточке Board есть такой

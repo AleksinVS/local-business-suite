@@ -14,6 +14,7 @@ from .forms import DepartmentForm
 from .models import Department
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import WorkOrder, WorkOrderStatus
+from apps.accounts.access_contracts import can_edit_role_definitions
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -81,11 +82,7 @@ class LegacyRoleRulesRedirectView(LoginRequiredMixin, UserPassesTestMixin, Templ
     """Закрытый совместимый адрес удалённого массового редактора ролей."""
 
     def test_func(self):
-        return bool(
-            self.request.user.is_authenticated
-            and self.request.user.is_active
-            and self.request.user.is_superuser
-        )
+        return can_edit_role_definitions(self.request.user)
 
     def get(self, request, *args, **kwargs):
         return redirect("settings_center:role_catalog")

@@ -334,6 +334,49 @@ class WaitingListRouteTests(TestCase):
             WaitingListEntry.objects.filter(patient_name="Новый Пациент").exists()
         )
 
+    def test_htmx_create_returns_event_without_redirect_or_full_page(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:create"),
+            {
+                "patient_name": "Новый HTMX Пациент",
+                "patient_dob": "20.05.1980",
+                "patient_phone": "+7 (905) 123-45-67",
+                "service_id": "s2",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="entry-detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.headers["HX-Trigger"], "waitingListEntryCreated")
+        self.assertNotIn("HX-Redirect", response.headers)
+        self.assertEqual(response.content, b"")
+        self.assertTrue(
+            WaitingListEntry.objects.filter(patient_name="Новый HTMX Пациент").exists()
+        )
+
+    def test_htmx_create_validation_error_stays_in_drawer_form(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:create"),
+            {
+                "patient_name": "Новая запись с ошибкой",
+                "patient_dob": "20.05.1980",
+                "patient_phone": "123",
+                "service_id": "s2",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="entry-detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="waiting-list-form"')
+        self.assertContains(response, "Неверный формат телефона")
+        self.assertFalse(
+            WaitingListEntry.objects.filter(patient_name="Новая запись с ошибкой").exists()
+        )
+
     def test_detail_view_renders(self):
         self.client.force_login(self.user)
         response = self.client.get(

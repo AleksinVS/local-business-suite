@@ -546,8 +546,13 @@ class DepartmentViewTests(TestCase):
             password="pass",
             email="role-admin@example.test",
         )
+        cls.contract_admin = User.objects.create_user(
+            username="contract-admin-ui", password="pass"
+        )
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        admin_group, _ = Group.objects.get_or_create(name="admin")
         cls.manager.groups.add(manager_group)
+        cls.contract_admin.groups.add(admin_group)
         cls.department = Department.objects.create(name="Стационар")
 
     def test_manager_can_open_department_directory(self):
@@ -574,6 +579,13 @@ class DepartmentViewTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, reverse("admin:index"))
+
+    def test_access_nav_visible_for_staff_and_contract_admin_role(self):
+        for actor in (self.staff, self.contract_admin):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("core:dashboard"))
+                self.assertContains(response, reverse("settings_center:access_workspace"))
 
     @override_settings(APP_DISPLAY_NAME="БУЗ ВО ВОБ №3")
     def test_custom_app_display_name_is_rendered(self):
@@ -616,15 +628,26 @@ class DepartmentViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_active_superuser_legacy_role_rules_route_redirects_to_role_catalog(self):
-        self.client.force_login(self.role_admin)
+        for actor in (self.role_admin, self.staff, self.contract_admin):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("core:role_rules"))
+                self.assertRedirects(
+                    response,
+                    reverse("settings_center:role_catalog"),
+                    fetch_redirect_response=False,
+                )
 
-        response = self.client.get(reverse("core:role_rules"))
-
-        self.assertRedirects(
-            response,
-            reverse("settings_center:role_catalog"),
-            fetch_redirect_response=False,
+    def test_inactive_role_definition_editor_and_manager_are_denied_legacy_route(self):
+        inactive_staff = User.objects.create_user(
+            username="inactive-role-editor", password="pass", is_staff=True, is_active=False
         )
+        for actor in (self.manager, inactive_staff):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("core:role_rules"))
+                expected_status = 403 if actor is self.manager else 302
+                self.assertEqual(response.status_code, expected_status)
 
     def test_legacy_role_rules_post_is_not_allowed_and_contract_is_unchanged(self):
         from apps.core.contract_store import get_contract

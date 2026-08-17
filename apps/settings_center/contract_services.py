@@ -262,8 +262,15 @@ def _require_contract_editor(*, actor, setting_id, descriptor=None):
     actor_state = get_user_model().objects.filter(pk=actor.pk).first()
     if not actor_state or not actor_state.is_active:
         raise PermissionDenied("Требуется активная учетная запись.")
-    if setting_id == "core.contract.role_rules" and not actor_state.is_superuser:
-        raise PermissionDenied("Определения ролей может изменять только суперпользователь.")
+    if setting_id == "core.contract.role_rules":
+        from apps.accounts.access_contracts import (
+            ROLE_DEFINITION_EDITOR_DENIED_MESSAGE,
+            can_edit_role_definitions,
+        )
+
+        if not can_edit_role_definitions(actor_state):
+            raise PermissionDenied(ROLE_DEFINITION_EDITOR_DENIED_MESSAGE)
+        return actor_state
     required_permission = getattr(descriptor, "required_permission", "settings_center.manage")
     if required_permission == "settings_center.manage_users" and not actor_state.is_superuser:
         raise PermissionDenied("Изменение доступно только суперпользователю.")

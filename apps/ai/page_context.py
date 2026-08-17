@@ -9,6 +9,8 @@ from typing import Any
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
 
+from apps.core.contract_store import get_contract
+
 from apps.workorders.policies import (
     can_comment,
     can_confirm_closure,
@@ -21,7 +23,6 @@ from apps.waiting_list.models import WaitingListEntry, WaitingListStatus
 from apps.waiting_list.policies import (
     can_edit_waiting_list_entry,
     can_transition_waiting_list_entry,
-    can_view_waiting_list,
 )
 
 from .models import AIWindowContextSnapshot, ChatMessage
@@ -146,16 +147,22 @@ def resolve_page_context(user, envelope: dict[str, Any]) -> dict[str, Any]:
         return summary
 
     if source_code == "waiting_list" and object_type == "waiting_list_entry" and object_id:
-        if not can_view_waiting_list(user):
-            raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.")
+        from apps.waiting_list.selectors import visible_waiting_list_entries
+        role_rules_payload = get_contract("role_rules")
         try:
-            entry = WaitingListEntry.objects.get(pk=int(object_id))
+            entry = visible_waiting_list_entries(
+                user, rules_payload=role_rules_payload
+            ).get(pk=int(object_id))
         except (ValueError, TypeError):
             raise ValidationError("Некорректный ID записи листа ожидания.")
         except WaitingListEntry.DoesNotExist as exc:
             raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.") from exc
         transition_targets = [
-            status for status, _label in WaitingListStatus.choices if can_transition_waiting_list_entry(user, entry)
+            status
+            for status, _label in WaitingListStatus.choices
+            if can_transition_waiting_list_entry(
+                user, entry, status, rules_payload=role_rules_payload
+            )
         ]
         summary["selection"] = {
             "source_code": "waiting_list",
@@ -172,8 +179,12 @@ def resolve_page_context(user, envelope: dict[str, Any]) -> dict[str, Any]:
             "updated_at": entry.updated_at.isoformat() if entry.updated_at else "",
         }
         summary["capabilities"] = {
-            "can_edit": can_edit_waiting_list_entry(user, entry),
-            "can_transition": can_transition_waiting_list_entry(user, entry),
+            "can_edit": can_edit_waiting_list_entry(
+                user, entry, rules_payload=role_rules_payload
+            ),
+            "can_transition": can_transition_waiting_list_entry(
+                user, entry, rules_payload=role_rules_payload
+            ),
             "transition_targets": transition_targets,
         }
         summary["context_hint"] = f"waiting_list / {entry.pk}"

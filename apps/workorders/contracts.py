@@ -27,6 +27,28 @@ ROLE_SCOPE_VALUES = {
     "assigned_or_unassigned_or_authored",
 }
 
+# Values used by the explicit waiting-list capability model.  These are kept
+# here, next to the role-contract validator, so the editor and future domain
+# policies cannot silently invent a second vocabulary.
+WAITING_LIST_SCOPE_VALUES = ("none", "authored", "all")
+WAITING_LIST_STATUS_VALUES = ("waiting", "scheduled", "confirmed", "cancelled")
+WORKORDER_STATUS_VALUES = (
+    "new",
+    "accepted",
+    "in_progress",
+    "on_hold",
+    "resolved",
+    "closed",
+    "cancelled",
+)
+CAPABILITY_VALUES_SOURCES = {
+    "workorder_scopes",
+    "waiting_list_scopes",
+    "workorder_statuses",
+    "waiting_list_statuses",
+}
+CAPABILITY_VALUES_WILDCARD_SOURCES = {"workorder_statuses", "waiting_list_statuses"}
+
 REQUIRED_ROLE_KEYS = {
     "view_scope",
     "create_workorder",
@@ -62,16 +84,56 @@ REQUIRED_WORKFLOW_KEYS = {
 # для нетехнических пользователей (ADR-0034).
 CAPABILITY_METADATA_KEY = "$capabilities"
 CAPABILITY_TYPES = {"flag", "scope", "targets"}
-CAPABILITY_SECTIONS = {"workorders", "organization", "ai_memory", "personal_data"}
+CAPABILITY_SECTIONS = {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"}
 CAPABILITY_RISKS = {"normal", "elevated", "critical"}
+LEGACY_CAPABILITY_SOURCES = {
+    "view_scope": "workorder_scopes",
+    "edit_scope": "workorder_scopes",
+    "comment_scope": "workorder_scopes",
+    "upload_attachment_scope": "workorder_scopes",
+    "confirm_closure_scope": "workorder_scopes",
+    "rate_scope": "workorder_scopes",
+    "transition_scope": "workorder_scopes",
+    "transition_targets": "workorder_statuses",
+}
 
 
-def _validate_capability_metadata(metadata):
+def is_legacy_capability_metadata(metadata):
+    return (
+        isinstance(metadata, dict)
+        and "view_waiting_list" in metadata
+        and not any(key.startswith("waiting_list_") for key in metadata)
+    )
+
+
+def resolve_capability_values_source(capability, definition, *, metadata=None):
+    legacy_compat = is_legacy_capability_metadata(metadata)
+    source = definition.get("values_source")
+    if source is None and legacy_compat:
+        source = LEGACY_CAPABILITY_SOURCES.get(capability)
+    if definition.get("type") != "flag" and source not in CAPABILITY_VALUES_SOURCES:
+        raise ValidationError(
+            f"У права '{capability}' должно быть известное поле values_source."
+        )
+    return source
+
+
+def _validate_capability_metadata(metadata, *, legacy_compat=False):
     if not isinstance(metadata, dict):
         raise ValidationError("Блок $capabilities должен быть JSON-объектом.")
+    allowed_fields = {"type", "label", "description", "section", "risk", "values_source"}
     for key, entry in metadata.items():
+        if not isinstance(key, str) or not key or key.startswith("$"):
+            raise ValidationError(f"Код права '{key}' должен быть непустой строкой без префикса '$'.")
         if not isinstance(entry, dict):
             raise ValidationError(f"Описание права '{key}' должно быть JSON-объектом.")
+        unknown_fields = sorted(set(entry) - allowed_fields)
+        if unknown_fields:
+            raise ValidationError(
+                f"Описание права '{key}' содержит неизвестные поля: "
+                + ", ".join(unknown_fields)
+                + "."
+            )
         if entry.get("type") not in CAPABILITY_TYPES:
             raise ValidationError(
                 f"У права '{key}' поле type должно быть одним из: "
@@ -92,6 +154,48 @@ def _validate_capability_metadata(metadata):
             raise ValidationError(
                 f"У права '{key}' неизвестный уровень риска '{entry['risk']}'."
             )
+        values_source = resolve_capability_values_source(
+            key,
+            entry,
+            metadata=metadata if legacy_compat else None,
+        )
+        if entry["type"] == "flag":
+            if "values_source" in entry:
+                raise ValidationError(
+                    f"У булева права '{key}' поле values_source запрещено."
+                )
+        elif values_source not in CAPABILITY_VALUES_SOURCES:
+            raise ValidationError(
+                f"У права '{key}' должно быть известное поле values_source."
+            )
+
+
+def capability_values(source, *, workflow_payload=None):
+    """Return the canonical values for a capability ``values_source``.
+
+    ``workflow_payload`` is optional for callers that validate a role contract
+    without loading the workflow contract.  The normal read path uses the
+    canonical fallback list; the write path supplies the workflow payload and
+    therefore validates against its current status list.
+    """
+    if source == "workorder_scopes":
+        return tuple(sorted(ROLE_SCOPE_VALUES))
+    if source == "waiting_list_scopes":
+        return WAITING_LIST_SCOPE_VALUES
+    if source == "waiting_list_statuses":
+        return (*WAITING_LIST_STATUS_VALUES, "*")
+    if source == "workorder_statuses":
+        if isinstance(workflow_payload, dict):
+            statuses = workflow_payload.get("statuses", ())
+            if isinstance(statuses, list) and all(
+                isinstance(status, str) and status for status in statuses
+            ):
+                return (*statuses, "*")
+        # The role contract is also read independently by ContractStore.  Keep
+        # that read path deterministic while the write path still cross-checks
+        # against the current workflow contract.
+        return (*WORKORDER_STATUS_VALUES, "*")
+    raise ValidationError(f"Неизвестный источник значений capability: {source!r}.")
 
 
 def validate_role_rules_payload(payload, workflow_payload=None):
@@ -127,8 +231,9 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             "Поле $administration.role_assignment_allowlist должно быть JSON-объектом."
         )
     capability_metadata = payload.get(CAPABILITY_METADATA_KEY, {})
+    legacy_compat = is_legacy_capability_metadata(capability_metadata)
     if capability_metadata:
-        _validate_capability_metadata(capability_metadata)
+        _validate_capability_metadata(capability_metadata, legacy_compat=legacy_compat)
     for actor_role, target_roles in allowlist.items():
         if actor_role not in role_names:
             raise ValidationError(
@@ -166,7 +271,7 @@ def validate_role_rules_payload(payload, workflow_payload=None):
     for role, config in payload.items():
         if role.startswith("$"):
             if role == CAPABILITY_METADATA_KEY:
-                _validate_capability_metadata(config)
+                _validate_capability_metadata(config, legacy_compat=legacy_compat)
             continue
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")
@@ -186,7 +291,13 @@ def validate_role_rules_payload(payload, workflow_payload=None):
                     + ", ".join(missing_capabilities)
                     + "."
                 )
-            _validate_role_capability_values(role, config, capability_metadata)
+            _validate_role_capability_values(
+                role,
+                config,
+                capability_metadata,
+                workflow_payload=workflow_payload,
+                legacy_compat=legacy_compat,
+            )
         else:
             legacy_admin_value = bool(config.get("manage_inventory"))
             for key in BACKWARD_COMPAT_ROLE_DEFAULT_KEYS:
@@ -235,7 +346,14 @@ def _role_has_critical_capability(config, metadata):
     return False
 
 
-def _validate_role_capability_values(role, config, metadata):
+def _validate_role_capability_values(
+    role,
+    config,
+    metadata,
+    *,
+    workflow_payload=None,
+    legacy_compat=False,
+):
     for capability, definition in metadata.items():
         value = config.get(capability)
         capability_type = definition.get("type")
@@ -243,19 +361,93 @@ def _validate_role_capability_values(role, config, metadata):
             raise ValidationError(
                 f"У роли '{role}' флаг '{capability}' должен быть логическим значением."
             )
-        if capability_type == "scope" and value not in ROLE_SCOPE_VALUES:
-            raise ValidationError(
-                f"У роли '{role}' поле '{capability}' содержит недопустимую область доступа."
+        if capability_type == "scope":
+            source = resolve_capability_values_source(
+                capability,
+                definition,
+                metadata=metadata if legacy_compat else None,
             )
+            allowed = set(capability_values(source, workflow_payload=workflow_payload))
+            if value not in allowed:
+                raise ValidationError(
+                    f"У роли '{role}' поле '{capability}' содержит недопустимое значение."
+                )
         if capability_type == "targets":
+            source = resolve_capability_values_source(
+                capability,
+                definition,
+                metadata=metadata if legacy_compat else None,
+            )
+            allowed = set(capability_values(source, workflow_payload=workflow_payload))
             if value == "*":
+                if source not in CAPABILITY_VALUES_WILDCARD_SOURCES:
+                    raise ValidationError(
+                        f"У роли '{role}' wildcard для права '{capability}' запрещён."
+                    )
                 continue
             if not isinstance(value, list) or not all(
-                isinstance(item, str) and item for item in value
+                isinstance(item, str) and item in allowed for item in value
             ):
                 raise ValidationError(
-                    f"У роли '{role}' поле '{capability}' должно быть списком строк или '*'."
+                    f"У роли '{role}' поле '{capability}' содержит неизвестное значение."
                 )
+            if len(value) != len(set(value)):
+                raise ValidationError(
+                    f"У роли '{role}' поле '{capability}' содержит повторяющиеся значения."
+                )
+            if "*" in value:
+                raise ValidationError(
+                    f"У роли '{role}' wildcard должен передаваться отдельно для права '{capability}'."
+                )
+
+    _validate_waiting_list_invariants(role, config, metadata)
+
+
+def _validate_waiting_list_invariants(role, config, metadata):
+    """Validate related waiting-list fields as one grant, not independently."""
+    waiting_fields = {
+        "waiting_list_edit_scope",
+        "waiting_list_edit_statuses",
+        "waiting_list_transition_scope",
+        "waiting_list_transition_from_statuses",
+        "waiting_list_transition_targets",
+    }
+    if not waiting_fields.intersection(metadata):
+        return
+    edit_scope = config.get("waiting_list_edit_scope")
+    edit_statuses = config.get("waiting_list_edit_statuses")
+    if edit_scope == "none" and edit_statuses != []:
+        raise ValidationError(
+            f"У роли '{role}' область редактирования листа ожидания 'none' требует пустого списка статусов."
+        )
+    if edit_scope != "none" and not isinstance(edit_statuses, list) and edit_statuses != "*":
+        raise ValidationError(
+            f"У роли '{role}' область редактирования листа ожидания требует статусы."
+        )
+    if edit_scope != "none" and isinstance(edit_statuses, list) and not edit_statuses:
+        raise ValidationError(
+            f"У роли '{role}' область редактирования листа ожидания требует непустого списка статусов."
+        )
+
+    transition_scope = config.get("waiting_list_transition_scope")
+    from_statuses = config.get("waiting_list_transition_from_statuses")
+    targets = config.get("waiting_list_transition_targets")
+    if transition_scope == "none" and (from_statuses != [] or targets != []):
+        raise ValidationError(
+            f"У роли '{role}' отключённый переход листа ожидания требует пустых списков статусов."
+        )
+    if transition_scope != "none":
+        for field, value in (
+            ("waiting_list_transition_from_statuses", from_statuses),
+            ("waiting_list_transition_targets", targets),
+        ):
+            if isinstance(value, list) and value:
+                continue
+            if value == "*":
+                continue
+            raise ValidationError(
+                f"У роли '{role}' область перехода листа ожидания требует непустого списка '{field}'."
+            )
 
 
 def validate_workflow_rules_payload(payload):

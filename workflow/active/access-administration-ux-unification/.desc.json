@@ -19,5 +19,7 @@
   "EXECUTOR_REPORT.delegated-role-definition-administration.md": "Отчёт делегированного редактирования определений ролей",
   "TASK_ACCEPTANCE.delegated-role-definition-administration.md": "Приёмка делегированного редактирования определений ролей",
   "EXECUTOR_REPORT.secret-status-containment.md": "Отчёт исключения сырых секретов из статуса env",
-  "TASK_ACCEPTANCE.secret-status-containment.md": "Приёмка защиты secret env status"
+  "TASK_ACCEPTANCE.secret-status-containment.md": "Приёмка защиты secret env status",
+  "EXECUTOR_REPORT.waiting-list-capability-model.md": "Отчёт реализации явной модели прав листа ожидания",
+  "TASK_ACCEPTANCE.waiting-list-capability-model.md": "Приёмка модели прав листа ожидания"
 }

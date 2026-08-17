@@ -5,7 +5,7 @@ from django.urls import reverse
 from apps.core.right_panels import RightPanelDescriptor, register_right_panel_provider
 
 from .models import WaitingListEntry
-from .policies import can_view_waiting_list
+from .selectors import visible_waiting_list_entries
 
 
 class WaitingListRightPanelProvider:
@@ -14,16 +14,16 @@ class WaitingListRightPanelProvider:
     supported_modes = ("view",)
 
     def can_open(self, user, object_id: str, mode: str = "view") -> bool:
-        if mode not in self.supported_modes or not can_view_waiting_list(user):
+        if mode not in self.supported_modes:
             return False
         try:
             pk = int(str(object_id).strip())
         except (TypeError, ValueError):
             return False
-        return WaitingListEntry.objects.filter(pk=pk).exists()
+        return visible_waiting_list_entries(user).filter(pk=pk).exists()
 
     def build_panel(self, user, object_id: str, mode: str = "view") -> RightPanelDescriptor:
-        entry = WaitingListEntry.objects.get(pk=int(str(object_id).strip()))
+        entry = visible_waiting_list_entries(user).get(pk=int(str(object_id).strip()))
         return RightPanelDescriptor(
             source_code=self.source_code,
             object_type=self.object_type,

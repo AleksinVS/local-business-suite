@@ -74,6 +74,12 @@ CAPABILITY_GROUP_BY_CAPABILITY = {
     "manage_ai_skills": "ai",
     "memory_organization_write": "memory",
     "memory_organization_review": "memory",
+    "waiting_list_view_scope": "waiting_list",
+    "waiting_list_edit_scope": "waiting_list",
+    "waiting_list_edit_statuses": "waiting_list",
+    "waiting_list_transition_scope": "waiting_list",
+    "waiting_list_transition_from_statuses": "waiting_list",
+    "waiting_list_transition_targets": "waiting_list",
 }
 
 
@@ -149,7 +155,10 @@ def role_definition_read_model(role_code):
     config = rules.get(role_code)
     if not isinstance(config, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
-    catalog = capability_catalog()
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    from apps.workorders.contracts import resolve_capability_values_source
     sections = []
     for group in capability_groups(catalog):
         sections.append({
@@ -162,6 +171,11 @@ def role_definition_read_model(role_code):
                     "label": metadata.get("label", code),
                     "description": metadata.get("description", ""),
                     "type": metadata.get("type", ""),
+                    "values_source": resolve_capability_values_source(
+                        code,
+                        metadata,
+                        metadata=catalog,
+                    ) if metadata.get("type") in {"scope", "targets"} else None,
                     "risk": metadata.get("risk", "normal"),
                     "risk_label": CAPABILITY_RISK_LABELS.get(metadata.get("risk", "normal"), ""),
                     "value": copy.deepcopy(config.get(code)),
@@ -188,7 +202,15 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
     before = rules.get(role_code)
     if not isinstance(before, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
-    after = _normalize_proposed_role(role_code=role_code, before=before, proposed=proposed_config)
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    after = _normalize_proposed_role(
+        role_code=role_code,
+        before=before,
+        proposed=proposed_config,
+        catalog=catalog,
+    )
     if before == after:
         raise ValidationError("В роли нет изменений для проверки.")
 
@@ -199,8 +221,13 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
 
     descriptor = get_registry().get("core.contract.role_rules")
     parse_and_validate_payload(descriptor, json.dumps(candidate, ensure_ascii=False))
-    changes = _role_definition_changes(before=before, after=after)
-    impact = _role_change_impact(role_code=role_code, before=before, after=after)
+    changes = _role_definition_changes(before=before, after=after, catalog=catalog)
+    impact = _role_change_impact(
+        role_code=role_code,
+        before=before,
+        after=after,
+        rules_snapshot=rules,
+    )
     risk_markers = [
         f"{change['label']}: {change['risk_label']}"
         for change in changes
@@ -247,11 +274,24 @@ def apply_role_definition_change(
     if normalized_hash(rules) != signed.get("base_hash"):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
     before = rules.get(role_code)
-    after = _normalize_proposed_role(role_code=role_code, before=before, proposed=proposed_config)
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    after = _normalize_proposed_role(
+        role_code=role_code,
+        before=before,
+        proposed=proposed_config,
+        catalog=catalog,
+    )
     if signed.get("after") != after:
         raise ValidationError("Поля роли изменились после предпросмотра.")
-    changes = _role_definition_changes(before=before, after=after)
-    impact = _role_change_impact(role_code=role_code, before=before, after=after)
+    changes = _role_definition_changes(before=before, after=after, catalog=catalog)
+    impact = _role_change_impact(
+        role_code=role_code,
+        before=before,
+        after=after,
+        rules_snapshot=rules,
+    )
     if signed.get("member_fingerprint") != _role_member_fingerprint(role_code) or signed.get(
         "impact_hash"
     ) != normalized_hash(impact):
@@ -273,7 +313,12 @@ def apply_role_definition_change(
     def locked_precondition(current_actor):
         if signed.get("actor_state") != _role_editor_actor_state(current_actor):
             raise ValidationError("Права администратора изменились после предпросмотра.")
-        current_impact = _role_change_impact(role_code=role_code, before=before, after=after)
+        current_impact = _role_change_impact(
+            role_code=role_code,
+            before=before,
+            after=after,
+            rules_snapshot=rules,
+        )
         if signed.get("member_fingerprint") != _role_member_fingerprint(role_code) or signed.get(
             "impact_hash"
         ) != normalized_hash(current_impact):
@@ -331,10 +376,9 @@ def _role_member_fingerprint(role_code):
     return normalized_hash(member_ids)
 
 
-def _normalize_proposed_role(*, role_code, before, proposed):
+def _normalize_proposed_role(*, role_code, before, proposed, catalog):
     if not isinstance(before, dict) or not isinstance(proposed, dict):
         raise ValidationError("Некорректное определение роли.")
-    catalog = capability_catalog()
     metadata_fields = {"display_name", "description"}
     unknown = sorted(set(proposed) - set(catalog) - metadata_fields)
     if unknown:
@@ -355,8 +399,7 @@ def _normalize_proposed_role(*, role_code, before, proposed):
     return after
 
 
-def _role_definition_changes(*, before, after):
-    catalog = capability_catalog()
+def _role_definition_changes(*, before, after, catalog):
     changes = []
     for code, label in (("display_name", "Название роли"), ("description", "Описание роли")):
         if before.get(code, "") == after.get(code, ""):
@@ -433,13 +476,21 @@ def _capability_change_direction(*, capability_type, before, after):
     return "mixed"
 
 
-def _role_change_impact(*, role_code, before, after):
+def _role_change_impact(*, role_code, before, after, rules_snapshot=None):
     users = list(
         get_user_model().objects.filter(groups__name=role_code)
         .prefetch_related("groups")
         .distinct()
     )
-    configs_before = dict(contract_role_configs())
+    snapshot = rules_snapshot if isinstance(rules_snapshot, dict) else get_contract("role_rules")
+    configs_before = {
+        code: dict(config)
+        for code, config in snapshot.items()
+        if isinstance(code, str) and not code.startswith("$") and isinstance(config, dict)
+    }
+    catalog = snapshot.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
     configs_after = copy.deepcopy(configs_before)
     configs_after[role_code] = after
     effective_change_count = 0
@@ -448,15 +499,15 @@ def _role_change_impact(*, role_code, before, after):
     requires_object_check_count = 0
     changed_scope = any(
         metadata.get("type") == "scope" and before.get(code) != after.get(code)
-        for code, metadata in capability_catalog().items()
+        for code, metadata in catalog.items()
     )
     for user in users:
         if user.is_superuser:
             system_override_count += 1
             continue
         role_names = [group.name for group in user.groups.all() if group.name in configs_before]
-        before_effective = _effective_role_values(role_names, configs_before)
-        after_effective = _effective_role_values(role_names, configs_after)
+        before_effective = _effective_role_values(role_names, configs_before, catalog=catalog)
+        after_effective = _effective_role_values(role_names, configs_after, catalog=catalog)
         if before_effective != after_effective:
             effective_change_count += 1
             if changed_scope:
@@ -473,11 +524,19 @@ def _role_change_impact(*, role_code, before, after):
     }
 
 
-def _effective_role_values(role_names, configs):
+def _effective_role_values(role_names, configs, *, catalog=None):
     result = {}
-    catalog = capability_catalog()
+    catalog = catalog if isinstance(catalog, dict) else capability_catalog()
     for capability, metadata in catalog.items():
-        if capability in {"transition_scope", "transition_targets"}:
+        if capability in {
+            "transition_scope",
+            "transition_targets",
+            "waiting_list_edit_scope",
+            "waiting_list_edit_statuses",
+            "waiting_list_transition_scope",
+            "waiting_list_transition_from_statuses",
+            "waiting_list_transition_targets",
+        }:
             continue
         values = [configs[role].get(capability) for role in role_names if role in configs]
         capability_type = metadata.get("type")
@@ -512,6 +571,32 @@ def _effective_role_values(role_names, configs):
         )
     }
     result["transition_grants"] = sorted(transition_grants)
+
+    # Scope and status lists are one grant.  Build combinations only inside a
+    # single role so one role's broad scope cannot be combined with another
+    # role's statuses into a permission neither role actually grants.
+    edit_grants = set()
+    transition_grants = set()
+    for role in role_names:
+        config = configs.get(role, {})
+        edit_scope = config.get("waiting_list_edit_scope", "none")
+        edit_statuses = config.get("waiting_list_edit_statuses", [])
+        if edit_scope != "none":
+            statuses = ["*"] if edit_statuses == "*" else edit_statuses
+            edit_grants.update((edit_scope, status) for status in statuses)
+        transition_scope = config.get("waiting_list_transition_scope", "none")
+        from_statuses = config.get("waiting_list_transition_from_statuses", [])
+        targets = config.get("waiting_list_transition_targets", [])
+        if transition_scope != "none":
+            sources = ["*"] if from_statuses == "*" else from_statuses
+            destinations = ["*"] if targets == "*" else targets
+            transition_grants.update(
+                (transition_scope, source, destination)
+                for source in sources
+                for destination in destinations
+            )
+    result["waiting_list_edit_grants"] = sorted(edit_grants)
+    result["waiting_list_transition_grants"] = sorted(transition_grants)
     return result
 
 

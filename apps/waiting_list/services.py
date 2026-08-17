@@ -1,12 +1,21 @@
 import re
 from datetime import date, datetime
+from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
+
+from apps.workorders.policies import role_rules
 
 from .models import (
     SERVICE_CHOICES,
     WaitingListAuditLog,
     WaitingListEntry,
     WaitingListStatus,
+)
+from .policies import (
+    can_create_waiting_list,
+    can_edit_waiting_list_entry,
+    can_transition_waiting_list_entry,
 )
 
 
@@ -58,6 +67,20 @@ class WaitingListValidationError(Exception):
     pass
 
 
+def _locked_active_actor(actor):
+    if not getattr(actor, "pk", None):
+        raise PermissionDenied("Пользователь не определён.")
+    current = (
+        get_user_model().objects.select_for_update().prefetch_related("groups").filter(
+            pk=actor.pk,
+            is_active=True,
+        ).first()
+    )
+    if current is None:
+        raise PermissionDenied("Пользователь неактивен или недоступен.")
+    return current
+
+
 @transaction.atomic
 def create_entry(
     *,
@@ -75,6 +98,11 @@ def create_entry(
     Create a new waiting list entry with server-side validation.
     Raises WaitingListValidationError on validation failure.
     """
+    actor = _locked_active_actor(author)
+    rules_payload = role_rules()
+    if not can_create_waiting_list(actor, rules_payload=rules_payload):
+        raise PermissionDenied("Создание записей листа ожидания запрещено.")
+
     # Server-side validation
     if not patient_name or len(patient_name.strip()) < 2:
         raise WaitingListValidationError("ФИО пациента обязательно (минимум 2 символа).")
@@ -96,7 +124,7 @@ def create_entry(
         raise WaitingListValidationError("Целевая дата не может быть позже крайней даты.")
 
     entry = WaitingListEntry.objects.create(
-        author=author,
+        author=actor,
         patient_name=patient_name.strip(),
         patient_dob=parsed_dob,
         patient_phone=patient_phone,
@@ -110,7 +138,7 @@ def create_entry(
     # Create audit log entry
     _create_audit_log(
         entry=entry,
-        actor=author,
+        actor=actor,
         action="Запись создана",
     )
 
@@ -135,7 +163,15 @@ def update_entry(
     Update a waiting list entry with validation.
     Raises WaitingListValidationError on validation failure.
     """
+    actor = _locked_active_actor(user)
     locked_entry = WaitingListEntry.objects.select_for_update().get(pk=entry.pk)
+    rules_payload = role_rules()
+    if not can_edit_waiting_list_entry(
+        actor,
+        locked_entry,
+        rules_payload=rules_payload,
+    ):
+        raise PermissionDenied("Редактирование этой записи запрещено.")
     normalized_values = {}
 
     if patient_name is not _NOT_PROVIDED:
@@ -195,7 +231,7 @@ def update_entry(
     changed_labels = [_AUDIT_FIELD_LABELS[field_name] for field_name in changed_fields]
     _create_audit_log(
         entry=locked_entry,
-        actor=user,
+        actor=actor,
         action=f"Изменены поля: {', '.join(changed_labels)}",
     )
 
@@ -212,9 +248,20 @@ def transition_entry(
     """
     Transition entry to a new status and create audit log.
     """
+    actor = _locked_active_actor(user)
     locked_entry = WaitingListEntry.objects.select_for_update().get(pk=entry.pk)
+    rules_payload = role_rules()
+    if not can_transition_waiting_list_entry(
+        actor,
+        locked_entry,
+        to_status,
+        rules_payload=rules_payload,
+    ):
+        raise PermissionDenied("Переход в выбранный статус запрещён.")
+    if to_status not in WaitingListStatus.values:
+        raise WaitingListValidationError("Недопустимый целевой статус.")
     if locked_entry.status == to_status:
-        return locked_entry
+        raise WaitingListValidationError("Запись уже находится в выбранном статусе.")
 
     locked_entry.status = to_status
     locked_entry.save(
@@ -223,7 +270,7 @@ def transition_entry(
 
     _create_audit_log(
         entry=locked_entry,
-        actor=user,
+        actor=actor,
         action=f"Статус изменен на '{ WaitingListStatus(to_status).label }'",
     )
 

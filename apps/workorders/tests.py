@@ -64,6 +64,7 @@ from .policies import (
     can_rate,
     can_transition,
     can_view,
+    active_role_rules,
     capability_flags,
     default_board_access_applies,
     has_role_capability,
@@ -2176,7 +2177,8 @@ class CapabilityRegistryTests(TestCase):
             self.assertTrue(label)
 
         keys = {key for key, _label, _description in flags}
-        self.assertIn("view_waiting_list", keys)
+        self.assertIn("create_waiting_list", keys)
+        self.assertNotIn("view_waiting_list", keys)
         self.assertIn("memory_organization_write", keys)
 
     def test_every_capability_has_ui_section_and_risk_metadata(self):
@@ -2186,7 +2188,7 @@ class CapabilityRegistryTests(TestCase):
         for key, metadata in capabilities.items():
             self.assertIn(
                 metadata.get("section"),
-                {"workorders", "organization", "ai_memory", "personal_data"},
+                {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"},
                 f"{key}: неизвестный section",
             )
             self.assertIn(
@@ -2209,6 +2211,32 @@ class CapabilityRegistryTests(TestCase):
 
         self.assertEqual(rules["view_scope"], "all")
         self.assertEqual(rules["transition_targets"], "*")
+        self.assertEqual(rules["waiting_list_view_scope"], "all")
+        self.assertEqual(rules["waiting_list_edit_scope"], "all")
+        self.assertEqual(rules["waiting_list_edit_statuses"], "*")
+        self.assertEqual(rules["waiting_list_transition_scope"], "all")
+        self.assertEqual(rules["waiting_list_transition_from_statuses"], "*")
+        self.assertEqual(rules["waiting_list_transition_targets"], "*")
+
+    def test_legacy_superuser_default_and_active_roleless_rules_remain_fail_closed(self):
+        legacy_rules = {
+            "legacy": {
+                "view_waiting_list": True,
+                "create_waiting_list": True,
+            }
+        }
+        root = User.objects.create_superuser(username="legacy-rules-root")
+        roleless = User.objects.create_user(username="active-roleless")
+        inactive = User.objects.create_user(username="inactive-roleless")
+        inactive.is_active = False
+        inactive.save(update_fields=["is_active"])
+
+        self.assertEqual(active_role_rules(root, rules_payload=legacy_rules)[0]["name"], "superuser")
+        self.assertTrue(active_role_rules(root, rules_payload=legacy_rules)[0]["view_waiting_list"])
+        default_rules = active_role_rules(roleless, rules_payload=legacy_rules)
+        self.assertEqual(default_rules[0]["name"], "default_board_viewer")
+        self.assertFalse(default_rules[0]["view_waiting_list"])
+        self.assertEqual(active_role_rules(inactive, rules_payload=legacy_rules), [])
 
     def test_inactive_superuser_has_no_capabilities(self):
         inactive_root = User.objects.create_superuser(username="inactive-policy-root")
@@ -2250,6 +2278,102 @@ class CapabilityRegistryTests(TestCase):
         unknown_capability["customer"]["unregistered_access"] = True
         with self.assertRaisesMessage(ValidationError, "неизвестные права"):
             validate_role_rules_payload(unknown_capability)
+
+    def test_waiting_list_capabilities_have_separate_sources_and_doctor_defaults(self):
+        from .contracts import capability_values
+
+        metadata = self.base_role_rules["$capabilities"]
+        for code in (
+            "view_scope",
+            "transition_targets",
+            "waiting_list_view_scope",
+            "waiting_list_edit_statuses",
+            "waiting_list_transition_targets",
+        ):
+            self.assertIn("values_source", metadata[code])
+        self.assertEqual(
+            set(capability_values("waiting_list_scopes")),
+            {"none", "authored", "all"},
+        )
+        self.assertEqual(
+            set(capability_values("waiting_list_statuses")),
+            {"waiting", "scheduled", "confirmed", "cancelled", "*"},
+        )
+        self.assertEqual(
+            self.base_role_rules["doctor"]["waiting_list_edit_statuses"],
+            ["waiting", "scheduled"],
+        )
+        self.assertEqual(
+            self.base_role_rules["doctor"]["waiting_list_transition_from_statuses"],
+            ["waiting", "scheduled", "confirmed"],
+        )
+        self.assertEqual(
+            self.base_role_rules["doctor"]["waiting_list_transition_targets"],
+            ["waiting", "scheduled", "confirmed", "cancelled"],
+        )
+        for role in ("customer", "technician", "manager", "admin"):
+            self.assertEqual(self.base_role_rules[role]["waiting_list_edit_scope"], "none")
+            self.assertEqual(self.base_role_rules[role]["waiting_list_edit_statuses"], [])
+            self.assertEqual(self.base_role_rules[role]["waiting_list_transition_scope"], "none")
+            self.assertEqual(self.base_role_rules[role]["waiting_list_transition_targets"], [])
+
+    def test_waiting_list_related_invariants_and_values_source_fail_closed(self):
+        invalid_edit = copy.deepcopy(self.base_role_rules)
+        invalid_edit["doctor"]["waiting_list_edit_scope"] = "none"
+        with self.assertRaisesMessage(ValidationError, "требует пустого списка"):
+            validate_role_rules_payload(invalid_edit)
+
+        invalid_transition = copy.deepcopy(self.base_role_rules)
+        invalid_transition["doctor"]["waiting_list_transition_scope"] = "none"
+        with self.assertRaisesMessage(ValidationError, "отключённый переход"):
+            validate_role_rules_payload(invalid_transition)
+
+        unknown_source = copy.deepcopy(self.base_role_rules)
+        unknown_source["$capabilities"]["waiting_list_view_scope"]["values_source"] = "future"
+        with self.assertRaisesMessage(ValidationError, "известное поле values_source"):
+            validate_role_rules_payload(unknown_source)
+
+        missing_source = copy.deepcopy(self.base_role_rules)
+        missing_source["$capabilities"]["waiting_list_view_scope"].pop("values_source")
+        with self.assertRaisesMessage(ValidationError, "известное поле values_source"):
+            validate_role_rules_payload(missing_source)
+
+    def test_legacy_role_payload_without_waiting_capabilities_remains_compatible(self):
+        legacy = copy.deepcopy(self.base_role_rules)
+        waiting_codes = (
+            "waiting_list_view_scope",
+            "waiting_list_edit_scope",
+            "waiting_list_edit_statuses",
+            "waiting_list_transition_scope",
+            "waiting_list_transition_from_statuses",
+            "waiting_list_transition_targets",
+        )
+        for code in waiting_codes:
+            legacy["$capabilities"].pop(code)
+            for role in ("customer", "technician", "manager", "admin", "doctor"):
+                legacy[role].pop(code)
+        legacy["$capabilities"]["view_waiting_list"] = {
+            "type": "flag",
+            "section": "personal_data",
+            "risk": "critical",
+            "label": "Просмотр листа ожидания",
+            "description": "Совместимый старый флаг просмотра листа ожидания.",
+        }
+        for role in ("customer", "technician", "manager", "admin", "doctor"):
+            legacy[role]["view_waiting_list"] = role == "doctor"
+        for code in (
+            "view_scope",
+            "edit_scope",
+            "comment_scope",
+            "upload_attachment_scope",
+            "confirm_closure_scope",
+            "rate_scope",
+            "transition_scope",
+            "transition_targets",
+        ):
+            legacy["$capabilities"][code].pop("values_source", None)
+
+        validate_role_rules_payload(legacy)
 
     def test_role_assignment_allowlist_rejects_critical_or_unknown_roles(self):
         critical = copy.deepcopy(self.base_role_rules)

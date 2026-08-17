@@ -7,6 +7,7 @@ from apps.accounts.department_policy import available_user_departments
 from apps.accounts.models import ExternalIdentity
 from apps.accounts.selectors import contract_role_names, selected_role_names_for_user
 from apps.accounts.services import assignable_role_names_for_actor
+from apps.core.contract_store import get_contract
 
 
 class ContractPayloadForm(forms.Form):
@@ -49,32 +50,43 @@ class RoleDefinitionForm(forms.Form):
                 if capability_type == "flag":
                     field = forms.BooleanField(required=False, label=capability["label"])
                 elif capability_type == "scope":
-                    from apps.workorders.contracts import ROLE_SCOPE_VALUES
+                    from apps.workorders.contracts import capability_values
+                    from apps.workorders.policies import SCOPE_LABELS
 
+                    source = capability.get("values_source")
+                    choices = capability_values(
+                        source,
+                        workflow_payload=get_contract("workflow_rules"),
+                    )
                     field = forms.ChoiceField(
                         choices=[
-                            (choice, {
-                                "all": "Все",
-                                "department_branch": "Ветка подразделения",
-                                "assigned_or_unassigned_or_authored": "Свои, назначенные и неназначенные",
-                                "assigned_or_unassigned": "Назначенные и неназначенные",
-                                "assigned": "Только назначенные",
-                                "visible": "Все видимые",
+                            (choice, SCOPE_LABELS.get(choice, {
+                                "all": "Все записи",
                                 "authored": "Только созданные пользователем",
                                 "none": "Нет доступа",
-                            }.get(choice, choice))
-                            for choice in sorted(ROLE_SCOPE_VALUES)
+                            }.get(choice, choice)))
+                            for choice in choices
                         ],
                         label=capability["label"],
                     )
                 elif capability_type == "targets":
-                    from apps.core.contract_store import get_contract
+                    from apps.workorders.contracts import capability_values
+                    from apps.workorders.models import WorkOrderStatus
+                    from apps.waiting_list.models import WaitingListStatus
 
-                    workflow_statuses = get_contract("workflow_rules").get("statuses", [])
+                    source = capability.get("values_source")
+                    values = capability_values(
+                        source,
+                        workflow_payload=get_contract("workflow_rules"),
+                    )
+                    status_labels = dict(WorkOrderStatus.choices)
+                    status_labels.update(dict(WaitingListStatus.choices))
                     field = forms.MultipleChoiceField(
                         label=capability["label"],
                         choices=[("*", "Все статусы")] + [
-                            (status, status) for status in workflow_statuses
+                            (status, status_labels.get(status, status))
+                            for status in values
+                            if status != "*"
                         ],
                         widget=forms.CheckboxSelectMultiple,
                         required=False,
@@ -111,6 +123,15 @@ class RoleDefinitionForm(forms.Form):
         if self.is_bound:
             self.data = self.data.copy()
             self.data["active_group"] = self.initial["active_group"]
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("capability__waiting_list_edit_scope") == "none":
+            cleaned["capability__waiting_list_edit_statuses"] = []
+        if cleaned.get("capability__waiting_list_transition_scope") == "none":
+            cleaned["capability__waiting_list_transition_from_statuses"] = []
+            cleaned["capability__waiting_list_transition_targets"] = []
+        return cleaned
 
     def proposed_config(self):
         display_name = (

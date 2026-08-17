@@ -17,7 +17,7 @@ from apps.core.source_adapters import (
 from apps.memory.deidentification import pseudonymize_value
 
 from .models import WaitingListEntry, WaitingListStatus
-from .policies import can_view_waiting_list
+from .selectors import visible_waiting_list_entries
 
 
 class WaitingListSourceAdapter:
@@ -79,7 +79,12 @@ class WaitingListSourceAdapter:
         )
 
     def can_access(self, user: Any, envelope_or_object_id) -> bool:
-        return bool(getattr(user, "is_superuser", False) or can_view_waiting_list(user))
+        object_id = getattr(envelope_or_object_id, "object_id", envelope_or_object_id)
+        try:
+            pk = int(str(object_id).strip())
+        except (TypeError, ValueError):
+            return False
+        return visible_waiting_list_entries(user).filter(pk=pk).exists()
 
     def extract_analytics_facts(self, envelope: SourceObjectEnvelope):
         source_object = self.get_object(envelope.object_id)

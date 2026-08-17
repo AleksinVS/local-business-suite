@@ -169,6 +169,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     models.py: file # Модель WaitingListEntry
     policies.py: file # Политики доступа
     right_panel.py: file # RightPanelProvider листа ожидания для безопасного открытия записи в общем правом сайдбаре
+    selectors.py: file # Канонические ограниченные выборки записей листа ожидания
     services.py: file # Сервисы листа ожидания
     source_adapter.py: file # SourceAdapter листа ожидания для memory source_data search и analytics projection
     tests.py: file # Тесты приложения
@@ -584,6 +585,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.htmx-sidebar-navigation.md: file # Отчёт реализации частичной HTMX-навигации панелей
       EXECUTOR_REPORT.role-capability-section-editor.md: file # Отчёт явной карты группировки возможностей и локального редактора разделов
       EXECUTOR_REPORT.secret-status-containment.md: file # Отчёт исключения сырых секретов из статуса env
+      EXECUTOR_REPORT.waiting-list-capability-model.md: file # Отчёт реализации явной модели прав листа ожидания
       EXECUTOR_REPORT.workspace-ux-critique-cycle.md: file # Отчёт цикла критики и исправлений единого окна workspace
       TASK_ACCEPTANCE.capability-ui-taxonomy-correction.md: file # Приёмка пользовательской карты группировки прав роли
       TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md: file # Техническая и визуальная приёмка пакета 10
@@ -593,6 +595,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.htmx-sidebar-navigation.md: file # Техническая приёмка HTMX-навигации, истории и сохранения ИИ-чата
       TASK_ACCEPTANCE.role-capability-section-editor.md: file # Техническая и визуальная приёмка группового редактора прав роли
       TASK_ACCEPTANCE.secret-status-containment.md: file # Приёмка защиты secret env status
+      TASK_ACCEPTANCE.waiting-list-capability-model.md: file # Приёмка модели прав листа ожидания
       TASK_ACCEPTANCE.workspace-ux-critique-cycle.md: file # Техническая приёмка пакетов 06–08 единого окна доступа
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file

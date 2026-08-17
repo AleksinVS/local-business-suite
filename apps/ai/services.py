@@ -6,7 +6,7 @@ import uuid
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.utils import timezone
 
 from apps.core.models import Department
@@ -19,6 +19,7 @@ from apps.workorders.policies import (
     can_transition,
     can_confirm_closure,
     can_rate,
+    role_rules,
 )
 from apps.workorders.selectors import visible_workorders_queryset
 from apps.workorders.services import (
@@ -387,14 +388,23 @@ def get_workorder_for_actor(*, actor, workorder_id=None, number=None):
 
 
 def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
-    from apps.waiting_list.models import WaitingListEntry
-    from apps.waiting_list.policies import can_view_waiting_list
+    from apps.waiting_list.selectors import visible_waiting_list_entries
 
-    if not can_view_waiting_list(actor):
-        raise PermissionDenied("Пользователю недоступен лист ожидания.")
     if not entry_id:
         raise ValidationError("Нужно указать entry_id.")
-    entry = WaitingListEntry.objects.get(pk=entry_id)
+    current_actor = get_user_model().objects.filter(
+        pk=getattr(actor, "pk", None),
+        is_active=True,
+    ).first()
+    if current_actor is None:
+        raise PermissionDenied("Пользователю недоступен лист ожидания.")
+    rules_payload = role_rules()
+    try:
+        entry = visible_waiting_list_entries(
+            current_actor, rules_payload=rules_payload
+        ).get(pk=entry_id)
+    except ObjectDoesNotExist as exc:
+        raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.") from exc
     return {
         "id": entry.id,
         "status": entry.status,

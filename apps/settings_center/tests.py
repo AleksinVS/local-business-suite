@@ -80,6 +80,12 @@ class AccessWorkspaceTests(TestCase):
             "manage_inventory": "inventory",
             "view_waiting_list": "waiting_list",
             "create_waiting_list": "waiting_list",
+            "waiting_list_view_scope": "waiting_list",
+            "waiting_list_edit_scope": "waiting_list",
+            "waiting_list_edit_statuses": "waiting_list",
+            "waiting_list_transition_scope": "waiting_list",
+            "waiting_list_transition_from_statuses": "waiting_list",
+            "waiting_list_transition_targets": "waiting_list",
             "view_analytics": "analytics",
             "manage_departments": "departments",
             "manage_roles": "access",
@@ -88,7 +94,10 @@ class AccessWorkspaceTests(TestCase):
             "memory_organization_review": "memory",
         }
         self.assertEqual(CAPABILITY_GROUP_BY_CAPABILITY, expected)
-        self.assertEqual(set(CAPABILITY_GROUP_BY_CAPABILITY), set(catalog))
+        # Runtime role_rules may intentionally lag the code-first default until
+        # the normal preview/apply migration; every runtime capability must
+        # still have a group, while new default capabilities stay registered.
+        self.assertTrue(set(catalog) <= set(CAPABILITY_GROUP_BY_CAPABILITY))
         groups = capability_groups(catalog)
         grouped = [code for group in groups for code, _metadata in group["capabilities"]]
         self.assertEqual(sorted(grouped), sorted(catalog))
@@ -286,6 +295,70 @@ class AccessWorkspaceTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["active_group"], "memory")
         self.assertEqual(form.proposed_config(), model["config"])
+
+    def test_role_definition_form_exposes_waiting_choices_and_round_trips_wildcard(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.core.contract_store import _reset_for_tests
+
+        payload = load_json_file("contracts/role_rules.json")
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            role_file = root / "role_rules.json"
+            role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with override_settings(
+                LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
+                RUNTIME_CONTRACTS_DIR=root,
+            ):
+                _reset_for_tests()
+                try:
+                    model = role_definition_read_model("doctor")
+                    model = copy.deepcopy(model)
+                    model["config"]["waiting_list_transition_from_statuses"] = "*"
+                    model["config"]["waiting_list_transition_targets"] = "*"
+                    for section in model["sections"]:
+                        for capability in section["capabilities"]:
+                            if capability["code"] in {
+                                "waiting_list_transition_from_statuses",
+                                "waiting_list_transition_targets",
+                            }:
+                                capability["value"] = "*"
+
+                    data = {
+                        "base_hash": model["base_hash"],
+                        "active_group": "waiting_list",
+                        "display_name": model["label"],
+                        "description": model["description"],
+                    }
+                    for section in model["sections"]:
+                        for capability in section["capabilities"]:
+                            value = capability["value"]
+                            if value is True:
+                                data[f"capability__{capability['code']}"] = "on"
+                            elif value not in (False, None):
+                                data[f"capability__{capability['code']}"] = (
+                                    ["*"] if value == "*" else value
+                                )
+                    form = RoleDefinitionForm(data, role_read_model=model)
+                    self.assertTrue(form.is_valid(), form.errors)
+                    self.assertEqual(
+                        set(form.fields["capability__waiting_list_view_scope"].choices),
+                        {
+                            ("none", "Нет доступа"),
+                            ("authored", "Только созданные пользователем"),
+                            ("all", "Все записи"),
+                        },
+                    )
+                    target_choices = dict(
+                        form.fields["capability__waiting_list_transition_targets"].choices
+                    )
+                    self.assertEqual(target_choices["*"], "Все статусы")
+                    self.assertEqual(
+                        set(target_choices) - {"*"},
+                        {"waiting", "scheduled", "confirmed", "cancelled"},
+                    )
+                    self.assertEqual(form.proposed_config(), model["config"])
+                finally:
+                    _reset_for_tests()
 
     def test_role_definition_form_normalizes_invalid_active_group_and_preserves_valid(self):
         from apps.accounts.access_contracts import role_definition_read_model
@@ -1360,6 +1433,36 @@ class SettingsCenterRegistryTests(TestCase):
             effective["transition_grants"],
             [("assigned_or_unassigned", "resolved")],
         )
+
+    def test_role_impact_keeps_waiting_scope_and_statuses_paired_per_role(self):
+        from apps.accounts.access_contracts import _effective_role_values
+
+        configs = {
+            "broad": {
+                "waiting_list_edit_scope": "all",
+                "waiting_list_edit_statuses": ["waiting"],
+                "waiting_list_transition_scope": "all",
+                "waiting_list_transition_from_statuses": ["waiting"],
+                "waiting_list_transition_targets": ["scheduled"],
+            },
+            "narrow": {
+                "waiting_list_edit_scope": "authored",
+                "waiting_list_edit_statuses": ["scheduled"],
+                "waiting_list_transition_scope": "authored",
+                "waiting_list_transition_from_statuses": ["scheduled"],
+                "waiting_list_transition_targets": ["confirmed"],
+            },
+        }
+
+        effective = _effective_role_values(["broad", "narrow"], configs)
+
+        self.assertEqual(
+            effective["waiting_list_edit_grants"],
+            [("all", "waiting"), ("authored", "scheduled")],
+        )
+        self.assertIn(("all", "waiting", "scheduled"), effective["waiting_list_transition_grants"])
+        self.assertIn(("authored", "scheduled", "confirmed"), effective["waiting_list_transition_grants"])
+        self.assertNotIn(("all", "scheduled", "confirmed"), effective["waiting_list_transition_grants"])
 
 
 class SettingsCenterContractTests(TestCase):

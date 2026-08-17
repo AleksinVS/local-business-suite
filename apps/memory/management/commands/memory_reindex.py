@@ -2,8 +2,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.memory.chat_memory import index_knowledge_item
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.memory.chat_memory import _index_knowledge_item_locked, index_knowledge_item
 from apps.memory.document_ingestion import (
+    _ingest_source_object_text_locked,
     delete_search_document_indexes,
     get_source_ingestion_profile,
     ingest_source_object_text,
@@ -13,6 +15,7 @@ from apps.memory.models import MemoryIngestionIssue, MemorySearchDocument, Memor
 from apps.memory.policies import search_document_sensitivity
 from apps.memory.services import MemoryQueueJobKind, enqueue_memory_queue_task
 from apps.memory.source_text_extraction import PARSER_VERSION
+from apps.memory.source_lifecycle import enabled_source_operation
 from apps.memory.vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 
 
@@ -60,8 +63,36 @@ class Command(BaseCommand):
         dry_run = bool(options.get("dry_run"))
         force = bool(options.get("force"))
 
+        if source is not None:
+            with enabled_source_operation(source_id=source.pk) as fresh_source:
+                return self._handle_locked(
+                    source=fresh_source,
+                    corpus=corpus,
+                    backend=backend,
+                    backends=backends,
+                    dry_run=dry_run,
+                    force=force,
+                )
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+            return self._handle_locked(
+                source=None,
+                corpus=corpus,
+                backend=backend,
+                backends=backends,
+                dry_run=dry_run,
+                force=force,
+            )
+
+    def _handle_locked(self, *, source, corpus, backend, backends, dry_run, force):
         if dry_run:
-            result = self._run_reindex(source=source, corpus=corpus, backends=backends, force=force, dry_run=True)
+            result = self._run_reindex_locked(
+                source=source,
+                corpus=corpus,
+                backends=backends,
+                force=force,
+                dry_run=True,
+                source_fenced=True,
+            )
             self.stdout.write(
                 "Memory reindex dry-run: "
                 f"corpus={corpus}, backend={backend}, eligible={result['eligible_document_count']}, "
@@ -88,7 +119,14 @@ class Command(BaseCommand):
         job.attempt_count += 1
         job.save(update_fields=["status", "started_at", "attempt_count", "updated_at"])
         try:
-            result = self._run_reindex(source=source, corpus=corpus, backends=backends, force=force, dry_run=False)
+            result = self._run_reindex_locked(
+                source=source,
+                corpus=corpus,
+                backends=backends,
+                force=force,
+                dry_run=False,
+                source_fenced=True,
+            )
         except Exception as exc:
             job.status = "failed"
             job.finished_at = timezone.now()
@@ -116,9 +154,35 @@ class Command(BaseCommand):
             raise CommandError(f"MemorySource '{source_code}' does not exist. Run memory_sync_source first.") from exc
 
     def _run_reindex(self, *, source, corpus, backends, force, dry_run):
+        if source is not None:
+            with enabled_source_operation(source_id=source.pk) as fresh_source:
+                return self._run_reindex_locked(
+                    source=fresh_source,
+                    corpus=corpus,
+                    backends=backends,
+                    force=force,
+                    dry_run=dry_run,
+                    source_fenced=True,
+                )
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+            return self._run_reindex_locked(
+                source=None,
+                corpus=corpus,
+                backends=backends,
+                force=force,
+                dry_run=dry_run,
+                source_fenced=True,
+            )
+
+    def _run_reindex_locked(self, *, source, corpus, backends, force, dry_run, source_fenced):
         documents = MemorySearchDocument.objects.select_related("knowledge_item", "source_object", "source_object__source").filter(
             index_status=MemorySearchDocument.IndexStatus.READY
         )
+        if source is None:
+            documents = documents.filter(
+                Q(corpus_type=MemorySearchDocument.CorpusType.KNOWLEDGE)
+                | Q(source_object__source__status=MemorySource.Status.ENABLED)
+            )
         if corpus != "all":
             documents = documents.filter(corpus_type=corpus)
         if source is not None:
@@ -163,7 +227,10 @@ class Command(BaseCommand):
                 if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE:
                     if document.knowledge_item_id is None:
                         raise CommandError(f"Knowledge document {document.document_id} has no knowledge item.")
-                    index_knowledge_item(document.knowledge_item, index_backends=backends)
+                    if source_fenced:
+                        _index_knowledge_item_locked(document.knowledge_item, index_backends=backends)
+                    else:
+                        index_knowledge_item(document.knowledge_item, index_backends=backends)
                 else:
                     if document.source_object_id is None:
                         raise CommandError(f"Source document {document.document_id} has no source object.")
@@ -185,7 +252,8 @@ class Command(BaseCommand):
                     if outcome["issue_kind"] == MemoryIngestionIssue.IssueKind.PII_AUDIT:
                         _create_reindex_issue(document=document, outcome=outcome)
                         result["pii_audit_count"] += 1
-                    ingest_source_object_text(
+                    ingest = _ingest_source_object_text_locked if source_fenced else ingest_source_object_text
+                    ingest(
                         source_object=source_object,
                         safe_text=outcome["text"],
                         partial_reason=outcome["partial_reason"],
@@ -248,6 +316,7 @@ def _delete_missing_source_documents(*, source, backends) -> int:
         corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
         source_object__discovery_status=MemorySourceObject.DiscoveryStatus.MISSING,
     ).exclude(index_status=MemorySearchDocument.IndexStatus.DELETED)
+    queryset = queryset.filter(source_object__source__status=MemorySource.Status.ENABLED)
     if source is not None:
         queryset = queryset.filter(source_object__source=source)
     document_ids = list(queryset.values_list("document_id", flat=True))

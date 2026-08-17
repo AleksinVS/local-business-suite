@@ -25,6 +25,7 @@
   "secret_backends.py": "Provider-neutral secret handle backend with Vaultwarden-compatible external link MVP",
   "selectors.py": "QuerySet-селекторы источников, search documents и jobs",
   "services.py": "Сервисы синхронизации sources, lifecycle jobs, audit записи и memory projection из SourceObjectEnvelope",
+  "source_lifecycle.py": "Единая блокировка и проверка статуса для операций источников памяти",
   "review_safety.py": "Безопасная сериализация текста и metadata для UI ревью памяти без raw secrets/PII",
   "review_selectors.py": "Selectors и read-only ReviewQueueItem projection для очереди ревью, состояния индекса, pending-знаний и комбинированного аудита (issues+queue+git log)",
   "review_services.py": "Сервисный слой действий ревью issue/индекса (мутация записи + safe review_log в metadata) и accept/reject pending-кандидатов знаний",

@@ -11,9 +11,14 @@ from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count
 
-from apps.core.contract_store import get_contract, normalized_hash
+from apps.core.contract_store import ContractStoreError, get_contract, normalized_hash
 
-from .selectors import capability_catalog, contract_role_configs, role_risk_markers
+from .selectors import (
+    capability_catalog,
+    contract_role_configs,
+    role_definition_editor_roles,
+    role_risk_markers,
+)
 
 
 ROLE_DEFINITION_PREVIEW_SALT = "accounts.role-definition-preview.v1"
@@ -48,6 +53,10 @@ CAPABILITY_RISK_LABELS = {
     "elevated": "Повышенный риск",
     "critical": "Критический риск",
 }
+ROLE_DEFINITION_EDITOR_DENIED_MESSAGE = (
+    "Определения ролей доступны активному суперпользователю или участнику "
+    "настроенной роли редакторов определений."
+)
 
 CAPABILITY_GROUP_BY_CAPABILITY = {
     "view_scope": "kanban",
@@ -67,10 +76,36 @@ CAPABILITY_GROUP_BY_CAPABILITY = {
     "view_analytics": "analytics",
     "manage_departments": "departments",
     "manage_roles": "access",
+    "manage_settings": "access",
     "manage_ai_skills": "ai",
     "memory_organization_write": "memory",
     "memory_organization_review": "memory",
+    "waiting_list_view_scope": "waiting_list",
+    "waiting_list_edit_scope": "waiting_list",
+    "waiting_list_edit_statuses": "waiting_list",
+    "waiting_list_transition_scope": "waiting_list",
+    "waiting_list_transition_from_statuses": "waiting_list",
+    "waiting_list_transition_targets": "waiting_list",
 }
+
+
+def can_edit_role_definitions(actor, *, rules_snapshot=None):
+    """Return whether an active actor has product role-definition authority."""
+    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
+        return False
+    current = get_user_model().objects.filter(pk=actor.pk, is_active=True).first()
+    if not current:
+        return False
+    if current.is_superuser:
+        return True
+    try:
+        editor_roles = role_definition_editor_roles(rules_snapshot)
+    except ContractStoreError:
+        return False
+    return bool(
+        editor_roles
+        and current.groups.filter(name__in=editor_roles).exists()
+    )
 
 
 def capability_group_code(code, _metadata=None):
@@ -129,7 +164,10 @@ def role_definition_read_model(role_code):
     config = rules.get(role_code)
     if not isinstance(config, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
-    catalog = capability_catalog()
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    from apps.workorders.contracts import resolve_capability_values_source
     sections = []
     for group in capability_groups(catalog):
         sections.append({
@@ -142,6 +180,11 @@ def role_definition_read_model(role_code):
                     "label": metadata.get("label", code),
                     "description": metadata.get("description", ""),
                     "type": metadata.get("type", ""),
+                    "values_source": resolve_capability_values_source(
+                        code,
+                        metadata,
+                        metadata=catalog,
+                    ) if metadata.get("type") in {"scope", "targets"} else None,
                     "risk": metadata.get("risk", "normal"),
                     "risk_label": CAPABILITY_RISK_LABELS.get(metadata.get("risk", "normal"), ""),
                     "value": copy.deepcopy(config.get(code)),
@@ -161,14 +204,22 @@ def role_definition_read_model(role_code):
 
 
 def preview_role_definition_change(*, actor, role_code, proposed_config, base_hash):
-    actor = _require_role_definition_editor(actor)
     rules = get_contract("role_rules")
+    actor = _require_role_definition_editor(actor, rules_snapshot=rules)
     if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
         raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
     before = rules.get(role_code)
     if not isinstance(before, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
-    after = _normalize_proposed_role(role_code=role_code, before=before, proposed=proposed_config)
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    after = _normalize_proposed_role(
+        role_code=role_code,
+        before=before,
+        proposed=proposed_config,
+        catalog=catalog,
+    )
     if before == after:
         raise ValidationError("В роли нет изменений для проверки.")
 
@@ -179,8 +230,19 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
 
     descriptor = get_registry().get("core.contract.role_rules")
     parse_and_validate_payload(descriptor, json.dumps(candidate, ensure_ascii=False))
-    changes = _role_definition_changes(before=before, after=after)
-    impact = _role_change_impact(role_code=role_code, before=before, after=after)
+    changes = _role_definition_changes(before=before, after=after, catalog=catalog)
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=role_code,
+        changes=changes,
+        rules_snapshot=rules,
+    )
+    impact = _role_change_impact(
+        role_code=role_code,
+        before=before,
+        after=after,
+        rules_snapshot=rules,
+    )
     risk_markers = [
         f"{change['label']}: {change['risk_label']}"
         for change in changes
@@ -188,7 +250,7 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
     ]
     token_payload = {
         "actor_id": actor.pk,
-        "actor_state": _role_editor_actor_state(actor),
+        "actor_state": _role_editor_actor_state(actor, rules_snapshot=rules),
         "role_code": role_code,
         "base_hash": normalized_hash(rules),
         "after": after,
@@ -215,23 +277,42 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
 def apply_role_definition_change(
     *, actor, role_code, proposed_config, base_hash, preview_token, risk_confirmed=False
 ):
-    actor = _require_role_definition_editor(actor)
     signed = _load_role_definition_preview(preview_token)
+    rules = get_contract("role_rules")
+    actor = _require_role_definition_editor(actor, rules_snapshot=rules)
     if signed.get("actor_id") != actor.pk or signed.get("role_code") != role_code:
         raise ValidationError("Предпросмотр относится к другой роли или администратору.")
-    if signed.get("actor_state") != _role_editor_actor_state(actor):
+    if signed.get("actor_state") != _role_editor_actor_state(actor, rules_snapshot=rules):
         raise ValidationError("Права администратора изменились после предпросмотра.")
     if signed.get("base_hash") != str(base_hash or "").removeprefix("sha256:"):
         raise ValidationError("Версия формы не совпадает с предпросмотром.")
-    rules = get_contract("role_rules")
     if normalized_hash(rules) != signed.get("base_hash"):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
     before = rules.get(role_code)
-    after = _normalize_proposed_role(role_code=role_code, before=before, proposed=proposed_config)
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
+    after = _normalize_proposed_role(
+        role_code=role_code,
+        before=before,
+        proposed=proposed_config,
+        catalog=catalog,
+    )
     if signed.get("after") != after:
         raise ValidationError("Поля роли изменились после предпросмотра.")
-    changes = _role_definition_changes(before=before, after=after)
-    impact = _role_change_impact(role_code=role_code, before=before, after=after)
+    changes = _role_definition_changes(before=before, after=after, catalog=catalog)
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=role_code,
+        changes=changes,
+        rules_snapshot=rules,
+    )
+    impact = _role_change_impact(
+        role_code=role_code,
+        before=before,
+        after=after,
+        rules_snapshot=rules,
+    )
     if signed.get("member_fingerprint") != _role_member_fingerprint(role_code) or signed.get(
         "impact_hash"
     ) != normalized_hash(impact):
@@ -243,17 +324,49 @@ def apply_role_definition_change(
     )
     if requires_confirmation and not risk_confirmed:
         raise ValidationError("Изменение чувствительных прав требует подтверждения.")
-    candidate = copy.deepcopy(rules)
-    candidate[role_code] = after
-
-    from apps.settings_center.contract_services import apply_contract_payload
+    from apps.settings_center.contract_services import _apply_role_definition_payload
 
     preview_fingerprint = hashlib.sha256(preview_token.encode("utf-8")).hexdigest()
 
-    def locked_precondition(current_actor):
-        if signed.get("actor_state") != _role_editor_actor_state(current_actor):
+    def locked_precondition(current_actor, current_rules):
+        if normalized_hash(current_rules) != signed.get("base_hash"):
+            raise ValidationError("Контракт ролей изменился после предпросмотра.")
+        current_actor = _require_role_definition_editor(
+            current_actor,
+            rules_snapshot=current_rules,
+        )
+        if signed.get("actor_state") != _role_editor_actor_state(
+            current_actor,
+            rules_snapshot=current_rules,
+        ):
             raise ValidationError("Права администратора изменились после предпросмотра.")
-        current_impact = _role_change_impact(role_code=role_code, before=before, after=after)
+        current_before = current_rules.get(role_code)
+        current_catalog = current_rules.get("$capabilities", {})
+        if not isinstance(current_before, dict) or not isinstance(current_catalog, dict):
+            raise ValidationError("Роль исчезла или стала некорректной.")
+        current_after = _normalize_proposed_role(
+            role_code=role_code,
+            before=current_before,
+            proposed=proposed_config,
+            catalog=current_catalog,
+        )
+        current_changes = _role_definition_changes(
+            before=current_before,
+            after=current_after,
+            catalog=current_catalog,
+        )
+        _assert_role_definition_target_policy(
+            actor=current_actor,
+            role_code=role_code,
+            changes=current_changes,
+            rules_snapshot=current_rules,
+        )
+        current_impact = _role_change_impact(
+            role_code=role_code,
+            before=current_before,
+            after=current_after,
+            rules_snapshot=current_rules,
+        )
         if signed.get("member_fingerprint") != _role_member_fingerprint(role_code) or signed.get(
             "impact_hash"
         ) != normalized_hash(current_impact):
@@ -262,13 +375,32 @@ def apply_role_definition_change(
                 "Выполните предпросмотр снова."
             )
 
-    return apply_contract_payload(
+    def raw_payload_factory(current_rules):
+        current_before = current_rules.get(role_code)
+        current_catalog = current_rules.get("$capabilities", {})
+        if not isinstance(current_before, dict) or not isinstance(current_catalog, dict):
+            raise ValidationError("Роль исчезла или стала некорректной.")
+        current_after = _normalize_proposed_role(
+            role_code=role_code,
+            before=current_before,
+            proposed=proposed_config,
+            catalog=current_catalog,
+        )
+        if current_after != after:
+            raise ValidationError("Поля роли изменились после предпросмотра.")
+        candidate = copy.deepcopy(current_rules)
+        candidate[role_code] = current_after
+        return json.dumps(candidate, ensure_ascii=False)
+
+    return _apply_role_definition_payload(
         actor=actor,
-        setting_id="core.contract.role_rules",
-        raw_payload=json.dumps(candidate, ensure_ascii=False),
+        role_code=role_code,
         confirmed=True,
         base_hash=signed["base_hash"],
+        preview_token=preview_token,
+        risk_confirmed=risk_confirmed,
         operation_fingerprint=preview_fingerprint,
+        raw_payload_factory=raw_payload_factory,
         locked_precondition=locked_precondition,
         audit_context={
             "source": "role_definition_editor",
@@ -283,21 +415,98 @@ def apply_role_definition_change(
     )
 
 
-def _require_role_definition_editor(actor):
-    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
+def _require_role_definition_editor(actor, *, rules_snapshot=None):
+    if not getattr(actor, "is_authenticated", False):
         raise PermissionDenied("Требуется вход в систему.")
+    rules = rules_snapshot if isinstance(rules_snapshot, dict) else get_contract("role_rules")
+    if not can_edit_role_definitions(actor, rules_snapshot=rules):
+        raise PermissionDenied(ROLE_DEFINITION_EDITOR_DENIED_MESSAGE)
     current = get_user_model().objects.get(pk=actor.pk)
-    if not current.is_active or not current.is_superuser:
-        raise PermissionDenied("Определения ролей может изменять только активный суперпользователь.")
     return current
 
 
-def _role_editor_actor_state(actor):
+def _role_editor_actor_state(actor, *, rules_snapshot=None):
+    rules = rules_snapshot if isinstance(rules_snapshot, dict) else get_contract("role_rules")
     return {
         "is_active": bool(actor.is_active),
         "is_superuser": bool(actor.is_superuser),
         "roles": sorted(actor.groups.values_list("name", flat=True)),
+        "editor_roles": list(role_definition_editor_roles(rules)),
     }
+
+
+def _assert_role_definition_target_policy(*, actor, role_code, changes, rules_snapshot):
+    """Enforce the delegated editor ceiling from one fresh role snapshot."""
+    if actor.is_superuser:
+        return
+    held_roles = {
+        group.name
+        for group in actor.groups.all()
+        if group.name in {
+            name
+            for name, config in rules_snapshot.items()
+            if isinstance(name, str) and not name.startswith("$") and isinstance(config, dict)
+        }
+    }
+    if role_code in held_roles:
+        raise PermissionDenied(
+            "Делегированный редактор не может изменять определение роли, которой сам обладает."
+        )
+    critical_changes = [
+        change
+        for change in changes
+        if change.get("risk") == "critical"
+    ]
+    if critical_changes and any(
+        change.get("direction") != "reduction" for change in critical_changes
+    ):
+        raise PermissionDenied(
+            "Делегированный редактор может только сужать критические права чужой роли."
+        )
+
+
+def _validate_role_definition_transport_request(
+    *, actor, role_code, before, after, preview_token, risk_confirmed
+):
+    """Independent under-lock validation for the constrained write transport."""
+    signed = _load_role_definition_preview(preview_token)
+    if signed.get("actor_id") != actor.pk or signed.get("role_code") != role_code:
+        raise PermissionDenied("Предпросмотр относится к другой роли или администратору.")
+    if signed.get("base_hash") != normalized_hash(before):
+        raise ValidationError("Контракт ролей изменился после предпросмотра.")
+    current_before = before.get(role_code)
+    current_after = after.get(role_code)
+    if not isinstance(current_before, dict) or not isinstance(current_after, dict):
+        raise ValidationError("Роль исчезла или стала некорректной.")
+    if signed.get("after") != current_after:
+        raise ValidationError("Поля роли изменились после предпросмотра.")
+    actor = _require_role_definition_editor(actor, rules_snapshot=before)
+    if signed.get("actor_state") != _role_editor_actor_state(actor, rules_snapshot=before):
+        raise ValidationError("Права администратора изменились после предпросмотра.")
+    catalog = before.get("$capabilities", {})
+    changes = _role_definition_changes(
+        before=current_before,
+        after=current_after,
+        catalog=catalog,
+    )
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=role_code,
+        changes=changes,
+        rules_snapshot=before,
+    )
+    impact = _role_change_impact(
+        role_code=role_code,
+        before=current_before,
+        after=current_after,
+        rules_snapshot=before,
+    )
+    if signed.get("member_fingerprint") != _role_member_fingerprint(role_code):
+        raise ValidationError("Состав участников роли изменился. Выполните предпросмотр снова.")
+    if signed.get("impact_hash") != normalized_hash(impact):
+        raise ValidationError("Влияние изменения изменилось. Выполните предпросмотр снова.")
+    if any(change["risk"] in {"elevated", "critical"} for change in changes) and not risk_confirmed:
+        raise ValidationError("Изменение чувствительных прав требует подтверждения.")
 
 
 def _role_member_fingerprint(role_code):
@@ -310,10 +519,9 @@ def _role_member_fingerprint(role_code):
     return normalized_hash(member_ids)
 
 
-def _normalize_proposed_role(*, role_code, before, proposed):
+def _normalize_proposed_role(*, role_code, before, proposed, catalog):
     if not isinstance(before, dict) or not isinstance(proposed, dict):
         raise ValidationError("Некорректное определение роли.")
-    catalog = capability_catalog()
     metadata_fields = {"display_name", "description"}
     unknown = sorted(set(proposed) - set(catalog) - metadata_fields)
     if unknown:
@@ -334,8 +542,7 @@ def _normalize_proposed_role(*, role_code, before, proposed):
     return after
 
 
-def _role_definition_changes(*, before, after):
-    catalog = capability_catalog()
+def _role_definition_changes(*, before, after, catalog):
     changes = []
     for code, label in (("display_name", "Название роли"), ("description", "Описание роли")):
         if before.get(code, "") == after.get(code, ""):
@@ -399,8 +606,8 @@ def _capability_change_direction(*, capability_type, before, after):
             return "expansion"
         return "mixed"
     if capability_type == "scope":
-        before_atoms = set(_normalized_scope_atoms([before]))
-        after_atoms = set(_normalized_scope_atoms([after]))
+        before_atoms = _scope_direction_atoms(before)
+        after_atoms = _scope_direction_atoms(after)
         if before_atoms == {"all"}:
             return "reduction"
         if after_atoms == {"all"}:
@@ -412,13 +619,30 @@ def _capability_change_direction(*, capability_type, before, after):
     return "mixed"
 
 
-def _role_change_impact(*, role_code, before, after):
+def _scope_direction_atoms(value):
+    """Use opaque scope atoms for security direction; incomparable is mixed."""
+    if value == "all":
+        return {"all"}
+    if value == "none":
+        return set()
+    return {value}
+
+
+def _role_change_impact(*, role_code, before, after, rules_snapshot=None):
     users = list(
         get_user_model().objects.filter(groups__name=role_code)
         .prefetch_related("groups")
         .distinct()
     )
-    configs_before = dict(contract_role_configs())
+    snapshot = rules_snapshot if isinstance(rules_snapshot, dict) else get_contract("role_rules")
+    configs_before = {
+        code: dict(config)
+        for code, config in snapshot.items()
+        if isinstance(code, str) and not code.startswith("$") and isinstance(config, dict)
+    }
+    catalog = snapshot.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        catalog = {}
     configs_after = copy.deepcopy(configs_before)
     configs_after[role_code] = after
     effective_change_count = 0
@@ -427,15 +651,15 @@ def _role_change_impact(*, role_code, before, after):
     requires_object_check_count = 0
     changed_scope = any(
         metadata.get("type") == "scope" and before.get(code) != after.get(code)
-        for code, metadata in capability_catalog().items()
+        for code, metadata in catalog.items()
     )
     for user in users:
         if user.is_superuser:
             system_override_count += 1
             continue
         role_names = [group.name for group in user.groups.all() if group.name in configs_before]
-        before_effective = _effective_role_values(role_names, configs_before)
-        after_effective = _effective_role_values(role_names, configs_after)
+        before_effective = _effective_role_values(role_names, configs_before, catalog=catalog)
+        after_effective = _effective_role_values(role_names, configs_after, catalog=catalog)
         if before_effective != after_effective:
             effective_change_count += 1
             if changed_scope:
@@ -452,11 +676,19 @@ def _role_change_impact(*, role_code, before, after):
     }
 
 
-def _effective_role_values(role_names, configs):
+def _effective_role_values(role_names, configs, *, catalog=None):
     result = {}
-    catalog = capability_catalog()
+    catalog = catalog if isinstance(catalog, dict) else capability_catalog()
     for capability, metadata in catalog.items():
-        if capability in {"transition_scope", "transition_targets"}:
+        if capability in {
+            "transition_scope",
+            "transition_targets",
+            "waiting_list_edit_scope",
+            "waiting_list_edit_statuses",
+            "waiting_list_transition_scope",
+            "waiting_list_transition_from_statuses",
+            "waiting_list_transition_targets",
+        }:
             continue
         values = [configs[role].get(capability) for role in role_names if role in configs]
         capability_type = metadata.get("type")
@@ -491,6 +723,32 @@ def _effective_role_values(role_names, configs):
         )
     }
     result["transition_grants"] = sorted(transition_grants)
+
+    # Scope and status lists are one grant.  Build combinations only inside a
+    # single role so one role's broad scope cannot be combined with another
+    # role's statuses into a permission neither role actually grants.
+    edit_grants = set()
+    transition_grants = set()
+    for role in role_names:
+        config = configs.get(role, {})
+        edit_scope = config.get("waiting_list_edit_scope", "none")
+        edit_statuses = config.get("waiting_list_edit_statuses", [])
+        if edit_scope != "none":
+            statuses = ["*"] if edit_statuses == "*" else edit_statuses
+            edit_grants.update((edit_scope, status) for status in statuses)
+        transition_scope = config.get("waiting_list_transition_scope", "none")
+        from_statuses = config.get("waiting_list_transition_from_statuses", [])
+        targets = config.get("waiting_list_transition_targets", [])
+        if transition_scope != "none":
+            sources = ["*"] if from_statuses == "*" else from_statuses
+            destinations = ["*"] if targets == "*" else targets
+            transition_grants.update(
+                (transition_scope, source, destination)
+                for source in sources
+                for destination in destinations
+            )
+    result["waiting_list_edit_grants"] = sorted(edit_grants)
+    result["waiting_list_transition_grants"] = sorted(transition_grants)
     return result
 
 

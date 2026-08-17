@@ -17,10 +17,37 @@ from apps.core.file_locks import (
     exclusive_file_lock,
 )
 from apps.accounts.selectors import contract_role_names
+from apps.core.models import Department
+from apps.inventory.models import MedicalDevice
 
 from . import notification_events
-from .models import Board, BoardAccessAudit, KanbanColumnConfig, WorkOrder, WorkOrderStatus, WorkOrderTransitionLog
+from .models import (
+    Board,
+    BoardAccessAudit,
+    KanbanColumnConfig,
+    WorkOrder,
+    WorkOrderAttachment,
+    WorkOrderStatus,
+    WorkOrderTransitionLog,
+)
+from .policies import (
+    can_assign,
+    can_comment,
+    can_confirm_closure,
+    can_create,
+    can_edit,
+    can_manage_board_columns,
+    can_rate,
+    can_transition,
+    can_upload_attachment,
+)
 from .policies import board_access_role_names, can_manage_board_access
+from .selectors import (
+    creation_departments_queryset,
+    creation_devices_queryset,
+    visible_boards_queryset,
+    visible_workorders_queryset,
+)
 
 
 BOARD_ACCESS_PREVIEW_SALT = "workorders.board-access-preview.v1"
@@ -213,8 +240,14 @@ def _apply_board_access_locked(
 
 @transaction.atomic
 def clone_board(*, actor, board, new_title=None, new_slug=None, reason=""):
-    """Клонировать структуру доски без скрытого наследования доступа."""
-    actor = _current_board_access_actor(actor)
+    """Клонировать структуру доски без скрытого наследования доступа.
+
+    Lock order is actor -> source board; capability is checked after the
+    actor lock so a concurrent role revoke cannot authorize the clone.
+    """
+    actor = _lock_active_workorder_actor(actor)
+    if not can_manage_board_access(actor):
+        raise PermissionDenied("Клонирование доски недоступно пользователю.")
     source_board = Board.objects.select_for_update().get(pk=board.pk)
     cloned = Board.objects.create(
         title=new_title or f"{source_board.title} (копия)",
@@ -456,7 +489,7 @@ def _unique_board_slug(base_slug):
     return candidate
 
 
-def create_workorder(
+def _create_workorder_unchecked(
     *,
     author,
     title: str,
@@ -483,7 +516,7 @@ def create_workorder(
     return workorder
 
 
-def transition_workorder(*, workorder: WorkOrder, user, to_status: str) -> WorkOrder:
+def _transition_workorder_unchecked(*, workorder: WorkOrder, user, to_status: str) -> WorkOrder:
     previous_status = workorder.status
     workorder.status = to_status
     if to_status != WorkOrderStatus.CLOSED:
@@ -513,7 +546,7 @@ def transition_workorder(*, workorder: WorkOrder, user, to_status: str) -> WorkO
     return workorder
 
 
-def confirm_closure(*, workorder: WorkOrder, user) -> WorkOrder:
+def _confirm_closure_unchecked(*, workorder: WorkOrder, user) -> WorkOrder:
     previous_status = workorder.status
     workorder.status = WorkOrderStatus.CLOSED
     workorder.closure_confirmed = True
@@ -541,7 +574,330 @@ def confirm_closure(*, workorder: WorkOrder, user) -> WorkOrder:
     return workorder
 
 
-def rate_workorder(*, workorder: WorkOrder, user, rating: int) -> WorkOrder:
+def _rate_workorder_unchecked(*, workorder: WorkOrder, user, rating: int) -> WorkOrder:
     workorder.rating = rating
     workorder.save(update_fields=["rating"])
     return workorder
+
+
+# These command functions are the single mutation boundary for the workorder
+# domain.  HTTP and AI are adapters: they validate transport data, then call
+# one command which re-reads the actor and the target under the same lock.
+WORKORDER_UPDATE_FIELDS = (
+    "board",
+    "title",
+    "description",
+    "department",
+    "priority",
+    "device",
+    "assignee",
+)
+
+
+def _lock_active_workorder_actor(actor):
+    user_model = get_user_model()
+    locked_actor = user_model.objects.select_for_update().filter(
+        pk=getattr(actor, "pk", None), is_active=True
+    ).first()
+    if locked_actor is None:
+        raise PermissionDenied("Учетная запись исполнителя отключена или не найдена.")
+    return locked_actor
+
+
+def _coerce_pk(value):
+    return getattr(value, "pk", value)
+
+
+def _creation_department(actor, value):
+    department_id = creation_departments_queryset(actor).filter(
+        pk=_coerce_pk(value)
+    ).values_list("pk", flat=True).first()
+    if department_id is None:
+        raise PermissionDenied("Недоступно выбранное подразделение.")
+    department = Department.objects.select_for_update().filter(pk=department_id).first()
+    if department is None or not creation_departments_queryset(actor).filter(
+        pk=department.pk
+    ).exists():
+        raise PermissionDenied("Подразделение стало недоступно.")
+    return department
+
+
+def _creation_device(actor, value, *, department):
+    if value in (None, ""):
+        return None
+    device_id = creation_devices_queryset(actor).filter(
+        pk=_coerce_pk(value), department_id=department.pk
+    ).values_list("pk", flat=True).first()
+    if device_id is None:
+        raise PermissionDenied("Недоступно выбранное медицинское изделие.")
+    device = MedicalDevice.objects.select_for_update().filter(pk=device_id).first()
+    if device is None or not creation_devices_queryset(actor).filter(
+        pk=device.pk, department_id=department.pk
+    ).exists():
+        raise PermissionDenied("Медицинское изделие стало недоступно.")
+    return device
+
+
+def _lock_assignee(value):
+    """Lock and return an active, canonical assignee or fail closed."""
+    if value in (None, ""):
+        return None
+    assignee = (
+        get_user_model().objects.select_for_update().filter(
+            pk=_coerce_pk(value), is_active=True
+        ).first()
+    )
+    if assignee is None:
+        raise PermissionDenied("Недоступен выбранный исполнитель.")
+    return assignee
+
+
+def create_workorder_command(*, actor, payload):
+    """Create a workorder after fresh actor, board and relation checks."""
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        if not can_create(current_actor):
+            raise PermissionDenied("Пользователю недоступно создание заявок.")
+        board_filter = (
+            {"pk": _coerce_pk(payload.get("board"))}
+            if payload.get("board") not in (None, "")
+            else {"slug": "main"}
+        )
+        board = Board.objects.select_for_update().filter(**board_filter).first()
+        if board is None or not visible_boards_queryset(current_actor).filter(
+            pk=board.pk
+        ).exists():
+            raise PermissionDenied("Недоступна выбранная доска.")
+        # Mutation lock order: actor -> boards(sorted) -> departments(sorted)
+        # -> devices -> assignee.  Authorization is repeated after locks.
+        department = _creation_department(
+            current_actor,
+            payload.get("department", payload.get("department_id")),
+        )
+        device = _creation_device(
+            current_actor,
+            payload.get("device", payload.get("device_id")),
+            department=department,
+        )
+        workorder = _create_workorder_unchecked(
+            author=current_actor,
+            title=payload.get("title", ""),
+            description=payload.get("description", ""),
+            department=department,
+            priority=payload.get("priority", "medium"),
+            device_id=device.pk if device else None,
+            assignee=None,
+            board=board,
+        )
+    return workorder
+
+
+def _locked_visible_workorder(current_actor, workorder_id, *, additional_board_id=None):
+    # Mutation lock order is actor -> boards(sorted) -> workorder.  Board ids
+    # are read before authorization/locks only to establish the lock set; all
+    # relations and visibility are re-read after the locks are held.
+    target_board_id = WorkOrder.objects.filter(pk=workorder_id).values_list(
+        "board_id", flat=True
+    ).first()
+    if target_board_id is None:
+        raise PermissionDenied("Заявка недоступна текущему пользователю.")
+    board_ids = {target_board_id}
+    if additional_board_id not in (None, ""):
+        board_ids.add(_coerce_pk(additional_board_id))
+    locked_boards = {
+        board.pk: board
+        for board in Board.objects.select_for_update().filter(
+            pk__in=sorted(board_ids)
+        ).order_by("pk")
+    }
+    workorder = WorkOrder.objects.select_for_update().filter(pk=workorder_id).first()
+    if workorder is None:
+        raise PermissionDenied("Заявка недоступна текущему пользователю.")
+    board = locked_boards.get(workorder.board_id)
+    if board is None:
+        raise PermissionDenied("Доска заявки недоступна.")
+    visible_id = visible_workorders_queryset(current_actor).filter(
+        pk=workorder.pk
+    ).values_list("pk", flat=True).first()
+    if visible_id is None:
+        raise PermissionDenied("Заявка недоступна текущему пользователю.")
+    workorder.board = board
+    return workorder
+
+
+def update_workorder_command(*, actor, workorder_id, payload):
+    """Update only the allow-listed workorder fields under an object lock."""
+    unknown = set(payload) - set(WORKORDER_UPDATE_FIELDS)
+    if unknown:
+        raise ValidationError("Недопустимые поля заявки: " + ", ".join(sorted(unknown)))
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        requested_board = payload.get("board") if "board" in payload else None
+        workorder = _locked_visible_workorder(
+            current_actor,
+            workorder_id,
+            additional_board_id=requested_board,
+        )
+        if not can_edit(current_actor, workorder):
+            raise PermissionDenied("Пользователю недоступно редактирование заявки.")
+        changed = set(payload)
+        if "board" in changed:
+            board = Board.objects.filter(pk=_coerce_pk(payload["board"])).first()
+            if board is None or not visible_boards_queryset(current_actor).filter(
+                pk=board.pk
+            ).exists():
+                raise PermissionDenied("Недоступна выбранная доска.")
+            workorder.board = board
+        if "department" in changed:
+            value = payload["department"]
+            if _coerce_pk(value) != workorder.department_id:
+                department = _creation_department(current_actor, value)
+                if "device" not in changed and workorder.device_id:
+                    if workorder.device_id and workorder.device and workorder.device.department_id != department.pk:
+                        raise ValidationError(
+                            "При смене подразделения выберите медицинское изделие из нового подразделения."
+                        )
+                workorder.department = department
+        if "device" in changed:
+            value = payload["device"]
+            if _coerce_pk(value) != workorder.device_id:
+                workorder.device = _creation_device(
+                    current_actor,
+                    value,
+                    department=workorder.department,
+                )
+        if "assignee" in changed:
+            assignee = payload["assignee"]
+            if _coerce_pk(assignee) != workorder.assignee_id:
+                if not can_assign(current_actor, workorder):
+                    raise PermissionDenied("Пользователю недоступно назначение исполнителей.")
+                if assignee in (None, ""):
+                    workorder.assignee = None
+                else:
+                    workorder.assignee = _lock_assignee(assignee)
+        for field in ("title", "description", "priority"):
+            if field in changed:
+                setattr(workorder, field, payload[field])
+        workorder.save(update_fields=list(changed) + ["updated_at"])
+    return workorder
+
+
+def add_workorder_comment_command(*, actor, workorder_id, body):
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        if not can_comment(current_actor, workorder):
+            raise PermissionDenied("Пользователю недоступно комментирование.")
+        comment = workorder.comments.create(author=current_actor, body=body)
+        workorder.updated_at = timezone.now()
+        workorder.save(update_fields=["updated_at"])
+        notification_events.notify_workorder_comment_created(
+            workorder,
+            actor=current_actor,
+        )
+    return comment
+
+
+def add_workorder_attachment_command(*, actor, workorder_id, uploaded_file):
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        if not can_upload_attachment(current_actor, workorder):
+            raise PermissionDenied("Загрузка файлов запрещена.")
+        attachment = WorkOrderAttachment.objects.create(
+            workorder=workorder,
+            uploaded_by=current_actor,
+            file=uploaded_file,
+            content_type=getattr(uploaded_file, "content_type", ""),
+        )
+    return attachment
+
+
+def transition_workorder_command(*, actor, workorder_id, target_status):
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        if not can_transition(current_actor, workorder, target_status):
+            raise PermissionDenied("Переход статуса запрещен.")
+        return _transition_workorder_unchecked(
+            workorder=workorder, user=current_actor, to_status=target_status
+        )
+
+
+def move_workorder_command(*, actor, workorder_id, column_code):
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        column = KanbanColumnConfig.objects.filter(
+            board=workorder.board, code=column_code
+        ).first()
+        if column is None:
+            raise PermissionDenied("Недоступна выбранная колонка.")
+        old_status = workorder.status
+        if old_status not in column.statuses:
+            target_status = next(
+                (status for status in column.statuses if can_transition(current_actor, workorder, status)),
+                None,
+            )
+            if target_status is None:
+                raise PermissionDenied("Перемещение в колонку запрещено.")
+            workorder = _transition_workorder_unchecked(
+                workorder=workorder, user=current_actor, to_status=target_status
+            )
+    return workorder, old_status, column
+
+
+def confirm_workorder_closure_command(*, actor, workorder_id):
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        if not can_confirm_closure(current_actor, workorder):
+            raise PermissionDenied("Подтверждение закрытия запрещено.")
+        return _confirm_closure_unchecked(workorder=workorder, user=current_actor)
+
+
+def rate_workorder_command(*, actor, workorder_id, rating):
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        raise ValidationError("Оценка должна быть целым числом от 1 до 5.")
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        workorder = _locked_visible_workorder(current_actor, workorder_id)
+        if not can_rate(current_actor, workorder):
+            raise PermissionDenied("Пользователю недоступна оценка заявки.")
+        return _rate_workorder_unchecked(workorder=workorder, user=current_actor, rating=rating)
+
+
+def update_board_column_command(*, actor, column_id, payload):
+    """Изменить только разрешённые поля колонки видимой доски."""
+    allowed_fields = {"title", "wip_limit"}
+    unknown = set(payload) - allowed_fields
+    if unknown:
+        raise ValidationError("Недопустимые поля колонки: " + ", ".join(sorted(unknown)))
+    with transaction.atomic():
+        current_actor = _lock_active_workorder_actor(actor)
+        if not can_manage_board_columns(current_actor):
+            raise PermissionDenied("Изменение колонок запрещено.")
+        column_board_id = KanbanColumnConfig.objects.filter(pk=column_id).values_list(
+            "board_id", flat=True
+        ).first()
+        if column_board_id is None:
+            raise PermissionDenied("Колонка недоступна.")
+        # Keep one lock order for all board mutations: actor -> board ->
+        # dependent row. The preliminary id lookup is not an authorization
+        # decision; both rows and their relation are re-read under locks.
+        board = Board.objects.select_for_update().filter(pk=column_board_id).first()
+        if board is None or not visible_boards_queryset(current_actor).filter(
+            pk=board.pk
+        ).exists():
+            raise PermissionDenied("Доска колонки недоступна.")
+        column = KanbanColumnConfig.objects.select_for_update().filter(
+            pk=column_id,
+            board_id=board.pk,
+        ).first()
+        if column is None:
+            raise PermissionDenied("Колонка недоступна.")
+        for field, value in payload.items():
+            setattr(column, field, value)
+        if payload:
+            column.save(update_fields=list(payload))
+    return column

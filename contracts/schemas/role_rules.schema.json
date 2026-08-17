@@ -8,6 +8,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "role_definition_editor_roles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "role_assignment_allowlist": {
           "type": "object",
           "additionalProperties": {
@@ -29,10 +34,29 @@
           "type": { "enum": ["flag", "scope", "targets"] },
           "label": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
-          "section": { "enum": ["workorders", "organization", "ai_memory", "personal_data"] },
-          "risk": { "enum": ["normal", "elevated", "critical"] }
+          "section": { "enum": ["workorders", "organization", "ai_memory", "personal_data", "waiting_list"] },
+          "risk": { "enum": ["normal", "elevated", "critical"] },
+          "values_source": {
+            "enum": ["workorder_scopes", "waiting_list_scopes", "workorder_statuses", "waiting_list_statuses"]
+          }
         },
-        "required": ["type", "label", "description", "section", "risk"]
+        "required": ["type", "label", "description", "section", "risk"],
+        "allOf": [
+          {
+            "if": {
+              "required": ["type"],
+              "properties": { "type": { "enum": ["scope", "targets"] } }
+            },
+            "then": { "required": ["values_source"] }
+          },
+          {
+            "if": {
+              "required": ["type"],
+              "properties": { "type": { "const": "flag" } }
+            },
+            "then": { "not": { "required": ["values_source"] } }
+          }
+        ]
       }
     }
   },
@@ -44,18 +68,18 @@
         "display_name": { "type": "string" },
         "description": { "type": "string" },
         "view_scope": {
-          "enum": ["all", "department_branch", "assigned_or_unassigned_or_authored", "authored", "none"]
+          "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"]
         },
         "create_workorder": { "type": "boolean" },
-        "edit_scope": { "type": "string" },
-        "comment_scope": { "type": "string" },
-        "upload_attachment_scope": { "type": "string" },
-        "confirm_closure_scope": { "type": "string" },
-        "rate_scope": { "type": "string" },
-        "transition_scope": { "type": "string" },
+        "edit_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
+        "comment_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
+        "upload_attachment_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
+        "confirm_closure_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
+        "rate_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
+        "transition_scope": { "type": "string", "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"] },
         "transition_targets": {
           "oneOf": [
-            { "type": "array", "items": { "type": "string" } },
+            { "type": "array", "uniqueItems": true, "items": { "enum": ["new", "accepted", "in_progress", "on_hold", "resolved", "closed", "cancelled"] } },
             { "enum": ["*"] }
           ]
         },
@@ -65,11 +89,44 @@
         "view_analytics": { "type": "boolean" },
         "manage_departments": { "type": "boolean" },
         "manage_roles": { "type": "boolean" },
+        "manage_settings": { "type": "boolean" },
         "manage_ai_skills": { "type": "boolean" },
         "memory_organization_write": { "type": "boolean" },
         "memory_organization_review": { "type": "boolean" },
-        "view_waiting_list": { "type": "boolean" },
-        "create_waiting_list": { "type": "boolean" }
+        "create_waiting_list": { "type": "boolean" },
+        "waiting_list_view_scope": { "enum": ["none", "authored", "all"] },
+        "waiting_list_edit_scope": { "enum": ["none", "authored", "all"] },
+        "waiting_list_edit_statuses": {
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+            },
+            { "enum": ["*"] }
+          ]
+        },
+        "waiting_list_transition_scope": { "enum": ["none", "authored", "all"] },
+        "waiting_list_transition_from_statuses": {
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+            },
+            { "enum": ["*"] }
+          ]
+        },
+        "waiting_list_transition_targets": {
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+            },
+            { "enum": ["*"] }
+          ]
+        }
       },
       "required": [
         "view_scope",
@@ -87,11 +144,89 @@
         "view_analytics",
         "manage_departments",
         "manage_roles",
+        "manage_settings",
         "manage_ai_skills",
         "memory_organization_write",
         "memory_organization_review",
-        "view_waiting_list",
-        "create_waiting_list"
+        "create_waiting_list",
+        "waiting_list_view_scope",
+        "waiting_list_edit_scope",
+        "waiting_list_edit_statuses",
+        "waiting_list_transition_scope",
+        "waiting_list_transition_from_statuses",
+        "waiting_list_transition_targets"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "waiting_list_edit_scope": { "const": "none" } }
+          },
+          "then": {
+            "properties": { "waiting_list_edit_statuses": { "const": [] } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "waiting_list_edit_scope": { "enum": ["authored", "all"] } }
+          },
+          "then": {
+            "properties": {
+              "waiting_list_edit_statuses": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+                  },
+                  { "const": "*" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "waiting_list_transition_scope": { "const": "none" } }
+          },
+          "then": {
+            "properties": {
+              "waiting_list_transition_from_statuses": { "const": [] },
+              "waiting_list_transition_targets": { "const": [] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "waiting_list_transition_scope": { "enum": ["authored", "all"] } }
+          },
+          "then": {
+            "properties": {
+              "waiting_list_transition_from_statuses": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+                  },
+                  { "const": "*" }
+                ]
+              },
+              "waiting_list_transition_targets": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": { "enum": ["waiting", "scheduled", "confirmed", "cancelled"] }
+                  },
+                  { "const": "*" }
+                ]
+              }
+            }
+          }
+        }
       ]
     }
   },

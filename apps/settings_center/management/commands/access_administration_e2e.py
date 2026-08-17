@@ -1,3 +1,4 @@
+import copy
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -81,10 +82,24 @@ class Command(BaseCommand):
             raise CommandError("Тестовые логины уже заняты; существующие данные не изменены.")
 
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = "technician"
-        control_role_code = "manager"
-        if role_rules.get(role_code, {}).get("view_scope") != "assigned_or_unassigned_or_authored":
+        source_role_code = "technician"
+        role_code = "__access_admin_e2e_technician__"
+        source_control_role_code = "manager"
+        control_role_code = "__access_admin_e2e_manager__"
+        source_role = role_rules.get(source_role_code)
+        source_control_role = role_rules.get(source_control_role_code)
+        if not isinstance(source_role, dict) or source_role.get("view_scope") != "assigned_or_unassigned_or_authored":
             raise CommandError("E2E ожидает исходную ограниченную область technician.view_scope.")
+        if not isinstance(source_control_role, dict):
+            raise CommandError("E2E ожидает исходную контрактную роль manager.")
+        temporary_role_codes = (role_code, control_role_code)
+        if any(
+            code in role_rules or Group.objects.filter(name=code).exists()
+            for code in temporary_role_codes
+        ):
+            raise CommandError("Временная роль E2E уже занята; существующие данные не изменены.")
+        role_rules[role_code] = copy.deepcopy(source_role)
+        role_rules[control_role_code] = copy.deepcopy(source_control_role)
 
         actor = member = control = board = department = None
         created_group_names = []
@@ -143,8 +158,19 @@ class Command(BaseCommand):
                     if client.get(detail_url).status_code != 404:
                         raise CommandError("До изменения technician видит чужую назначенную заявку.")
                     client.force_login(control)
-                    if client.get(detail_url).status_code != 200:
-                        raise CommandError("Участник technician+manager потерял доступ manager.")
+                    control_detail_status = client.get(detail_url).status_code
+                    if control_detail_status != 200:
+                        from apps.workorders.policies import allowed_view_scopes, user_roles
+                        from apps.workorders.selectors import visible_boards_queryset
+
+                        raise CommandError(
+                            "Участник временных technician+manager потерял контрольный доступ: "
+                            f"status={control_detail_status}, "
+                            f"roles={sorted(user_roles(control))}, "
+                            f"scopes={sorted(allowed_view_scopes(control))}, "
+                            f"visible_boards={list(visible_boards_queryset(control).values_list('pk', flat=True))}, "
+                            f"target_board={board.pk}."
+                        )
 
                     client.force_login(actor)
                     role_url = reverse("settings_center:access_workspace")

@@ -48,6 +48,11 @@ class BoardAdmin(admin.ModelAdmin):
     inlines = [KanbanColumnConfigInline]
     actions = ["clone_boards"]
 
+    def has_delete_permission(self, request, obj=None):
+        # Board deletion cascades workorders; preserve the domain hard-delete
+        # invariant and keep Django Admin as change/add break-glass only.
+        return False
+
     @admin.display(description="Резервное управление доступом")
     def access_management_link(self, obj):
         if not obj or not obj.pk:
@@ -188,6 +193,15 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "department__name",
     )
     inlines = [WorkOrderCommentInline, WorkOrderAttachmentInline, WorkOrderTransitionLogInline]
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def delete_model(self, request, obj):
+        raise PermissionDenied("Удаление заявок запрещено. Используйте отмену через workflow.")
+
+    def delete_queryset(self, request, queryset):
+        raise PermissionDenied("Массовое удаление заявок запрещено.")
 
 
 @admin.register(KanbanColumnConfig)

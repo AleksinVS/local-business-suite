@@ -1,6 +1,7 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
   "$administration": {
+    "role_definition_editor_roles": ["admin"],
     "role_assignment_allowlist": {
       "manager": ["customer", "technician"]
     }
@@ -8,6 +9,7 @@
   "$capabilities": {
     "view_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "normal",
       "label": "Область видимости заявок",
@@ -22,6 +24,7 @@
     },
     "edit_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "normal",
       "label": "Редактирование заявок",
@@ -29,6 +32,7 @@
     },
     "comment_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "normal",
       "label": "Комментирование заявок",
@@ -36,6 +40,7 @@
     },
     "upload_attachment_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "normal",
       "label": "Загрузка файлов к заявкам",
@@ -43,6 +48,7 @@
     },
     "confirm_closure_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "elevated",
       "label": "Подтверждение закрытия",
@@ -50,6 +56,7 @@
     },
     "rate_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "normal",
       "label": "Оценка выполненной работы",
@@ -57,6 +64,7 @@
     },
     "transition_scope": {
       "type": "scope",
+      "values_source": "workorder_scopes",
       "section": "workorders",
       "risk": "elevated",
       "label": "Смена статусов заявок",
@@ -64,6 +72,7 @@
     },
     "transition_targets": {
       "type": "targets",
+      "values_source": "workorder_statuses",
       "section": "workorders",
       "risk": "elevated",
       "label": "Доступные статусы",
@@ -111,6 +120,13 @@
       "label": "Управление ролями",
       "description": "Изменение прав ролей на этой странице. Право уровня администратора — выдавать с осторожностью."
     },
+    "manage_settings": {
+      "type": "flag",
+      "section": "organization",
+      "risk": "critical",
+      "label": "Управление настройками",
+      "description": "Просмотр и изменение продуктовых настроек через Центр настроек. Доступно только роли администратора."
+    },
     "manage_ai_skills": {
       "type": "flag",
       "section": "ai_memory",
@@ -132,19 +148,60 @@
       "label": "Ревью памяти организации",
       "description": "Проверка и подтверждение записей, попадающих в общую память организации."
     },
-    "view_waiting_list": {
-      "type": "flag",
-      "section": "personal_data",
-      "risk": "critical",
-      "label": "Просмотр листа ожидания",
-      "description": "Доступ к листу ожидания пациентов. Содержит персональные данные (ФИО, дата рождения, телефон) — по правилам организации выдаётся только врачам (роль «Врач»)."
-    },
     "create_waiting_list": {
       "type": "flag",
       "section": "personal_data",
       "risk": "critical",
       "label": "Добавление в лист ожидания",
       "description": "Разрешает добавлять новые записи в лист ожидания пациентов. По правилам организации выдаётся только врачам (роль «Врач»)."
+    },
+    "waiting_list_view_scope": {
+      "type": "scope",
+      "values_source": "waiting_list_scopes",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Область просмотра листа ожидания",
+      "description": "Определяет, какие записи листа ожидания доступны пользователю: никакие, созданные им или все записи."
+    },
+    "waiting_list_edit_scope": {
+      "type": "scope",
+      "values_source": "waiting_list_scopes",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Область редактирования листа ожидания",
+      "description": "Определяет, какие записи листа ожидания пользователь может изменять. Статусы редактирования задаются отдельно."
+    },
+    "waiting_list_edit_statuses": {
+      "type": "targets",
+      "values_source": "waiting_list_statuses",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Статусы для редактирования листа ожидания",
+      "description": "Статусы записей, которые пользователь может редактировать в пределах выбранной области."
+    },
+    "waiting_list_transition_scope": {
+      "type": "scope",
+      "values_source": "waiting_list_scopes",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Область переходов листа ожидания",
+      "description": "Определяет, какие записи пользователь может переводить между статусами."
+    },
+    "waiting_list_transition_from_statuses": {
+      "type": "targets",
+      "values_source": "waiting_list_statuses",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Исходные статусы листа ожидания",
+      "description": "Статусы, из которых разрешён переход записи в пределах выбранной области."
+    },
+    "waiting_list_transition_targets": {
+      "type": "targets",
+      "values_source": "waiting_list_statuses",
+      "section": "waiting_list",
+      "risk": "critical",
+      "label": "Целевые статусы листа ожидания",
+      "description": "Статусы, в которые разрешено переводить запись в пределах глобального графа переходов."
     }
   },
   "customer": {
@@ -165,11 +222,17 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,
-    "view_waiting_list": false,
-    "create_waiting_list": false
+    "create_waiting_list": false,
+    "waiting_list_view_scope": "none",
+    "waiting_list_edit_scope": "none",
+    "waiting_list_edit_statuses": [],
+    "waiting_list_transition_scope": "none",
+    "waiting_list_transition_from_statuses": [],
+    "waiting_list_transition_targets": []
   },
   "technician": {
     "display_name": "Техник (Медтехник)",
@@ -189,11 +252,17 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,
-    "view_waiting_list": false,
-    "create_waiting_list": false
+    "create_waiting_list": false,
+    "waiting_list_view_scope": "none",
+    "waiting_list_edit_scope": "none",
+    "waiting_list_edit_statuses": [],
+    "waiting_list_transition_scope": "none",
+    "waiting_list_transition_from_statuses": [],
+    "waiting_list_transition_targets": []
   },
   "manager": {
     "display_name": "Менеджер (Руководитель)",
@@ -213,11 +282,17 @@
     "view_analytics": true,
     "manage_departments": true,
     "manage_roles": true,
+    "manage_settings": false,
     "manage_ai_skills": true,
     "memory_organization_write": true,
     "memory_organization_review": true,
-    "view_waiting_list": false,
-    "create_waiting_list": false
+    "create_waiting_list": false,
+    "waiting_list_view_scope": "none",
+    "waiting_list_edit_scope": "none",
+    "waiting_list_edit_statuses": [],
+    "waiting_list_transition_scope": "none",
+    "waiting_list_transition_from_statuses": [],
+    "waiting_list_transition_targets": []
   },
   "admin": {
     "display_name": "Администратор портала",
@@ -237,11 +312,17 @@
     "view_analytics": true,
     "manage_departments": true,
     "manage_roles": true,
+    "manage_settings": true,
     "manage_ai_skills": true,
     "memory_organization_write": true,
     "memory_organization_review": true,
-    "view_waiting_list": false,
-    "create_waiting_list": false
+    "create_waiting_list": false,
+    "waiting_list_view_scope": "none",
+    "waiting_list_edit_scope": "none",
+    "waiting_list_edit_statuses": [],
+    "waiting_list_transition_scope": "none",
+    "waiting_list_transition_from_statuses": [],
+    "waiting_list_transition_targets": []
   },
   "doctor": {
     "display_name": "Врач",
@@ -261,10 +342,16 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,
-    "view_waiting_list": true,
-    "create_waiting_list": true
+    "create_waiting_list": true,
+    "waiting_list_view_scope": "all",
+    "waiting_list_edit_scope": "authored",
+    "waiting_list_edit_statuses": ["waiting", "scheduled"],
+    "waiting_list_transition_scope": "authored",
+    "waiting_list_transition_from_statuses": ["waiting", "scheduled", "confirmed"],
+    "waiting_list_transition_targets": ["waiting", "scheduled", "confirmed", "cancelled"]
   }
 }

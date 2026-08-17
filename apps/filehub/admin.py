@@ -15,8 +15,37 @@ from .models import (
 )
 
 
+class ActiveSuperuserReserveAdmin(admin.ModelAdmin):
+    """Django Admin is a reserve path, never a staff authority."""
+
+    def _active_superuser(self, request):
+        return bool(getattr(request.user, "is_active", False) and getattr(request.user, "is_superuser", False))
+
+    def has_add_permission(self, request):
+        return self._active_superuser(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._active_superuser(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._active_superuser(request)
+
+
+class ReadOnlyOperationalAdmin(admin.ModelAdmin):
+    """Audit and operational state is written only by domain services/workers."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(MemoryFileObject)
-class MemoryFileObjectAdmin(admin.ModelAdmin):
+class MemoryFileObjectAdmin(ActiveSuperuserReserveAdmin):
     list_display = ("file_id", "source", "lifecycle_status", "current_version", "last_seen_at", "updated_at")
     list_filter = ("lifecycle_status", "source__domain", "source__source_kind", "updated_at")
     search_fields = ("file_id", "source__code")
@@ -28,7 +57,7 @@ class MemoryFileObjectAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileObjectVersion)
-class MemoryFileObjectVersionAdmin(admin.ModelAdmin):
+class MemoryFileObjectVersionAdmin(ActiveSuperuserReserveAdmin):
     list_display = ("file_object", "short_sha256", "size_bytes", "storage_backend", "version_status", "created_at")
     list_filter = ("storage_backend", "version_status", "created_at")
     search_fields = ("file_object__file_id", "sha256", "source_object__object_id")
@@ -41,7 +70,7 @@ class MemoryFileObjectVersionAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFilePhysicalPlacement)
-class MemoryFilePhysicalPlacementAdmin(admin.ModelAdmin):
+class MemoryFilePhysicalPlacementAdmin(ReadOnlyOperationalAdmin):
     list_display = ("file_object", "storage_backend", "path_role", "placement_status", "is_current", "updated_at")
     list_filter = ("storage_backend", "path_role", "placement_status", "is_current", "updated_at")
     search_fields = ("file_object__file_id", "relative_path", "source_object__object_id")
@@ -50,7 +79,7 @@ class MemoryFilePhysicalPlacementAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFilePathAlias)
-class MemoryFilePathAliasAdmin(admin.ModelAdmin):
+class MemoryFilePathAliasAdmin(ActiveSuperuserReserveAdmin):
     list_display = ("source", "relative_path", "file_object", "alias_kind", "is_active", "last_seen_at")
     list_filter = ("alias_kind", "is_active", "source__domain")
     search_fields = ("source__code", "relative_path", "file_object__file_id")
@@ -58,7 +87,7 @@ class MemoryFilePathAliasAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileVirtualView)
-class MemoryFileVirtualViewAdmin(admin.ModelAdmin):
+class MemoryFileVirtualViewAdmin(ActiveSuperuserReserveAdmin):
     list_display = ("source", "slug", "view_kind", "status", "owner_user", "is_system", "updated_at")
     list_filter = ("view_kind", "status", "is_system", "source__domain")
     search_fields = ("source__code", "slug", "title")
@@ -67,7 +96,7 @@ class MemoryFileVirtualViewAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileVirtualRule)
-class MemoryFileVirtualRuleAdmin(admin.ModelAdmin):
+class MemoryFileVirtualRuleAdmin(ActiveSuperuserReserveAdmin):
     list_display = ("title", "view", "rule_kind", "status", "confidence", "updated_at")
     list_filter = ("rule_kind", "status", "view__view_kind")
     search_fields = ("title", "view__slug")
@@ -76,7 +105,7 @@ class MemoryFileVirtualRuleAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileVirtualPlacement)
-class MemoryFileVirtualPlacementAdmin(admin.ModelAdmin):
+class MemoryFileVirtualPlacementAdmin(ReadOnlyOperationalAdmin):
     list_display = ("view", "virtual_path", "file_object", "status", "confidence", "review_required")
     list_filter = ("status", "review_required", "placement_source", "view__view_kind")
     search_fields = ("view__slug", "virtual_path", "file_object__file_id")
@@ -85,7 +114,7 @@ class MemoryFileVirtualPlacementAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileUsageEvent)
-class MemoryFileUsageEventAdmin(admin.ModelAdmin):
+class MemoryFileUsageEventAdmin(ReadOnlyOperationalAdmin):
     list_display = ("event_kind", "source", "safe_path_bucket", "actor", "created_at")
     list_filter = ("event_kind", "source__domain", "created_at")
     search_fields = ("source__code", "safe_path_hash", "safe_path_bucket", "file_object__file_id")
@@ -94,7 +123,7 @@ class MemoryFileUsageEventAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileOrganizationProposal)
-class MemoryFileOrganizationProposalAdmin(admin.ModelAdmin):
+class MemoryFileOrganizationProposalAdmin(ReadOnlyOperationalAdmin):
     list_display = ("title", "source", "status", "affected_file_count", "confidence", "reviewed_by", "updated_at")
     list_filter = ("status", "source__domain", "reviewed_at", "created_at")
     search_fields = ("title", "source__code", "proposal_id")
@@ -103,7 +132,7 @@ class MemoryFileOrganizationProposalAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileOrganizationDecision)
-class MemoryFileOrganizationDecisionAdmin(admin.ModelAdmin):
+class MemoryFileOrganizationDecisionAdmin(ReadOnlyOperationalAdmin):
     list_display = ("proposal", "decision", "actor", "created_at")
     list_filter = ("decision", "created_at")
     search_fields = ("proposal__title", "comment")
@@ -112,7 +141,7 @@ class MemoryFileOrganizationDecisionAdmin(admin.ModelAdmin):
 
 
 @admin.register(MemoryFileMoveJob)
-class MemoryFileMoveJobAdmin(admin.ModelAdmin):
+class MemoryFileMoveJobAdmin(ReadOnlyOperationalAdmin):
     list_display = ("idempotency_key", "source", "file_object", "status", "target_storage_backend", "retention_until", "updated_at")
     list_filter = ("status", "target_storage_backend", "source__domain", "retention_until")
     search_fields = ("idempotency_key", "file_object__file_id", "expected_sha256")

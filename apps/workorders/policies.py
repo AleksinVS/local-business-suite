@@ -1,5 +1,7 @@
 from apps.core.contract_store import get_contract
 
+from .contracts import capability_values, resolve_capability_values_source
+
 from .models import WorkOrder, WorkOrderStatus
 
 ROLE_CUSTOMER = "customer"
@@ -7,6 +9,17 @@ ROLE_TECHNICIAN = "technician"
 ROLE_MANAGER = "manager"
 DEFAULT_BOARD_VIEW_ROLE = "default_board_viewer"
 DEFAULT_BOARD_VISIBILITY_GROUP = ROLE_CUSTOMER
+
+SCOPE_LABELS = {
+    "all": "Все записи",
+    "department_branch": "Ветка подразделения",
+    "assigned_or_unassigned_or_authored": "Свои, назначенные и неназначенные",
+    "assigned_or_unassigned": "Назначенные и неназначенные",
+    "assigned": "Только назначенные",
+    "visible": "Все видимые",
+    "authored": "Только созданные пользователем",
+    "none": "Нет доступа",
+}
 
 # Запасной список булевых прав на случай, если рабочая копия контракта ещё не
 # содержит блок $capabilities (например, деградация store на старый снимок).
@@ -18,6 +31,7 @@ FALLBACK_BOOLEAN_CAPABILITIES = (
     ("view_analytics", "Просмотр аналитики", ""),
     ("manage_departments", "Управление подразделениями", ""),
     ("manage_roles", "Управление ролями", ""),
+    ("manage_settings", "Управление настройками", ""),
     ("manage_ai_skills", "Управление ИИ-навыками", ""),
     ("memory_organization_write", "Запись в память организации", ""),
     ("memory_organization_review", "Ревью памяти организации", ""),
@@ -26,7 +40,7 @@ FALLBACK_BOOLEAN_CAPABILITIES = (
 )
 
 
-def capability_flags():
+def capability_flags(rules_payload=None):
     """Булевы права из справочника $capabilities контракта ролей.
 
     Возвращает список кортежей (ключ, название, комментарий) — единый источник
@@ -35,15 +49,16 @@ def capability_flags():
     """
     flags = [
         (key, label, description)
-        for key, label, description, capability_type in capability_definitions()
+        for key, label, description, capability_type in capability_definitions(rules_payload=rules_payload)
         if capability_type == "flag"
     ]
     return flags or list(FALLBACK_BOOLEAN_CAPABILITIES)
 
 
-def capability_definitions():
+def capability_definitions(*, rules_payload=None):
     """Метаданные всех прав для понятного отображения и редактирования в UI."""
-    metadata = role_rules().get("$capabilities")
+    payload = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    metadata = payload.get("$capabilities")
     if not isinstance(metadata, dict):
         return [
             (key, label, description, "flag")
@@ -82,12 +97,12 @@ def status_transitions():
     }
 
 
-def active_role_rules(user):
+def active_role_rules(user, rules_payload=None):
     if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
         return []
+    rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
     if getattr(user, "is_superuser", False):
-        return [{"name": "superuser", **superuser_rules()}]
-    rules = role_rules()
+        return [{"name": "superuser", **superuser_rules(rules_payload=rules)}]
     explicit_rules = [
         {"name": role, **rules[role]}
         for role in user_roles(user)
@@ -95,21 +110,51 @@ def active_role_rules(user):
     ]
     if explicit_rules:
         return explicit_rules
-    if default_board_access_applies(user):
-        return [{"name": DEFAULT_BOARD_VIEW_ROLE, **default_board_view_rules()}]
+    if default_board_access_applies(user, rules_payload=rules):
+        return [{"name": DEFAULT_BOARD_VIEW_ROLE, **default_board_view_rules(rules_payload=rules)}]
     return []
 
 
-def default_board_access_applies(user):
+def default_board_access_applies(user, rules_payload=None):
     """Базовый read-only профиль только для активного пользователя без ролей."""
 
     if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
         return False
-    explicit_role_names = set(role_rules()) & user_roles(user)
+    rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    explicit_role_names = set(rules) & user_roles(user)
     return not explicit_role_names
 
 
-def default_board_view_rules():
+def _populate_capability_type_defaults(rules, *, rules_payload, superuser):
+    metadata = rules_payload.get("$capabilities", {})
+    if not isinstance(metadata, dict):
+        return rules
+    for key, definition in metadata.items():
+        if key in rules or not isinstance(definition, dict):
+            continue
+        capability_type = definition.get("type")
+        if capability_type == "flag":
+            rules[key] = bool(superuser)
+        elif capability_type == "scope":
+            source = resolve_capability_values_source(
+                key,
+                definition,
+                metadata=metadata,
+            )
+            values = capability_values(source)
+            rules[key] = "all" if superuser and "all" in values else "none"
+        elif capability_type == "targets":
+            source = resolve_capability_values_source(
+                key,
+                definition,
+                metadata=metadata,
+            )
+            values = capability_values(source)
+            rules[key] = "*" if superuser and "*" in values else []
+    return rules
+
+
+def default_board_view_rules(rules_payload=None):
     """Минимальный профиль: просмотр своей ветки без единого write-права."""
 
     rules = {
@@ -127,12 +172,13 @@ def default_board_view_rules():
         "transition_scope": "none",
         "transition_targets": [],
     }
-    for key, _label, _description in capability_flags():
+    payload = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    for key, _label, _description in capability_flags(rules_payload=payload):
         rules[key] = False
-    return rules
+    return _populate_capability_type_defaults(rules, rules_payload=payload, superuser=False)
 
 
-def superuser_rules():
+def superuser_rules(rules_payload=None):
     # Scope-поля заданы явно, а булевы права берутся из справочника контракта:
     # новое право автоматически включается суперпользователю, ручной список
     # больше не может отстать от контракта (ранее из-за этого суперпользователь
@@ -147,9 +193,10 @@ def superuser_rules():
         "transition_scope": "all",
         "transition_targets": "*",
     }
-    for key, _label, _description in capability_flags():
+    payload = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    for key, _label, _description in capability_flags(rules_payload=payload):
         rules[key] = True
-    return rules
+    return _populate_capability_type_defaults(rules, rules_payload=payload, superuser=True)
 
 
 def has_role_capability(user, capability):
@@ -263,10 +310,6 @@ def can_edit(user, workorder: WorkOrder) -> bool:
     if not can_view(user, workorder):
         return False
     return any(scope_matches(user, workorder, rule.get("edit_scope")) for rule in active_role_rules(user))
-
-
-def can_delete(user, workorder: WorkOrder) -> bool:
-    return can_edit(user, workorder)
 
 
 def can_assign(user, workorder: WorkOrder) -> bool:

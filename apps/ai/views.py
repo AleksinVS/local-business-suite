@@ -19,8 +19,6 @@ from django.views.generic import DetailView, RedirectView, TemplateView
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.workorders.policies import can_manage_inventory
-
 from .commands import get_predefined_commands, resolve_command, resolve_custom_command
 from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
@@ -389,7 +387,9 @@ def collect_agui_event(event, collector):
 
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        from .skill_authoring import can_manage_ai_skills
+
+        return can_manage_ai_skills(self.request.user)
 
 
 class AIHubView(AIManagementMixin, TemplateView):

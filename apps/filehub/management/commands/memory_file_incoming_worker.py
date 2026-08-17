@@ -11,7 +11,6 @@ class Command(BaseCommand):
         parser.add_argument("--source-code", required=True, help="MemorySource code.")
         parser.add_argument("--dry-run", action="store_true", help="Show metrics without writing state.")
         parser.add_argument("--limit", type=int, default=None, help="Optional maximum files to process.")
-        parser.add_argument("--allow-disabled", action="store_true", help="Allow disabled file organization profile.")
 
     def handle(self, *args, **options):
         source = _source(options["source_code"])
@@ -19,7 +18,6 @@ class Command(BaseCommand):
             source=source,
             dry_run=options["dry_run"],
             limit=options["limit"],
-            require_enabled=not options["allow_disabled"],
         )
         self.stdout.write(
             self.style.SUCCESS(

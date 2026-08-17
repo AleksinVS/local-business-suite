@@ -6,26 +6,30 @@ import uuid
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.utils import timezone
 
-from apps.core.models import Department
-from apps.inventory.models import MedicalDevice
-from apps.workorders.models import Board, WorkOrder, WorkOrderPriority
-from apps.workorders.policies import (
-    can_comment,
-    can_create,
-    can_delete,
-    can_transition,
-    can_confirm_closure,
-    can_rate,
+from apps.workorders.models import WorkOrder, WorkOrderPriority
+from apps.workorders.policies import role_rules
+from apps.workorders.selectors import (
+    resolve_active_actor,
+    visible_workorders_queryset,
 )
-from apps.workorders.selectors import visible_workorders_queryset
+from apps.inventory.selectors import (
+    visible_departments_queryset,
+    visible_devices_queryset,
+)
 from apps.workorders.services import (
-    create_workorder,
-    transition_workorder,
-    confirm_closure,
-    rate_workorder,
+    add_workorder_comment_command,
+    confirm_workorder_closure_command,
+    create_workorder_command,
+    rate_workorder_command,
+    transition_workorder_command,
+)
+from apps.inventory.services import (
+    archive_device_command,
+    create_device_command,
+    update_device_command,
 )
 
 from .models import AgentActionLog, ChatMessage, ChatSession
@@ -343,6 +347,9 @@ def mask_chat_runtime_text(value):
 
 
 def list_workorders_for_actor(*, actor, status=None, limit=20):
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return []
     queryset = visible_workorders_queryset(actor).order_by("-updated_at")
     if status:
         queryset = queryset.filter(status=status)
@@ -364,13 +371,19 @@ def list_workorders_for_actor(*, actor, status=None, limit=20):
 
 
 def get_workorder_for_actor(*, actor, workorder_id=None, number=None):
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        raise PermissionDenied("Требуется активная учетная запись.")
     queryset = visible_workorders_queryset(actor)
-    if workorder_id:
-        workorder = queryset.get(pk=workorder_id)
-    elif number:
-        workorder = queryset.get(number=number)
-    else:
-        raise ValidationError("Нужно указать workorder_id или number.")
+    try:
+        if workorder_id:
+            workorder = queryset.get(pk=workorder_id)
+        elif number:
+            workorder = queryset.get(number=number)
+        else:
+            raise ValidationError("Нужно указать workorder_id или number.")
+    except WorkOrder.DoesNotExist as exc:
+        raise PermissionDenied("Заявка недоступна текущему пользователю.") from exc
     return {
         "id": workorder.id,
         "number": workorder.number,
@@ -387,14 +400,23 @@ def get_workorder_for_actor(*, actor, workorder_id=None, number=None):
 
 
 def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
-    from apps.waiting_list.models import WaitingListEntry
-    from apps.waiting_list.policies import can_view_waiting_list
+    from apps.waiting_list.selectors import visible_waiting_list_entries
 
-    if not can_view_waiting_list(actor):
-        raise PermissionDenied("Пользователю недоступен лист ожидания.")
     if not entry_id:
         raise ValidationError("Нужно указать entry_id.")
-    entry = WaitingListEntry.objects.get(pk=entry_id)
+    current_actor = get_user_model().objects.filter(
+        pk=getattr(actor, "pk", None),
+        is_active=True,
+    ).first()
+    if current_actor is None:
+        raise PermissionDenied("Пользователю недоступен лист ожидания.")
+    rules_payload = role_rules()
+    try:
+        entry = visible_waiting_list_entries(
+            current_actor, rules_payload=rules_payload
+        ).get(pk=entry_id)
+    except ObjectDoesNotExist as exc:
+        raise PermissionDenied("Запись листа ожидания недоступна текущему пользователю.") from exc
     return {
         "id": entry.id,
         "status": entry.status,
@@ -407,20 +429,15 @@ def get_waiting_list_entry_for_actor(*, actor, entry_id=None):
 
 
 def create_workorder_for_actor(*, actor, payload):
-    if not can_create(actor):
-        raise PermissionDenied("Пользователю недоступно создание заявок.")
-    department = Department.objects.get(pk=payload["department_id"])
-    board = Board.objects.filter(slug="main").first()
-    if not board:
-        raise ValidationError("Доска по умолчанию 'main' не существует. Обратитесь к администратору.")
-    workorder = create_workorder(
-        author=actor,
-        title=payload.get("title") or payload["subject"],
-        description=payload["description"],
-        department=department,
-        priority=payload.get("priority", WorkOrderPriority.MEDIUM),
-        device_id=payload.get("device_id"),
-        board=board,
+    workorder = create_workorder_command(
+        actor=actor,
+        payload={
+            "title": payload.get("title") or payload["subject"],
+            "description": payload["description"],
+            "department_id": payload["department_id"],
+            "priority": payload.get("priority", WorkOrderPriority.MEDIUM),
+            "device_id": payload.get("device_id"),
+        },
     )
     return {
         "id": workorder.id,
@@ -431,12 +448,10 @@ def create_workorder_for_actor(*, actor, payload):
 
 
 def transition_workorder_for_actor(*, actor, payload):
-    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
-    target_status = payload["target_status"]
-    if not can_transition(actor, workorder, target_status):
-        raise PermissionDenied("Пользователю недоступен этот переход статуса.")
-    workorder = transition_workorder(
-        workorder=workorder, user=actor, to_status=target_status
+    workorder = transition_workorder_command(
+        actor=actor,
+        workorder_id=payload["workorder_id"],
+        target_status=payload["target_status"],
     )
     return {
         "id": workorder.id,
@@ -446,46 +461,31 @@ def transition_workorder_for_actor(*, actor, payload):
     }
 
 
-def delete_workorder_for_actor(*, actor, payload):
-    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
-    if not can_delete(actor, workorder):
-        raise PermissionDenied("Пользователю недоступно удаление заявки.")
-    result = {
-        "id": workorder.id,
-        "number": workorder.number,
-        "title": workorder.title,
-        "status": workorder.status,
-        "deleted": True,
-    }
-    workorder.delete()
-    return {"workorder": result}
-
-
 def add_comment_for_actor(*, actor, payload):
-    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
-    if not can_comment(actor, workorder):
-        raise PermissionDenied("Пользователю недоступно комментирование.")
-    comment = workorder.comments.create(author=actor, body=payload["text"])
-    workorder.updated_at = timezone.now()
-    workorder.save(update_fields=["updated_at"])
+    comment = add_workorder_comment_command(
+        actor=actor,
+        workorder_id=payload["workorder_id"],
+        body=payload["text"],
+    )
     return {
         "id": comment.id,
-        "workorder_id": workorder.id,
+        "workorder_id": comment.workorder_id,
         "body": comment.body,
-        "author": actor.username,
+        "author": comment.author.username,
         "created_at": comment.created_at.isoformat(),
     }
 
 
 def list_departments_for_actor(*, actor, query="", parent_id=None):
-    if not actor.is_authenticated:
-        raise PermissionDenied("Требуется вход в систему.")
-    queryset = Department.objects.select_related("parent").order_by(
-        "parent_id", "name", "id"
-    )
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return []
+    queryset = visible_departments_queryset(actor)
     if query:
         queryset = queryset.filter(name__icontains=query)
     if parent_id:
+        if not queryset.filter(pk=parent_id).exists():
+            return []
         queryset = queryset.filter(parent_id=parent_id)
     return [
         {
@@ -499,11 +499,10 @@ def list_departments_for_actor(*, actor, query="", parent_id=None):
 
 
 def list_devices_for_actor(*, actor, query="", department_id=None, archived=False):
-    if not actor.is_authenticated:
-        raise PermissionDenied("Требуется вход в систему.")
-    queryset = MedicalDevice.objects.select_related("department").order_by("name", "id")
-    if not archived:
-        queryset = queryset.filter(is_archived=False)
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return []
+    queryset = visible_devices_queryset(actor, include_archived=bool(archived))
     if query:
         queryset = queryset.filter(name__icontains=query)
     if department_id:
@@ -564,10 +563,10 @@ def _sanitize_ai_audit_payload(value):
 
 
 def confirm_closure_for_actor(*, actor, payload):
-    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
-    if not can_confirm_closure(actor, workorder):
-        raise PermissionDenied("Пользователю недоступно подтверждение закрытия.")
-    workorder = confirm_closure(workorder=workorder, user=actor)
+    workorder = confirm_workorder_closure_command(
+        actor=actor,
+        workorder_id=payload["workorder_id"],
+    )
     return {
         "id": workorder.id,
         "number": workorder.number,
@@ -578,14 +577,10 @@ def confirm_closure_for_actor(*, actor, payload):
 
 
 def rate_workorder_for_actor(*, actor, payload):
-    workorder = visible_workorders_queryset(actor).get(pk=payload["workorder_id"])
-    if not can_rate(actor, workorder):
-        raise PermissionDenied("Пользователю недоступна оценка заявки.")
-    rating = payload.get("rating")
-    if not isinstance(rating, int) or rating < 1 or rating > 5:
-        raise ValidationError("Оценка должна быть целым числом от 1 до 5.")
-    workorder = rate_workorder(
-        workorder=workorder, user=actor, rating=rating
+    workorder = rate_workorder_command(
+        actor=actor,
+        workorder_id=payload["workorder_id"],
+        rating=payload.get("rating"),
     )
     return {
         "id": workorder.id,
@@ -596,16 +591,14 @@ def rate_workorder_for_actor(*, actor, payload):
 
 
 def create_device_for_actor(*, actor, payload):
-    from apps.workorders.policies import can_manage_inventory
-
-    if not can_manage_inventory(actor):
-        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
-    department = Department.objects.get(pk=payload["department_id"])
-    device = MedicalDevice.objects.create(
-        name=payload["name"],
-        department=department,
-        model=payload.get("model", ""),
-        serial_number=payload.get("serial_number", ""),
+    device = create_device_command(
+        actor=actor,
+        payload={
+            "name": payload["name"],
+            "department": payload["department_id"],
+            "model": payload.get("model", ""),
+            "serial_number": payload.get("serial_number", ""),
+        },
     )
     return {
         "id": device.id,
@@ -615,20 +608,18 @@ def create_device_for_actor(*, actor, payload):
 
 
 def update_device_for_actor(*, actor, payload):
-    from apps.workorders.policies import can_manage_inventory
-
-    if not can_manage_inventory(actor):
-        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
-    device = MedicalDevice.objects.get(pk=payload["device_id"])
-    if "name" in payload:
-        device.name = payload["name"]
+    update_payload = {
+        key: payload[key]
+        for key in ("name", "model", "serial_number")
+        if key in payload
+    }
     if "department_id" in payload:
-        device.department_id = payload["department_id"]
-    if "model" in payload:
-        device.model = payload["model"]
-    if "serial_number" in payload:
-        device.serial_number = payload["serial_number"]
-    device.save()
+        update_payload["department"] = payload["department_id"]
+    device = update_device_command(
+        actor=actor,
+        device_id=payload["device_id"],
+        payload=update_payload,
+    )
     return {
         "id": device.id,
         "name": device.name,
@@ -637,12 +628,7 @@ def update_device_for_actor(*, actor, payload):
 
 
 def archive_device_for_actor(*, actor, payload):
-    from apps.workorders.policies import can_manage_inventory
-
-    if not can_manage_inventory(actor):
-        raise PermissionDenied("Пользователю недоступно управление инвентарем.")
-    device = MedicalDevice.objects.get(pk=payload["device_id"])
-    device.archive()
+    device = archive_device_command(actor=actor, device_id=payload["device_id"])
     return {
         "id": device.id,
         "is_archived": device.is_archived,
@@ -653,6 +639,9 @@ def get_analytics_summary_for_actor(*, actor, payload):
     from apps.workorders.policies import can_view_analytics
     from django.db.models import Count
 
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        raise PermissionDenied("Требуется активная учетная запись.")
     if not can_view_analytics(actor):
         raise PermissionDenied("Пользователю недоступна аналитика.")
 
@@ -673,7 +662,7 @@ def get_analytics_summary_for_actor(*, actor, payload):
             .annotate(total=Count("id"))
             .order_by("-total", "department")
         )
-        departments = Department.objects.select_related("parent")
+        departments = visible_departments_queryset(actor)
         department_map = {d.id: d for d in departments}
         return {
             "summary": [
@@ -775,15 +764,23 @@ def update_role_permissions_for_actor(*, actor, payload):
     }
 
 def get_role_rules_for_actor(*, actor, payload):
-    """Returns the current role configuration from role_rules.json."""
-    if not actor.is_authenticated:
-        raise PermissionDenied("Требуется вход в систему.")
+    """Return role rules only to the product access-administration roles."""
+    from apps.accounts.access_contracts import can_edit_role_definitions
     from apps.core.contract_store import get_contract
+
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        raise PermissionDenied("Требуется активная учетная запись.")
+    from apps.workorders.policies import can_manage_roles
+
+    if not (can_manage_roles(actor) or can_edit_role_definitions(actor)):
+        raise PermissionDenied("Правила ролей доступны только администраторам доступа.")
     return {"rules": get_contract("role_rules")}
 
 def list_users_for_actor(*, actor, payload):
     """Lists users with their roles and departments. Only for superusers."""
-    if not actor.is_superuser:
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None or not actor.is_superuser:
         raise PermissionDenied("Список всех пользователей доступен только администраторам.")
 
     User = get_user_model()
@@ -973,7 +970,8 @@ def update_user_for_actor(*, actor, payload):
 
 def list_groups_for_actor(*, actor, payload):
     """Lists all available Django groups. Only for superusers."""
-    if not actor.is_superuser:
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None or not actor.is_superuser:
         raise PermissionDenied("Список групп доступен только администраторам.")
     from django.contrib.auth.models import Group
     return {"items": list(Group.objects.values_list("name", flat=True))}

@@ -31,14 +31,22 @@
         {% for row in rows %}
           <tr>
             <td>
-              <strong>{{ row.descriptor.title }}</strong>
-              <code class="setting-code">{{ row.descriptor.setting_id }}</code>
+              <strong>{{ row.title }}</strong>
+              <code class="setting-code">{{ row.setting_id }}</code>
             </td>
-            <td><code>{{ row.descriptor.metadata.env_key }}</code></td>
-            <td>{{ row.descriptor.section }}</td>
-            <td>{{ row.effective_value|default:"" }}</td>
+            <td><code>{{ row.env_key }}</code></td>
+            <td>{{ row.section }}</td>
+            <td>
+              {% if row.is_secret %}
+                <span aria-label="Секретное значение">
+                  {{ row.effective_value|default:"не настроено" }}
+                </span>
+              {% else %}
+                {{ row.effective_value|default:"" }}
+              {% endif %}
+            </td>
             <td>{{ row.apply_mode_label }}</td>
-            <td>{% if row.descriptor.requires_restart %}да{% else %}нет{% endif %}</td>
+            <td>{% if row.requires_restart %}да{% else %}нет{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

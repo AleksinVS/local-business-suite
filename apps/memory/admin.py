@@ -1,6 +1,9 @@
 from django.contrib import admin
+from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
+
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 
 from .models import (
     MemoryAccessAudit,
@@ -73,6 +76,15 @@ class MemorySourceAdmin(admin.ModelAdmin):
                 _search_document_count=Count("source_objects__search_documents", distinct=True),
             )
         )
+
+    def save_model(self, request, obj, form, change):
+        # Django Admin is the documented reserve path.  It still participates
+        # in the same source-status fence as FileHub workers.
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+            with transaction.atomic():
+                if obj.pk:
+                    MemorySource.objects.select_for_update().filter(pk=obj.pk).first()
+                super().save_model(request, obj, form, change)
 
     @admin.display(ordering="_search_document_count", description="Поисковые документы")
     def search_document_count(self, obj):

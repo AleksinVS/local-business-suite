@@ -12,6 +12,7 @@ from .models import MemorySearchDocument, MemorySourceObject
 from .policies import (
     can_access_search_document,
     effective_source_trust,
+    resolve_active_actor,
     search_document_scope_tokens,
     search_document_sensitivity,
     search_document_source,
@@ -94,6 +95,7 @@ def memory_search(
     }
 
     try:
+        actor = resolve_active_actor(actor, force_refresh=True)
         _assert_actor(actor)
         route_decision = resolve_retrieval_route(sensitivity)
         trace["route"] = route_decision.as_trace()
@@ -223,6 +225,11 @@ def memory_search(
         raise
 
 def read_search_document_text(document: MemorySearchDocument, *, actor=None) -> str:
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None or not can_access_search_document(actor, document):
+        # Never fall back to a filename, path, or object id on a denied read:
+        # those values are themselves personal/source metadata.
+        raise PermissionDenied("Доступ к поисковому документу запрещен.")
     if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE:
         if document.knowledge_item_id is None:
             raise ValidationError("Knowledge search document has no knowledge item.")
@@ -230,10 +237,7 @@ def read_search_document_text(document: MemorySearchDocument, *, actor=None) -> 
     if document.source_object_id:
         from .services import render_source_object_text
 
-        rendered = render_source_object_text(document.source_object, actor=actor)
-        if rendered:
-            return rendered
-        return document.source_object.file_name or document.source_object.relative_path or document.source_object.object_id
+        return render_source_object_text(document.source_object, actor=actor)
     return ""
 
 
@@ -745,22 +749,21 @@ def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, t
 
 def _source_object_document(source_object: MemorySourceObject) -> MemorySearchDocument:
     document_id = "source:" + hashlib.sha256(f"{source_object.source.code}:{source_object.object_id}".encode("utf-8")).hexdigest()[:40]
-    document, _ = MemorySearchDocument.objects.get_or_create(
+    # This object is a read-only projection for an unindexed source fallback.
+    # ``memory_search`` must never create a durable document or index row.
+    return MemorySearchDocument(
         document_id=document_id,
-        defaults={
-            "corpus_type": MemorySearchDocument.CorpusType.SOURCE_DATA,
-            "object_kind": MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
-            "source_object": source_object,
-            "body_hash": source_object.content_hash,
-            "index_status": MemorySearchDocument.IndexStatus.READY,
-            "metadata": {
-                "file_name": source_object.file_name,
-                "relative_path": source_object.relative_path,
-                "content_hash": source_object.content_hash,
-            },
+        corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
+        object_kind=MemorySearchDocument.ObjectKind.SOURCE_OBJECT,
+        source_object=source_object,
+        body_hash=source_object.content_hash,
+        index_status=MemorySearchDocument.IndexStatus.READY,
+        metadata={
+            "file_name": source_object.file_name,
+            "relative_path": source_object.relative_path,
+            "content_hash": source_object.content_hash,
         },
     )
-    return document
 
 
 def _document_source_code(document: MemorySearchDocument, *, source=None) -> str:

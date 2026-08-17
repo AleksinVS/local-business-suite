@@ -64,6 +64,7 @@ from apps.workorders.policies import ROLE_MANAGER
 from apps.inventory.models import MedicalDevice
 from apps.waiting_list.models import WaitingListEntry
 from apps.workorders.models import Board, BoardAccessAudit, WorkOrder
+from apps.workorders.models import WorkOrderStatus
 from config.settings import database_config_from_url
 from .models import Department
 
@@ -546,8 +547,13 @@ class DepartmentViewTests(TestCase):
             password="pass",
             email="role-admin@example.test",
         )
+        cls.contract_admin = User.objects.create_user(
+            username="contract-admin-ui", password="pass"
+        )
         manager_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        admin_group, _ = Group.objects.get_or_create(name="admin")
         cls.manager.groups.add(manager_group)
+        cls.contract_admin.groups.add(admin_group)
         cls.department = Department.objects.create(name="Стационар")
 
     def test_manager_can_open_department_directory(self):
@@ -555,6 +561,70 @@ class DepartmentViewTests(TestCase):
         response = self.client.get(reverse("core:department_list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Подразделения")
+
+    def test_department_counts_use_actor_visible_devices_and_workorders_without_join_multiplication(self):
+        from apps.core.contract_store import _reset_for_tests, get_contract
+
+        department = Department.objects.create(name="Scoped counts")
+        actor = User.objects.create_user(
+            username="scoped-counts-actor",
+            password="pass",
+            department=department,
+        )
+        role_group, _ = Group.objects.get_or_create(name="scoped-counts-role")
+        actor.groups.add(role_group)
+        board = Board.objects.create(title="Scoped counts board", slug="scoped-counts")
+        board.allowed_groups.add(role_group)
+        visible_device = MedicalDevice.objects.create(
+            name="Visible count device",
+            inventory_number="SCOPED-COUNT-VISIBLE",
+            department=department,
+        )
+        MedicalDevice.objects.create(
+            name="Foreign count device",
+            inventory_number="SCOPED-COUNT-FOREIGN",
+            department=department,
+        )
+        WorkOrder.objects.create(
+            title="Visible count workorder",
+            description="Visible to actor.",
+            department=department,
+            author=self.manager,
+            assignee=actor,
+            board=board,
+            device=visible_device,
+            status=WorkOrderStatus.NEW,
+        )
+        WorkOrder.objects.create(
+            title="Foreign count workorder",
+            description="Not visible to actor.",
+            department=department,
+            author=self.manager,
+            assignee=self.manager,
+            board=board,
+            device=visible_device,
+            status=WorkOrderStatus.NEW,
+        )
+        payload = json.loads(json.dumps(get_contract("role_rules")))
+        payload["scoped-counts-role"] = {
+            **payload["technician"],
+            "view_scope": "assigned",
+            "manage_departments": True,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_rules_path = Path(tmpdir) / "role_rules.json"
+            role_rules_path.write_text(json.dumps(payload), encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_rules_path):
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    response = self.client.get(reverse("core:department_list"))
+                    self.assertEqual(response.status_code, 200)
+                    row = response.context["departments"].get(pk=department.pk)
+                    self.assertEqual(row.device_count, 1)
+                    self.assertEqual(row.workorder_count, 1)
+                finally:
+                    _reset_for_tests()
 
     def test_manager_can_create_child_department(self):
         self.client.force_login(self.manager)
@@ -574,6 +644,15 @@ class DepartmentViewTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, reverse("admin:index"))
+
+    def test_access_nav_uses_contract_authority_not_staff_flag(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("core:dashboard"))
+        self.assertNotContains(response, reverse("settings_center:access_workspace"))
+
+        self.client.force_login(self.contract_admin)
+        response = self.client.get(reverse("core:dashboard"))
+        self.assertContains(response, reverse("settings_center:access_workspace"))
 
     @override_settings(APP_DISPLAY_NAME="БУЗ ВО ВОБ №3")
     def test_custom_app_display_name_is_rendered(self):
@@ -616,15 +695,26 @@ class DepartmentViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_active_superuser_legacy_role_rules_route_redirects_to_role_catalog(self):
-        self.client.force_login(self.role_admin)
+        for actor in (self.role_admin, self.contract_admin):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("core:role_rules"))
+                self.assertRedirects(
+                    response,
+                    reverse("settings_center:role_catalog"),
+                    fetch_redirect_response=False,
+                )
 
-        response = self.client.get(reverse("core:role_rules"))
-
-        self.assertRedirects(
-            response,
-            reverse("settings_center:role_catalog"),
-            fetch_redirect_response=False,
+    def test_inactive_role_definition_editor_and_manager_are_denied_legacy_route(self):
+        inactive_staff = User.objects.create_user(
+            username="inactive-role-editor", password="pass", is_staff=True, is_active=False
         )
+        for actor in (self.manager, inactive_staff):
+            with self.subTest(actor=actor.username):
+                self.client.force_login(actor)
+                response = self.client.get(reverse("core:role_rules"))
+                expected_status = 403 if actor is self.manager else 302
+                self.assertEqual(response.status_code, expected_status)
 
     def test_legacy_role_rules_post_is_not_allowed_and_contract_is_unchanged(self):
         from apps.core.contract_store import get_contract

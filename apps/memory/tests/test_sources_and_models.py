@@ -1,4 +1,6 @@
 """Тесты моделей источников, metadata и сервисов очереди."""
+from types import SimpleNamespace
+
 from apps.memory.tests._common import *  # noqa: F401,F403
 
 
@@ -57,6 +59,53 @@ class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(sources[0].review_owner, "operations")
         self.assertEqual(sources[1].status, MemorySource.Status.DISABLED)
         self.assertEqual(sources[0].config["scope_rule"], "workorder_visibility")
+
+    def test_envelope_cannot_reenable_an_administratively_disabled_source(self):
+        from apps.memory.services import _ensure_memory_source_from_envelope
+
+        source = self.create_source(code="disabled-envelope-source")
+        source.status = MemorySource.Status.DISABLED
+        source.save(update_fields=["status", "updated_at"])
+        envelope = SimpleNamespace(
+            source_code=source.code,
+            source_origin="internal",
+            source_kind="django_model",
+            domain="workorders",
+            privacy_profile="pii_off",
+            access_policy={},
+            provenance={"adapter": source.code},
+            schema_version="1.0",
+            sensitivity="internal",
+            title="Disabled source",
+        )
+
+        with self.assertRaises(ValidationError):
+            _ensure_memory_source_from_envelope(envelope)
+        source.refresh_from_db()
+        self.assertEqual(source.status, MemorySource.Status.DISABLED)
+
+    def test_delete_envelope_cannot_mutate_disabled_source(self):
+        from apps.memory.services import delete_memory_projection_from_envelope
+
+        source = self.create_source(code="disabled-delete-envelope")
+        source_object = MemorySourceObject.objects.create(
+            source=source,
+            object_id="object-disabled-delete",
+            object_uri="internal:disabled",
+            relative_path="disabled.txt",
+            file_name="disabled.txt",
+            discovery_status=MemorySourceObject.DiscoveryStatus.SEEN,
+            ingestion_status=MemorySourceObject.IngestionStatus.INGESTED,
+        )
+        source.status = MemorySource.Status.DISABLED
+        source.save(update_fields=["status", "updated_at"])
+        envelope = SimpleNamespace(source_code=source.code, object_id=source_object.object_id)
+
+        with self.assertRaises(ValidationError):
+            delete_memory_projection_from_envelope(envelope)
+        source_object.refresh_from_db()
+        self.assertEqual(source_object.discovery_status, MemorySourceObject.DiscoveryStatus.SEEN)
+        self.assertEqual(source_object.ingestion_status, MemorySourceObject.IngestionStatus.INGESTED)
 
     def test_effective_source_trust_maps_legacy_statuses_to_mvp_statuses(self):
         cases = {

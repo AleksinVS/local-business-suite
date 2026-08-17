@@ -14,7 +14,7 @@ def get_settings_descriptors():
             value_type="json",
             widget="status_color_palette",
             write_policy="editable",
-            required_permission="settings_center.manage",
+            required_permission="manage_settings",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE",
                 "settings_payload_attr": "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS",

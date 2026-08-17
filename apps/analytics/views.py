@@ -2,20 +2,31 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F
 from django.views.generic import TemplateView
 
-from apps.core.models import Department
-from apps.workorders.models import WorkOrder, WorkOrderStatus
+from apps.workorders.models import WorkOrderStatus
 from apps.workorders.policies import can_view_analytics
+from apps.workorders.selectors import (
+    resolve_active_actor,
+    visible_departments_queryset,
+    visible_workorders_queryset,
+)
 
 
 class AnalyticsDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "analytics/dashboard.html"
 
     def test_func(self):
-        return can_view_analytics(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_view_analytics(actor)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        base_qs = WorkOrder.objects.select_related("assignee")
+        # Analytics is a read adapter over the same scoped workorder selector
+        # used by the board and AI.  Aggregating the model directly leaks
+        # branches for relational/department-scoped actors.
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        base_qs = visible_workorders_queryset(actor).select_related(
+            "assignee"
+        )
         status_labels = dict(WorkOrderStatus.choices)
         context["status_summary"] = [
             {
@@ -30,7 +41,7 @@ class AnalyticsDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
             .annotate(total=Count("id"))
             .order_by("-total", "department")
         )
-        departments = Department.objects.select_related("parent")
+        departments = visible_departments_queryset(actor)
         department_map = {department.id: department for department in departments}
         context["department_summary"] = [
             {

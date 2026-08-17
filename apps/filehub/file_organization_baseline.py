@@ -5,15 +5,16 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 from .file_organization import (
     BASELINE_VIEW_SLUG,
-    create_file_organization_issue,
+    _create_file_organization_issue_locked,
     decimal_confidence,
-    ensure_file_object_for_source_object,
+    _ensure_file_object_for_source_object_locked,
     get_file_organization_profile,
-    get_or_create_system_view,
+    _get_or_create_system_view_locked,
     sanitize_path_segment,
-    sync_file_objects_from_source_objects,
+    _sync_file_objects_from_source_objects_locked,
 )
 from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
 
@@ -45,13 +46,33 @@ def build_baseline_virtual_structure(
     create_issues: bool = True,
     require_enabled: bool = True,
 ) -> dict:
-    profile = get_file_organization_profile(source, require_enabled=require_enabled)
-    sync_metrics = sync_file_objects_from_source_objects(source=source, dry_run=dry_run, limit=limit)
+    if require_enabled is not True:
+        raise ValueError("Обход проверки включенного источника запрещен.")
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with transaction.atomic():
+            source = MemorySource.objects.select_for_update().get(pk=source.pk)
+            return _build_baseline_virtual_structure_locked(
+                source=source,
+                dry_run=dry_run,
+                limit=limit,
+                create_issues=create_issues,
+            )
+
+
+def _build_baseline_virtual_structure_locked(
+    *,
+    source: MemorySource,
+    dry_run: bool = False,
+    limit: int | None = None,
+    create_issues: bool = True,
+) -> dict:
+    profile = get_file_organization_profile(source)
+    sync_metrics = _sync_file_objects_from_source_objects_locked(source=source, dry_run=dry_run, limit=limit)
     queryset = MemorySourceObject.objects.filter(source=source).order_by("relative_path")
     if limit:
         queryset = queryset[:limit]
 
-    view = get_or_create_system_view(
+    view = _get_or_create_system_view_locked(
         source=source,
         view_kind=MemoryFileVirtualView.ViewKind.BASELINE_AUTO,
         slug=BASELINE_VIEW_SLUG,
@@ -72,7 +93,7 @@ def build_baseline_virtual_structure(
     }
     for source_object in queryset:
         metrics["seen"] += 1
-        file_object = ensure_file_object_for_source_object(source_object) if not dry_run else None
+        file_object = _ensure_file_object_for_source_object_locked(source_object=source_object) if not dry_run else None
         file_id = file_object.file_id if file_object is not None else _dry_run_file_id(source_object)
         plan = classify_baseline_placement(source_object=source_object, file_id=file_id)
         metrics["placements"] += 1
@@ -112,7 +133,7 @@ def build_baseline_virtual_structure(
                     if "acl_scope_missing" in plan.conflicts
                     else MemoryIngestionIssue.IssueKind.CANONICALIZATION_CONFLICT
                 )
-                create_file_organization_issue(
+                _create_file_organization_issue_locked(
                     source=source,
                     source_object=source_object,
                     issue_kind=issue_kind,

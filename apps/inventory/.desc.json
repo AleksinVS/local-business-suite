@@ -1,11 +1,14 @@
 {
   ".": "Каталог управляемых активов (медицинские устройства)",
   "models.py": "Модель MedicalDevice (с архивацией)",
-  "views.py": "Представления CRUD устройств",
+  "selectors.py": "Actor-aware selectors доступных и создаваемых изделий",
+  "services.py": "Actor-aware команды создания, изменения и архивации изделий",
+  "views.py": "Представления CRUD устройств со scoped read querysets",
   "forms.py": "Формы устройств",
   "urls.py": "URL-маршруты инвентаря",
   "admin.py": "Регистрация моделей в Django Admin",
   "apps.py": "Конфигурация приложения",
   "tests.py": "Тесты приложения",
+  "test_actor_commands.py": "Тесты actor-aware команд изменения инвентаря",
   "management/": "Django management-команды приложения (например, импорт устройств)"
 }

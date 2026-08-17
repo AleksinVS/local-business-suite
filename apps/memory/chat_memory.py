@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.ai.models import ChatMessage
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 
 from .models import (
     MemoryKnowledgeItem,
@@ -260,6 +261,13 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
 
 
 def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
+    # Keep source status stable for the complete index update, not only while
+    # obtaining the source row.  The lock is intentionally acquired once.
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        return _index_knowledge_item_locked(item, index_backends=index_backends)
+
+
+def _index_knowledge_item_locked(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
     lifecycle = str((item.metadata or {}).get("lifecycle") or "current")
     if lifecycle != "current":
         # ADR-0030 decisions 4 & 8: a page proposed via the git
@@ -272,7 +280,7 @@ def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext
             item.index_status = "indexing_pending"
             item.save(update_fields=["index_status", "updated_at"])
         return {"document_ids": [], "fact_ids": [], "knowledge_id": item.memory_id, "skipped": f"lifecycle:{lifecycle}"}
-    source = _chat_memory_source(item.scope)
+    source = _chat_memory_source_locked(item.scope)
     selected_backends = set(index_backends or ())
     fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
     vector_backend = get_default_vector_backend() if "vector" in selected_backends else None
@@ -518,37 +526,50 @@ def _source_refs_for_remember(*, session, message_ids: list[int]) -> list[dict[s
 
 
 def _chat_memory_source(scope: str) -> MemorySource:
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        return _chat_memory_source_locked(scope)
+
+
+def _chat_memory_source_locked(scope: str) -> MemorySource:
     code = CHAT_MEMORY_ORG_SOURCE if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else CHAT_MEMORY_PERSONAL_SOURCE
     title = "Память организации из ИИ-чата" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "Личная память из ИИ-чата"
-    source, _ = MemorySource.objects.update_or_create(
+    defaults = {
+        "title": title,
+        "source_kind": "ai_chat",
+        "domain": "chat_memory",
+        "owner": "memory",
+        "status": MemorySource.Status.ENABLED,
+        "trust_status": MemorySource.TrustStatus.TRUSTED,
+        "authority_class": (
+            MemorySource.AuthorityClass.REVIEWED_ORG_KNOWLEDGE
+            if scope == MemoryKnowledgeItem.Scope.ORGANIZATION
+            else MemorySource.AuthorityClass.APPROVED_USER_MEMORY
+        ),
+        "trusted_for_context": True,
+        "requires_source_review": False,
+        "review_owner": "knowledge_owner" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "memory_owner",
+        "trusted_context_kinds": ["retrieved_chunk", "citation"],
+        "untrusted_handling": "review_required",
+        "sync_mode": "event_driven",
+        "scope_rule": "chat_memory_scope",
+        "sensitivity": "internal",
+        "pii_policy": "secret_handle_redaction",
+        "extractor_profile": CHAT_MEMORY_EXTRACTOR_VERSION,
+        "chunking_profile": "short_business_event_v1",
+        "index_profiles": ["fulltext_default"],
+        "config": {"runtime_source": True, "scope": scope},
+    }
+    source, created = MemorySource.objects.get_or_create(
         code=code,
-        defaults={
-            "title": title,
-            "source_kind": "ai_chat",
-            "domain": "chat_memory",
-            "owner": "memory",
-            "status": MemorySource.Status.ENABLED,
-            "trust_status": MemorySource.TrustStatus.TRUSTED,
-            "authority_class": (
-                MemorySource.AuthorityClass.REVIEWED_ORG_KNOWLEDGE
-                if scope == MemoryKnowledgeItem.Scope.ORGANIZATION
-                else MemorySource.AuthorityClass.APPROVED_USER_MEMORY
-            ),
-            "trusted_for_context": True,
-            "requires_source_review": False,
-            "review_owner": "knowledge_owner" if scope == MemoryKnowledgeItem.Scope.ORGANIZATION else "memory_owner",
-            "trusted_context_kinds": ["retrieved_chunk", "citation"],
-            "untrusted_handling": "review_required",
-            "sync_mode": "event_driven",
-            "scope_rule": "chat_memory_scope",
-            "sensitivity": "internal",
-            "pii_policy": "secret_handle_redaction",
-            "extractor_profile": CHAT_MEMORY_EXTRACTOR_VERSION,
-            "chunking_profile": "short_business_event_v1",
-            "index_profiles": ["fulltext_default"],
-            "config": {"runtime_source": True, "scope": scope},
-        },
+        defaults=defaults,
     )
+    if not created:
+        if source.status != MemorySource.Status.ENABLED:
+            raise ValidationError(f"Источник '{source.code}' отключён администратором.")
+        for field, value in defaults.items():
+            if field != "status":
+                setattr(source, field, value)
+        source.save(update_fields=[field for field in defaults if field != "status"] + ["updated_at"])
     return source
 
 

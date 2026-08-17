@@ -14,7 +14,7 @@ def get_settings_descriptors():
             value_type="object",
             widget="user_management",
             write_policy="requires_domain_workflow",
-            required_permission="settings_center.manage_users",
+            required_permission="manage_users",
         ),
         SettingDescriptor(
             setting_id="accounts.user.ad_identity_link",
@@ -27,6 +27,6 @@ def get_settings_descriptors():
             value_type="object",
             widget="ad_identity_link",
             write_policy="requires_domain_workflow",
-            required_permission="settings_center.manage_users",
+            required_permission="manage_users",
         ),
     ]

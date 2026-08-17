@@ -2,8 +2,11 @@ import hashlib
 from collections.abc import Iterable
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.utils import timezone
 
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 from apps.core.source_adapters import (
     ACCESS_MODE_ADAPTER_CHECK,
     OPERATION_DELETE,
@@ -24,8 +27,14 @@ from .models import (
     MemorySource,
     MemorySourceObject,
 )
-from .policies import user_scope_tokens
+from .policies import (
+    can_access_knowledge_item,
+    can_access_source_object_scope,
+    resolve_active_actor,
+    user_scope_tokens,
+)
 from .security import scan_for_secrets
+from .source_lifecycle import enabled_source_operation
 from .vector_backends import (
     LANCEDB_VECTOR_SCHEMA_VERSION,
     MemoryIndexRecord,
@@ -36,6 +45,12 @@ from .vector_backends import (
 
 
 def sync_sources_from_contract(sources_payload):
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with transaction.atomic():
+            return _sync_sources_from_contract_locked(sources_payload)
+
+
+def _sync_sources_from_contract_locked(sources_payload):
     sources = []
     for item in sources_payload:
         source, _ = MemorySource.objects.update_or_create(
@@ -73,9 +88,35 @@ def upsert_memory_projection_from_envelope(
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
 ):
+    if dry_run:
+        return _upsert_memory_projection_from_envelope_locked(
+            envelope,
+            index_backends=index_backends,
+            dry_run=True,
+        )
+    # An administrative source shutdown is a fence: it waits for an already
+    # running projection and prevents a new one from starting with stale state.
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        return _upsert_memory_projection_from_envelope_locked(
+            envelope,
+            index_backends=index_backends,
+            dry_run=False,
+        )
+
+
+def _upsert_memory_projection_from_envelope_locked(
+    envelope: SourceObjectEnvelope,
+    *,
+    index_backends: Iterable[str] = ("fulltext", "vector"),
+    dry_run: bool = False,
+):
     """Create or refresh memory source-data projection from a normalized source envelope."""
     if envelope.operation == OPERATION_DELETE:
-        return delete_memory_projection_from_envelope(envelope, index_backends=index_backends, dry_run=dry_run)
+        return _delete_memory_projection_from_envelope_locked(
+            envelope,
+            index_backends=index_backends,
+            dry_run=dry_run,
+        )
 
     if dry_run:
         privacy_profile = resolve_privacy_profile(
@@ -212,9 +253,27 @@ def delete_memory_projection_from_envelope(
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
 ):
-    source = MemorySource.objects.filter(code=envelope.source_code).first()
+    with enabled_source_operation(source_code=envelope.source_code) as source:
+        return _delete_memory_projection_from_envelope_locked(
+            envelope,
+            index_backends=index_backends,
+            dry_run=dry_run,
+            source=source,
+        )
+
+
+def _delete_memory_projection_from_envelope_locked(
+    envelope: SourceObjectEnvelope,
+    *,
+    index_backends: Iterable[str] = ("fulltext", "vector"),
+    dry_run: bool = False,
+    source: MemorySource | None = None,
+):
+    source = source or MemorySource.objects.filter(code=envelope.source_code).first()
     if source is None:
         return {"source_code": envelope.source_code, "deleted": 0, "dry_run": dry_run}
+    if source.status != MemorySource.Status.ENABLED:
+        raise ValidationError(f"Источник '{source.code}' отключён для операций памяти.")
     source_object = MemorySourceObject.objects.filter(source=source, object_id=envelope.object_id).first()
     if source_object is None:
         return {"source_code": source.code, "deleted": 0, "dry_run": dry_run}
@@ -235,29 +294,65 @@ def delete_memory_projection_from_envelope(
 
 
 def can_access_source_object_via_adapter(user, source_object: MemorySourceObject) -> bool:
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None or source_object is None or not getattr(source_object, "source_id", None):
+        return False
+    # This helper is public and may be called without the outer scope policy.
+    # Re-read the lifecycle state here as well so a disabled source cannot be
+    # exposed by a stale object or a status race.
+    source = MemorySource.objects.filter(pk=source_object.source_id).first()
+    if source is None or source.status != MemorySource.Status.ENABLED:
+        return False
     access_policy = (source_object.metadata or {}).get("access_policy") or {}
-    if access_policy.get("mode") != ACCESS_MODE_ADAPTER_CHECK:
+    mode = access_policy.get("mode")
+    if mode in {None, "", "scope_tokens", "acl_inherited", "manual_mapping"}:
         return True
-    adapter = get_source_adapter(source_object.source.code)
+    if mode != ACCESS_MODE_ADAPTER_CHECK:
+        return False
+    adapter = get_source_adapter(source.code)
     if adapter is None:
         return False
     try:
-        return bool(adapter.can_access(user, source_object.object_id))
+        return bool(adapter.can_access(actor, source_object.object_id))
     except Exception:
         return False
 
 
+def can_access_source_object(user, source_object: MemorySourceObject) -> bool:
+    """Final object policy: persisted scope plus adapter access when required."""
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
+        return False
+    if not can_access_source_object_scope(actor, source_object):
+        return False
+    return can_access_source_object_via_adapter(actor, source_object)
+
+
 def render_source_object_text(source_object: MemorySourceObject, *, actor=None) -> str:
+    # Rendering is a user-visible read path.  Do not let a missing actor turn
+    # the projection's cached safe_text into an anonymous data oracle.
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return ""
+    if not can_access_source_object_scope(actor, source_object):
+        return ""
     access_policy = (source_object.metadata or {}).get("access_policy") or {}
     if access_policy.get("mode") == ACCESS_MODE_ADAPTER_CHECK:
         adapter = get_source_adapter(source_object.source.code)
         if adapter is None:
             return ""
-        if actor is not None and not can_access_source_object_via_adapter(actor, source_object):
+        if not can_access_source_object(actor, source_object):
             return ""
-        source_record = adapter.get_object(source_object.object_id)
+        try:
+            source_record = adapter.get_object(source_object.object_id)
+        except Exception:
+            return ""
         if source_record is not None:
-            return adapter.render_envelope(source_record).text
+            try:
+                return adapter.render_envelope(source_record).text
+            except Exception:
+                return ""
+        return ""
     metadata = source_object.metadata or {}
     if metadata.get("safe_text"):
         return str(metadata.get("safe_text") or "")
@@ -268,12 +363,22 @@ def source_adapter_document_id(*, source_code: str, object_id: str) -> str:
     return "source:" + hashlib.sha256(f"{source_code}:{object_id}".encode("utf-8")).hexdigest()[:40]
 
 
-def compile_knowledge_item_digest(*, scope_tokens=None, limit=100):
+def compile_knowledge_item_digest(*, actor=None, scope_tokens=None, limit=100):
+    actor = resolve_active_actor(actor, force_refresh=True)
+    actor_scope = user_scope_tokens(actor) if actor is not None else set()
+    if not actor_scope:
+        raise PermissionDenied("Для сборки дайджеста нужен активный пользователь и его область доступа.")
     queryset = MemoryKnowledgeItem.objects.filter(status=MemoryKnowledgeItem.Status.ACTIVE).order_by("-updated_at", "-id")
-    tokens = set(scope_tokens or [])
+    if getattr(actor, "is_superuser", False):
+        tokens = None
+    else:
+        requested_tokens = set(scope_tokens) if scope_tokens is not None else actor_scope
+        tokens = requested_tokens & actor_scope
     records = []
     for item in queryset[: max(int(limit), 1)]:
-        if tokens and not set(item.scope_tokens or []) & tokens:
+        if tokens is not None and not set(item.scope_tokens or []) & tokens:
+            continue
+        if not can_access_knowledge_item(actor, item):
             continue
         try:
             text = read_knowledge_item_file(item).body
@@ -396,6 +501,9 @@ def record_access_audit(
     denied_reason="",
     retrieval_trace=None,
 ):
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        raise PermissionDenied("Аудит доступа может записывать только активный пользователь.")
     return MemoryAccessAudit.objects.create(
         actor=actor,
         request_id=request_id,
@@ -465,13 +573,31 @@ def _ensure_memory_source_from_envelope(envelope: SourceObjectEnvelope) -> Memor
         },
     )
     if not created:
-        source.status = MemorySource.Status.ENABLED
-        source.error_message = ""
+        if source.status != MemorySource.Status.ENABLED:
+            raise ValidationError(
+                f"Источник '{source.code}' отключён; входящий envelope не может включить его автоматически."
+            )
         source.sensitivity = envelope.sensitivity
         source.pii_policy = envelope.privacy_profile
         source.config = {**(source.config or {}), **config}
-        source.save(update_fields=["status", "error_message", "sensitivity", "pii_policy", "config", "updated_at"])
+        source.save(update_fields=["sensitivity", "pii_policy", "config", "updated_at"])
     return source
+
+
+def set_memory_source_status(*, source_code: str, status: str, error_message: str = "") -> MemorySource:
+    """Canonical status transition serialized with FileHub physical work."""
+
+    if status not in MemorySource.Status.values:
+        raise ValidationError("Неизвестный статус источника памяти.")
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with transaction.atomic():
+            source = MemorySource.objects.select_for_update().filter(code=source_code).first()
+            if source is None:
+                raise ValidationError("Источник памяти не найден.")
+            source.status = status
+            source.error_message = error_message
+            source.save(update_fields=["status", "error_message", "updated_at"])
+            return source
 
 
 def _ensure_memory_source_object_from_envelope(*, source: MemorySource, envelope: SourceObjectEnvelope) -> MemorySourceObject:

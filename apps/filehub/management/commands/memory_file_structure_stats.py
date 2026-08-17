@@ -10,14 +10,12 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--source-code", required=True, help="MemorySource code.")
         parser.add_argument("--dry-run", action="store_true", help="Show metrics without writing proposals.")
-        parser.add_argument("--allow-disabled", action="store_true", help="Allow disabled file organization profile.")
 
     def handle(self, *args, **options):
         source = _source(options["source_code"])
         metrics = build_organization_proposals(
             source=source,
             dry_run=options["dry_run"],
-            require_enabled=not options["allow_disabled"],
         )
         self.stdout.write(
             self.style.SUCCESS(

@@ -20,57 +20,13 @@ from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
 )
-from apps.ai.contracts import (
-    validate_ai_chat_settings_payload,
-    validate_ai_registry_payload,
-    validate_ai_task_types_payload,
-    validate_ai_tools_payload,
-)
-from apps.memory.contracts import (
-    validate_memory_file_organization_profiles_payload,
-    validate_memory_profiles_payload,
-    validate_memory_graph_schema_payload,
-    validate_memory_ingestion_profiles_payload,
-    validate_memory_routing_payload,
-    validate_memory_sources_payload,
-)
-from apps.workorders.contracts import (
-    validate_role_rules_payload,
-    validate_workorder_status_colors_payload,
-    validate_workflow_rules_payload,
-)
-
+from .descriptors import runtime_validators
 from .models import SettingsChange
 from .registry import get_registry
 from .services import build_masked_diff, record_settings_change
 
 
-VALIDATORS = {
-    "validate_role_rules_payload": lambda payload: validate_role_rules_payload(
-        payload,
-        workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
-    ),
-    "validate_workorder_status_colors_payload": lambda payload: validate_workorder_status_colors_payload(
-        payload,
-        workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
-    ),
-    "validate_workflow_rules_payload": validate_workflow_rules_payload,
-    "validate_ai_registry_payload": validate_ai_registry_payload,
-    "validate_ai_tools_payload": validate_ai_tools_payload,
-    "validate_ai_task_types_payload": validate_ai_task_types_payload,
-    "validate_ai_chat_settings_payload": validate_ai_chat_settings_payload,
-    "validate_memory_profiles_payload": validate_memory_profiles_payload,
-    "validate_memory_routing_payload": validate_memory_routing_payload,
-    "validate_memory_ingestion_profiles_payload": validate_memory_ingestion_profiles_payload,
-    "validate_memory_file_organization_profiles_payload": validate_memory_file_organization_profiles_payload,
-    "validate_memory_graph_schema_payload": validate_memory_graph_schema_payload,
-    "validate_memory_sources_payload": lambda payload: validate_memory_sources_payload(
-        payload,
-        profiles_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_PROFILES_FILE),
-        routing_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE),
-        ingestion_profiles_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE),
-    ),
-}
+VALIDATORS = runtime_validators()
 
 
 def read_contract_value(descriptor):
@@ -78,7 +34,11 @@ def read_contract_value(descriptor):
     return load_json_file(path)
 
 
-def preview_contract_payload(*, descriptor, raw_payload: str):
+def preview_contract_payload(*, actor, setting_id: str, raw_payload: str):
+    # Preview is an authorization boundary too; otherwise a user could use
+    # the validation/diff endpoint as a read oracle for a protected contract.
+    descriptor = get_registry().get(setting_id)
+    _require_contract_editor(actor=actor, setting_id=descriptor.setting_id, descriptor=descriptor)
     before = read_contract_value(descriptor)
     after = parse_and_validate_payload(descriptor, raw_payload)
     return {
@@ -103,8 +63,92 @@ def apply_contract_payload(
     audit_context: dict | None = None,
     locked_precondition=None,
 ):
+    """Apply a complete contract payload."""
+    return _apply_contract_payload(
+        actor=actor,
+        setting_id=setting_id,
+        raw_payload=raw_payload,
+        confirmed=confirmed,
+        base_hash=base_hash,
+        _action=_action,
+        _rollback_of=_rollback_of,
+        operation_fingerprint=operation_fingerprint,
+        audit_context=audit_context,
+        locked_precondition=locked_precondition,
+    )
+
+
+def _apply_role_definition_payload(
+    *,
+    actor,
+    role_code: str,
+    base_hash: str,
+    confirmed: bool,
+    raw_payload_factory,
+    preview_token: str | None = None,
+    risk_confirmed: bool = False,
+    operation_fingerprint: str | None = None,
+    audit_context: dict | None = None,
+    locked_precondition=None,
+):
+    """Internal transport for the signed single-role writer.
+
+    This is intentionally not a generic delegated writer: a signed preview is
+    mandatory and the transport performs an independent domain check under the
+    contract lock after the caller's factory has produced the candidate.
+    """
+    if not preview_token:
+        raise ValidationError("Изменение определения роли требует подписанного предпросмотра.")
+    return _apply_contract_payload(
+        actor=actor,
+        setting_id="core.contract.role_rules",
+        raw_payload=None,
+        confirmed=confirmed,
+        base_hash=base_hash,
+        operation_fingerprint=operation_fingerprint,
+        audit_context=audit_context,
+        locked_precondition=locked_precondition,
+        _allow_delegated_role_definition=True,
+        _role_definition_role_code=role_code,
+        _raw_payload_factory=raw_payload_factory,
+        _role_definition_preview_token=preview_token,
+        _role_definition_risk_confirmed=bool(risk_confirmed),
+    )
+
+
+def _apply_contract_payload(
+    *,
+    actor,
+    setting_id: str,
+    raw_payload: str | None,
+    confirmed: bool,
+    base_hash: str | None = None,
+    _action=SettingsChange.Action.APPLY,
+    _rollback_of=None,
+    operation_fingerprint: str | None = None,
+    audit_context: dict | None = None,
+    locked_precondition=None,
+    _allow_delegated_role_definition=False,
+    _role_definition_role_code=None,
+    _raw_payload_factory=None,
+    _role_definition_preview_token=None,
+    _role_definition_risk_confirmed=False,
+):
     descriptor = get_registry().get(setting_id)
-    actor = _require_contract_editor(actor=actor, setting_id=setting_id, descriptor=descriptor)
+    actor = _require_contract_editor(
+        actor=actor,
+        setting_id=setting_id,
+        descriptor=descriptor,
+        allow_delegated_role_definition=_allow_delegated_role_definition,
+    )
+    if _allow_delegated_role_definition and (
+        setting_id != "core.contract.role_rules"
+        or not _role_definition_role_code
+        or _raw_payload_factory is None
+    ):
+        raise ValidationError("Некорректный ограниченный writer определения роли.")
+    if _allow_delegated_role_definition and not _role_definition_preview_token:
+        raise ValidationError("Изменение определения роли требует подписанного предпросмотра.")
     if descriptor.storage_kind != "runtime_contract":
         raise ValidationError("Настройка не связана с рабочим контрактом.")
     if not descriptor.is_editable:
@@ -126,15 +170,16 @@ def apply_contract_payload(
                 actor=actor,
                 setting_id=setting_id,
                 descriptor=descriptor,
+                allow_delegated_role_definition=_allow_delegated_role_definition,
             )
-            if locked_precondition is not None:
-                locked_precondition(actor)
             _resolve_known_pending_changes(setting_id=setting_id)
             if operation_fingerprint and SettingsChange.objects.filter(
                 operation_fingerprint=operation_fingerprint
             ).exists():
                 raise ValidationError("Этот предпросмотр уже был применён.")
             before = read_contract_value(descriptor)
+            if locked_precondition is not None:
+                locked_precondition(actor, before)
             if normalized_hash(before) != _plain_hash(base_hash):
                 raise ValidationError(
                     "Контракт уже изменён другим процессом. Перечитайте актуальную версию "
@@ -143,7 +188,27 @@ def apply_contract_payload(
             # Кросс-контрактная валидация выполняется под общей блокировкой:
             # одновременно нельзя изменить role/workflow и получить проверку
             # против промежуточной пары версий.
+            if _raw_payload_factory is not None:
+                raw_payload = _raw_payload_factory(copy.deepcopy(before))
             after = parse_and_validate_payload(descriptor, raw_payload)
+            if _allow_delegated_role_definition:
+                _assert_single_role_payload(
+                    before=before,
+                    after=after,
+                    role_code=_role_definition_role_code,
+                )
+                from apps.accounts.access_contracts import (
+                    _validate_role_definition_transport_request,
+                )
+
+                _validate_role_definition_transport_request(
+                    actor=actor,
+                    role_code=_role_definition_role_code,
+                    before=before,
+                    after=after,
+                    preview_token=_role_definition_preview_token,
+                    risk_confirmed=_role_definition_risk_confirmed,
+                )
             if normalized_hash(before) == normalized_hash(after):
                 raise ValidationError("В контракте нет изменений для применения.")
             _validate_cross_contract_candidate(setting_id=setting_id, candidate=after)
@@ -256,26 +321,73 @@ def reconcile_pending_contract_changes(*, apply: bool, setting_id: str | None = 
     return reports
 
 
-def _require_contract_editor(*, actor, setting_id, descriptor=None):
+def _require_contract_editor(
+    *, actor, setting_id, descriptor=None, allow_delegated_role_definition=False
+):
     if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
         raise PermissionDenied("Требуется вход в систему.")
     actor_state = get_user_model().objects.filter(pk=actor.pk).first()
     if not actor_state or not actor_state.is_active:
         raise PermissionDenied("Требуется активная учетная запись.")
-    if setting_id == "core.contract.role_rules" and not actor_state.is_superuser:
-        raise PermissionDenied("Определения ролей может изменять только суперпользователь.")
-    required_permission = getattr(descriptor, "required_permission", "settings_center.manage")
-    if required_permission == "settings_center.manage_users" and not actor_state.is_superuser:
-        raise PermissionDenied("Изменение доступно только суперпользователю.")
-    if required_permission == "settings_center.manage" and not (
-        actor_state.is_staff or actor_state.is_superuser
-    ):
-        raise PermissionDenied("Изменять рабочие настройки может только администратор настроек.")
-    if required_permission not in {"settings_center.manage", "settings_center.manage_users"} and not (
-        actor_state.is_superuser or actor_state.has_perm(required_permission)
-    ):
-        raise PermissionDenied("Недостаточно прав для изменения этой настройки.")
+    if setting_id == "core.contract.role_rules":
+        from apps.accounts.access_contracts import (
+            ROLE_DEFINITION_EDITOR_DENIED_MESSAGE,
+            can_edit_role_definitions,
+        )
+
+        if allow_delegated_role_definition:
+            if not can_edit_role_definitions(actor_state):
+                raise PermissionDenied(ROLE_DEFINITION_EDITOR_DENIED_MESSAGE)
+        elif not actor_state.is_superuser:
+            raise PermissionDenied(
+                "Полную запись контракта ролей может выполнять только активный суперпользователь."
+            )
+        return actor_state
+    required_permission = getattr(descriptor, "required_permission", "manage_settings")
+    if required_permission == "manage_users":
+        if not actor_state.is_superuser:
+            raise PermissionDenied("Изменение доступно только суперпользователю.")
+    elif required_permission == "manage_settings":
+        from .policies import can_manage_settings
+
+        if not can_manage_settings(actor_state):
+            raise PermissionDenied("Изменять рабочие настройки может только администратор настроек.")
+    else:
+        # Descriptor permissions are an explicit closed vocabulary.  Do not
+        # fall back to Django ``has_perm``: an accidental/legacy string must
+        # never become a second product authorization path.
+        raise PermissionDenied("Неизвестное право настройки.")
     return actor_state
+
+
+def _assert_single_role_payload(*, before, after, role_code):
+    """Fail closed if a delegated factory touches anything except one role."""
+    if (
+        not isinstance(role_code, str)
+        or not role_code
+        or role_code.startswith("$")
+        or not isinstance(before, dict)
+        or not isinstance(after, dict)
+    ):
+        raise ValidationError("Ограниченный writer получил некорректный контракт ролей.")
+    if (
+        set(before) != set(after)
+        or role_code not in before
+        or not isinstance(before.get(role_code), dict)
+        or not isinstance(after.get(role_code), dict)
+    ):
+        raise ValidationError(
+            "Ограниченный writer может изменять только существующую роль."
+        )
+    changed_top_level = sorted(
+        key for key in before if key != role_code and before.get(key) != after.get(key)
+    )
+    if changed_top_level:
+        raise ValidationError(
+            "Ограниченный writer не может изменять соседние роли или служебные блоки: "
+            + ", ".join(changed_top_level)
+            + "."
+        )
 
 
 def parse_and_validate_payload(descriptor, raw_payload: str):
@@ -537,6 +649,11 @@ def _contract_relative_path(descriptor) -> str:
 def _validate_cross_contract_candidate(*, setting_id, candidate):
     if setting_id != "core.contract.workflow_rules":
         return
+    from apps.workorders.contracts import (
+        validate_role_rules_payload,
+        validate_workorder_status_colors_payload,
+    )
+
     role_rules = read_contract_value(get_registry().get("core.contract.role_rules"))
     status_colors = read_contract_value(get_registry().get("workorders.contract.status_colors"))
     validate_role_rules_payload(role_rules, workflow_payload=candidate)

@@ -140,7 +140,10 @@ python manage.py reconcile_ai_action --token <uuid> --outcome failed --operator 
 короче 32 символов; нельзя повторять `DJANGO_SECRET_KEY`. При ротации увеличьте
 версию ключа.
 
-Определения ролей меняет только активный superuser. Стандартные access-поля User,
+Опредения ролей меняет активный аутентифицированный superuser или участник
+роли из `$administration.role_definition_editor_roles` (по умолчанию `admin`).
+`is_staff` сохраняет только вход в Django Admin; одного `manage_roles` для
+редактора определений недостаточно. Стандартные access-поля User,
 permissions Group и `Board.allowed_groups` в Django Admin доступны только для
 чтения; резервное назначение открывается отдельной ссылкой в карточке User и
 обязательно требует причину, preview и подтверждение. В карточке Board есть такой
@@ -160,7 +163,8 @@ python manage.py memory_eval --dry-run
 
 Manual checks:
 
-- `/settings/` opens for staff/superuser and returns 403 for regular users;
+- `/settings/` открывается для active superuser и роли с
+  `manage_settings=true`; staff-only пользователь получает 403;
 - superuser can create a disabled test user and remove it or keep it disabled;
 - AD link can be saved without storing AD passwords in user records;
 - disabled local user cannot authenticate or restore a session through LDAP;

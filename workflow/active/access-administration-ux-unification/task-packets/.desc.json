@@ -15,5 +15,11 @@
   "09-htmx-sidebar-navigation.json": "Частичная HTMX-навигация левого редактора и правого инспектора",
   "10-composite-user-draft-and-sidebar-shell.json": "Единый черновик карточки пользователя и общая оболочка левой панели",
   "11-role-capability-section-editor.json": "Группировка прав роли по разделам сайта и двухпанельный редактор",
-  "12-capability-ui-taxonomy-correction.json": "Исправление полной пользовательской таксономии прав роли"
+  "12-capability-ui-taxonomy-correction.json": "Исправление полной пользовательской таксономии прав роли",
+  "13-delegated-role-definition-administration.json": "Делегированное редактирование определений ролей",
+  "14-secret-status-containment.json": "Исключение сырых секретов из HTTP-контекста центра настроек",
+  "15-waiting-list-capability-model.json": "Ролевые области и статусная матрица листа ожидания",
+  "16-business-resource-boundaries.json": "Scoped selectors и сервисные границы заявок, инвентаря, главной страницы и AI",
+  "17-administration-and-memory-boundaries.json": "Разделение продуктовых, технических и резервных административных полномочий",
+  "18-security-e2e-docs-acceptance.json": "Сквозная security-матрица, runtime migration, документация и приёмка"
 }

@@ -1,0 +1,73 @@
+{
+  "task_id": "15-waiting-list-capability-model",
+  "goal": "Сделать видимость, редактирование и переходы листа ожидания явно настраиваемыми ролью и обязательными на сервисной границе.",
+  "write_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/workorders/contracts.py",
+    "apps/workorders/policies.py",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/forms.py",
+    "apps/waiting_list/policies.py",
+    "apps/waiting_list/selectors.py",
+    "apps/waiting_list/services.py",
+    "apps/waiting_list/views.py",
+    "apps/waiting_list/right_panel.py",
+    "apps/waiting_list/source_adapter.py",
+    "apps/waiting_list/tests.py",
+    "apps/ai/page_context.py",
+    "apps/ai/services.py",
+    "apps/ai/tests/",
+    "apps/core/context_processors.py",
+    "apps/core/tests.py",
+    "apps/settings_center/tests.py",
+    "apps/workorders/tests.py"
+  ],
+  "invariants": [
+    "Авторство само по себе не является разрешением и учитывается только как scope.",
+    "Actor перечитывается и проверяется вместе с locked entry внутри сервиса.",
+    "Глобальный граф переходов и ролевые source/target ограничения применяются совместно.",
+    "Отсутствующее или неизвестное значение даёт none.",
+    "Scope и статусы оцениваются как единый грант одной роли; поля разных ролей не образуют новое разрешение.",
+    "Одна операция использует один снимок role_rules и свежие locked actor/entry.",
+    "Суперпользователь подчиняется глобальному графу статусов, но получает полный ролевой грант.",
+    "Рабочая копия data/contracts/role_rules.json не редактируется напрямую."
+  ],
+  "capability_model": {
+    "legacy_transition": "Старый view_waiting_list временно читается как all/none; удаление fallback выполняется отдельным совместимым выпуском после штатной миграции runtime.",
+    "fields": [
+      "waiting_list_view_scope: scope, values_source=waiting_list_scopes",
+      "create_waiting_list: flag",
+      "waiting_list_edit_scope: scope, values_source=waiting_list_scopes",
+      "waiting_list_edit_statuses: targets, values_source=waiting_list_statuses",
+      "waiting_list_transition_scope: scope, values_source=waiting_list_scopes",
+      "waiting_list_transition_from_statuses: targets, values_source=waiting_list_statuses",
+      "waiting_list_transition_targets: targets, values_source=waiting_list_statuses"
+    ],
+    "values_sources": {
+      "waiting_list_scopes": ["none", "authored", "all"],
+      "waiting_list_statuses": ["waiting", "scheduled", "confirmed", "cancelled", "*"]
+    },
+    "global_transition_graph": {
+      "waiting": ["scheduled", "cancelled"],
+      "scheduled": ["waiting", "confirmed", "cancelled"],
+      "confirmed": ["cancelled"],
+      "cancelled": []
+    },
+    "configuration_invariants": [
+      "edit_scope=none требует edit_statuses=[]; прочий edit_scope требует непустой список.",
+      "transition_scope=none требует from_statuses=[] и targets=[]; прочий scope требует оба непустых списка.",
+      "values_source обязателен для scope/targets, запрещен для flag, неизвестный источник или элемент отклоняется.",
+      "Wildcard разрешен только для явно поддерживающего его источника; списки уникальны."
+    ]
+  },
+  "acceptance": [
+    "Матрица роль × авторство × исходный статус × целевой статус проходит для HTTP и service.",
+    "List/detail/source adapter используют один scoped selector.",
+    "Редактор роли показывает человекочитаемые scopes и статусы листа ожидания из общего values_source resolver.",
+    "Preview эффективных прав показывает связанные edit/transition grants без фантомного объединения разных ролей.",
+    "Чужой pk не раскрывается через HTTP, правую панель, AI page context, AI service и source adapter.",
+    "Create/update/transition повторно проверяют права внутри сервисной транзакции.",
+    "Рабочий role_rules мигрирован штатным preview/apply без скрытой перезаписи."
+  ]
+}

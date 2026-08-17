@@ -70,13 +70,16 @@ Each significant setting has a stable `setting_id`, such as:
 
 ```text
 memory.source.scope_rule
-memory.source.acl_mode
+memory.contract.ingestion_profiles
 memory.ingestion.max_file_size_mb
 memory.routing.cloud_gate.max_sensitivity
 accounts.user.ad_identity_link
 ai.llm.default_local_model
 settings_center.env.DJANGO_AUTH_MODE
 ```
+
+`acl_mode` является полем `memory.contract.ingestion_profiles`, а не
+самостоятельным файловым контрактом.
 
 The descriptor includes at minimum:
 

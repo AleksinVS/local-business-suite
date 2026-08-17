@@ -13,7 +13,6 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=None, help="Optional maximum move jobs to process.")
         parser.add_argument("--purge", action="store_true", help="Purge quarantined source files after retention.")
         parser.add_argument("--backup-checkpoint-ref", default="", help="Required when purge policy requires backup checkpoint.")
-        parser.add_argument("--allow-disabled", action="store_true", help="Allow disabled file organization profile.")
 
     def handle(self, *args, **options):
         source = _source(options["source_code"])
@@ -22,7 +21,6 @@ class Command(BaseCommand):
                 source=source,
                 backup_checkpoint_ref=options["backup_checkpoint_ref"],
                 dry_run=options["dry_run"],
-                require_enabled=not options["allow_disabled"],
             )
             self.stdout.write(
                 self.style.SUCCESS(
@@ -36,7 +34,6 @@ class Command(BaseCommand):
             source=source,
             dry_run=options["dry_run"],
             limit=options["limit"],
-            require_enabled=not options["allow_disabled"],
         )
         self.stdout.write(
             self.style.SUCCESS(

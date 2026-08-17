@@ -1,7 +1,7 @@
 {
   ".": "Общие словари, дашборд, формы настроек и AI-утилиты",
   "models.py": "Общие модели (Department и др.)",
-  "views.py": "Представления дашборда и настроек",
+  "views.py": "Представления дашборда и настроек с actor-aware read selectors",
   "forms.py": "Формы настроек",
   "context_processors.py": "Контекстные процессоры шаблонов",
   "settings_descriptors.py": "Доменные descriptors Settings Center для core contracts и .env status",

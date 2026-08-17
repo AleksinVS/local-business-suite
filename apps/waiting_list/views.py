@@ -3,20 +3,24 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
+from apps.core.contract_store import get_contract
+
 from .forms import WaitingListEntryForm, WaitingListStatusForm
 from .models import WaitingListEntry, WaitingListStatus
 from .policies import (
+    allowed_waiting_list_transition_targets,
     can_create_waiting_list,
     can_edit_waiting_list_entry,
     can_transition_waiting_list_entry,
     can_view_waiting_list,
 )
+from .selectors import visible_waiting_list_entries
 from .services import (
     WaitingListValidationError,
     create_entry,
@@ -27,6 +31,14 @@ from .services import (
 
 def page_context_json(payload):
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _role_rules_snapshot(request):
+    snapshot = getattr(request, "_waiting_role_rules", None)
+    if snapshot is None:
+        snapshot = get_contract("role_rules", request=request)
+        request._waiting_role_rules = snapshot
+    return snapshot
 
 
 def waiting_list_detail_page_context(request, entry):
@@ -53,13 +65,31 @@ def waiting_list_detail_context(request, entry, *, form=None, error=None):
     """Build one context contract for full-page and HTMX detail rendering."""
     if form is None:
         form = WaitingListEntryForm(instance=entry)
+    rules_payload = _role_rules_snapshot(request)
+    allowed_targets = allowed_waiting_list_transition_targets(
+        request.user, entry, rules_payload=rules_payload
+    )
+    status_form = WaitingListStatusForm(instance=entry)
+    status_form.fields["status"].choices = [
+        (status, label)
+        for status, label in WaitingListStatus.choices
+        if status in allowed_targets
+    ]
     return {
         "entry": entry,
         "form": form,
-        "status_form": WaitingListStatusForm(instance=entry),
-        "status_choices": WaitingListStatus.choices,
-        "can_edit": can_edit_waiting_list_entry(request.user, entry),
-        "can_transition": can_transition_waiting_list_entry(request.user, entry),
+        "status_form": status_form,
+        "status_choices": [
+            (status, label)
+            for status, label in WaitingListStatus.choices
+            if status in allowed_targets
+        ],
+        "can_edit": can_edit_waiting_list_entry(
+            request.user, entry, rules_payload=rules_payload
+        ),
+        "can_transition": can_transition_waiting_list_entry(
+            request.user, entry, rules_payload=rules_payload
+        ),
         "detail_ai_context_json": page_context_json(
             waiting_list_detail_page_context(request, entry)
         ),
@@ -72,7 +102,10 @@ class WaitingListAccessMixin(LoginRequiredMixin):
     """Mixin ensuring only users with the view_waiting_list capability get access."""
 
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated and not can_view_waiting_list(request.user):
+        rules_payload = _role_rules_snapshot(request)
+        if request.user.is_authenticated and not can_view_waiting_list(
+            request.user, rules_payload=rules_payload
+        ):
             return HttpResponseForbidden(
                 "Доступ к листу ожидания есть только у ролей с правом просмотра (по умолчанию — «Врач»)."
             )
@@ -87,7 +120,10 @@ class WaitingListDashboardView(WaitingListAccessMixin, ListView):
     context_object_name = "entries"
 
     def get_queryset(self):
-        queryset = WaitingListEntry.objects.all().order_by("-created_at")
+        queryset = visible_waiting_list_entries(
+            self.request.user,
+            rules_payload=_role_rules_snapshot(self.request),
+        ).order_by("-created_at")
 
         # Filters from querystring
         service = self.request.GET.get("service", "").strip()
@@ -144,7 +180,11 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
     template_name = "waiting_list/entry_form.html"
 
     def dispatch(self, request, *args, **kwargs):
-        if not can_create_waiting_list(request.user):
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
+        if not can_create_waiting_list(
+            request.user, rules_payload=_role_rules_snapshot(request)
+        ):
             return HttpResponseForbidden("Создание записей запрещено.")
         return super().dispatch(request, *args, **kwargs)
 
@@ -169,12 +209,12 @@ class WaitingListEntryCreateView(WaitingListAccessMixin, CreateView):
                 priority_cito=form.cleaned_data.get("priority_cito", False),
                 comment=form.cleaned_data.get("comment", ""),
             )
-            response = redirect("waiting_list:dashboard")
             if self.request.htmx:
-                response["HX-Redirect"] = self.get_success_url()
-            else:
-                messages.success(self.request, "Запись добавлена в лист ожидания.")
-            return response
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = "waitingListEntryCreated"
+                return response
+            messages.success(self.request, "Запись добавлена в лист ожидания.")
+            return redirect("waiting_list:dashboard")
         except WaitingListValidationError as e:
             form.add_error(None, str(e))
             return self.form_invalid(form)
@@ -188,7 +228,11 @@ class WaitingListEntryDetailView(WaitingListAccessMixin, DetailView):
     context_object_name = "entry"
 
     def get_queryset(self):
-        return WaitingListEntry.objects.prefetch_related("audit_logs__actor")
+        return visible_waiting_list_entries(
+            self.request.user,
+            rules_payload=_role_rules_snapshot(self.request),
+            queryset=WaitingListEntry.objects.prefetch_related("audit_logs__actor"),
+        )
 
     def get_template_names(self):
         if self.request.htmx:
@@ -210,13 +254,20 @@ class WaitingListEntryUpdateView(WaitingListAccessMixin, UpdateView):
     context_object_name = "entry"
 
     def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
         entry = self.get_object()
-        if not can_edit_waiting_list_entry(request.user, entry):
+        if not can_edit_waiting_list_entry(
+            request.user, entry, rules_payload=_role_rules_snapshot(request)
+        ):
             return HttpResponseForbidden("Редактирование этой записи запрещено.")
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        return WaitingListEntry.objects.all()
+        return visible_waiting_list_entries(
+            self.request.user,
+            rules_payload=_role_rules_snapshot(self.request),
+        )
 
     def get_template_names(self):
         if self.request.htmx:
@@ -270,14 +321,20 @@ class WaitingListTransitionView(WaitingListAccessMixin, View):
     """Quick status transition for HTMX-driven dashboard."""
 
     def post(self, request, pk):
-        entry = get_object_or_404(WaitingListEntry, pk=pk)
-        if not can_transition_waiting_list_entry(request.user, entry):
-            return HttpResponseForbidden("Смена статуса этой записи запрещена.")
-
         target_status = request.POST.get("status", "")
 
         if target_status not in WaitingListStatus.values:
             return HttpResponseForbidden("Недопустимый статус.")
+
+        rules_payload = _role_rules_snapshot(request)
+        entry = get_object_or_404(
+            visible_waiting_list_entries(request.user, rules_payload=rules_payload),
+            pk=pk,
+        )
+        if not can_transition_waiting_list_entry(
+            request.user, entry, target_status, rules_payload=rules_payload
+        ):
+            return HttpResponseForbidden("Смена статуса этой записи запрещена.")
 
         try:
             transition_entry(entry=entry, user=request.user, to_status=target_status)

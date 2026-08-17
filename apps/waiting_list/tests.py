@@ -4,9 +4,11 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.core.json_utils import load_json_file
 from apps.workorders.policies import ROLE_MANAGER
 
 User = get_user_model()
@@ -19,6 +21,8 @@ from .policies import (
     can_transition_waiting_list_entry,
     can_view_waiting_list,
 )
+from .selectors import visible_waiting_list_entries
+from .source_adapter import WaitingListSourceAdapter
 
 
 def grant_doctor_role(*users):
@@ -74,6 +78,7 @@ class WaitingListModelTests(TestCase):
     def test_entry_audit_log_created_on_creation(self):
         """Creating an entry via service creates an audit log."""
         user = User.objects.create_user(username="testuser", password="pass")
+        grant_doctor_role(user)
         entry = create_entry(
             author=user,
             patient_name="Тестов Тест Тестович",
@@ -103,6 +108,7 @@ class WaitingListValidationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(username="valuser", password="pass")
+        grant_doctor_role(cls.user)
 
     def test_create_entry_requires_name_min_length(self):
         with self.assertRaises(WaitingListValidationError):
@@ -224,6 +230,64 @@ class WaitingListValidationTests(TestCase):
         self.assertEqual(entry.patient_phone, "+7 (900) 111-22-33")
         self.assertEqual(entry.audit_logs.count(), 1)
 
+    def test_create_rechecks_actor_active_state_inside_service(self):
+        stale_actor = User.objects.get(pk=self.user.pk)
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+
+        with self.assertRaises(PermissionDenied):
+            create_entry(
+                author=stale_actor,
+                patient_name="Неактивный Автор",
+                patient_dob="01.01.1990",
+                patient_phone="+7 (900) 111-22-33",
+                service_id="s1",
+            )
+
+    def test_update_rechecks_actor_and_locked_entry(self):
+        entry = create_entry(
+            author=self.user,
+            patient_name="Свежая Запись",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+        )
+        stale_actor = User.objects.get(pk=self.user.pk)
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+        with self.assertRaises(PermissionDenied):
+            update_entry(entry=entry, user=stale_actor, patient_name="Не должно сохраниться")
+
+        User.objects.filter(pk=self.user.pk).update(is_active=True)
+        foreign = User.objects.create_user(username="fresh-foreign-author", password="pass")
+        WaitingListEntry.objects.filter(pk=entry.pk).update(author=foreign)
+        with self.assertRaises(PermissionDenied):
+            update_entry(entry=entry, user=self.user, patient_name="Чужая запись")
+
+    def test_transition_rechecks_actor_and_locked_entry(self):
+        entry = create_entry(
+            author=self.user,
+            patient_name="Переходная Запись",
+            patient_dob="01.01.1990",
+            patient_phone="+7 (900) 111-22-33",
+            service_id="s1",
+        )
+        stale_actor = User.objects.get(pk=self.user.pk)
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+        with self.assertRaises(PermissionDenied):
+            transition_entry(
+                entry=entry,
+                user=stale_actor,
+                to_status=WaitingListStatus.SCHEDULED,
+            )
+
+        User.objects.filter(pk=self.user.pk).update(is_active=True)
+        WaitingListEntry.objects.filter(pk=entry.pk).update(status=WaitingListStatus.CANCELLED)
+        with self.assertRaises(PermissionDenied):
+            transition_entry(
+                entry=entry,
+                user=self.user,
+                to_status=WaitingListStatus.SCHEDULED,
+            )
+
 
 @pytest.mark.integration
 class WaitingListPolicyTests(TestCase):
@@ -265,8 +329,15 @@ class WaitingListPolicyTests(TestCase):
     def test_author_can_edit(self):
         self.assertTrue(can_edit_waiting_list_entry(self.user, self.entry))
 
-    def test_manager_can_edit_any_entry(self):
-        self.assertTrue(can_edit_waiting_list_entry(self.manager, self.entry))
+    def test_manager_cannot_edit_without_explicit_waiting_grant(self):
+        rules = load_json_file("contracts/role_rules.json")
+        self.assertFalse(
+            can_edit_waiting_list_entry(
+                self.manager,
+                self.entry,
+                rules_payload=rules,
+            )
+        )
 
     def test_outsider_cannot_edit(self):
         self.assertFalse(can_edit_waiting_list_entry(self.outsider, self.entry))
@@ -274,11 +345,166 @@ class WaitingListPolicyTests(TestCase):
     def test_author_can_transition(self):
         self.assertTrue(can_transition_waiting_list_entry(self.user, self.entry))
 
-    def test_manager_can_transition(self):
-        self.assertTrue(can_transition_waiting_list_entry(self.manager, self.entry))
+    def test_manager_cannot_transition_without_explicit_waiting_grant(self):
+        rules = load_json_file("contracts/role_rules.json")
+        self.assertFalse(
+            can_transition_waiting_list_entry(
+                self.manager,
+                self.entry,
+                rules_payload=rules,
+            )
+        )
 
     def test_outsider_cannot_transition(self):
         self.assertFalse(can_transition_waiting_list_entry(self.outsider, self.entry))
+
+    def test_legacy_superuser_default_and_active_roleless_profiles_fail_closed(self):
+        legacy_rules = {
+            "manager": {
+                "manage_departments": True,
+                "view_waiting_list": False,
+                "create_waiting_list": False,
+            },
+            "legacy": {
+                "view_waiting_list": True,
+                "create_waiting_list": True,
+            }
+        }
+        superuser = User.objects.create_superuser(username="legacy-root", password="pass")
+        roleless = User.objects.create_user(username="roleless", password="pass")
+        unknown_group_user = User.objects.create_user(username="unknown-role", password="pass")
+        unknown_group, _ = Group.objects.get_or_create(name="future-role")
+        unknown_group_user.groups.add(unknown_group)
+
+        self.assertTrue(can_view_waiting_list(superuser, rules_payload=legacy_rules))
+        self.assertTrue(can_create_waiting_list(superuser, rules_payload=legacy_rules))
+        self.assertFalse(can_view_waiting_list(roleless, rules_payload=legacy_rules))
+        self.assertFalse(can_view_waiting_list(unknown_group_user, rules_payload=legacy_rules))
+        self.assertFalse(
+            can_edit_waiting_list_entry(
+                self.manager,
+                self.entry,
+                rules_payload=legacy_rules,
+            )
+        )
+        self.assertTrue(
+            can_transition_waiting_list_entry(
+                superuser,
+                self.entry,
+                WaitingListStatus.SCHEDULED,
+                rules_payload=legacy_rules,
+            )
+        )
+        self.assertFalse(
+            can_transition_waiting_list_entry(
+                superuser,
+                self.entry,
+                WaitingListStatus.CONFIRMED,
+                rules_payload=legacy_rules,
+            )
+        )
+
+    def test_waiting_list_selector_uses_authored_scope_for_own_and_foreign_entries(self):
+        rules = {
+            "doctor": {
+                "waiting_list_view_scope": "authored",
+                "waiting_list_edit_scope": "none",
+                "waiting_list_edit_statuses": [],
+                "waiting_list_transition_scope": "none",
+                "waiting_list_transition_from_statuses": [],
+                "waiting_list_transition_targets": [],
+            }
+        }
+        foreign = WaitingListEntry.objects.create(
+            author=self.outsider,
+            patient_name="Чужой Пациент",
+            patient_dob=date(1990, 1, 1),
+            patient_phone="+7 (900) 222-22-22",
+            service_id="s1",
+        )
+        visible = visible_waiting_list_entries(self.user, rules_payload=rules)
+        self.assertEqual(list(visible.values_list("pk", flat=True)), [self.entry.pk])
+        self.assertNotIn(foreign.pk, visible.values_list("pk", flat=True))
+
+    def test_waiting_policy_does_not_union_scope_and_status_from_different_roles(self):
+        mixed_rules = {
+            "broad_scope": {
+                "waiting_list_view_scope": "all",
+                "waiting_list_edit_scope": "all",
+                "waiting_list_edit_statuses": ["waiting"],
+                "waiting_list_transition_scope": "all",
+                "waiting_list_transition_from_statuses": ["waiting"],
+                "waiting_list_transition_targets": ["scheduled"],
+            },
+            "narrow_status": {
+                "waiting_list_view_scope": "all",
+                "waiting_list_edit_scope": "authored",
+                "waiting_list_edit_statuses": ["scheduled"],
+                "waiting_list_transition_scope": "authored",
+                "waiting_list_transition_from_statuses": ["scheduled"],
+                "waiting_list_transition_targets": ["confirmed"],
+            },
+        }
+        self.user.groups.clear()
+        self.user.groups.add(
+            Group.objects.create(name="broad_scope"),
+            Group.objects.create(name="narrow_status"),
+        )
+        self.entry.status = WaitingListStatus.SCHEDULED
+        self.entry.author = self.outsider
+        self.entry.save(update_fields=["status", "author"])
+
+        self.assertFalse(
+            can_edit_waiting_list_entry(self.user, self.entry, rules_payload=mixed_rules)
+        )
+        self.assertFalse(
+            can_transition_waiting_list_entry(
+                self.user,
+                self.entry,
+                WaitingListStatus.CONFIRMED,
+                rules_payload=mixed_rules,
+            )
+        )
+
+    def test_global_transition_graph_limits_superuser_for_every_status(self):
+        superuser = User.objects.create_superuser(username="graph-root", password="pass")
+        expected = {
+            WaitingListStatus.WAITING: {WaitingListStatus.SCHEDULED, WaitingListStatus.CANCELLED},
+            WaitingListStatus.SCHEDULED: {
+                WaitingListStatus.WAITING,
+                WaitingListStatus.CONFIRMED,
+                WaitingListStatus.CANCELLED,
+            },
+            WaitingListStatus.CONFIRMED: {WaitingListStatus.CANCELLED},
+            WaitingListStatus.CANCELLED: set(),
+        }
+        for status, targets in expected.items():
+            entry = WaitingListEntry.objects.create(
+                author=self.user,
+                patient_name=f"Граф {status}",
+                patient_dob=date(1990, 1, 1),
+                patient_phone="+7 (900) 333-33-33",
+                service_id="s1",
+                status=status,
+            )
+            self.assertEqual(
+                {
+                    target
+                    for target, _label in WaitingListStatus.choices
+                    if can_transition_waiting_list_entry(superuser, entry, target)
+                },
+                targets,
+            )
+
+    def test_source_adapter_denies_foreign_entry(self):
+        adapter = WaitingListSourceAdapter()
+        self.assertFalse(adapter.can_access(self.outsider, str(self.entry.pk)))
+
+    def test_right_panel_denies_foreign_entry(self):
+        provider = WaitingListRightPanelProvider()
+        self.assertFalse(provider.can_open(self.outsider, str(self.entry.pk)))
+        with self.assertRaises(WaitingListEntry.DoesNotExist):
+            provider.build_panel(self.outsider, str(self.entry.pk))
 
 
 @pytest.mark.integration
@@ -332,6 +558,49 @@ class WaitingListRouteTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             WaitingListEntry.objects.filter(patient_name="Новый Пациент").exists()
+        )
+
+    def test_htmx_create_returns_event_without_redirect_or_full_page(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:create"),
+            {
+                "patient_name": "Новый HTMX Пациент",
+                "patient_dob": "20.05.1980",
+                "patient_phone": "+7 (905) 123-45-67",
+                "service_id": "s2",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="entry-detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.headers["HX-Trigger"], "waitingListEntryCreated")
+        self.assertNotIn("HX-Redirect", response.headers)
+        self.assertEqual(response.content, b"")
+        self.assertTrue(
+            WaitingListEntry.objects.filter(patient_name="Новый HTMX Пациент").exists()
+        )
+
+    def test_htmx_create_validation_error_stays_in_drawer_form(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("waiting_list:create"),
+            {
+                "patient_name": "Новая запись с ошибкой",
+                "patient_dob": "20.05.1980",
+                "patient_phone": "123",
+                "service_id": "s2",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="entry-detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="waiting-list-form"')
+        self.assertContains(response, "Неверный формат телефона")
+        self.assertFalse(
+            WaitingListEntry.objects.filter(patient_name="Новая запись с ошибкой").exists()
         )
 
     def test_detail_view_renders(self):
@@ -480,3 +749,55 @@ class WaitingListRouteTests(TestCase):
             {"status": WaitingListStatus.SCHEDULED},
         )
         self.assertEqual(self.entry.audit_logs.count(), 2)
+
+    def test_foreign_entry_is_hidden_or_forbidden_at_http_boundary(self):
+        foreign_author = User.objects.create_user(username="route-foreign-author", password="pass")
+        foreign = WaitingListEntry.objects.create(
+            author=foreign_author,
+            patient_name="Чужой Маршрут",
+            patient_dob=date(1990, 1, 1),
+            patient_phone="+7 (900) 444-44-44",
+            service_id="s1",
+        )
+        authored_rules = {
+            "doctor": {
+                "waiting_list_view_scope": "authored",
+                "waiting_list_edit_scope": "authored",
+                "waiting_list_edit_statuses": ["waiting"],
+                "waiting_list_transition_scope": "authored",
+                "waiting_list_transition_from_statuses": ["waiting"],
+                "waiting_list_transition_targets": ["scheduled"],
+            }
+        }
+        self.client.force_login(self.user)
+        with patch("apps.waiting_list.views._role_rules_snapshot", return_value=authored_rules):
+            hidden = self.client.get(
+                reverse("waiting_list:detail", kwargs={"pk": foreign.pk})
+            )
+        self.assertEqual(hidden.status_code, 404)
+
+        viewer = User.objects.create_user(username="route-viewer", password="pass")
+        viewer_group, _ = Group.objects.get_or_create(name="viewer")
+        viewer.groups.add(viewer_group)
+        viewer_rules = {
+            "viewer": {
+                "waiting_list_view_scope": "all",
+                "waiting_list_edit_scope": "none",
+                "waiting_list_edit_statuses": [],
+                "waiting_list_transition_scope": "none",
+                "waiting_list_transition_from_statuses": [],
+                "waiting_list_transition_targets": [],
+            }
+        }
+        self.client.force_login(viewer)
+        with patch("apps.waiting_list.views._role_rules_snapshot", return_value=viewer_rules):
+            forbidden = self.client.post(
+                reverse("waiting_list:update", kwargs={"pk": foreign.pk}),
+                {
+                    "patient_name": foreign.patient_name,
+                    "patient_dob": "01.01.1990",
+                    "patient_phone": foreign.patient_phone,
+                    "service_id": foreign.service_id,
+                },
+            )
+        self.assertEqual(forbidden.status_code, 403)

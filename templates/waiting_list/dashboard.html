@@ -14,7 +14,7 @@
 {% block content %}
   {# Toolbar with Filters #}
   <div class="toolbar">
-    <form method="get" class="filters filters--adaptive" id="filter-form">
+    <form method="get" class="filters filters--adaptive" id="filter-form" hx-sync="this:replace">
       <div class="input-group">
         <label for="filterService">Услуга</label>
         <select
@@ -22,7 +22,7 @@
           name="service"
           hx-get="{% url 'waiting_list:dashboard' %}"
           hx-target="#entry-table"
-          hx-swap="innerHTML"
+          hx-swap="outerHTML"
           hx-trigger="change"
           hx-include="#filter-form"
         >
@@ -43,7 +43,7 @@
           placeholder="ФИО или Дата рожд."
           hx-get="{% url 'waiting_list:dashboard' %}"
           hx-target="#entry-table"
-          hx-swap="innerHTML"
+          hx-swap="outerHTML"
           hx-trigger="keyup changed delay:300ms, search"
           hx-include="#filter-form"
         >
@@ -58,7 +58,7 @@
           value="{{ filters.date_from }}"
           hx-get="{% url 'waiting_list:dashboard' %}"
           hx-target="#entry-table"
-          hx-swap="innerHTML"
+          hx-swap="outerHTML"
           hx-trigger="change"
           hx-include="#filter-form"
         >
@@ -73,7 +73,7 @@
           {% if filters.cito %}checked{% endif %}
           hx-get="{% url 'waiting_list:dashboard' %}"
           hx-target="#entry-table"
-          hx-swap="innerHTML"
+          hx-swap="outerHTML"
           hx-trigger="change"
           hx-include="#filter-form"
         >
@@ -101,10 +101,11 @@
           <th
             data-sort="created_at"
             hx-get="{% url 'waiting_list:dashboard' %}"
-            hx-vals="js:getSortParams('created_at')"
+            hx-vals="js:{...getSortParams('created_at')}"
             hx-target="#entry-table"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             hx-include="#filter-form"
+            hx-sync="#filter-form:replace"
             style="cursor: pointer;"
           >
             Дата создания ↕
@@ -112,10 +113,11 @@
           <th
             data-sort="patient_name"
             hx-get="{% url 'waiting_list:dashboard' %}"
-            hx-vals="js:getSortParams('patient_name')"
+            hx-vals="js:{...getSortParams('patient_name')}"
             hx-target="#entry-table"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             hx-include="#filter-form"
+            hx-sync="#filter-form:replace"
             style="cursor: pointer;"
           >
             Пациент ↕
@@ -124,10 +126,11 @@
           <th
             data-sort="service_id"
             hx-get="{% url 'waiting_list:dashboard' %}"
-            hx-vals="js:getSortParams('service_id')"
+            hx-vals="js:{...getSortParams('service_id')}"
             hx-target="#entry-table"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             hx-include="#filter-form"
+            hx-sync="#filter-form:replace"
             style="cursor: pointer;"
           >
             Услуга ↕
@@ -135,10 +138,11 @@
           <th
             data-sort="date_tag"
             hx-get="{% url 'waiting_list:dashboard' %}"
-            hx-vals="js:getSortParams('date_tag')"
+            hx-vals="js:{...getSortParams('date_tag')}"
             hx-target="#entry-table"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             hx-include="#filter-form"
+            hx-sync="#filter-form:replace"
             style="cursor: pointer;"
           >
             Целевая дата ↕
@@ -146,10 +150,11 @@
           <th
             data-sort="status"
             hx-get="{% url 'waiting_list:dashboard' %}"
-            hx-vals="js:getSortParams('status')"
+            hx-vals="js:{...getSortParams('status')}"
             hx-target="#entry-table"
-            hx-swap="innerHTML"
+            hx-swap="outerHTML"
             hx-include="#filter-form"
+            hx-sync="#filter-form:replace"
             style="cursor: pointer;"
           >
             Статус ↕
@@ -183,6 +188,35 @@
     currentSort.asc = initialOrder === 'asc';
   }
 
+  function getWaitingListParams() {
+    const params = new URLSearchParams();
+    const filterForm = document.getElementById('filter-form');
+    if (filterForm) {
+      new FormData(filterForm).forEach(function(value, key) {
+        if (String(value) !== '') params.set(key, String(value));
+      });
+    } else {
+      new URLSearchParams(window.location.search).forEach(function(value, key) {
+        params.set(key, value);
+      });
+    }
+    params.set('sort', currentSort.field);
+    params.set('order', currentSort.asc ? 'asc' : 'desc');
+    return params;
+  }
+
+  function getWaitingListTableUrl() {
+    const query = getWaitingListParams().toString();
+    return window.location.pathname + (query ? '?' + query : '');
+  }
+
+  function getWaitingListSortValues() {
+    return {
+      sort: currentSort.field,
+      order: currentSort.asc ? 'asc' : 'desc'
+    };
+  }
+
   function getSortParams(field) {
     if (currentSort.field === field) {
       currentSort.asc = !currentSort.asc;
@@ -190,10 +224,7 @@
       currentSort.field = field;
       currentSort.asc = false;
     }
-    const params = new URLSearchParams(urlParams);
-    params.set('sort', currentSort.field);
-    params.set('order', currentSort.asc ? 'asc' : 'desc');
-    return JSON.stringify(Object.fromEntries(params));
+    return getWaitingListSortValues();
   }
 
   // Drawer management
@@ -211,13 +242,29 @@
     if (overlay) overlay.classList.remove('active');
   }
 
-  document.body.addEventListener('waitingListEntryUpdated', function() {
+  function refreshWaitingListTable() {
     const tableBody = document.getElementById('entry-table');
     if (!tableBody || !window.htmx) return;
-    window.htmx.ajax('GET', window.location.pathname + window.location.search, {
+    const filterForm = document.getElementById('filter-form');
+    if (filterForm) {
+      window.htmx.ajax('GET', window.location.pathname, {
+        source: filterForm,
+        target: '#entry-table',
+        swap: 'outerHTML',
+        values: getWaitingListSortValues()
+      });
+      return;
+    }
+    window.htmx.ajax('GET', getWaitingListTableUrl(), {
       target: '#entry-table',
       swap: 'outerHTML'
     });
+  }
+
+  document.body.addEventListener('waitingListEntryUpdated', refreshWaitingListTable);
+  document.body.addEventListener('waitingListEntryCreated', function() {
+    closeWaitingListDrawer();
+    refreshWaitingListTable();
   });
 
   // Keyboard shortcuts

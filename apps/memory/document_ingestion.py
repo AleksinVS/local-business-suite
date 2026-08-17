@@ -20,6 +20,7 @@ from .models import (
     MemorySourceObject,
 )
 from .security import scan_for_secrets
+from .source_lifecycle import enabled_source_operation
 from .deidentification import detect_pii
 from .source_text_extraction import (
     SUPPORTED_SOURCE_TEXT_EXTENSIONS,
@@ -55,6 +56,15 @@ class IngestionProfile:
 
 
 def discover_source_objects(*, source: MemorySource, dry_run=False, created_by=None):
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        return _discover_source_objects_locked(
+            source=fresh_source,
+            dry_run=dry_run,
+            created_by=created_by,
+        )
+
+
+def _discover_source_objects_locked(*, source: MemorySource, dry_run=False, created_by=None):
     profile = get_source_ingestion_profile(source)
     run = _create_run(source=source, dry_run=dry_run, created_by=created_by)
     metrics = {
@@ -137,9 +147,19 @@ def discover_source_objects(*, source: MemorySource, dry_run=False, created_by=N
 
 
 def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=None, limit=None):
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        return _ingest_source_objects_locked(
+            source=fresh_source,
+            dry_run=dry_run,
+            created_by=created_by,
+            limit=limit,
+        )
+
+
+def _ingest_source_objects_locked(*, source: MemorySource, dry_run=False, created_by=None, limit=None):
     profile = get_source_ingestion_profile(source)
     if not dry_run and not MemorySourceObject.objects.filter(source=source).exists():
-        discover_source_objects(source=source, dry_run=False, created_by=created_by)
+        _discover_source_objects_locked(source=source, dry_run=False, created_by=created_by)
 
     run = _create_run(source=source, dry_run=dry_run, created_by=created_by)
     metrics = {
@@ -184,7 +204,7 @@ def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=Non
                 continue
 
             try:
-                document_result = ingest_source_object_text(
+                document_result = _ingest_source_object_text_locked(
                     source_object=source_object,
                     safe_text=outcome["text"],
                     partial_reason=outcome["partial_reason"],
@@ -218,6 +238,16 @@ def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=Non
 
 
 def prepare_bootstrap_package(*, source: MemorySource, department: str, dry_run=False, limit=None):
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        return _prepare_bootstrap_package_locked(
+            source=fresh_source,
+            department=department,
+            dry_run=dry_run,
+            limit=limit,
+        )
+
+
+def _prepare_bootstrap_package_locked(*, source: MemorySource, department: str, dry_run=False, limit=None):
     objects = MemorySourceObject.objects.filter(
         source=source,
         ingestion_status__in=[MemorySourceObject.IngestionStatus.INGESTED, MemorySourceObject.IngestionStatus.PARTIAL],
@@ -318,8 +348,19 @@ def iter_source_files(*, root: Path, source: MemorySource, follow_symlinks=False
         yield path
 
 
-def build_source_object_payload(*, source, root, file_path, object_id, relative_path, stat, now, profile):
-    content_hash = sha256_file(file_path)
+def build_source_object_payload(
+    *,
+    source,
+    root,
+    file_path,
+    object_id,
+    relative_path,
+    stat,
+    now,
+    profile,
+    content_hash_override=None,
+):
+    content_hash = content_hash_override or sha256_file(file_path)
     mime_type, _ = mimetypes.guess_type(str(file_path))
     extension = file_path.suffix.lower()
     acl_resolution = None
@@ -330,6 +371,12 @@ def build_source_object_payload(*, source, root, file_path, object_id, relative_
             file_path=file_path,
             relative_path=relative_path,
         )
+    acl_metadata = acl_resolution.as_metadata() if acl_resolution else None
+    if acl_metadata is not None:
+        # Persist the effective profile decision with the object.  Read policy
+        # must not silently fall back to the process-wide setting after a
+        # discovery run (notably for admin_only versus block).
+        acl_metadata["unresolved_policy"] = profile.unresolved_acl_policy
     return {
         "object_uri": str(file_path),
         "relative_path": relative_path,
@@ -350,7 +397,7 @@ def build_source_object_payload(*, source, root, file_path, object_id, relative_
         "metadata": {
             "raw_mode": profile.raw_mode,
             "acl_mode": profile.acl_mode,
-            **({"acl": acl_resolution.as_metadata()} if acl_resolution else {}),
+            **({"acl": acl_metadata} if acl_metadata else {}),
         },
     }
 
@@ -474,8 +521,30 @@ def inspect_source_object_for_ingestion(*, source_object: MemorySourceObject, pr
     }
 
 
-@transaction.atomic
 def ingest_source_object_text(
+    *,
+    source_object: MemorySourceObject,
+    safe_text: str,
+    partial_reason="",
+    extraction_metadata=None,
+    index_backends=("fulltext", "vector"),
+):
+    with enabled_source_operation(source_id=source_object.source_id) as source:
+        fresh_object = MemorySourceObject.objects.select_related("source").get(
+            pk=source_object.pk,
+            source=source,
+        )
+        return _ingest_source_object_text_locked(
+            source_object=fresh_object,
+            safe_text=safe_text,
+            partial_reason=partial_reason,
+            extraction_metadata=extraction_metadata,
+            index_backends=index_backends,
+        )
+
+
+@transaction.atomic
+def _ingest_source_object_text_locked(
     *,
     source_object: MemorySourceObject,
     safe_text: str,

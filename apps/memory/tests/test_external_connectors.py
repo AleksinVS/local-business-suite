@@ -33,6 +33,61 @@ class MemoryExternalConnectorTests(TestCase):
             },
         )
 
+    def test_disabled_source_rejects_direct_external_handoff(self):
+        from ..external_connectors import (
+            build_external_envelope,
+            enqueue_external_envelope,
+            handoff_external_envelope_to_memory,
+            write_external_landing_artifacts,
+        )
+
+        source = self.create_external_source()
+        source.status = MemorySource.Status.DISABLED
+        source.save(update_fields=["status", "updated_at"])
+        envelope = build_external_envelope(
+            source_code=source.code,
+            collection="tickets",
+            object_type="ticket",
+            external_id="T-disabled",
+            title="Disabled",
+            payload={"status": "open"},
+            run_id="run-disabled",
+            scope_tokens=["org:default"],
+        )
+
+        with self.assertRaises(ValidationError):
+            handoff_external_envelope_to_memory(envelope=envelope)
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            with self.assertRaises(ValidationError):
+                write_external_landing_artifacts(source=source, envelope=envelope)
+            with self.assertRaises(ValidationError):
+                enqueue_external_envelope(source=source, envelope=envelope)
+            self.assertFalse((Path(tmpdir) / "memory" / "external_api").exists())
+        self.assertFalse(MemorySourceObject.objects.filter(source=source).exists())
+        self.assertFalse(MemoryExternalConnectorJob.objects.filter(source_code=source.code).exists())
+
+    def test_disabled_source_rejects_direct_tombstone_without_writing(self):
+        from ..external_connectors import append_external_tombstone, build_external_envelope
+
+        source = self.create_external_source()
+        source.status = MemorySource.Status.DISABLED
+        source.save(update_fields=["status", "updated_at"])
+        envelope = build_external_envelope(
+            source_code=source.code,
+            collection="tickets",
+            object_type="ticket",
+            external_id="T-tombstone-disabled",
+            title="Disabled tombstone",
+            payload={"status": "deleted"},
+            run_id="run-tombstone-disabled",
+            scope_tokens=["org:default"],
+            operation="delete",
+        )
+        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+            with self.assertRaises(ValidationError):
+                append_external_tombstone(source=source, envelope=envelope)
+            self.assertFalse((Path(tmpdir) / "memory" / "external_api").exists())
+
     def test_external_envelope_queue_handoff_indexes_memory(self):
         from ..external_connectors import (
             build_external_envelope,

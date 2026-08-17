@@ -47,6 +47,37 @@ def role_assignment_allowlist() -> dict[str, tuple[str, ...]]:
     }
 
 
+def role_definition_editor_roles(rules_payload=None) -> tuple[str, ...]:
+    """Return the product role codes allowed to edit role definitions.
+
+    The value is deliberately resolved from one role-rules snapshot.  A missing
+    field is the short-lived legacy default; malformed or unknown values fail
+    closed instead of silently broadening the editor set.
+    """
+    rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
+    administration = rules.get("$administration", {})
+    if not isinstance(administration, dict):
+        return ()
+    if "role_definition_editor_roles" not in administration:
+        raw_roles = ["admin"]
+    else:
+        raw_roles = administration.get("role_definition_editor_roles")
+    if not isinstance(raw_roles, list) or not raw_roles:
+        return ()
+    if not all(isinstance(role, str) and role for role in raw_roles):
+        return ()
+    if len(raw_roles) != len(set(raw_roles)):
+        return ()
+    known_roles = {
+        role
+        for role, config in rules.items()
+        if isinstance(role, str) and not role.startswith("$") and isinstance(config, dict)
+    }
+    if set(raw_roles) - known_roles:
+        return ()
+    return tuple(raw_roles)
+
+
 def capability_catalog() -> dict[str, dict]:
     metadata = get_contract("role_rules").get("$capabilities", {})
     return metadata if isinstance(metadata, dict) else {}

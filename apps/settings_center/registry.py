@@ -4,11 +4,15 @@ import importlib
 from functools import lru_cache
 
 from .descriptors import (
+    runtime_validator_names,
     SECRET_STORAGE_KINDS,
     SECRET_VALUE_TYPES,
     SECRET_WIDGETS,
     SettingDescriptor,
 )
+
+
+KNOWN_REQUIRED_PERMISSIONS = frozenset({"manage_settings", "manage_users"})
 
 
 DESCRIPTOR_MODULES = (
@@ -83,3 +87,20 @@ def _validate_descriptor_security(descriptor: SettingDescriptor) -> None:
         raise ValueError(
             f"Descriptor '{descriptor.setting_id}' is marked secret without a secret value type, widget, or storage kind."
         )
+    if descriptor.required_permission not in KNOWN_REQUIRED_PERMISSIONS:
+        raise ValueError(
+            f"Descriptor '{descriptor.setting_id}' has an unknown required_permission."
+        )
+    if descriptor.storage_kind == "runtime_contract" and descriptor.is_editable:
+        if not descriptor.metadata.get("settings_path"):
+            raise ValueError(
+                f"Editable runtime descriptor '{descriptor.setting_id}' must define settings_path."
+            )
+        if not descriptor.metadata.get("validator"):
+            raise ValueError(
+                f"Editable runtime descriptor '{descriptor.setting_id}' must define validator."
+            )
+        if descriptor.metadata["validator"] not in runtime_validator_names():
+            raise ValueError(
+                f"Editable runtime descriptor '{descriptor.setting_id}' has an unknown validator."
+            )

@@ -102,7 +102,7 @@
 Где применить:
 
 - `apps.ai.tooling.execute_tool` и `execute_pending_action`;
-- `workorders.create`, `workorders.transition`, `workorders.delete`, `inventory.devices.*`, `access.*`, `memory.remember`;
+- `workorders.create`, `workorders.transition`, `inventory.devices.*`, `access.*`, `memory.remember`;
 - future workers для ingestion/indexing/analytics.
 
 Практическое правило: AI tool не должен сам решать бизнес-правила. Он формирует command, проверяет confirmation, вызывает доменный сервис и пишет audit.

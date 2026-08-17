@@ -53,6 +53,12 @@ class AIViewsTests(TestCase):
         response = self.client.get(reverse("ai:hub"))
         self.assertEqual(response.status_code, 403)
 
+    def test_staff_flag_alone_cannot_open_ai_hub(self):
+        staff = User.objects.create_user(username="staff-only-ai", password="pass", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.get(reverse("ai:hub"))
+        self.assertEqual(response.status_code, 403)
+
     def test_copilotkit_config_is_feature_flagged(self):
         self.client.force_login(self.customer)
         response = self.client.get(reverse("ai:copilotkit_config"))
@@ -713,16 +719,27 @@ class AIViewsTests(TestCase):
         delegated_admin = User.objects.create_user(username="admin-role-definition")
         admin_group, _ = Group.objects.get_or_create(name="admin")
         delegated_admin.groups.add(admin_group)
-        payload = {"role_name": "admin", "permissions_map": {"manage_roles": False}}
+        payload = {"role_name": "customer", "permissions_map": {"view_analytics": True}}
 
-        for actor in (staff, delegated_admin):
-            with self.subTest(actor=actor.username):
-                prepared, preview = prepare_role_permissions_change_for_actor(
-                    actor=actor,
-                    payload=payload,
-                )
-                self.assertEqual(prepared["role_name"], "admin")
-                self.assertTrue(preview["changes"])
+        with self.assertRaises(PermissionDenied):
+            prepare_role_permissions_change_for_actor(actor=staff, payload=payload)
+
+        prepared, preview = prepare_role_permissions_change_for_actor(
+            actor=delegated_admin,
+            payload=payload,
+        )
+        self.assertEqual(prepared["role_name"], "customer")
+        self.assertTrue(preview["changes"])
+
+        own_role_payload = {
+            "role_name": "admin",
+            "permissions_map": {"view_analytics": False},
+        }
+        with self.assertRaises(PermissionDenied):
+            prepare_role_permissions_change_for_actor(
+                actor=delegated_admin,
+                payload=own_role_payload,
+            )
 
         with self.assertRaises(PermissionDenied):
             prepare_role_permissions_change_for_actor(actor=self.manager, payload=payload)
@@ -1657,7 +1674,7 @@ class AIViewsTests(TestCase):
         self.assertIn("meta", payload)
         self.assertIn("session_id", payload["meta"])
         action = AgentActionLog.objects.filter(tool_code="workorders.get").first()
-        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
+        self.assertEqual(action.status, AgentActionLog.Status.DENIED)
 
     def test_workorders_create_requires_confirmation_without_token(self):
         response = self.client.post(
@@ -2022,3 +2039,67 @@ class PendingActionConcurrencyTests(TransactionTestCase):
         self.assertEqual(audit.actor, operator)
         self.assertTrue(audit.response_payload["manual_reconciliation"])
         self.assertFalse(audit.response_payload["state_closed"])
+
+    def test_skill_authoring_rechecks_active_actor(self):
+        from ..skill_authoring import can_manage_ai_skills, create_or_update_runtime_skill_for_actor
+
+        inactive = User.objects.create_user(username="inactive-skill-author", is_active=False)
+        self.assertFalse(can_manage_ai_skills(inactive))
+        with self.assertRaises(PermissionDenied):
+            create_or_update_runtime_skill_for_actor(
+                actor=inactive,
+                payload={"skill_id": "inactive-test", "name": "x", "description": "x", "body": "x"},
+            )
+
+    def test_skill_authoring_rejects_symlinked_target_directory(self):
+        from ..skill_authoring import create_or_update_runtime_skill_for_actor
+
+        actor = User.objects.create_user(username="symlink-skill-author")
+        with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside:
+            runtime_root = Path(tmpdir) / "contracts"
+            skills_root = runtime_root / "ai" / "skills"
+            skills_root.mkdir(parents=True)
+            (skills_root / "escape").symlink_to(Path(outside), target_is_directory=True)
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_root), patch(
+                "apps.ai.skill_authoring.can_manage_ai_skills", return_value=True
+            ):
+                with self.assertRaises(ValidationError):
+                    create_or_update_runtime_skill_for_actor(
+                        actor=actor,
+                        payload={"skill_id": "escape", "name": "x", "description": "x", "body": "x"},
+                    )
+
+    def test_skill_authoring_rejects_symlinked_parent_directory(self):
+        from ..skill_authoring import create_or_update_runtime_skill_for_actor
+
+        actor = User.objects.create_user(username="symlink-parent-skill-author")
+        with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside:
+            runtime_root = Path(tmpdir) / "contracts"
+            runtime_root.mkdir(parents=True)
+            (runtime_root / "ai").symlink_to(Path(outside), target_is_directory=True)
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_root), patch(
+                "apps.ai.skill_authoring.can_manage_ai_skills", return_value=True
+            ):
+                with self.assertRaises(ValidationError):
+                    create_or_update_runtime_skill_for_actor(
+                        actor=actor,
+                        payload={"skill_id": "escape", "name": "x", "description": "x", "body": "x"},
+                    )
+
+    def test_skill_authoring_rejects_existing_symlinked_skill_file(self):
+        from ..skill_authoring import create_or_update_runtime_skill_for_actor
+
+        actor = User.objects.create_user(username="symlink-file-author")
+        with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside:
+            runtime_root = Path(tmpdir) / "contracts"
+            skill_dir = runtime_root / "ai" / "skills" / "safe"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").symlink_to(Path(outside) / "SKILL.md")
+            with override_settings(RUNTIME_CONTRACTS_DIR=runtime_root), patch(
+                "apps.ai.skill_authoring.can_manage_ai_skills", return_value=True
+            ):
+                with self.assertRaises(ValidationError):
+                    create_or_update_runtime_skill_for_actor(
+                        actor=actor,
+                        payload={"skill_id": "safe", "name": "x", "description": "x", "body": "x"},
+                    )

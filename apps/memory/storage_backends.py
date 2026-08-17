@@ -46,34 +46,66 @@ class ManagedFSStorageBackend:
         )
 
     def verify(self, storage_ref: str, *, expected_hash: str, expected_size: int) -> bool:
-        path = Path(storage_ref)
+        path = self._validated_storage_ref(storage_ref)
+        if path is None:
+            return False
         if not path.exists() or not path.is_file():
             return False
         return path.stat().st_size == expected_size and sha256_file(path) == expected_hash
 
-    def quarantine_source(self, source_path: Path, *, quarantine_relative_path: str) -> StorageWriteResult:
+    def quarantine_source(
+        self,
+        source_path: Path,
+        *,
+        quarantine_relative_path: str,
+        expected_hash: str,
+        expected_size: int,
+    ) -> StorageWriteResult:
         source_path = Path(source_path)
         if not source_path.exists() or not source_path.is_file():
             raise FileNotFoundError(f"Source file is unavailable for quarantine: {source_path}")
         target_path = self.resolve_relative_path(quarantine_relative_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_path.stat().st_size != expected_size or sha256_file(source_path) != expected_hash:
+            raise ValueError("Source file changed before quarantine.")
+        if target_path.exists():
+            raise FileExistsError(f"Quarantine target already exists: {target_path}")
         shutil.move(str(source_path), str(target_path))
+        actual_hash = sha256_file(target_path)
+        actual_size = target_path.stat().st_size
+        if actual_hash != expected_hash or actual_size != expected_size:
+            if not source_path.exists():
+                shutil.move(str(target_path), str(source_path))
+            raise ValueError("Quarantined file verification failed; source was restored.")
         return StorageWriteResult(
             storage_backend=self.storage_backend,
             storage_ref=str(target_path),
             relative_path=self.relative_to_root(target_path),
-            sha256=sha256_file(target_path),
-            size_bytes=target_path.stat().st_size,
+            sha256=actual_hash,
+            size_bytes=actual_size,
         )
 
     def purge(self, storage_ref: str) -> bool:
-        path = Path(storage_ref)
+        path = self._validated_storage_ref(storage_ref)
+        if path is None:
+            raise ValueError("Managed storage reference escapes backend root or is a symlink.")
         if not path.exists():
             return False
         if not path.is_file():
             raise ValueError("Only files can be purged by managed_fs backend.")
         path.unlink()
         return True
+
+    def _validated_storage_ref(self, storage_ref: str) -> Path | None:
+        path = Path(storage_ref)
+        root = self.root.resolve()
+        try:
+            resolved = path.resolve(strict=False)
+        except (OSError, RuntimeError):
+            return None
+        if path.is_symlink() or (resolved != root and root not in resolved.parents):
+            return None
+        return path
 
     def resolve_relative_path(self, relative_path: str) -> Path:
         relative = Path(str(relative_path or "").replace("\\", "/"))

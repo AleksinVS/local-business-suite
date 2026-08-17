@@ -4,29 +4,28 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect
+from django.db.models import F
 from django.views import View
 from django.views.generic import TemplateView
 
-from apps.memory.models import MemorySearchDocument, MemorySource
-from apps.memory.policies import (
-    can_access_search_document,
-    can_review_organization_memory,
-    can_view_memory_review_queue,
-    scope_tokens_match,
-    user_scope_tokens,
-)
+from apps.memory.models import MemorySource
+from apps.memory.policies import can_review_organization_memory, can_view_memory_review_queue, is_active_actor
 
-from .file_organization import decimal_confidence, normalize_relative_path
-from .file_organization_move import create_move_jobs_for_accepted_proposal
-from .file_organization_stats import apply_organization_proposal_decision, record_file_usage_event
+from .file_organization import save_user_virtual_placement
+from .file_organization_stats import apply_organization_proposal_decision
 from .models import (
     MemoryFileMoveJob,
     MemoryFileObject,
     MemoryFileOrganizationDecision,
     MemoryFileOrganizationProposal,
-    MemoryFileUsageEvent,
     MemoryFileVirtualPlacement,
     MemoryFileVirtualView,
+)
+from .selectors import (
+    can_access_file_object,
+    can_access_source_for_organization,
+    proposal_membership_is_visible,
+    visible_file_objects,
 )
 
 
@@ -40,30 +39,44 @@ class MemoryFileOrganizationView(MemoryReviewAccessMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        sources = MemorySource.objects.order_by("code")
+        sources = [source for source in MemorySource.objects.order_by("code") if can_access_source_for_organization(self.request.user, source)]
+        valid_proposals = [
+            proposal
+            for proposal in MemoryFileOrganizationProposal.objects.select_related("source", "reviewed_by").filter(source__in=sources)
+            if proposal_membership_is_visible(self.request.user, proposal)
+        ]
+        valid_proposals_by_source = {}
+        for proposal in valid_proposals:
+            valid_proposals_by_source.setdefault(proposal.source_id, []).append(proposal)
         context["sources"] = [
             {
                 "source": source,
                 "file_count": MemoryFileObject.objects.filter(source=source).count(),
                 "baseline_count": MemoryFileVirtualPlacement.objects.filter(
-                    view__source=source,
+                    file_object__source=source,
+                    view__source=F("file_object__source"),
                     view__view_kind="baseline_auto",
                 ).count(),
-                "proposal_count": MemoryFileOrganizationProposal.objects.filter(source=source).count(),
-                "move_job_count": MemoryFileMoveJob.objects.filter(source=source).count(),
+                "proposal_count": len(valid_proposals_by_source.get(source.pk, [])),
+                "move_job_count": MemoryFileMoveJob.objects.filter(
+                    source=source,
+                    file_object__source=source,
+                ).count(),
             }
             for source in sources
         ]
+        visible_file_ids = [file_object.pk for file_object in visible_file_objects(self.request.user)]
         context["placements"] = (
             MemoryFileVirtualPlacement.objects.select_related("view", "file_object", "view__source")
+            .filter(file_object_id__in=visible_file_ids, view__source=F("file_object__source"))
             .order_by("-updated_at", "-id")[:50]
         )
         context["proposals"] = (
-            MemoryFileOrganizationProposal.objects.select_related("source", "reviewed_by")
-            .order_by("status", "-created_at", "-id")[:50]
+            valid_proposals[:50]
         )
         context["move_jobs"] = (
             MemoryFileMoveJob.objects.select_related("source", "file_object", "proposal")
+            .filter(source__in=sources, file_object_id__in=visible_file_ids, file_object__source=F("source"))
             .order_by("status", "-created_at", "-id")[:50]
         )
         context["can_decide_file_organization"] = can_review_organization_memory(self.request.user)
@@ -84,9 +97,8 @@ class MemoryFileOrganizationProposalActionView(MemoryReviewAccessMixin, View):
                 actor=request.user,
                 decision=decision,
                 comment=comment,
+                create_jobs=request.POST.get("create_jobs") == "1",
             )
-            if decision == MemoryFileOrganizationDecision.Decision.ACCEPT_FOR_PHYSICAL_MOVE and request.POST.get("create_jobs") == "1":
-                create_move_jobs_for_accepted_proposal(proposal=proposal, approved_by=request.user)
         except (ValueError, ValidationError) as exc:
             messages.error(request, str(exc))
         else:
@@ -99,24 +111,25 @@ class MemoryFileUserViewsView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        file_objects = [
-            _file_object_display(file_object)
-            for file_object in MemoryFileObject.objects.select_related(
-                "source",
-                "current_physical_placement",
-                "current_version",
-                "current_version__source_object",
-            ).order_by("source__code", "file_id")[:200]
-            if _can_access_file_object(self.request.user, file_object)
-        ]
+        if not is_active_actor(self.request.user):
+            context["file_objects"] = []
+            context["placements"] = MemoryFileVirtualPlacement.objects.none()
+            context["user_views"] = MemoryFileVirtualView.objects.none()
+            return context
+        file_objects = [_file_object_display(file_object) for file_object in visible_file_objects(self.request.user)[:200]]
+        visible_source_ids = {item["source_code"] for item in file_objects}
         user_views = MemoryFileVirtualView.objects.filter(
             owner_user=self.request.user,
             view_kind=MemoryFileVirtualView.ViewKind.USER,
+            source__code__in=visible_source_ids,
+            source__status=MemorySource.Status.ENABLED,
         ).order_by("source__code", "slug")
         context["file_objects"] = file_objects
         context["placements"] = (
             MemoryFileVirtualPlacement.objects.select_related("view", "file_object", "view__source")
             .filter(view__owner_user=self.request.user, view__view_kind=MemoryFileVirtualView.ViewKind.USER)
+            .filter(view__source__status=MemorySource.Status.ENABLED, file_object__source__status=MemorySource.Status.ENABLED)
+            .filter(file_object_id__in=[item["id"] for item in file_objects], view__source=F("file_object__source"))
             .order_by("virtual_path")
         )
         context["user_views"] = user_views
@@ -127,66 +140,15 @@ class MemoryFileUserViewsView(LoginRequiredMixin, TemplateView):
             MemoryFileObject.objects.select_related("source", "current_version", "current_version__source_object"),
             pk=request.POST.get("file_object_id"),
         )
-        if not _can_access_file_object(request.user, file_object):
+        if not can_access_file_object(request.user, file_object):
             raise PermissionDenied("Недостаточно прав на файл.")
-        virtual_path = normalize_relative_path(request.POST.get("virtual_path", ""))
-        if not virtual_path:
-            messages.error(request, "Укажите виртуальный путь.")
-            return redirect("filehub:user_file_views")
-        view, _created = MemoryFileVirtualView.objects.update_or_create(
-            source=file_object.source,
-            view_kind=MemoryFileVirtualView.ViewKind.USER,
-            slug=f"user-{request.user.pk}",
-            defaults={
-                "title": f"Личная структура {request.user.get_username()}",
-                "owner_user": request.user,
-                "status": MemoryFileVirtualView.Status.ACTIVE,
-                "is_system": False,
-            },
-        )
-        MemoryFileVirtualPlacement.objects.update_or_create(
-            view=view,
-            file_object=file_object,
-            virtual_path=virtual_path,
-            defaults={
-                "placement_source": MemoryFileVirtualPlacement.PlacementSource.USER_MANUAL,
-                "confidence": decimal_confidence(1.0),
-                "status": MemoryFileVirtualPlacement.Status.ACCEPTED,
-                "review_required": False,
-                "evidence": ["user_manual"],
-                "conflicts": [],
-                "created_by": request.user,
-            },
-        )
-        record_file_usage_event(
-            source=file_object.source,
-            event_kind=MemoryFileUsageEvent.EventKind.VIRTUAL_MOVE,
-            file_object=file_object,
-            view=view,
+        save_user_virtual_placement(
             actor=request.user,
-            virtual_path=virtual_path,
+            file_object_id=file_object.pk,
+            virtual_path=request.POST.get("virtual_path", ""),
         )
         messages.success(request, "Виртуальное размещение сохранено.")
         return redirect("filehub:user_file_views")
-
-
-def _can_access_file_object(user, file_object: MemoryFileObject) -> bool:
-    if getattr(user, "is_superuser", False):
-        return True
-    source_object = getattr(getattr(file_object, "current_version", None), "source_object", None)
-    if source_object is None:
-        placement = file_object.physical_placements.select_related("source_object").filter(source_object__isnull=False).first()
-        source_object = placement.source_object if placement is not None else None
-    if source_object is None:
-        return False
-    document = MemorySearchDocument.objects.filter(source_object=source_object).first()
-    if document is not None:
-        return can_access_search_document(user, document)
-    required_tokens = (source_object.metadata or {}).get("scope_tokens") or []
-    if not required_tokens:
-        acl = (source_object.metadata or {}).get("acl") or {}
-        required_tokens = acl.get("scope_tokens") or []
-    return scope_tokens_match(required_tokens, user_scope_tokens(user))
 
 
 def _file_object_display(file_object: MemoryFileObject) -> dict:

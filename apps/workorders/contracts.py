@@ -230,6 +230,28 @@ def validate_role_rules_payload(payload, workflow_payload=None):
         raise ValidationError(
             "Поле $administration.role_assignment_allowlist должно быть JSON-объектом."
         )
+    if "role_definition_editor_roles" in administration:
+        editor_roles = administration["role_definition_editor_roles"]
+        if (
+            not isinstance(editor_roles, list)
+            or not editor_roles
+            or not all(isinstance(role, str) and role for role in editor_roles)
+        ):
+            raise ValidationError(
+                "Поле $administration.role_definition_editor_roles должно быть "
+                "непустым списком кодов ролей."
+            )
+        if len(editor_roles) != len(set(editor_roles)):
+            raise ValidationError(
+                "Поле $administration.role_definition_editor_roles содержит повторяющиеся роли."
+            )
+        unknown_editor_roles = sorted(set(editor_roles) - role_names)
+        if unknown_editor_roles:
+            raise ValidationError(
+                "Поле $administration.role_definition_editor_roles содержит неизвестные роли: "
+                + ", ".join(unknown_editor_roles)
+                + "."
+            )
     capability_metadata = payload.get(CAPABILITY_METADATA_KEY, {})
     legacy_compat = is_legacy_capability_metadata(capability_metadata)
     if capability_metadata:

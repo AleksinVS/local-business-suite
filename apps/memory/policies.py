@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 
 from .models import MemorySearchDocument, MemorySource
 
@@ -69,29 +71,99 @@ class SourceTrustDecision:
 
 
 def user_scope_tokens(user):
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user)
+    if actor is None:
         return set()
-    tokens = {PUBLIC_SCOPE_TOKEN, f"user:{user.id}"}
-    tokens.update(f"role:{name}" for name in user.groups.values_list("name", flat=True))
-    if getattr(user, "is_superuser", False):
+    tokens = {PUBLIC_SCOPE_TOKEN, f"user:{actor.id}"}
+    tokens.update(scope_token_for_group_name(name) for name in actor_group_names(actor))
+    if getattr(actor, "is_superuser", False):
         tokens.add("role:superuser")
     return tokens
 
 
+def is_active_actor(user, *, force_refresh: bool = False) -> bool:
+    """Return whether a real, persisted, active account may act.
+
+    ``is_authenticated`` is a request-state marker, not an authorization
+    decision: an inactive user and an unsaved user object must both fail
+    closed.  Keeping this check in the memory policy module makes direct
+    service calls and HTTP views use the same rule.
+    """
+    return resolve_active_actor(user, force_refresh=force_refresh) is not None
+
+
+def resolve_active_actor(user, *, force_refresh: bool = False):
+    """Resolve one bounded, group-prefetched active actor snapshot.
+
+    A request may carry a stale ``User`` instance after an admin revokes a
+    group or deactivates the account.  Read policies must consult the current
+    row, while selectors can pass this marked snapshot through a complete
+    query operation to avoid one database lookup per object.
+    """
+    if not force_refresh and getattr(user, "_memory_active_actor_snapshot", False):
+        return user if getattr(user, "is_active", False) else None
+    if not getattr(user, "is_authenticated", False) or not getattr(user, "pk", None):
+        return None
+    actor = (
+        get_user_model().objects.filter(pk=user.pk, is_active=True)
+        .prefetch_related("groups")
+        .first()
+    )
+    if actor is not None:
+        actor._memory_active_actor_snapshot = True
+    return actor
+
+
+def role_codes_snapshot(rules_snapshot=None) -> set[str]:
+    """Return only real role names from the current role-rules snapshot."""
+    if not isinstance(rules_snapshot, dict):
+        from apps.core.contract_store import get_contract
+
+        try:
+            rules_snapshot = get_contract("role_rules")
+        except Exception:
+            return set()
+    return {
+        name
+        for name, config in rules_snapshot.items()
+        if isinstance(name, str) and not name.startswith("$") and isinstance(config, dict)
+    }
+
+
+def scope_token_for_group_name(name: str, rules_snapshot=None) -> str:
+    """Map contract roles to ``role:`` and technical AD/Django groups to ``group:``."""
+    normalized = str(name or "").strip()
+    if not normalized:
+        return ""
+    prefix = "role:" if normalized in role_codes_snapshot(rules_snapshot) else "group:"
+    return prefix + normalized
+
+
+def actor_group_names(actor) -> tuple[str, ...]:
+    prefetched = getattr(actor, "_prefetched_objects_cache", {}).get("groups")
+    if prefetched is not None:
+        return tuple(group.name for group in prefetched)
+    return tuple(actor.groups.values_list("name", flat=True))
+
+
 def can_manage_memory(user) -> bool:
-    return bool(getattr(user, "is_authenticated", False) and getattr(user, "is_staff", False))
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
+        return False
+    if getattr(actor, "is_superuser", False):
+        return True
+    return "memory_admin" in set(actor_group_names(actor))
 
 
 def has_memory_review_capability(user, capability: str) -> bool:
     if capability not in MEMORY_REVIEW_CAPABILITIES:
         return False
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
-    if getattr(user, "is_superuser", False):
+    if getattr(actor, "is_superuser", False):
         return True
-    if user.has_perm(f"memory.{capability}"):
-        return True
-    group_names = set(user.groups.values_list("name", flat=True))
+    group_names = set(actor_group_names(actor))
     return any(capability in MEMORY_REVIEW_GROUP_CAPABILITIES.get(group_name, set()) for group_name in group_names)
 
 
@@ -116,45 +188,70 @@ def can_view_memory_access_audit(user) -> bool:
 
 
 def can_review_scoped_search_document(user, document: MemorySearchDocument) -> bool:
-    if getattr(user, "is_superuser", False):
-        return True
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
-    return scope_tokens_match(search_document_scope_tokens(document), user_scope_tokens(user))
+    if document.source_object_id:
+        source = MemorySource.objects.filter(pk=document.source_object.source_id).first()
+        if source is None or source.status != MemorySource.Status.ENABLED:
+            return False
+        from .services import can_access_source_object
+
+        if not can_access_source_object(actor, document.source_object):
+            return False
+    if getattr(actor, "is_superuser", False):
+        return True
+    return scope_tokens_match(search_document_scope_tokens(document), user_scope_tokens(actor))
 
 
 def can_review_scoped_issue(user, issue) -> bool:
-    if getattr(user, "is_superuser", False):
-        return True
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
+        return False
+    if not issue_source_is_consistent(issue):
+        return False
+    source = MemorySource.objects.filter(pk=issue.source_id).first()
+    if source is None or source.status != MemorySource.Status.ENABLED:
         return False
     if getattr(issue, "source_object_id", None):
-        required_tokens = (issue.source_object.metadata or {}).get("scope_tokens") or []
+        from .services import can_access_source_object
+
+        if not can_access_source_object(actor, issue.source_object):
+            return False
+        required_tokens = source_object_scope_tokens(issue.source_object, source=source)
     else:
-        required_tokens = source_scope_tokens(getattr(issue, "source", None))
-    return scope_tokens_match(required_tokens, user_scope_tokens(user))
+        required_tokens = source_scope_tokens(source)
+    if getattr(actor, "is_superuser", False):
+        return True
+    return scope_tokens_match(required_tokens, user_scope_tokens(actor))
 
 
 def can_write_personal_memory(user, owner) -> bool:
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
-    return bool(getattr(user, "is_superuser", False) or user.pk == getattr(owner, "pk", None))
+    return bool(getattr(actor, "is_superuser", False) or actor.pk == getattr(owner, "pk", None))
 
 
 def can_write_organization_memory(user) -> bool:
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
-    if getattr(user, "is_superuser", False):
+    if getattr(actor, "is_superuser", False):
         return True
-    return _user_has_role_flag(user, "memory_organization_write")
+    return _user_has_role_flag(actor, "memory_organization_write")
 
 
 def can_review_organization_memory(user) -> bool:
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
-    if getattr(user, "is_superuser", False):
+    if getattr(actor, "is_superuser", False):
         return True
-    return _user_has_role_flag(user, "memory_organization_review")
+    return bool(
+        _user_has_role_flag(actor, "memory_organization_review")
+        and has_memory_review_capability(actor, "review_issues")
+    )
 
 
 def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
@@ -164,27 +261,103 @@ def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
 
 
 def can_access_search_document(user, document: MemorySearchDocument) -> bool:
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
+        return False
     if document.source_object_id:
-        from .services import can_access_source_object_via_adapter
-
-        if not can_access_source_object_via_adapter(user, document.source_object):
+        source = MemorySource.objects.filter(pk=document.source_object.source_id).first()
+        if source is None or source.status != MemorySource.Status.ENABLED:
             return False
-    if getattr(user, "is_superuser", False):
+        from .services import can_access_source_object
+
+        if not can_access_source_object(actor, document.source_object):
+            return False
+    if getattr(actor, "is_superuser", False):
         return True
     return document.index_status == MemorySearchDocument.IndexStatus.READY and scope_tokens_match(
         search_document_scope_tokens(document),
-        user_scope_tokens(user),
+        user_scope_tokens(actor),
     )
 
 
 def can_access_knowledge_item(user, item) -> bool:
-    if getattr(user, "is_superuser", False):
-        return True
-    if not getattr(user, "is_authenticated", False):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
         return False
+    if getattr(actor, "is_superuser", False):
+        return True
     if item.status != "active":
         return False
-    return scope_tokens_match(item.scope_tokens, user_scope_tokens(user))
+    return scope_tokens_match(item.scope_tokens, user_scope_tokens(actor))
+
+
+def source_object_scope_tokens(source_object, *, source=None) -> list[str]:
+    source = source or getattr(source_object, "source", None)
+    metadata = source_object.metadata or {}
+    acl = metadata.get("acl") or {}
+    acl_status = str(acl.get("status") or "").strip().lower()
+    if acl_status in {"unresolved", "blocked", "unreadable", "disabled"}:
+        legacy_profile_policy = ""
+        if not acl.get("unresolved_policy"):
+            # Objects discovered before the policy snapshot was introduced
+            # must retain the policy of their configured ingestion profile.
+            # Any malformed/missing profile still falls through to the
+            # fail-closed process setting below.
+            try:
+                from .document_ingestion import get_source_ingestion_profile
+
+                legacy_profile_policy = get_source_ingestion_profile(
+                    source
+                ).unresolved_acl_policy
+            except Exception:
+                legacy_profile_policy = ""
+        unresolved_policy = (
+            acl.get("unresolved_policy")
+            or (getattr(source, "config", {}) or {}).get("acl_policy", {}).get("unresolved_policy")
+            or legacy_profile_policy
+            or getattr(settings, "MEMORY_ACL_UNRESOLVED_POLICY", "block")
+        )
+        if unresolved_policy in {"admin_only", "root_only"}:
+            return ["role:superuser"]
+        if unresolved_policy == "fallback_scope_rule":
+            return source_scope_tokens(source)
+        return []
+    tokens = [
+        str(token).strip()
+        for token in (metadata.get("scope_tokens") or acl.get("scope_tokens") or [])
+        if str(token).strip()
+    ]
+    return tokens or source_scope_tokens(source)
+
+
+def can_access_source_object_scope(user, source_object) -> bool:
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None or source_object is None or not getattr(source_object, "source_id", None):
+        return False
+    # Never trust the source relation cached on the object, and never let the
+    # root shortcut skip the lifecycle fence.
+    source = MemorySource.objects.filter(pk=source_object.source_id).first()
+    if source is None or source.status != MemorySource.Status.ENABLED:
+        return False
+    required = source_object_scope_tokens(source_object, source=source)
+    if not required:
+        return False
+    if not getattr(actor, "is_superuser", False) and not scope_tokens_match(required, user_scope_tokens(actor)):
+        return False
+    return True
+
+
+def issue_source_is_consistent(issue) -> bool:
+    """Reject an issue whose denormalized source disagrees with its target."""
+    if not getattr(issue, "source_id", None):
+        return False
+    if not getattr(issue, "source_object_id", None):
+        return True
+    try:
+        source_object = getattr(issue, "source_object", None)
+    except ObjectDoesNotExist:
+        return False
+    return source_object is not None and source_object.source_id == issue.source_id
 
 
 def effective_source_trust(source: MemorySource | None) -> SourceTrustDecision:
@@ -285,7 +458,10 @@ def _user_has_role_flag(user, flag: str) -> bool:
     from apps.core.contract_store import get_contract
 
     role_rules = get_contract("role_rules")
-    role_names = set(user.groups.values_list("name", flat=True))
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None:
+        return False
+    role_names = set(actor_group_names(actor))
     return any(bool((role_rules.get(role_name) or {}).get(flag)) for role_name in role_names)
 
 

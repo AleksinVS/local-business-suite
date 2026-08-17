@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
+from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 
-from .knowledge_files import recent_knowledge_commits
+from .knowledge_files import recent_knowledge_commits_for_actor
 from .models import (
     MemoryAccessAudit,
     MemoryExternalConnectorJob,
@@ -20,13 +22,18 @@ from .policies import (
     can_manage_memory_search_index,
     can_review_memory_issues,
     can_review_memory_privacy_issues,
+    can_review_scoped_issue,
+    can_review_scoped_search_document,
+    can_access_search_document,
     can_view_memory_access_audit,
     can_view_memory_review_queue,
+    resolve_active_actor,
     scope_tokens_match,
     source_scope_tokens,
     user_scope_tokens,
 )
 from .review_safety import safe_review_metadata, safe_review_text
+from .services import can_access_source_object
 
 OPEN_ISSUE_STATUSES = {
     MemoryIngestionIssue.Status.OPEN,
@@ -46,7 +53,11 @@ INDEX_HEALTH_ISSUE_KINDS = {
     MemoryIngestionIssue.IssueKind.SOURCE_DELETED_INDEX_LEFT,
 }
 INDEX_REVIEW_DISPLAY_LIMIT = 200
-SCOPE_TOKEN_FILTER_POSITION_LIMIT = 16
+# JSONField arrays do not have a portable ``overlap`` lookup on all supported
+# databases.  Keep the positional fallback deliberately large; ingestion
+# validators reject unbounded scope lists, so this is a defensive upper bound
+# rather than a silent first-16-elements policy.
+SCOPE_TOKEN_FILTER_POSITION_LIMIT = 256
 
 
 @dataclass(frozen=True)
@@ -73,10 +84,11 @@ class ReviewQueueItem:
 
 
 def review_dashboard_context(user) -> dict[str, Any]:
-    if not can_view_memory_review_queue(user):
+    actor = resolve_active_actor(user, force_refresh=True)
+    if actor is None or not can_view_memory_review_queue(actor):
         return _empty_dashboard()
-    issue_queryset = _scoped_issue_queryset(_base_issue_queryset(), user)
-    document_queryset = _scoped_document_queryset(_base_document_queryset(), user)
+    issue_queryset = _scoped_issue_queryset(_base_issue_queryset(), actor)
+    document_queryset = _scoped_document_queryset(_base_document_queryset(), actor)
     return {
         "open_issue_count": issue_queryset.filter(status__in=OPEN_ISSUE_STATUSES).count(),
         "blocker_issue_count": issue_queryset.filter(severity=MemoryIngestionIssue.Severity.BLOCKER, status__in=OPEN_ISSUE_STATUSES).count(),
@@ -84,14 +96,15 @@ def review_dashboard_context(user) -> dict[str, Any]:
         "index_problem_count": _index_problem_count(document_queryset),
         "issue_counts_by_severity": _issue_severity_counts(issue_queryset),
         "document_counts_by_status": _document_status_counts(document_queryset),
-        "recent_issues": [issue_to_review_queue_item(issue, user=user) for issue in issue_queryset[:8]],
-        "recent_jobs": list(_scoped_index_job_queryset(user)[:8]),
+        "recent_issues": [issue_to_review_queue_item(issue, user=actor) for issue in issue_queryset[:8]],
+        "recent_jobs": list(_scoped_index_job_queryset(actor)[:8]),
     }
 
 
 def review_issue_queryset(user, params=None):
+    user = resolve_active_actor(user, force_refresh=True)
     queryset = _base_issue_queryset()
-    if not can_view_memory_review_queue(user):
+    if user is None or not can_view_memory_review_queue(user):
         return queryset.none()
     queryset = _scoped_issue_queryset(queryset, user)
     params = params or {}
@@ -131,6 +144,9 @@ def review_issue_queryset(user, params=None):
 
 
 def issue_to_review_queue_item(issue: MemoryIngestionIssue, *, user) -> ReviewQueueItem:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_review_scoped_issue(user, issue):
+        raise PermissionDenied("Недоступная проблема памяти.")
     source_object = issue.source_object
     links = {"detail": reverse("memory:review_issue_detail", kwargs={"pk": issue.pk})}
     if source_object is not None:
@@ -161,6 +177,9 @@ def issue_to_review_queue_item(issue: MemoryIngestionIssue, *, user) -> ReviewQu
 
 
 def issue_detail_context(issue: MemoryIngestionIssue, *, user) -> dict[str, Any]:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_review_scoped_issue(user, issue):
+        raise PermissionDenied("Недоступная проблема памяти.")
     document = _document_for_source_object(issue.source_object) if issue.source_object_id else None
     access_audits = []
     if document is not None and can_view_memory_access_audit(user):
@@ -168,6 +187,7 @@ def issue_detail_context(issue: MemoryIngestionIssue, *, user) -> dict[str, Any]
             audit
             for audit in MemoryAccessAudit.objects.order_by("-created_at", "-id")[:100]
             if document.document_id in (audit.returned_document_ids or [])
+            and _audit_visible_to_actor(audit, document=document, user=user)
         ][:8]
     return {
         "issue": issue,
@@ -181,6 +201,9 @@ def issue_detail_context(issue: MemoryIngestionIssue, *, user) -> dict[str, Any]
 
 
 def issue_available_actions(issue: MemoryIngestionIssue, *, user) -> tuple[str, ...]:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_review_scoped_issue(user, issue):
+        return ()
     actions = []
     if can_review_memory_issues(user):
         actions.extend(["acknowledge", "assign", "request_expert_review", "comment"])
@@ -195,9 +218,29 @@ def issue_available_actions(issue: MemoryIngestionIssue, *, user) -> tuple[str, 
     return tuple(dict.fromkeys(actions))
 
 
+def assignees_for_issue(issue: MemoryIngestionIssue, *, actor):
+    """Return only active operators who can actually work on this issue."""
+    from .policies import can_review_memory_issues, can_review_memory_privacy_issues
+
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None or not can_view_memory_review_queue(actor) or not can_review_scoped_issue(actor, issue):
+        return []
+    candidates = get_user_model().objects.filter(is_active=True).prefetch_related("groups").order_by("username")
+    result = []
+    for assignee in candidates:
+        if not can_review_memory_issues(assignee):
+            continue
+        if issue.issue_kind in PRIVACY_ISSUE_KINDS and not can_review_memory_privacy_issues(assignee):
+            continue
+        if can_review_scoped_issue(assignee, issue):
+            result.append(assignee)
+    return result
+
+
 def index_document_queryset(user, params=None):
+    user = resolve_active_actor(user, force_refresh=True)
     queryset = _base_document_queryset()
-    if not can_view_memory_review_queue(user):
+    if user is None or not can_view_memory_review_queue(user):
         return queryset.none()
     queryset = _scoped_document_queryset(queryset, user)
     params = params or {}
@@ -229,6 +272,9 @@ def index_document_queryset(user, params=None):
 
 
 def search_document_to_review_queue_item(document: MemorySearchDocument, *, user) -> ReviewQueueItem:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_review_scoped_search_document(user, document):
+        raise PermissionDenied("Недоступный поисковый документ.")
     diagnostics = index_diagnostics(document)
     target = document_target_display(document)
     return ReviewQueueItem(
@@ -254,6 +300,9 @@ def search_document_to_review_queue_item(document: MemorySearchDocument, *, user
 
 
 def search_document_detail_context(document: MemorySearchDocument, *, user) -> dict[str, Any]:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_review_scoped_search_document(user, document):
+        raise PermissionDenied("Недоступный поисковый документ.")
     related_issues = MemoryIngestionIssue.objects.none()
     if document.source_object_id:
         related_issues = _base_issue_queryset().filter(source_object=document.source_object)
@@ -263,6 +312,7 @@ def search_document_detail_context(document: MemorySearchDocument, *, user) -> d
             audit
             for audit in MemoryAccessAudit.objects.order_by("-created_at", "-id")[:100]
             if document.document_id in (audit.returned_document_ids or [])
+            and _audit_visible_to_actor(audit, document=document, user=user)
         ][:12]
     return {
         "document": document,
@@ -271,13 +321,18 @@ def search_document_detail_context(document: MemorySearchDocument, *, user) -> d
         "safe_metadata": safe_review_metadata(document.metadata or {}),
         "related_issues": related_issues[:20],
         "review_log": list(reversed((document.metadata or {}).get("review_log") or []))[:50],
-        "related_jobs": _jobs_for_document(document)[:20],
+        "related_jobs": _jobs_for_document(document, user=user)[:20],
         "access_audits": access_audits,
         "available_actions": index_available_actions(document, user=user),
     }
 
 
 def index_available_actions(document: MemorySearchDocument, *, user) -> tuple[str, ...]:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None:
+        return ()
+    if not can_review_scoped_search_document(user, document):
+        return ()
     if not can_manage_memory_search_index(user):
         return ()
     actions = ["dry_run_reindex", "enqueue_reindex"]
@@ -358,7 +413,8 @@ def review_audit_context(user, params=None) -> dict[str, Any]:
     """Combined audit feed (ADR-0030 decision 4): the issue queue's decided
     items, the unified queue's recent tasks, and git-derived commit history —
     replacing the removed per-click ``MemoryReviewAction`` log table."""
-    if not can_view_memory_review_queue(user):
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_view_memory_review_queue(user):
         return {"decided_issues": [], "recent_jobs": [], "recent_commits": []}
     decided_issues = list(
         _scoped_issue_queryset(_base_issue_queryset(), user)
@@ -366,7 +422,7 @@ def review_audit_context(user, params=None) -> dict[str, Any]:
         .order_by("-updated_at", "-id")[:50]
     )
     recent_jobs = list(_scoped_index_job_queryset(user)[:50])
-    recent_commits = recent_knowledge_commits(limit=50)
+    recent_commits = recent_knowledge_commits_for_actor(actor=user, limit=50)
     return {
         "decided_issues": decided_issues,
         "recent_jobs": recent_jobs,
@@ -381,10 +437,11 @@ def pending_knowledge_queryset(user, params=None):
     """Organization candidacy proposals and classification-downgrade holds
     (both surfaced as ``metadata.lifecycle == "pending"`` per ADR-0030
     decisions 4 & 8), scoped by the viewer's scope tokens."""
+    user = resolve_active_actor(user, force_refresh=True)
     queryset = MemoryKnowledgeItem.objects.select_related("owner_user", "created_by").filter(
         metadata__lifecycle="pending"
     ).order_by("-updated_at", "-id")
-    if not can_view_memory_review_queue(user):
+    if user is None or not can_view_memory_review_queue(user):
         return queryset.none()
     if getattr(user, "is_superuser", False):
         return queryset
@@ -399,8 +456,11 @@ def pending_item_kind(item: MemoryKnowledgeItem) -> str:
 
 
 def source_filter_options(user=None):
-    queryset = MemorySource.objects.order_by("code")
-    if user is not None and not getattr(user, "is_superuser", False):
+    user = resolve_active_actor(user, force_refresh=True) if user is not None else None
+    queryset = MemorySource.objects.filter(status=MemorySource.Status.ENABLED).order_by("code")
+    if user is None:
+        return queryset.none().values_list("code", flat=True)
+    if not getattr(user, "is_superuser", False):
         queryset = queryset.filter(pk__in=_visible_source_ids_for_user(user))
     return queryset.values_list("code", flat=True)
 
@@ -456,13 +516,15 @@ def _severity_label(severity: str) -> str:
 
 
 def _base_issue_queryset():
-    return MemoryIngestionIssue.objects.select_related("source", "source_object", "run").order_by(
+    return MemoryIngestionIssue.objects.filter(source__status=MemorySource.Status.ENABLED).select_related("source", "source_object", "run").order_by(
         "status", "-created_at", "-id"
     )
 
 
 def _base_document_queryset():
-    return MemorySearchDocument.objects.select_related(
+    return MemorySearchDocument.objects.filter(
+        Q(source_object__isnull=True) | Q(source_object__source__status=MemorySource.Status.ENABLED)
+    ).select_related(
         "knowledge_item",
         "source_object",
         "source_object__source",
@@ -470,57 +532,126 @@ def _base_document_queryset():
 
 
 def _scoped_issue_queryset(queryset, user):
-    if getattr(user, "is_superuser", False):
-        return queryset
-    tokens = sorted(user_scope_tokens(user))
-    if not tokens:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None:
         return queryset.none()
-    object_scope_q = _scope_token_overlap_q("source_object__metadata__scope_tokens", tokens)
+    if not user_scope_tokens(user):
+        return queryset.none()
     source_ids = _visible_source_ids_for_user(user)
-    return queryset.filter((Q(source_object__isnull=False) & object_scope_q) | Q(source_object__isnull=True, source_id__in=source_ids))
+    scoped = queryset.filter(
+        Q(source_object__isnull=False)
+        | Q(source_object__isnull=True, source_id__in=source_ids)
+    ).filter(Q(source_object__isnull=True) | Q(source_object__source_id=F("source_id")))
+    return _filter_adapter_visible(scoped, user)
 
 
 def _scoped_document_queryset(queryset, user):
-    if getattr(user, "is_superuser", False):
-        return queryset
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None:
+        return queryset.none()
     tokens = sorted(user_scope_tokens(user))
     if not tokens:
         return queryset.none()
-    source_object_scope_q = _scope_token_overlap_q("source_object__metadata__scope_tokens", tokens)
     knowledge_scope_q = _scope_token_overlap_q("knowledge_item__scope_tokens", tokens)
-    return queryset.filter(
-        (Q(source_object__isnull=False) & source_object_scope_q)
+    scoped = queryset.filter(
+        Q(source_object__isnull=False)
         | (Q(knowledge_item__isnull=False) & knowledge_scope_q)
     )
+    return _filter_adapter_visible(scoped, user)
 
 
 def _scoped_index_job_queryset(user):
+    user = resolve_active_actor(user, force_refresh=True)
     queryset = MemoryExternalConnectorJob.objects.order_by("-created_at", "-id")
+    if user is None:
+        return queryset.none()
     if getattr(user, "is_superuser", False):
-        return queryset
+        enabled_codes = MemorySource.objects.filter(status=MemorySource.Status.ENABLED).values_list("code", flat=True)
+        return queryset.exclude(source_code="").filter(source_code__in=enabled_codes)
     visible_codes = list(
         MemorySource.objects.filter(id__in=_visible_source_ids_for_user(user)).values_list("code", flat=True)
     )
-    return queryset.filter(Q(source_code__in=visible_codes) | Q(source_code=""))
+    # Do not prefilter by the denormalized metadata token list: ACL fallback
+    # and admin-only states are resolved by the object policy below.
+    object_queryset = MemorySourceObject.objects.select_related("source")
+    visible_objects = [
+        source_object
+        for source_object in object_queryset
+        if can_access_source_object(user, source_object)
+    ]
+    # An empty source code is not a visible source: treating it as global
+    # exposes jobs whose target cannot be scoped to the actor.
+    visible_pairs = {(obj.source.code, str(obj.object_id)) for obj in visible_objects}
+    visible_document_pairs = {
+        (document.source_object.source.code, document.document_id)
+        for document in MemorySearchDocument.objects.filter(
+            source_object_id__in=[obj.pk for obj in visible_objects]
+        ).select_related("source_object__source")
+    }
+    object_target_query = Q(pk__in=[])
+    for source_code, object_id in visible_pairs:
+        object_target_query |= Q(source_code=source_code, payload__source_object_id=object_id)
+    for source_code, document_id in visible_document_pairs:
+        object_target_query |= Q(source_code=source_code, payload__document_id=document_id)
+    has_object_target = Q(payload__source_object_id__isnull=False) | Q(payload__document_id__isnull=False)
+    source_wide_query = Q(source_code__in=visible_codes) & ~has_object_target
+    return queryset.exclude(source_code="").filter(source_wide_query | object_target_query)
 
 
 def _visible_source_ids_for_user(user) -> list[int]:
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None:
+        return []
     if getattr(user, "is_superuser", False):
-        return list(MemorySource.objects.values_list("id", flat=True))
+        return list(MemorySource.objects.filter(status=MemorySource.Status.ENABLED).values_list("id", flat=True))
     tokens = set(user_scope_tokens(user))
     if not tokens:
         return []
-    source_ids = {
-        source.id
-        for source in MemorySource.objects.only("id", "scope_rule", "config")
-        if scope_tokens_match(source_scope_tokens(source), tokens)
-    }
-    source_ids.update(
-        MemorySourceObject.objects.filter(_scope_token_overlap_q("metadata__scope_tokens", sorted(tokens)))
-        .values_list("source_id", flat=True)
-        .distinct()
-    )
+    source_ids = set()
+    for source in MemorySource.objects.filter(status=MemorySource.Status.ENABLED).only("id", "status", "scope_rule", "config"):
+        config = source.config or {}
+        access_policy = config.get("access_policy") or {}
+        # A single object passing adapter_check does not establish access to
+        # the complete source.  Source-wide jobs/issues remain hidden unless
+        # the source itself has a token scope (or the actor is superuser).
+        if access_policy.get("mode") == "adapter_check":
+            continue
+        if scope_tokens_match(source_scope_tokens(source), tokens):
+            source_ids.add(source.id)
     return sorted(source_ids)
+
+
+def _filter_adapter_visible(queryset, user):
+    """Apply the source adapter's final object-level check to a queryset."""
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None:
+        return queryset.none()
+    candidates = list(
+        queryset.filter(source_object__isnull=False)
+        .select_related("source_object", "source_object__source")
+        .values_list("pk", "source_object")
+    )
+    if not candidates:
+        return queryset
+    visible_ids = []
+    objects = MemorySourceObject.objects.select_related("source").filter(
+        pk__in={source_object_id for _pk, source_object_id in candidates}
+    )
+    objects_by_id = {obj.pk: obj for obj in objects}
+    for row_pk, source_object_id in candidates:
+        source_object = objects_by_id.get(source_object_id)
+        if source_object is not None and can_access_source_object(user, source_object):
+            visible_ids.append(row_pk)
+    return queryset.filter(Q(source_object__isnull=True) | Q(pk__in=visible_ids))
+
+
+def _audit_visible_to_actor(audit, *, document, user) -> bool:
+    if getattr(user, "is_superuser", False):
+        return True
+    knowledge_item = getattr(document, "knowledge_item", None)
+    if knowledge_item is not None and knowledge_item.scope == MemoryKnowledgeItem.Scope.PERSONAL:
+        return knowledge_item.owner_user_id == getattr(user, "pk", None) or audit.actor_id == getattr(user, "pk", None)
+    return bool(set(audit.allowed_scope_tokens or []) & set(user_scope_tokens(user)))
 
 
 def _scope_token_overlap_q(path: str, tokens: list[str]) -> Q:
@@ -543,12 +674,16 @@ def _document_for_source_object(source_object):
     )
 
 
-def _jobs_for_document(document: MemorySearchDocument):
+def _jobs_for_document(document: MemorySearchDocument, *, user=None):
+    user = resolve_active_actor(user, force_refresh=True)
+    if user is None or not can_access_search_document(user, document):
+        return MemoryExternalConnectorJob.objects.none()
     queryset = MemoryExternalConnectorJob.objects.order_by("-created_at", "-id")
     if document.source_object_id:
-        return queryset.filter(
-            Q(source_code=document.source_object.source.code) | Q(payload__document_id=document.document_id)
-        )
+        result = queryset.filter(payload__document_id=document.document_id)
+        if user is not None and getattr(user, "is_superuser", False):
+            return result
+        return result.filter(source_code=document.source_object.source.code)
     return queryset.filter(payload__document_id=document.document_id)
 
 

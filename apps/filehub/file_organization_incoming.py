@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import datetime
 from pathlib import Path
 
+from django.db import transaction
 from django.utils import timezone
 
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 from apps.memory.document_ingestion import build_source_object_payload, get_source_ingestion_profile, resolve_source_root, sha256_file
 from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
 from apps.memory.security import scan_for_secrets
@@ -13,11 +16,11 @@ from apps.memory.source_text_extraction import SUPPORTED_SOURCE_TEXT_EXTENSIONS
 
 from .file_organization import (
     BASELINE_VIEW_SLUG,
-    create_file_organization_issue,
+    _create_file_organization_issue_locked,
     decimal_confidence,
-    ensure_file_object_for_source_object,
+    _ensure_file_object_for_source_object_locked,
     get_file_organization_profile,
-    get_or_create_system_view,
+    _get_or_create_system_view_locked,
     normalize_relative_path,
     stable_file_id_for_source_object,
 )
@@ -32,7 +35,21 @@ def process_incoming_folder(
     limit: int | None = None,
     require_enabled: bool = True,
 ) -> dict:
-    organization_profile = get_file_organization_profile(source, require_enabled=require_enabled)
+    if require_enabled is not True:
+        raise ValueError("Обход проверки включенного источника запрещен.")
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with transaction.atomic():
+            source = MemorySource.objects.select_for_update().get(pk=source.pk)
+            return _process_incoming_folder_locked(source=source, dry_run=dry_run, limit=limit)
+
+
+def _process_incoming_folder_locked(
+    *,
+    source: MemorySource,
+    dry_run: bool = False,
+    limit: int | None = None,
+) -> dict:
+    organization_profile = get_file_organization_profile(source)
     ingestion_profile = get_source_ingestion_profile(source)
     root = resolve_source_root(source)
     incoming_root = root / organization_profile.incoming_relative_path
@@ -55,11 +72,18 @@ def process_incoming_folder(
         metrics["missing"] = True
         return metrics
 
-    files = sorted(path for path in incoming_root.rglob("*") if path.is_file())
+    candidates = sorted(path for path in incoming_root.rglob("*") if path.is_file() or path.is_symlink())
+    files = []
+    unsafe_files = []
+    for candidate in candidates:
+        if _is_safe_incoming_file(candidate, root=root):
+            files.append(candidate)
+        else:
+            unsafe_files.append(candidate)
     if limit:
         files = files[:limit]
     now = timezone.now()
-    view = get_or_create_system_view(
+    view = _get_or_create_system_view_locked(
         source=source,
         view_kind=MemoryFileVirtualView.ViewKind.BASELINE_AUTO,
         slug=BASELINE_VIEW_SLUG,
@@ -67,6 +91,23 @@ def process_incoming_folder(
         baseline_profile=organization_profile.baseline_profile,
         dry_run=dry_run,
     )
+    for unsafe_path in unsafe_files:
+        metrics["seen"] += 1
+        metrics["blocked"] += 1
+        metrics["issues"] += 1
+        if not dry_run:
+            try:
+                safe_relative = unsafe_path.relative_to(root).as_posix()
+            except ValueError:
+                safe_relative = unsafe_path.name
+            _create_file_organization_issue_locked(
+                source=source,
+                source_object=None,
+                issue_kind=MemoryIngestionIssue.IssueKind.CANONICALIZATION_CONFLICT,
+                severity=MemoryIngestionIssue.Severity.BLOCKER,
+                message="Входной путь заблокирован: символическая ссылка или выход за корень источника.",
+                metadata={"relative_path": normalize_relative_path(safe_relative), "reason": "unsafe_incoming_path"},
+            )
     for file_path in files:
         metrics["seen"] += 1
         if not _file_is_stable(file_path, stable_after_seconds=ingestion_profile.stable_after_seconds):
@@ -74,8 +115,24 @@ def process_incoming_folder(
             continue
         metrics["stable"] += 1
         relative_path = normalize_relative_path(file_path.relative_to(root).as_posix())
-        stat = file_path.stat()
-        content_hash = sha256_file(file_path)
+        try:
+            stat, content_hash, text_bytes = _safe_incoming_snapshot(file_path, root=root)
+        except (OSError, ValueError):
+            metrics["blocked"] += 1
+            metrics["issues"] += 1
+            if not dry_run:
+                _create_file_organization_issue_locked(
+                    source=source,
+                    source_object=None,
+                    issue_kind=MemoryIngestionIssue.IssueKind.CANONICALIZATION_CONFLICT,
+                    severity=MemoryIngestionIssue.Severity.BLOCKER,
+                    message="Входной файл изменил путь или тип во время чтения.",
+                    metadata={
+                        "relative_path": normalize_relative_path(file_path.relative_to(root).as_posix()),
+                        "reason": "incoming_path_changed_during_read",
+                    },
+                )
+            continue
         object_id = _incoming_object_id(source=source, content_hash=content_hash, size_bytes=stat.st_size)
         source_object = MemorySourceObject(
             source=source,
@@ -90,7 +147,7 @@ def process_incoming_folder(
             last_seen_at=now,
             last_stable_at=now,
         )
-        secret_blocked, secret_metadata = _incoming_secret_block(file_path)
+        secret_blocked, secret_metadata = _incoming_secret_block(file_path, content=text_bytes)
         if dry_run:
             if secret_blocked:
                 metrics["blocked"] += 1
@@ -111,7 +168,20 @@ def process_incoming_folder(
             stat=stat,
             now=now,
             profile=ingestion_profile,
+            content_hash_override=content_hash,
         )
+        if not _is_safe_incoming_file(file_path, root=root):
+            metrics["blocked"] += 1
+            metrics["issues"] += 1
+            _create_file_organization_issue_locked(
+                source=source,
+                source_object=None,
+                issue_kind=MemoryIngestionIssue.IssueKind.CANONICALIZATION_CONFLICT,
+                severity=MemoryIngestionIssue.Severity.BLOCKER,
+                message="Входной файл изменил путь после чтения.",
+                metadata={"relative_path": relative_path, "reason": "incoming_path_changed_after_read"},
+            )
+            continue
         source_object, _created = MemorySourceObject.objects.update_or_create(
             source=source,
             object_id=object_id,
@@ -123,7 +193,7 @@ def process_incoming_folder(
             source_object.last_error = "Sensitive credential material was detected in incoming file."
             source_object.metadata = {**(source_object.metadata or {}), "incoming_secret_scan": secret_metadata}
             source_object.save(update_fields=["ingestion_status", "last_error", "metadata", "updated_at"])
-            create_file_organization_issue(
+            _create_file_organization_issue_locked(
                 source=source,
                 source_object=source_object,
                 issue_kind=MemoryIngestionIssue.IssueKind.SECRET_BLOCKED,
@@ -134,7 +204,7 @@ def process_incoming_folder(
             metrics["blocked"] += 1
             metrics["issues"] += 1
             continue
-        file_object = ensure_file_object_for_source_object(source_object)
+        file_object = _ensure_file_object_for_source_object_locked(source_object=source_object)
         plan = classify_baseline_placement(source_object=source_object, file_id=file_object.file_id)
         placement_status = (
             MemoryFileVirtualPlacement.Status.NEEDS_REVIEW
@@ -162,7 +232,7 @@ def process_incoming_folder(
         metrics["placements"] += 1
         if plan.review_required:
             metrics["review_required"] += 1
-            create_file_organization_issue(
+            _create_file_organization_issue_locked(
                 source=source,
                 source_object=source_object,
                 severity=MemoryIngestionIssue.Severity.WARNING,
@@ -177,6 +247,59 @@ def process_incoming_folder(
             )
             metrics["issues"] += 1
     return metrics
+
+
+def _is_safe_incoming_file(file_path: Path, *, root: Path) -> bool:
+    if file_path.is_symlink():
+        return False
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved_file = file_path.resolve(strict=True)
+    except (FileNotFoundError, OSError, RuntimeError):
+        return False
+    return resolved_file.is_file() and (resolved_file == resolved_root or resolved_root in resolved_file.parents)
+
+
+def _safe_incoming_snapshot(file_path: Path, *, root: Path):
+    """Hash one regular file without following a last-component symlink."""
+
+    if not _is_safe_incoming_file(file_path, root=root):
+        raise ValueError("Unsafe incoming path.")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(file_path, flags)
+    collected = bytearray() if file_path.suffix.lower() in SUPPORTED_SOURCE_TEXT_EXTENSIONS else None
+    try:
+        before = os.fstat(fd)
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            if collected is not None:
+                collected.extend(chunk)
+        after = os.fstat(fd)
+    finally:
+        os.close(fd)
+    if (
+        before.st_size != after.st_size
+        or before.st_mtime_ns != after.st_mtime_ns
+        or getattr(before, "st_ino", None) != getattr(after, "st_ino", None)
+        or not _is_safe_incoming_file(file_path, root=root)
+    ):
+        raise ValueError("Incoming file changed while it was read.")
+    current = file_path.stat()
+    if (
+        current.st_size != after.st_size
+        or current.st_mtime_ns != after.st_mtime_ns
+        or getattr(current, "st_ino", None) != getattr(after, "st_ino", None)
+    ):
+        raise ValueError("Incoming path was replaced after reading.")
+    return after, digest.hexdigest(), (bytes(collected) if collected is not None else None)
 
 
 def _ensure_incoming_dirs(*, incoming_root: Path, dry_run: bool) -> None:
@@ -201,12 +324,11 @@ def _incoming_object_id(*, source: MemorySource, content_hash: str, size_bytes: 
     return "incoming:" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:40]
 
 
-def _incoming_secret_block(path: Path) -> tuple[bool, dict]:
+def _incoming_secret_block(path: Path, *, content: bytes | None) -> tuple[bool, dict]:
     if path.suffix.lower() not in SUPPORTED_SOURCE_TEXT_EXTENSIONS:
         return False, {"checked": False, "reason": "unsupported_text_extension"}
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        return True, {"checked": True, "reason": str(exc), "findings": []}
+    if content is None:
+        return True, {"checked": True, "reason": "safe_snapshot_missing", "findings": []}
+    text = content.decode("utf-8", errors="replace")
     result = scan_for_secrets(text)
     return bool(result.blocked), result.as_dict()

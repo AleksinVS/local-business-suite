@@ -11,6 +11,7 @@ import tempfile
 import pytest
 
 from apps.core.models import Department
+from apps.core.contract_store import get_contract
 from apps.inventory.models import MedicalDevice
 from apps.workorders.models import Board, WorkOrder, WorkOrderStatus
 from apps.workorders.policies import ROLE_MANAGER
@@ -53,6 +54,7 @@ class AnalyticsDashboardTests(TestCase):
         cls.manager.groups.add(manager_group)
         cls.user = User.objects.create_user(username="guest", password="pass")
         cls.board = Board.objects.create(title="Test Board", slug="test-board-analytics")
+        cls.board.allowed_groups.add(manager_group)
         WorkOrder.objects.create(
             title="Плановое ТО",
             description="Проверка питания.",
@@ -75,6 +77,67 @@ class AnalyticsDashboardTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("analytics:dashboard"))
         self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_aggregates_only_workorders_visible_to_relational_actor(self):
+        own_department = Department.objects.create(name="Своя аналитическая ветка")
+        foreign_department = Department.objects.create(name="Чужая аналитическая ветка")
+        actor = User.objects.create_user(
+            username="analytics-scoped-reader",
+            password="pass",
+            department=own_department,
+        )
+        scoped_group, _ = Group.objects.get_or_create(name="analytics-scoped-reader")
+        actor.groups.add(scoped_group)
+        self.board.allowed_groups.add(scoped_group)
+        own = WorkOrder.objects.create(
+            title="Видимая аналитическая заявка",
+            description="Должна попасть в scoped summary.",
+            department=own_department,
+            author=self.user,
+            assignee=actor,
+            board=self.board,
+            status=WorkOrderStatus.NEW,
+        )
+        WorkOrder.objects.create(
+            title="Чужая аналитическая заявка",
+            description="Не должна попасть в summary.",
+            department=foreign_department,
+            author=self.user,
+            assignee=self.manager,
+            board=self.board,
+            status=WorkOrderStatus.CLOSED,
+        )
+        role_rules = {
+            "analytics-scoped-reader": {
+                **json.loads(json.dumps(get_contract("role_rules")["technician"])),
+                "view_scope": "assigned",
+                "view_analytics": True,
+            }
+        }
+
+        from apps.core.contract_store import _reset_for_tests
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            role_rules_path = Path(tmpdir) / "role_rules.json"
+            role_rules_path.write_text(json.dumps(role_rules), encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_rules_path):
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    response = self.client.get(reverse("analytics:dashboard"))
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.context["closed_count"], 0)
+                    self.assertEqual(response.context["resolved_count"], 0)
+                    self.assertEqual(
+                        response.context["status_summary"],
+                        [{
+                            "status": own.status,
+                            "status_label": dict(WorkOrderStatus.choices)[own.status],
+                            "total": 1,
+                        }],
+                    )
+                finally:
+                    _reset_for_tests()
 
 
 class KnowledgeDrivenAnalyticsTests(TestCase):

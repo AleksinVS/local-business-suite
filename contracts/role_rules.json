@@ -1,6 +1,7 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
   "$administration": {
+    "role_definition_editor_roles": ["admin"],
     "role_assignment_allowlist": {
       "manager": ["customer", "technician"]
     }
@@ -119,6 +120,13 @@
       "label": "Управление ролями",
       "description": "Изменение прав ролей на этой странице. Право уровня администратора — выдавать с осторожностью."
     },
+    "manage_settings": {
+      "type": "flag",
+      "section": "organization",
+      "risk": "critical",
+      "label": "Управление настройками",
+      "description": "Просмотр и изменение продуктовых настроек через Центр настроек. Доступно только роли администратора."
+    },
     "manage_ai_skills": {
       "type": "flag",
       "section": "ai_memory",
@@ -214,6 +222,7 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,
@@ -243,6 +252,7 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,
@@ -272,6 +282,7 @@
     "view_analytics": true,
     "manage_departments": true,
     "manage_roles": true,
+    "manage_settings": false,
     "manage_ai_skills": true,
     "memory_organization_write": true,
     "memory_organization_review": true,
@@ -301,6 +312,7 @@
     "view_analytics": true,
     "manage_departments": true,
     "manage_roles": true,
+    "manage_settings": true,
     "manage_ai_skills": true,
     "memory_organization_write": true,
     "memory_organization_review": true,
@@ -330,6 +342,7 @@
     "view_analytics": false,
     "manage_departments": false,
     "manage_roles": false,
+    "manage_settings": false,
     "manage_ai_skills": false,
     "memory_organization_write": false,
     "memory_organization_review": false,

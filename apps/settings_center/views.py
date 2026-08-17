@@ -778,7 +778,8 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         try:
             if self.request.POST.get("action") == "preview":
                 preview = preview_contract_payload(
-                    descriptor=self.descriptor,
+                    actor=self.request.user,
+                    setting_id=self.descriptor.setting_id,
                     raw_payload=form.cleaned_data["payload"],
                 )
                 record_settings_change(

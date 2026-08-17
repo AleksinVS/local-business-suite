@@ -8,7 +8,7 @@ from apps.memory.tests._common import *  # noqa: F401,F403
 class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
     databases = RUNTIME_DATABASES
     def test_user_scope_tokens_and_manage_policy(self):
-        group = Group.objects.create(name="memory_admins")
+        group = Group.objects.create(name="memory_admin")
         user = User.objects.create_user(username="memory-user", password="pass", is_staff=True)
         user.groups.add(group)
 
@@ -16,7 +16,7 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
 
         self.assertIn("org:default", tokens)
         self.assertIn(f"user:{user.id}", tokens)
-        self.assertIn("role:memory_admins", tokens)
+        self.assertIn("group:memory_admin", tokens)
         self.assertTrue(can_manage_memory(user))
         self.assertFalse(can_manage_memory(User(username="anonymous")))
 
@@ -52,7 +52,7 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(audit.query_hash, "sha256:abc")
         self.assertEqual(audit.returned_document_ids, ["document-1"])
         self.assertEqual(audit.returned_fact_ids, ["fact-1"])
-        self.assertEqual(audit.allowed_scope_tokens, sorted({"org:default", f"user:{user.id}", "role:operators"}))
+        self.assertEqual(audit.allowed_scope_tokens, sorted({"org:default", f"user:{user.id}", "group:operators"}))
         self.assertNotIn("query", {field.name for field in MemoryAccessAudit._meta.fields})
         self.assertEqual(str(audit), "req-audit-1:allowed")
 

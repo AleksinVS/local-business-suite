@@ -46,15 +46,6 @@ class TaskTypeContractTests(SimpleTestCase):
         partial = {"workorder": 7}
         self.assertIn("text", contract.get_missing_required_slots(partial))
 
-    def test_workorders_delete_contract_requires_confirmation(self):
-        from services.agent_runtime.task_types import get_task_type_contract
-        contract = get_task_type_contract("workorders.delete")
-        self.assertIsNotNone(contract)
-        self.assertTrue(contract.requires_confirmation)
-        self.assertEqual(contract.allowed_tools, ("workorders.get", "workorders.delete"))
-        self.assertEqual(contract.get_missing_required_slots({"workorder_id": 7}), [])
-        self.assertIn("workorder_id", contract.get_missing_required_slots({}))
-
     def test_lookup_departments_contract(self):
         from services.agent_runtime.task_types import get_task_type_contract
         contract = get_task_type_contract("lookup.departments")
@@ -129,7 +120,6 @@ class TaskTypeContractTests(SimpleTestCase):
                 {"id": "departments.list"},
                 {"id": "devices.list"},
                 {"id": "workorders.comment"},
-                {"id": "workorders.delete"},
                 {"id": "workorders.confirm_closure"},
                 {"id": "workorders.rate"},
                 {"id": "inventory.devices.create"},

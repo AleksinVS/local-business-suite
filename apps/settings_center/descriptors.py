@@ -42,6 +42,51 @@ SECRET_VALUE_TYPES = frozenset({"secret"})
 SECRET_WIDGETS = frozenset({"password", "secret", "secret_handle"})
 SECRET_STORAGE_KINDS = frozenset({"secret_handle"})
 
+def runtime_validators() -> dict[str, Any]:
+    """Build the single registry of editable runtime-contract validators."""
+    from django.conf import settings
+
+    from apps.ai import contracts as ai_contracts
+    from apps.core.json_utils import load_json_file
+    from apps.memory import contracts as memory_contracts
+    from apps.workorders import contracts as workorder_contracts
+
+    return {
+        "validate_role_rules_payload": lambda payload: workorder_contracts.validate_role_rules_payload(
+            payload,
+            workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
+        ),
+        "validate_workorder_status_colors_payload": lambda payload: workorder_contracts.validate_workorder_status_colors_payload(
+            payload,
+            workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
+        ),
+        "validate_workflow_rules_payload": workorder_contracts.validate_workflow_rules_payload,
+        "validate_ai_registry_payload": ai_contracts.validate_ai_registry_payload,
+        "validate_ai_tools_payload": ai_contracts.validate_ai_tools_payload,
+        "validate_ai_task_types_payload": ai_contracts.validate_ai_task_types_payload,
+        "validate_ai_chat_settings_payload": ai_contracts.validate_ai_chat_settings_payload,
+        "validate_memory_profiles_payload": memory_contracts.validate_memory_profiles_payload,
+        "validate_memory_routing_payload": memory_contracts.validate_memory_routing_payload,
+        "validate_memory_ingestion_profiles_payload": memory_contracts.validate_memory_ingestion_profiles_payload,
+        "validate_memory_file_organization_profiles_payload": memory_contracts.validate_memory_file_organization_profiles_payload,
+        "validate_memory_graph_schema_payload": memory_contracts.validate_memory_graph_schema_payload,
+        "validate_memory_sources_payload": lambda payload: memory_contracts.validate_memory_sources_payload(
+            payload,
+            profiles_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_PROFILES_FILE),
+            routing_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE),
+            ingestion_profiles_payload=load_json_file(
+                settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE
+            ),
+        ),
+        "validate_memory_trust_policy_payload": memory_contracts.validate_memory_trust_policy_payload,
+        "validate_memory_claims_policy_payload": memory_contracts.validate_memory_claims_policy_payload,
+        "validate_memory_retrieval_budget_payload": memory_contracts.validate_memory_retrieval_budget_payload,
+    }
+
+
+def runtime_validator_names() -> frozenset[str]:
+    return frozenset(runtime_validators())
+
 
 @dataclass(frozen=True)
 class SettingDescriptor:
@@ -55,7 +100,9 @@ class SettingDescriptor:
     value_type: str = "string"
     widget: str = "text"
     write_policy: str = "read_only"
-    required_permission: str = "settings_center.manage"
+    # Product settings use the role capability. Django ``is_staff`` remains
+    # exclusively the gate for Django Admin.
+    required_permission: str = "manage_settings"
     sensitivity: str = "internal"
     masking_policy: str = "default"
     requires_restart: bool = False

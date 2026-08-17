@@ -4,6 +4,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 
 User = get_user_model()
@@ -50,19 +51,44 @@ from .policies import (
     can_upload_attachment,
 )
 from .selectors import (
-    resolve_visible_department_device_selection,
+    _is_actor_snapshot,
+    _resolve_visible_department_device_selection_for_actor,
+    _visible_boards_queryset_for_actor,
+    _visible_workorders_queryset_for_actor,
+    creation_departments_queryset,
+    creation_devices_queryset,
+    resolve_active_actor,
     visible_boards_queryset,
-    visible_departments_queryset,
-    visible_devices_queryset,
     visible_workorders_queryset,
 )
-from .services import confirm_closure, transition_workorder
+from .services import (
+    add_workorder_attachment_command,
+    add_workorder_comment_command,
+    confirm_workorder_closure_command,
+    create_workorder_command,
+    move_workorder_command,
+    rate_workorder_command,
+    transition_workorder_command,
+    update_board_column_command,
+    update_workorder_command,
+)
 
 
 VIEW_BOARD = "board"
 
 
+def _policy_actor(user):
+    """Reuse only a marked actor snapshot inside one render operation."""
+
+    if _is_actor_snapshot(user):
+        return user
+    return resolve_active_actor(user, force_refresh=True)
+
+
 def quick_transition_choices_for(user, workorder):
+    user = _policy_actor(user)
+    if user is None:
+        return []
     return [
         (status, label)
         for status, label in WorkOrderStatus.choices
@@ -71,6 +97,15 @@ def quick_transition_choices_for(user, workorder):
 
 
 def _stepper_context(user, workorder):
+    user = _policy_actor(user)
+    if user is None:
+        return {
+            "workorder": workorder,
+            "transition_choices": [],
+            "transition_choices_vals": set(),
+            "status_choices": WorkOrderStatus.choices,
+            "can_confirm_closure": False,
+        }
     transitions = quick_transition_choices_for(user, workorder)
     return {
         "workorder": workorder,
@@ -89,12 +124,28 @@ def configured_columns(board=None):
 
 
 def drop_status_for_column(user, workorder, column):
+    user = _policy_actor(user)
+    if user is None:
+        return None
     if workorder.status in column.statuses:
         return None
     for status in column.statuses:
         if can_transition(user, workorder, status):
             return status
     return None
+
+
+def _fresh_render_actor_and_workorder(request, workorder_id):
+    """Re-authorize a target immediately before an HTMX fragment render."""
+    actor = resolve_active_actor(request.user, force_refresh=True)
+    if actor is None:
+        raise PermissionDenied("Учетная запись отключена.")
+    workorder = _visible_workorders_queryset_for_actor(actor).filter(
+        pk=workorder_id
+    ).first()
+    if workorder is None:
+        raise PermissionDenied("Заявка больше недоступна текущему пользователю.")
+    return actor, workorder
 
 
 def column_card_context(column):
@@ -285,8 +336,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_department_selection(self):
         if not hasattr(self, "_department_selection"):
-            self._department_selection = resolve_visible_department_device_selection(
-                self.request.user,
+            actor = _policy_actor(getattr(self, "_actor", self.request.user))
+            self._actor = actor
+            self._department_selection = _resolve_visible_department_device_selection_for_actor(
+                actor,
                 self.request.GET.getlist("department"),
                 self.request.GET.getlist("device"),
             )
@@ -302,11 +355,13 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_visible_boards(self):
         if not hasattr(self, "_visible_boards"):
-            self._visible_boards = visible_boards_queryset(self.request.user)
+            actor = _policy_actor(getattr(self, "_actor", self.request.user))
+            self._visible_boards = _visible_boards_queryset_for_actor(actor)
         return self._visible_boards
 
     def get_queryset(self, board):
-        queryset = visible_workorders_queryset(self.request.user, board=board).order_by(
+        actor = _policy_actor(getattr(self, "_actor", self.request.user))
+        queryset = _visible_workorders_queryset_for_actor(actor, board=board).order_by(
             "-updated_at"
         )
         queryset = queryset.annotate(
@@ -359,6 +414,11 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        actor = _policy_actor(getattr(self, "_actor", self.request.user))
+        if actor is None:
+            context.update({"no_boards": True, "current_view": VIEW_BOARD})
+            return context
+        self._actor = actor
         board = self.get_board()
         department_selection = self.get_department_selection()
         context["page_ai_context_json"] = page_context_json(
@@ -382,13 +442,23 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
             "selected_department_ids": department_selection.selected_department_ids,
             "selected_device_ids": department_selection.selected_device_ids,
             "selected_count": department_selection.selected_count,
-            "can_create_workorder": can_create(self.request.user),
+            "can_create_workorder": can_create(actor),
             "is_empty": not department_nodes,
         }
         context["visible_boards"] = self.get_visible_boards()
         context["workorder_status_color_style"] = _workorder_status_color_style()
         context["status_choices"] = WorkOrderStatus.choices
-        context["assignees"] = User.objects.order_by("first_name", "username")
+        visible_assignee_ids = _visible_workorders_queryset_for_actor(actor).filter(
+            assignee__isnull=False
+        ).values("assignee_id")
+        # Filter candidates from the current visible workorders only.  The
+        # command deliberately still permits any active target on write: that
+        # is the existing manage_assignments product semantic, not a new
+        # capability or a broader read selector.
+        context["assignees"] = User.objects.filter(
+            is_active=True,
+            pk__in=visible_assignee_ids,
+        ).order_by("first_name", "username")
         context["filters"] = {
             "view": VIEW_BOARD,
             "q": self.request.GET.get("q", ""),
@@ -401,9 +471,9 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 str(value) for value in department_selection.selected_device_ids
             ],
         }
-        context["can_create_workorder"] = can_create(self.request.user)
+        context["can_create_workorder"] = can_create(actor)
         context["can_manage_board_columns"] = can_manage_board_columns(
-            self.request.user
+            actor
         )
         if not board:
             context["no_boards"] = True
@@ -427,7 +497,7 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 column.code: status
                 for column in column_configs
                 for status in [
-                    drop_status_for_column(self.request.user, workorder, column)
+                    drop_status_for_column(actor, workorder, column)
                 ]
                 if status
             }
@@ -435,10 +505,10 @@ class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
                 {
                     "workorder": workorder,
                     "quick_transitions": quick_transition_choices_for(
-                        self.request.user, workorder
+                        actor, workorder
                     ),
                     "can_confirm_closure": can_confirm_closure(
-                        self.request.user, workorder
+                        actor, workorder
                     ),
                     "can_drag": bool(drop_targets),
                 }
@@ -481,19 +551,19 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         if board_id:
             initial["board"] = board_id
         user_department_id = self.request.user.department_id
-        if user_department_id and visible_departments_queryset(self.request.user).filter(
+        if user_department_id and creation_departments_queryset(self.request.user).filter(
             pk=user_department_id
         ).exists():
             initial["department"] = user_department_id
         department_id = _positive_id(self.request.GET.get("department"))
-        if department_id and visible_departments_queryset(self.request.user).filter(
+        if department_id and creation_departments_queryset(self.request.user).filter(
             pk=department_id
         ).exists():
             initial["department"] = department_id
         device_id = _positive_id(self.request.GET.get("device"))
         if device_id:
             device = (
-                visible_devices_queryset(self.request.user)
+                creation_devices_queryset(self.request.user)
                 .filter(pk=device_id)
                 .first()
             )
@@ -507,6 +577,18 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
         return kwargs
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # Creation scope is intentionally separate from the relational read
+        # directory: it is the actor's own allowed organizational branch.
+        form.fields["department"].queryset = creation_departments_queryset(
+            self.request.user
+        )
+        form.fields["device"].queryset = creation_devices_queryset(
+            self.request.user
+        )
+        return form
 
     def get_template_names(self):
         if self.request.htmx:
@@ -524,15 +606,16 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         return reverse("workorders:detail", kwargs={"pk": self.object.pk})
 
     def dispatch(self, request, *args, **kwargs):
-        if not can_create(request.user):
+        actor = resolve_active_actor(request.user, force_refresh=True)
+        if actor is None or not can_create(actor):
             return HttpResponseForbidden("Создание заявок запрещено")
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        form.instance.author = self.request.user
-        form.instance.assignee = None
-        self.object = form.save()
-        notification_events.notify_workorder_created(self.object, actor=self.request.user)
+        self.object = create_workorder_command(
+            actor=self.request.user,
+            payload=form.cleaned_data,
+        )
         if self.request.htmx:
             response = HttpResponse(status=204)
             response["HX-Redirect"] = self.get_success_url()
@@ -549,11 +632,11 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         department = None
         device = None
         if department_id:
-            department = visible_departments_queryset(self.request.user).filter(
+            department = creation_departments_queryset(self.request.user).filter(
                 pk=department_id
             ).first()
         if device_id:
-            device = visible_devices_queryset(self.request.user).filter(
+            device = creation_devices_queryset(self.request.user).filter(
                 pk=device_id
             ).first()
         context["selected_department_label"] = (
@@ -574,7 +657,8 @@ class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
     result_limit = 20
 
     def dispatch(self, request, *args, **kwargs):
-        if not can_create(request.user):
+        actor = resolve_active_actor(request.user, force_refresh=True)
+        if actor is None or not can_create(actor):
             return HttpResponseForbidden("Создание заявок запрещено")
         return super().dispatch(request, *args, **kwargs)
 
@@ -582,7 +666,7 @@ class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()[:100]
         normalized_query = query.casefold()
         if self.kind == "department":
-            departments = tuple(visible_departments_queryset(request.user))
+            departments = tuple(creation_departments_queryset(request.user))
             labels = _department_option_labels(departments)
             results = [
                 {"id": department.id, "label": labels[department.id]}
@@ -592,7 +676,7 @@ class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
                 or normalized_query in labels[department.id].casefold()
             ][: self.result_limit]
         elif self.kind == "device":
-            devices = visible_devices_queryset(request.user)
+            devices = creation_devices_queryset(request.user)
             if query:
                 devices = devices.filter(
                     Q(name__icontains=query)
@@ -601,7 +685,7 @@ class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
                 )
             devices = list(devices[: self.result_limit])
             department_labels = _department_option_labels(
-                tuple(visible_departments_queryset(request.user))
+                tuple(creation_departments_queryset(request.user))
             )
             results = [
                 {
@@ -626,6 +710,9 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     form_class = WorkOrderUpdateForm
     template_name = "workorders/workorder_form.html"
 
+    def get_queryset(self):
+        return visible_workorders_queryset(self.request.user)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
@@ -637,13 +724,21 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
         return [self.template_name]
 
     def test_func(self):
-        return can_edit(self.request.user, self.get_object())
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_edit(actor, self.get_object())
 
     def form_valid(self, form):
         previous = WorkOrder.objects.get(pk=form.instance.pk)
         changed_fields = set(form.changed_data)
         previous_assignee_id = previous.assignee_id
-        self.object = form.save()
+        self.object = update_workorder_command(
+            actor=self.request.user,
+            workorder_id=form.instance.pk,
+            payload={
+                field: form.cleaned_data[field]
+                for field in form.changed_data
+            },
+        )
         notification_events.notify_workorder_updated(
             self.object,
             actor=self.request.user,
@@ -664,11 +759,12 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
                 detail_view.get_context_data(object=self.object),
             )
             return _mark_workorders_changed(response)
-        return super().form_valid(form)
+        return redirect(self.get_success_url())
 
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
-        if not can_manage_assignments(self.request.user):
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        if actor is None or not can_manage_assignments(actor):
             form.fields["assignee"].disabled = True
             form.fields["assignee"].required = False
         return form
@@ -698,20 +794,24 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
         return [self.template_name]
 
     def get_context_data(self, **kwargs):
+        actor, visible_workorder = _fresh_render_actor_and_workorder(
+            self.request, self.object.pk
+        )
+        self.object = visible_workorder
         context = super().get_context_data(**kwargs)
         context["comment_form"] = WorkOrderCommentForm()
         context["attachment_form"] = WorkOrderAttachmentForm()
         context["rating_form"] = WorkOrderRatingForm(instance=self.object)
-        context.update(_stepper_context(self.request.user, self.object))
-        context["can_edit"] = can_edit(self.request.user, self.object)
+        context.update(_stepper_context(actor, self.object))
+        context["can_edit"] = can_edit(actor, self.object)
         context["can_confirm_closure"] = can_confirm_closure(
-            self.request.user, self.object
+            actor, self.object
         )
-        context["can_rate"] = can_rate(self.request.user, self.object)
+        context["can_rate"] = can_rate(actor, self.object)
         context["can_upload_attachment"] = can_upload_attachment(
-            self.request.user, self.object
+            actor, self.object
         )
-        context["can_comment"] = can_comment(self.request.user, self.object)
+        context["can_comment"] = can_comment(actor, self.object)
         context["detail_ai_context_json"] = page_context_json(
             workorder_detail_page_context(self.request, self.object)
         )
@@ -720,21 +820,27 @@ class WorkOrderDetailView(LoginRequiredMixin, DetailView):
 
 class WorkOrderCommentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
+        # Resolve the target through the scoped selector even when form data
+        # is invalid, so the error branch cannot reference an undefined or
+        # foreign workorder.
         workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
-        if not can_comment(request.user, workorder):
-            return HttpResponseForbidden("Комментарии недоступны")
         form = WorkOrderCommentForm(request.POST)
         if form.is_valid():
-            WorkOrderComment.objects.create(
-                workorder=workorder,
-                author=request.user,
-                body=form.cleaned_data["body"],
-            )
-            notification_events.notify_workorder_comment_created(
-                workorder,
-                actor=request.user,
-            )
+            try:
+                comment = add_workorder_comment_command(
+                    actor=request.user,
+                    workorder_id=pk,
+                    body=form.cleaned_data["body"],
+                )
+            except PermissionDenied:
+                return HttpResponseForbidden("Комментарии недоступны")
+            workorder = comment.workorder
+            workorder.refresh_from_db()
             if request.htmx:
+                try:
+                    _actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+                except PermissionDenied:
+                    return HttpResponseForbidden("Комментарии недоступны")
                 response = render(
                     request,
                     "workorders/partials/comments.html",
@@ -747,6 +853,10 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
             messages.success(request, "Комментарий добавлен.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:
+            try:
+                _actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+            except PermissionDenied:
+                return HttpResponseForbidden("Комментарии недоступны")
             return render(
                 request,
                 "workorders/partials/comments.html",
@@ -759,39 +869,49 @@ class WorkOrderCommentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
     def post(self, request, pk):
+        # See comment form: invalid transport data still uses a scoped target.
         workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
-        if not can_upload_attachment(request.user, workorder):
-            return HttpResponseForbidden("Загрузка файлов запрещена")
         form = WorkOrderAttachmentForm(request.POST, request.FILES)
         if form.is_valid():
-            uploaded_file = form.cleaned_data["file"]
-            WorkOrderAttachment.objects.create(
-                workorder=workorder,
-                uploaded_by=request.user,
-                file=uploaded_file,
-                content_type=getattr(uploaded_file, "content_type", ""),
-            )
+            try:
+                attachment = add_workorder_attachment_command(
+                    actor=request.user,
+                    workorder_id=pk,
+                    uploaded_file=form.cleaned_data["file"],
+                )
+            except PermissionDenied:
+                return HttpResponseForbidden("Загрузка файлов запрещена")
+            workorder = attachment.workorder
+            workorder.refresh_from_db()
             if request.htmx:
+                try:
+                    actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+                except PermissionDenied:
+                    return HttpResponseForbidden("Загрузка файлов запрещена")
                 response = render(
                     request,
                     "workorders/partials/attachments.html",
                     {
                         "workorder": workorder,
                         "attachment_form": WorkOrderAttachmentForm(),
-                        "can_upload_attachment": True,
+                        "can_upload_attachment": can_upload_attachment(actor, workorder),
                     },
                 )
                 return _mark_workorders_changed(response)
             messages.success(request, "Файл добавлен.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:
+            try:
+                actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+            except PermissionDenied:
+                return HttpResponseForbidden("Загрузка файлов запрещена")
             return render(
                 request,
                 "workorders/partials/attachments.html",
                 {
                     "workorder": workorder,
                     "attachment_form": form,
-                    "can_upload_attachment": True,
+                    "can_upload_attachment": can_upload_attachment(actor, workorder),
                 },
                 status=400,
             )
@@ -801,29 +921,39 @@ class WorkOrderAttachmentCreateView(LoginRequiredMixin, View):
 
 class WorkOrderTransitionView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
         target_status = request.POST.get("status", "")
-        if not can_transition(request.user, workorder, target_status):
+        try:
+            workorder = transition_workorder_command(
+                actor=request.user,
+                workorder_id=pk,
+                target_status=target_status,
+            )
+        except PermissionDenied:
             return HttpResponseForbidden("Переход запрещен")
-        transition_workorder(
-            workorder=workorder, user=request.user, to_status=target_status
-        )
         workorder.refresh_from_db()
         if request.htmx:
+            try:
+                actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+            except PermissionDenied:
+                return HttpResponseForbidden("Переход запрещен")
             if request.htmx.target == "board-columns":
                 board_view = WorkOrderBoardView()
                 board_view.request = request
                 board_view.args = ()
                 board_view.kwargs = {}
+                board_view._actor = actor
+                board_context = board_view.get_context_data()
+                if not board_context.get("board_columns"):
+                    return HttpResponseForbidden("Доска заявки больше недоступна")
                 return render(
                     request,
                     "workorders/partials/board_columns.html",
-                    board_view.get_context_data(),
+                    board_context,
                 )
             response = render(
                 request,
                 "workorders/partials/status_section.html",
-                _stepper_context(request.user, workorder),
+                _stepper_context(actor, workorder),
             )
             return _mark_workorders_changed(response)
         messages.success(request, "Статус заявки обновлен.")
@@ -832,25 +962,33 @@ class WorkOrderTransitionView(LoginRequiredMixin, View):
 
 class WorkOrderBoardMoveView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
-        old_status = workorder.status
         column_code = request.POST.get("column", "").strip()
-        column = get_object_or_404(KanbanColumnConfig, code=column_code, board=workorder.board)
-        target_status = drop_status_for_column(request.user, workorder, column)
-
-        if target_status:
-            transition_workorder(
-                workorder=workorder, user=request.user, to_status=target_status
+        try:
+            workorder, old_status, column = move_workorder_command(
+                actor=request.user,
+                workorder_id=pk,
+                column_code=column_code,
             )
-        elif workorder.status not in column.statuses:
+        except PermissionDenied:
             return HttpResponseForbidden("Перемещение в колонку запрещено")
 
-        # Determine which columns to update
+        try:
+            actor, visible_workorder = _fresh_render_actor_and_workorder(request, pk)
+        except PermissionDenied:
+            return HttpResponseForbidden("Перемещение в колонку запрещено")
+        if visible_workorder.board_id != workorder.board_id:
+            return HttpResponseForbidden("Доска заявки больше недоступна")
+
+        # Determine which columns to update only after re-authorizing the
+        # actor and target immediately before rendering.
         board_view = WorkOrderBoardView()
         board_view.request = request
         board_view.args = ()
         board_view.kwargs = {}
+        board_view._actor = actor
         context = board_view.get_context_data()
+        if actor is None or not context.get("board_columns"):
+            return HttpResponseForbidden("Доска заявки больше недоступна")
 
         # Find the old column and the new column configs
         updated_columns = []
@@ -864,7 +1002,7 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
         old_column_key = status_to_column.get(old_status)
         new_column_key = column.code
 
-        for col in context["board_columns"]:
+        for col in context.get("board_columns", []):
             if col["key"] == old_column_key or col["key"] == new_column_key:
                 updated_columns.append(col)
 
@@ -884,12 +1022,19 @@ class WorkOrderBoardMoveView(LoginRequiredMixin, View):
 
 class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
-        if not can_confirm_closure(request.user, workorder):
+        try:
+            workorder = confirm_workorder_closure_command(
+                actor=request.user,
+                workorder_id=pk,
+            )
+        except PermissionDenied:
             return HttpResponseForbidden("Подтверждение закрытия запрещено")
-        confirm_closure(workorder=workorder, user=request.user)
         workorder.refresh_from_db()
-        context = _stepper_context(request.user, workorder)
+        try:
+            actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+        except PermissionDenied:
+            return HttpResponseForbidden("Подтверждение закрытия запрещено")
+        context = _stepper_context(actor, workorder)
         if request.htmx:
             response = render(request, "workorders/partials/status_section.html", context)
             return _mark_workorders_changed(response)
@@ -899,17 +1044,28 @@ class WorkOrderConfirmClosureView(LoginRequiredMixin, View):
 
 class WorkOrderRateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        workorder = get_object_or_404(visible_workorders_queryset(request.user), pk=pk)
-        if not can_rate(request.user, workorder):
+        workorder = visible_workorders_queryset(request.user).filter(pk=pk).first()
+        if workorder is None:
             return HttpResponseForbidden("Оценка запрещена")
-        form = WorkOrderRatingForm(request.POST, instance=workorder)
+        form = WorkOrderRatingForm(request.POST)
         if form.is_valid():
-            form.save()
+            try:
+                workorder = rate_workorder_command(
+                    actor=request.user,
+                    workorder_id=pk,
+                    rating=form.cleaned_data["rating"],
+                )
+            except PermissionDenied:
+                return HttpResponseForbidden("Оценка запрещена")
             workorder.refresh_from_db()
+            try:
+                actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+            except PermissionDenied:
+                return HttpResponseForbidden("Оценка запрещена")
             context = {
                 "workorder": workorder,
                 "rating_form": WorkOrderRatingForm(instance=workorder),
-                "can_rate": can_rate(request.user, workorder),
+                "can_rate": actor is not None and can_rate(actor, workorder),
             }
             if request.htmx:
                 response = render(
@@ -919,13 +1075,17 @@ class WorkOrderRateView(LoginRequiredMixin, View):
             messages.success(request, "Оценка сохранена.")
             return redirect("workorders:detail", pk=workorder.pk)
         if request.htmx:
+            try:
+                actor, workorder = _fresh_render_actor_and_workorder(request, pk)
+            except PermissionDenied:
+                return HttpResponseForbidden("Оценка запрещена")
             return render(
                 request,
                 "workorders/partials/rating_section.html",
                 {
                     "workorder": workorder,
                     "rating_form": form,
-                    "can_rate": can_rate(request.user, workorder),
+                    "can_rate": actor is not None and can_rate(actor, workorder),
                 },
                 status=400,
             )
@@ -935,16 +1095,32 @@ class WorkOrderRateView(LoginRequiredMixin, View):
 
 class KanbanColumnRenameView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        if not can_manage_board_columns(request.user):
-            return HttpResponseForbidden("Изменение колонок запрещено")
-        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        column = get_object_or_404(
+            KanbanColumnConfig.objects.filter(
+                board__in=visible_boards_queryset(request.user)
+            ),
+            pk=pk,
+        )
         form = KanbanColumnTitleForm(request.POST, instance=column)
         if form.is_valid():
-            form.save()
+            try:
+                column = update_board_column_command(
+                    actor=request.user,
+                    column_id=pk,
+                    payload=form.cleaned_data,
+                )
+            except PermissionDenied:
+                return HttpResponseForbidden("Изменение колонок запрещено")
+        actor = resolve_active_actor(request.user, force_refresh=True)
+        if actor is None or not _visible_boards_queryset_for_actor(actor).filter(
+            pk=column.board_id
+        ).exists():
+            return HttpResponseForbidden("Изменение колонок запрещено")
         board_view = WorkOrderBoardView()
         board_view.request = request
         board_view.args = ()
         board_view.kwargs = {}
+        board_view._actor = actor
         if request.htmx and request.htmx.target == f"column-config-{column.pk}":
             return render(
                 request,
@@ -952,19 +1128,28 @@ class KanbanColumnRenameView(LoginRequiredMixin, View):
                 column_card_context(column),
                 status=200 if form.is_valid() else 400,
             )
+        board_context = board_view.get_context_data()
+        if not board_context.get("board_columns"):
+            return HttpResponseForbidden("Доска больше недоступна")
         return render(
             request,
             "workorders/partials/board_columns.html",
-            board_view.get_context_data(),
+            board_context,
             status=200 if form.is_valid() else 400,
         )
 
 
 class KanbanColumnEditView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        if not can_manage_board_columns(request.user):
+        actor = resolve_active_actor(request.user, force_refresh=True)
+        if actor is None or not can_manage_board_columns(actor):
             return HttpResponseForbidden("Изменение колонок запрещено")
-        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        column = get_object_or_404(
+            KanbanColumnConfig.objects.filter(
+                board__in=visible_boards_queryset(request.user)
+            ),
+            pk=pk,
+        )
         return render(
             request,
             "workorders/partials/column_config_form.html",
@@ -974,9 +1159,15 @@ class KanbanColumnEditView(LoginRequiredMixin, View):
 
 class KanbanColumnDisplayView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        if not can_manage_board_columns(request.user):
+        actor = resolve_active_actor(request.user, force_refresh=True)
+        if actor is None or not can_manage_board_columns(actor):
             return HttpResponseForbidden("Изменение колонок запрещено")
-        column = get_object_or_404(KanbanColumnConfig, pk=pk)
+        column = get_object_or_404(
+            KanbanColumnConfig.objects.filter(
+                board__in=visible_boards_queryset(request.user)
+            ),
+            pk=pk,
+        )
         return render(
             request,
             "workorders/partials/column_config_card.html",

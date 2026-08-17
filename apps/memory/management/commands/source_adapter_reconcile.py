@@ -4,7 +4,11 @@ from django.utils import timezone
 from apps.analytics.services import delete_analytics_projection_from_envelope, upsert_analytics_projection_from_envelope
 from apps.core.source_adapters import OPERATION_DELETE, SourceObjectEnvelope, get_source_adapter, registered_source_adapters
 from apps.memory.models import MemorySource, MemorySourceObject
-from apps.memory.services import delete_memory_projection_from_envelope, upsert_memory_projection_from_envelope
+from apps.memory.services import (
+    delete_memory_projection_from_envelope,
+    set_memory_source_status,
+    upsert_memory_projection_from_envelope,
+)
 
 
 class Command(BaseCommand):
@@ -152,7 +156,10 @@ class Command(BaseCommand):
     def _mark_missing_adapter(self, source_code, *, dry_run):
         if dry_run:
             return
-        MemorySource.objects.filter(code=source_code).update(
+        if not MemorySource.objects.filter(code=source_code).exists():
+            return
+        set_memory_source_status(
+            source_code=source_code,
             status=MemorySource.Status.MISSING_ADAPTER,
             error_message="Source adapter is not registered; adapter_check results fail closed.",
         )

@@ -2,6 +2,7 @@
 import pytest
 
 from apps.ai.tests._common import *  # noqa: F401,F403
+from apps.workorders.models import WorkOrderTransitionLog
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
@@ -171,6 +172,80 @@ class IdentityContextPropagationTests(TestCase):
         self.assertEqual(cancel_payload["meta"].get("request_id"), "req-cancel-001")
         self.assertEqual(cancel_payload["meta"].get("origin_channel"), "cancel_channel")
         self.assertEqual(cancel_payload["meta"].get("actor_version"), "1.2.0")
+
+    def test_confirming_legacy_delete_pending_action_fails_without_deleting_workorder(self):
+        """A persisted hard-delete request must fail closed after tool removal."""
+        workorder = WorkOrder.objects.create(
+            board=self.main_board,
+            title="Legacy delete request",
+            description="Must remain after the old AI action is confirmed.",
+            department=self.department,
+            author=self.manager,
+        )
+        session = ChatSession.objects.create(user=self.manager)
+        pending = PendingAction.objects.create(
+            tool_code="workorders.delete",
+            action_kind="write",
+            actor=self.manager,
+            session=session,
+            payload={"workorder_id": workorder.id},
+            status=PendingAction.Status.PENDING,
+        )
+
+        result = execute_pending_action(
+            token=pending.token,
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            request_id="req-legacy-delete-confirm",
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("no longer available", result["errors"][0])
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, PendingAction.Status.FAILED)
+        self.assertTrue(WorkOrder.objects.filter(pk=workorder.pk).exists())
+
+    def test_ai_cancellation_transitions_workorder_and_preserves_history(self):
+        """AI cancels a request through the workflow instead of deleting it."""
+        workorder = WorkOrder.objects.create(
+            board=self.main_board,
+            title="AI cancellation",
+            description="The cancelled request must remain auditable.",
+            department=self.department,
+            author=self.manager,
+        )
+        session = ChatSession.objects.create(user=self.manager)
+
+        transition_result = execute_tool(
+            tool_code="workorders.transition",
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            payload={
+                "workorder_id": workorder.id,
+                "target_status": WorkOrderStatus.CANCELLED,
+            },
+            request_id="req-ai-cancel-workorder",
+        )
+
+        self.assertTrue(transition_result["ok"], transition_result)
+        self.assertTrue(transition_result["meta"]["awaiting_confirmation"])
+        confirmed = execute_pending_action(
+            token=transition_result["meta"]["pending_action_token"],
+            confirmed=True,
+            actor_context={"user_id": self.manager.id, "channel": "internal"},
+            session_external_id=session.external_id,
+            request_id="req-ai-cancel-workorder-confirm",
+        )
+
+        self.assertTrue(confirmed["ok"], confirmed)
+        workorder.refresh_from_db()
+        self.assertEqual(workorder.status, WorkOrderStatus.CANCELLED)
+        self.assertTrue(WorkOrder.objects.filter(pk=workorder.pk).exists())
+        log = WorkOrderTransitionLog.objects.get(workorder=workorder)
+        self.assertEqual(log.from_status, WorkOrderStatus.NEW)
+        self.assertEqual(log.to_status, WorkOrderStatus.CANCELLED)
+        self.assertEqual(log.actor_id, self.manager.id)
 
     def test_workorders_create_pending_returns_task_type_report(self):
         """A pending workorders.create should include a task_type_report in meta."""
@@ -573,28 +648,6 @@ class IdentityContextPropagationTests(TestCase):
         )
         self.assertTrue(list_result["ok"], list_result)
         self.assertIn(workorder_id, [item["id"] for item in list_result["result"]["items"]])
-
-        delete_result = execute_tool(
-            tool_code="workorders.delete",
-            actor_context={"user_id": self.manager.id, "channel": "internal"},
-            session_external_id=session.external_id,
-            payload={"workorder_id": workorder_id},
-            request_id="req-ai-journey-delete",
-        )
-        self.assertTrue(delete_result["ok"], delete_result)
-        self.assertTrue(delete_result["meta"]["awaiting_confirmation"])
-        self.assertEqual(delete_result["meta"]["task_type_report"]["task_type_id"], "workorders.delete")
-
-        delete_confirm = execute_pending_action(
-            token=delete_result["meta"]["pending_action_token"],
-            confirmed=True,
-            actor_context={"user_id": self.manager.id, "channel": "internal"},
-            session_external_id=session.external_id,
-            request_id="req-ai-journey-delete-confirm",
-        )
-        self.assertTrue(delete_confirm["ok"], delete_confirm)
-        self.assertTrue(delete_confirm["result"]["workorder"]["deleted"])
-        self.assertFalse(WorkOrder.objects.filter(pk=workorder_id).exists())
 
         with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
             memory_message = ChatMessage.objects.create(

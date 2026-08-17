@@ -133,7 +133,9 @@ def scope_tokens_for_source_scope_rule(source):
     if source.scope_rule in {"role_scoped", "manual_scope_mapping", "contract_admin"}:
         role_names = source.config.get("role_names") or source.config.get("groups") or []
         existing = Group.objects.filter(name__in=role_names).values_list("name", flat=True)
-        return [f"role:{name}" for name in sorted(existing)]
+        from .policies import scope_token_for_group_name
+
+        return [scope_token_for_group_name(name) for name in sorted(existing)]
     return []
 
 
@@ -159,7 +161,9 @@ def _scope_tokens_for_acl_principal(principal):
     if kind == "group":
         name = str(principal.get("name", ""))
         if name and Group.objects.filter(name=name).exists():
-            return {f"role:{name}"}
+            from .policies import scope_token_for_group_name
+
+            return {scope_token_for_group_name(name)}
     return set()
 
 

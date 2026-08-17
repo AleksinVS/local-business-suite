@@ -192,8 +192,10 @@ def _iter_registered_contracts():
     workorder_status_colors) — он уже беднее, чем settings_center.registry, и
     не несет пути дефолта. Поэтому именно settings_center.registry выбран как
     единственный источник маппинга "имя -> путь", а не заведен третий список.
-    Дескрипторы без ``metadata.settings_path`` (например, `memory.source.acl_mode`,
-    `memory.secret.external_vault_link`) не привязаны к JSON-файлу и пропускаются.
+    Дескрипторы без ``metadata.settings_path`` (например,
+    `memory.secret.external_vault_link`) не привязаны к JSON-файлу и
+    пропускаются. Режим ACL памяти хранится в составе
+    цельного контракта источников, а не отдельным дескриптором.
     """
     for descriptor in get_registry().all():
         if descriptor.storage_kind != "runtime_contract":

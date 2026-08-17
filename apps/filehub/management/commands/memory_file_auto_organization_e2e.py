@@ -11,8 +11,12 @@ from django.utils import timezone
 
 from apps.filehub.file_organization_baseline import build_baseline_virtual_structure
 from apps.filehub.file_organization_incoming import process_incoming_folder
-from apps.filehub.file_organization_move import create_move_job_for_file, purge_ready_source_files, run_move_worker
-from apps.filehub.file_organization_stats import build_organization_proposals, record_file_usage_event
+from apps.filehub.file_organization_move import purge_ready_source_files, run_move_worker
+from apps.filehub.file_organization_stats import (
+    apply_organization_proposal_decision,
+    build_organization_proposals,
+    record_file_usage_event,
+)
 from apps.filehub.models import (
     MemoryFileMoveJob,
     MemoryFileOrganizationProposal,
@@ -47,6 +51,9 @@ class Command(BaseCommand):
 
         group, _created = Group.objects.get_or_create(name=f"docs-readers-{marker}")
         admin = User.objects.create_user(username=f"auto-org-admin-{marker}", password="pass", is_staff=True)
+        admin_role, _ = Group.objects.get_or_create(name="admin")
+        memory_admin, _ = Group.objects.get_or_create(name="memory_admin")
+        admin.groups.add(group, admin_role, memory_admin)
         reader = User.objects.create_user(username=f"auto-org-reader-{marker}", password="pass")
         reader.groups.add(group)
         outsider = User.objects.create_user(username=f"auto-org-outsider-{marker}", password="pass")
@@ -64,7 +71,11 @@ class Command(BaseCommand):
             index_profiles=["fulltext_default"],
             config={
                 "source_ref": str(source_root),
-                "ignore_patterns": [],
+                # Incoming is owned by the dedicated worker.  Letting generic
+                # discovery scan it as well creates two source identities for
+                # one physical file and correctly fails the complete-source
+                # authorization check.
+                "ignore_patterns": ["incoming/**"],
                 "ingestion_profile": "corporate_docs_windows_v1",
                 "file_organization_profile": "auto_org_e2e_v1",
                 "default_acl": {"allow": [{"kind": "group", "name": group.name}]},
@@ -101,13 +112,13 @@ class Command(BaseCommand):
         with override_settings(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES=profiles):
             discovery = discover_source_objects(source=source, dry_run=False)
             baseline = build_baseline_virtual_structure(source=source, dry_run=False)
-            if baseline["placements"] < 2 or not source_file.exists():
+            if baseline["placements"] < 1 or not source_file.exists():
                 raise CommandError("Baseline did not create placements or changed physical files.")
             incoming_metrics = process_incoming_folder(source=source, dry_run=False)
             if incoming_metrics["placements"] < 1:
                 raise CommandError("Incoming worker did not create virtual placement.")
             source_object = MemorySourceObject.objects.get(source=source, relative_path="contracts/dogovor-2026-alpha.txt")
-            source_object.metadata = {**(source_object.metadata or {}), "scope_tokens": [f"role:{group.name}"]}
+            source_object.metadata = {**(source_object.metadata or {}), "scope_tokens": [f"group:{group.name}"]}
             source_object.save(update_fields=["metadata", "updated_at"])
             file_object = source_object.file_versions.first().file_object
             document = MemorySearchDocument.objects.create(
@@ -117,7 +128,7 @@ class Command(BaseCommand):
                 source_object=source_object,
                 body_hash="body-hash",
                 index_status=MemorySearchDocument.IndexStatus.READY,
-                metadata={"scope_tokens": [f"role:{group.name}"]},
+                metadata={"scope_tokens": [f"group:{group.name}" ]},
             )
             if not can_access_search_document(reader, document) or can_access_search_document(outsider, document):
                 raise CommandError("Virtual view access control check failed.")
@@ -135,17 +146,17 @@ class Command(BaseCommand):
             if proposal_metrics["proposals"] < 1:
                 raise CommandError("Usage statistics did not create an organization proposal.")
             proposal = MemoryFileOrganizationProposal.objects.filter(source=source).first()
-            proposal.status = MemoryFileOrganizationProposal.Status.ACCEPTED_PHYSICAL
-            proposal.reviewed_by = admin
-            proposal.reviewed_at = timezone.now()
-            proposal.metadata = {"file_ids": [file_object.file_id]}
-            proposal.save(update_fields=["status", "reviewed_by", "reviewed_at", "metadata", "updated_at"])
-            job = create_move_job_for_file(
-                file_object=file_object,
-                target_relative_path=f"by-function/contracts/{file_object.file_id}/{source_file.name}",
+            # The physical approval and exact job set use the same
+            # actor-aware command as the HTTP endpoint.
+            proposal.metadata = {**(proposal.metadata or {}), "file_ids": [file_object.file_id]}
+            proposal.save(update_fields=["metadata", "updated_at"])
+            apply_organization_proposal_decision(
                 proposal=proposal,
-                approved_by=admin,
+                actor=admin,
+                decision="accept_for_physical_move",
+                create_jobs=True,
             )
+            job = MemoryFileMoveJob.objects.get(proposal=proposal)
             move_metrics = run_move_worker(source=source)
             job.refresh_from_db()
             if move_metrics["moved"] != 1 or job.status != MemoryFileMoveJob.Status.SOURCE_QUARANTINED:

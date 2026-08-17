@@ -301,10 +301,10 @@ ExternalIdentity
 
 ```json
 {
-  "setting_id": "memory.source.acl_mode",
+  "setting_id": "memory.contract.ingestion_profiles",
   "domain": "memory",
   "section": "Access",
-  "title": "ACL mode",
+  "title": "Профили загрузки и ACL",
   "allowed_values": ["scope_rule", "inherit_source_acl"],
   "current_value_summary": "inherit_source_acl",
   "sensitivity": "internal",
@@ -314,6 +314,10 @@ ExternalIdentity
   ]
 }
 ```
+
+`acl_mode` редактируется как поле цельного контракта
+профилей загрузки; отдельный файловый дескриптор для него не
+создаётся.
 
 Запрещено передавать:
 

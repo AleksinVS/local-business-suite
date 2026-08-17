@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from apps.workorders.models import (
     Board,
@@ -53,8 +53,13 @@ class Command(BaseCommand):
             return
 
         if clear:
-            deleted = WorkOrder.objects.filter(board=board).delete()[0]
-            self.stdout.write(f"Удалено карточек: {deleted}")
+            existing_count = WorkOrder.objects.filter(board=board).count()
+            if existing_count:
+                raise CommandError(
+                    "--clear не удаляет заявки: на доске есть "
+                    f"{existing_count} заявок. Используйте доменный workflow отмены."
+                )
+            self.stdout.write("На доске нет заявок для очистки.")
 
         users = list(User.objects.all())
         departments = list(Department.objects.all())

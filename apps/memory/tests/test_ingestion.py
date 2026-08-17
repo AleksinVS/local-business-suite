@@ -1,6 +1,7 @@
 """Тесты ожиданий bootstrap и пайплайна ingestion документов."""
 from apps.memory.tests._common import *  # noqa: F401,F403
 from apps.memory.tests._common import _memory_ingestion_profiles_with_acl  # noqa: F401
+from apps.memory.services import can_access_source_object
 
 
 class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase):
@@ -67,6 +68,40 @@ class MemoryIngestionBootstrapExpectationTests(MemoryModelFactoryMixin, TestCase
 
 class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
     databases = RUNTIME_DATABASES
+
+    def test_disabled_source_rejects_discovery_and_ingestion_without_writes(self):
+        from ..document_ingestion import discover_source_objects, ingest_source_objects, prepare_bootstrap_package
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "disabled_docs"
+            root.mkdir()
+            (root / "blocked.txt").write_text("must not be discovered", encoding="utf-8")
+            source = self.create_source(
+                code="disabled_discovery_ingestion",
+                source_kind="local_path",
+                domain="docs",
+                config={
+                    "source_ref": str(root),
+                    "ignore_patterns": [],
+                    "ingestion_profile": "corporate_docs_windows_v1",
+                },
+            )
+            source.status = MemorySource.Status.DISABLED
+            source.save(update_fields=["status", "updated_at"])
+
+            with self.assertRaises(ValidationError):
+                discover_source_objects(source=source, dry_run=False)
+            with self.assertRaises(ValidationError):
+                ingest_source_objects(source=source, dry_run=False)
+            with self.assertRaises(ValidationError):
+                prepare_bootstrap_package(source=source, department="blocked", dry_run=False)
+            with self.assertRaises(ValidationError):
+                call_command("memory_reindex", source_code=source.code, corpus="source_data", dry_run=True)
+
+            self.assertFalse(MemorySourceObject.objects.filter(source=source).exists())
+            self.assertFalse(MemoryIngestionRun.objects.filter(source=source).exists())
+            self.assertFalse(MemoryExternalConnectorJob.objects.filter(source_code=source.code).exists())
+
     def test_discover_source_objects_creates_durable_file_state(self):
         from ..document_ingestion import discover_source_objects
 
@@ -194,7 +229,7 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
                 metrics = ingest_source_objects(source=source, dry_run=False)
                 pii_index_results = get_default_backend().search(
                     "audit person",
-                    scope_tokens=["role:privacy-readers"],
+                    scope_tokens=["group:privacy-readers"],
                     sensitivity="internal",
                     limit=5,
                 )
@@ -252,7 +287,7 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
 
             self.assertEqual(metrics["ingested"], 1)
             document = MemorySearchDocument.objects.get(source_object__source=source)
-            self.assertEqual((document.source_object.metadata or {}).get("scope_tokens"), ["role:docs-readers"])
+        self.assertEqual((document.source_object.metadata or {}).get("scope_tokens"), ["group:docs-readers"])
 
     def test_inherited_acl_unknown_principal_fails_closed(self):
         from ..document_ingestion import discover_source_objects, ingest_source_objects
@@ -291,3 +326,59 @@ class MemoryDocumentIngestionPipelineTests(MemoryModelFactoryMixin, TestCase):
             issue = MemoryIngestionIssue.objects.get(source=source)
             self.assertEqual(issue.issue_kind, MemoryIngestionIssue.IssueKind.ACL_UNRESOLVED)
             self.assertEqual(issue.severity, MemoryIngestionIssue.Severity.BLOCKER)
+
+    def test_discovery_persists_effective_acl_policy_for_root_only_or_block(self):
+        from ..document_ingestion import discover_source_objects
+
+        root_actor = User.objects.create_superuser(username="acl-policy-root", password="pass")
+        operator = User.objects.create_user(username="acl-policy-operator", password="pass")
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "memory_docs"
+            root.mkdir()
+            (root / "procedure.txt").write_text("Procedure text", encoding="utf-8")
+
+            def create_source(code):
+                return self.create_source(
+                    code=code,
+                    source_kind="local_path",
+                    domain="docs",
+                    scope_rule="authenticated_user",
+                    config={
+                        "source_ref": str(root),
+                        "ignore_patterns": [],
+                        "ingestion_profile": "corporate_docs_acl_test_v1",
+                        "default_acl": {"allow": [{"kind": "group", "name": "unknown-ad-group"}]},
+                    },
+                )
+
+            admin_profiles = _memory_ingestion_profiles_with_acl(
+                acl_mode="inherit_source_acl", unresolved_policy="admin_only"
+            )
+            admin_source = create_source("acl-policy-admin")
+            with self.settings(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES=admin_profiles):
+                discover_source_objects(source=admin_source, dry_run=False)
+            admin_object = MemorySourceObject.objects.get(source=admin_source)
+            self.assertEqual((admin_object.metadata.get("acl") or {}).get("unresolved_policy"), "admin_only")
+            self.assertTrue(can_access_source_object(root_actor, admin_object))
+            self.assertFalse(can_access_source_object(operator, admin_object))
+
+            # Legacy objects did not persist the effective policy.  Resolve
+            # it from the source's configured ingestion profile instead of
+            # silently changing admin_only to the global default.
+            legacy_acl = dict(admin_object.metadata.get("acl") or {})
+            legacy_acl.pop("unresolved_policy", None)
+            admin_object.metadata = {**admin_object.metadata, "acl": legacy_acl}
+            admin_object.save(update_fields=["metadata", "updated_at"])
+            with self.settings(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES=admin_profiles):
+                self.assertTrue(can_access_source_object(root_actor, admin_object))
+                self.assertFalse(can_access_source_object(operator, admin_object))
+
+            block_profiles = _memory_ingestion_profiles_with_acl(
+                acl_mode="inherit_source_acl", unresolved_policy="block"
+            )
+            block_source = create_source("acl-policy-block")
+            with self.settings(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES=block_profiles):
+                discover_source_objects(source=block_source, dry_run=False)
+            block_object = MemorySourceObject.objects.get(source=block_source)
+            self.assertEqual((block_object.metadata.get("acl") or {}).get("unresolved_policy"), "block")
+            self.assertFalse(can_access_source_object(root_actor, block_object))

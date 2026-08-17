@@ -201,6 +201,47 @@ class MedicalDeviceCrudTests(TestCase):
         self.assertContains(response, "Номер регистрационного удостоверения")
         self.assertContains(response, "Срок службы")
 
+    def test_list_filter_and_detail_use_actor_scoped_devices(self):
+        own_department = Department.objects.create(name="Своя ветка")
+        foreign_department = Department.objects.create(name="Чужая ветка")
+        own_device = MedicalDevice.objects.create(
+            name="Видимое изделие",
+            inventory_number="SCOPE-OWN",
+            department=own_department,
+        )
+        foreign_device = MedicalDevice.objects.create(
+            name="Чужое изделие",
+            inventory_number="SCOPE-FOREIGN",
+            department=foreign_department,
+        )
+        actor = User.objects.create_user(
+            username="inventory-scoped-reader",
+            password="pass",
+            department=own_department,
+        )
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        actor.groups.add(customer_group)
+
+        self.client.force_login(actor)
+        response = self.client.get(reverse("inventory:list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, own_device.name)
+        self.assertNotContains(response, foreign_device.name)
+        self.assertEqual(
+            self.client.get(
+                reverse("inventory:detail", args=[foreign_device.pk])
+            ).status_code,
+            404,
+        )
+
+        own_device.archive()
+        foreign_device.archive()
+        archived_response = self.client.get(
+            reverse("inventory:list"), {"archived": "1"}
+        )
+        self.assertContains(archived_response, own_device.name)
+        self.assertNotContains(archived_response, foreign_device.name)
+
 
 @pytest.mark.integration
 class MedicalDeviceGroupingTests(TestCase):

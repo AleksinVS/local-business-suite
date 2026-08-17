@@ -13,7 +13,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
@@ -70,16 +70,22 @@ from .policies import (
     has_role_capability,
     superuser_rules,
 )
-from .selectors import visible_boards_queryset
+from .selectors import (
+    creation_departments_queryset,
+    visible_boards_queryset,
+    visible_departments_queryset,
+    visible_devices_queryset,
+    visible_workorders_queryset,
+)
 from .right_panel import WorkOrderRightPanelProvider
 from .services import (
     apply_board_access,
     clone_board,
-    confirm_closure,
-    create_workorder,
+    _confirm_closure_unchecked,
+    _create_workorder_unchecked,
     initialize_board_access_for_bootstrap,
     preview_board_access,
-    transition_workorder,
+    _transition_workorder_unchecked,
 )
 from .contracts import validate_role_rules_payload
 
@@ -111,6 +117,31 @@ class BoardAdminAccessTests(TestCase):
         form_class = BoardAdmin(Board, admin.site).get_form(request)
 
         self.assertNotIn("allowed_groups", form_class.base_fields)
+
+    def test_workorder_and_board_hard_delete_are_denied_even_for_superuser(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+        from .admin import BoardAdmin, WorkOrderAdmin
+
+        request = RequestFactory().get("/admin/workorders/")
+        request.user = self.actor
+        workorder_admin = WorkOrderAdmin(WorkOrder, admin.site)
+        board_admin = BoardAdmin(Board, admin.site)
+        self.assertFalse(workorder_admin.has_delete_permission(request))
+        self.assertFalse(board_admin.has_delete_permission(request))
+
+    def test_seed_board_clear_fails_closed_and_keeps_existing_workorders(self):
+        department = Department.objects.create(name="Seed command department")
+        workorder = WorkOrder.objects.create(
+            board=self.board,
+            title="Не удалять",
+            description="Доменная отмена вместо удаления",
+            department=department,
+            author=self.actor,
+        )
+        with self.assertRaises(CommandError):
+            call_command("seed_board", "--clear", "--board-slug", self.board.slug)
+        self.assertTrue(WorkOrder.objects.filter(pk=workorder.pk).exists())
 
     def test_board_access_service_previews_applies_and_changes_visibility(self):
         technician = User.objects.create_user(username="board-tech", password="pass")
@@ -254,7 +285,10 @@ class BoardAdminAccessTests(TestCase):
     def test_system_bootstrap_allows_only_preexisting_canonical_empty_boards_once(self):
         for slug in ("main", "backlog"):
             with self.subTest(slug=slug):
-                canonical = Board.objects.get(slug=slug)
+                canonical, _created = Board.objects.get_or_create(
+                    slug=slug,
+                    defaults={"title": f"Каноническая доска {slug}"},
+                )
                 canonical.allowed_groups.clear()
                 BoardAccessAudit.objects.filter(board=canonical).delete()
 
@@ -556,7 +590,7 @@ class WorkOrderRoleMatrixTests(TestCase):
     def test_confirm_closure_sets_confirmation_fields(self):
         self.workorder.status = WorkOrderStatus.RESOLVED
         self.workorder.save()
-        confirm_closure(workorder=self.workorder, user=self.customer)
+        _confirm_closure_unchecked(workorder=self.workorder, user=self.customer)
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.CLOSED)
         self.assertIsNotNone(self.workorder.resolved_at)
@@ -588,7 +622,7 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertIsNotNone(self.workorder.closed_at)
 
     def test_transition_service_creates_audit_log(self):
-        transition_workorder(
+        _transition_workorder_unchecked(
             workorder=self.workorder,
             user=self.technician,
             to_status=WorkOrderStatus.ACCEPTED,
@@ -598,7 +632,7 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertEqual(self.workorder.transitions.count(), 1)
 
     def test_create_workorder_service_notifies_visible_recipients_without_author(self):
-        workorder = create_workorder(
+        workorder = _create_workorder_unchecked(
             author=self.customer,
             title="Проверить кабель",
             description="Без чувствительных деталей в уведомлении.",
@@ -621,7 +655,7 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertNotIn(self.outsider.username, recipients)
 
     def test_transition_service_notifies_author_and_excludes_actor(self):
-        transition_workorder(
+        _transition_workorder_unchecked(
             workorder=self.workorder,
             user=self.technician,
             to_status=WorkOrderStatus.ACCEPTED,
@@ -699,6 +733,104 @@ class WorkOrderRoleMatrixTests(TestCase):
             self.assertTrue(can_transition(self.technician, self.workorder, WorkOrderStatus.ACCEPTED))
             self.assertFalse(can_transition(self.technician, self.workorder, WorkOrderStatus.CANCELLED))
 
+    def test_scoped_resource_selectors_cover_all_branch_none_and_inactive(self):
+        foreign_department = Department.objects.create(name="Чужой филиал")
+        foreign_device = MedicalDevice.objects.create(
+            name="Чужой аппарат",
+            serial_number="SN-FOREIGN-SCOPE",
+            department=foreign_department,
+        )
+        WorkOrder.objects.create(
+            title="Чужая заявка для scope",
+            description="Не должна утечь в ветку.",
+            department=foreign_department,
+            author=self.outsider,
+            assignee=self.manager,
+            board=self.board,
+            device=foreign_device,
+        )
+        none_group, _ = Group.objects.get_or_create(name="doctor")
+        self.outsider.groups.add(none_group)
+
+        self.assertIn(self.department.pk, visible_departments_queryset(self.manager).values_list("pk", flat=True))
+        self.assertIn(foreign_department.pk, visible_departments_queryset(self.manager).values_list("pk", flat=True))
+        self.assertNotIn(foreign_department.pk, visible_departments_queryset(self.customer).values_list("pk", flat=True))
+        self.assertNotIn(foreign_device.pk, visible_devices_queryset(self.customer).values_list("pk", flat=True))
+        self.assertFalse(visible_departments_queryset(self.outsider).exists())
+        self.assertFalse(visible_devices_queryset(self.outsider).exists())
+
+        self.manager.is_active = False
+        self.manager.save(update_fields=["is_active"])
+        self.assertFalse(visible_workorders_queryset(self.manager).exists())
+        self.assertFalse(visible_departments_queryset(self.manager).exists())
+        self.assertFalse(visible_devices_queryset(self.manager).exists())
+
+    def test_relational_scope_uses_visible_workorders_but_creation_uses_own_branch(self):
+        own_department = Department.objects.create(name="Свой филиал")
+        own_device = MedicalDevice.objects.create(
+            name="Свой аппарат",
+            serial_number="SN-RELATIONAL-OWN",
+            department=own_department,
+        )
+        foreign_department = Department.objects.create(name="Другой филиал")
+        foreign_device = MedicalDevice.objects.create(
+            name="Другой аппарат",
+            serial_number="SN-RELATIONAL-FOREIGN",
+            department=foreign_department,
+        )
+        relational = User.objects.create_user(
+            username="relational-reader",
+            password="pass",
+            department=own_department,
+        )
+        relational_group, _ = Group.objects.get_or_create(name="relational-reader")
+        relational.groups.add(relational_group)
+        self.board.allowed_groups.add(relational_group)
+        WorkOrder.objects.create(
+            title="Связанная заявка",
+            description="Видимая по назначению.",
+            department=own_department,
+            author=self.outsider,
+            assignee=relational,
+            board=self.board,
+            device=own_device,
+        )
+        WorkOrder.objects.create(
+            title="Несвязанная заявка",
+            description="Назначена другому сотруднику.",
+            department=foreign_department,
+            author=self.outsider,
+            assignee=self.manager,
+            board=self.board,
+            device=foreign_device,
+        )
+        role_rules = {
+            "relational-reader": {
+                **copy.deepcopy(get_contract("role_rules")["technician"]),
+                "view_scope": "assigned",
+            }
+        }
+
+        with _override_contract_file(
+            "LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", role_rules
+        ):
+            self.assertEqual(
+                set(visible_departments_queryset(relational).values_list("pk", flat=True)),
+                {own_department.pk},
+            )
+            self.assertEqual(
+                set(visible_devices_queryset(relational).values_list("pk", flat=True)),
+                {own_device.pk},
+            )
+            self.assertIn(
+                own_department.pk,
+                creation_departments_queryset(relational).values_list("pk", flat=True),
+            )
+            self.assertNotIn(
+                foreign_department.pk,
+                creation_departments_queryset(relational).values_list("pk", flat=True),
+            )
+
 
 @pytest.mark.integration
 class WorkOrderViewPermissionTests(TestCase):
@@ -758,6 +890,33 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:board"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.workorder.title)
+
+    def test_selector_board_argument_cannot_bypass_board_acl(self):
+        private_group, _ = Group.objects.get_or_create(name="private-selector-board")
+        private_board = Board.objects.create(
+            title="Чужая доска для selector",
+            slug="private-selector-board",
+        )
+        private_board.allowed_groups.add(private_group)
+        foreign = WorkOrder.objects.create(
+            title="Заявка на чужой доске",
+            description="Не должна возвращаться с board=.",
+            department=self.sub_department,
+            author=self.customer,
+            board=private_board,
+            device=self.device,
+        )
+
+        self.assertTrue(
+            visible_workorders_queryset(self.customer, board=self.board)
+            .filter(pk=self.workorder.pk)
+            .exists()
+        )
+        self.assertFalse(
+            visible_workorders_queryset(self.customer, board=private_board)
+            .filter(pk=foreign.pk)
+            .exists()
+        )
 
     def test_default_viewer_can_open_customer_board_but_cannot_write(self):
         self.client.force_login(self.default_viewer)
@@ -1338,6 +1497,63 @@ class WorkOrderViewPermissionTests(TestCase):
         self.workorder.refresh_from_db()
         self.assertEqual(self.workorder.status, WorkOrderStatus.ACCEPTED)
 
+    def test_htmx_comment_render_rechecks_scope_after_command(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.customer)
+        with patch(
+            "apps.workorders.views.add_workorder_comment_command",
+            return_value=SimpleNamespace(workorder=self.workorder),
+        ), patch(
+            "apps.workorders.views._fresh_render_actor_and_workorder",
+            side_effect=PermissionDenied,
+        ):
+            response = self.client.post(
+                reverse("workorders:comment", args=[self.workorder.pk]),
+                {"body": "Комментарий"},
+                HTTP_HX_REQUEST="true",
+            )
+        self.assertEqual(response.status_code, 403)
+
+    def test_htmx_attachment_render_rechecks_scope_after_command(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.customer)
+        upload = SimpleUploadedFile("note.txt", b"note", content_type="text/plain")
+        with patch(
+            "apps.workorders.views.add_workorder_attachment_command",
+            return_value=SimpleNamespace(workorder=self.workorder),
+        ), patch(
+            "apps.workorders.views._fresh_render_actor_and_workorder",
+            side_effect=PermissionDenied,
+        ):
+            response = self.client.post(
+                reverse("workorders:attachment", args=[self.workorder.pk]),
+                {"file": upload},
+                HTTP_HX_REQUEST="true",
+            )
+        self.assertEqual(response.status_code, 403)
+
+    def test_board_move_render_rechecks_actor_and_board_context(self):
+        from unittest.mock import patch
+
+        column = self.board.columns.get(code="in_progress")
+        self.client.force_login(self.technician)
+        with patch(
+            "apps.workorders.views.move_workorder_command",
+            return_value=(self.workorder, self.workorder.status, column),
+        ), patch(
+            "apps.workorders.views._fresh_render_actor_and_workorder",
+            side_effect=PermissionDenied,
+        ):
+            response = self.client.post(
+                reverse("workorders:board_move", args=[self.workorder.pk]),
+                {"column": "in_progress"},
+                HTTP_HX_REQUEST="true",
+                HTTP_HX_TARGET="board-columns",
+            )
+        self.assertEqual(response.status_code, 403)
+
     def test_customer_cannot_drag_card_to_technical_column(self):
         self.client.force_login(self.customer)
         response = self.client.post(
@@ -1632,7 +1848,7 @@ class WorkOrderViewPermissionTests(TestCase):
     def test_technician_cannot_rate_closed_workorder(self):
         self.workorder.status = WorkOrderStatus.RESOLVED
         self.workorder.save()
-        confirm_closure(workorder=self.workorder, user=self.customer)
+        _confirm_closure_unchecked(workorder=self.workorder, user=self.customer)
         self.client.force_login(self.technician)
         response = self.client.post(
             reverse("workorders:rate", args=[self.workorder.pk]),

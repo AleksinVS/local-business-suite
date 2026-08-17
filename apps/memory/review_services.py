@@ -9,7 +9,9 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .chat_memory import index_knowledge_item, rebuild_memory_projection
+from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+
+from .chat_memory import _index_knowledge_item_locked, rebuild_memory_projection
 from .document_ingestion import delete_search_document_indexes
 from .knowledge_files import _safe_repo_path, knowledge_repo_root, parse_knowledge_file, write_knowledge_item_file
 from .models import MemoryIngestionIssue, MemoryKnowledgeItem, MemorySearchDocument
@@ -20,6 +22,10 @@ from .policies import (
     can_review_scoped_search_document,
     can_review_memory_issues,
     can_review_memory_privacy_issues,
+    issue_source_is_consistent,
+    is_active_actor,
+    scope_tokens_match,
+    user_scope_tokens,
 )
 from .review_safety import safe_review_metadata, safe_review_text
 from .review_selectors import PRIVACY_ISSUE_KINDS, index_stale_deletion_allowed
@@ -65,8 +71,15 @@ class ReviewActionOutcome:
     target: Any
 
 
-@transaction.atomic
 def apply_issue_review_action(*, actor, issue: MemoryIngestionIssue, action: str, payload=None) -> ReviewActionOutcome:
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+        return _apply_issue_review_action_locked(actor=actor, issue=issue, action=action, payload=payload)
+
+
+@transaction.atomic
+def _apply_issue_review_action_locked(*, actor, issue: MemoryIngestionIssue, action: str, payload=None) -> ReviewActionOutcome:
+    actor = _lock_active_actor(actor)
+    issue = _lock_issue(issue)
     payload = payload or {}
     _require_issue_action(actor, issue, action)
     comment = safe_review_text(payload.get("comment", ""), max_length=1000)
@@ -94,7 +107,7 @@ def apply_issue_review_action(*, actor, issue: MemoryIngestionIssue, action: str
         issue.resolution_code = ""
         issue.resolution_note = ""
     elif action == IssueReviewAction.ASSIGN:
-        issue.assigned_to = _resolve_assignee(payload.get("assigned_to"))
+        issue.assigned_to = _resolve_assignee(payload.get("assigned_to"), issue=issue)
     elif action == IssueReviewAction.COMMENT:
         decision = ReviewDecision.INFO
     elif action == IssueReviewAction.ENQUEUE_REINDEX:
@@ -121,8 +134,15 @@ def apply_issue_review_action(*, actor, issue: MemoryIngestionIssue, action: str
     return ReviewActionOutcome(decision=decision, target=issue)
 
 
-@transaction.atomic
 def apply_index_review_action(*, actor, document: MemorySearchDocument, action: str, payload=None) -> ReviewActionOutcome:
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+        return _apply_index_review_action_locked(actor=actor, document=document, action=action, payload=payload)
+
+
+@transaction.atomic
+def _apply_index_review_action_locked(*, actor, document: MemorySearchDocument, action: str, payload=None) -> ReviewActionOutcome:
+    actor = _lock_active_actor(actor)
+    document = _lock_document(document)
     payload = payload or {}
     if not can_manage_memory_search_index(actor):
         raise PermissionDenied("Управление поисковым индексом памяти недоступно.")
@@ -154,6 +174,12 @@ def apply_index_review_action(*, actor, document: MemorySearchDocument, action: 
 
 
 def accept_pending_item(*, item: MemoryKnowledgeItem, actor) -> MemoryKnowledgeItem:
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+        return _accept_pending_item_locked(item=item, actor=actor)
+
+
+@transaction.atomic
+def _accept_pending_item_locked(*, item: MemoryKnowledgeItem, actor) -> MemoryKnowledgeItem:
     """Owner acceptance of a pending knowledge page (ADR-0030 decisions 4 & 8).
 
     Applies whatever the file's frontmatter currently proposes (organization
@@ -163,9 +189,10 @@ def accept_pending_item(*, item: MemoryKnowledgeItem, actor) -> MemoryKnowledgeI
     the actor is named in the commit message), and reindexes so the page
     becomes reachable through ``memory.search``.
     """
-    if not can_review_organization_memory(actor):
-        raise PermissionDenied("Ревью кандидатов памяти недоступно.")
+    actor = _lock_active_actor(actor)
+    item = _lock_pending_item(item)
     parsed = _read_pending_file(item)
+    _require_pending_item_access(actor, item=item, parsed=parsed)
     meta = parsed.metadata or {}
 
     item.sensitivity = str(meta.get("sensitivity") or item.sensitivity)
@@ -187,11 +214,17 @@ def accept_pending_item(*, item: MemoryKnowledgeItem, actor) -> MemoryKnowledgeI
     )
     rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
     if item.status == MemoryKnowledgeItem.Status.ACTIVE:
-        index_knowledge_item(item)
+        _index_knowledge_item_locked(item)
     return item
 
 
 def reject_pending_item(*, item: MemoryKnowledgeItem, actor, reason: str = "") -> MemoryKnowledgeItem:
+    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+        return _reject_pending_item_locked(item=item, actor=actor, reason=reason)
+
+
+@transaction.atomic
+def _reject_pending_item_locked(*, item: MemoryKnowledgeItem, actor, reason: str = "") -> MemoryKnowledgeItem:
     """Reject a pending page. The decision is recorded as a git commit; the
     page is never indexed for search either way.
 
@@ -202,10 +235,11 @@ def reject_pending_item(*, item: MemoryKnowledgeItem, actor, reason: str = "") -
     still-current (higher) classification, so the file matches the approved
     state again.
     """
-    if not can_review_organization_memory(actor):
-        raise PermissionDenied("Ревью кандидатов памяти недоступно.")
+    actor = _lock_active_actor(actor)
+    item = _lock_pending_item(item)
     is_candidate = bool((item.metadata or {}).get("candidate_source_memory_id"))
     parsed = _read_pending_file(item)
+    _require_pending_item_access(actor, item=item, parsed=parsed)
 
     updated_metadata = dict(item.metadata or {})
     updated_metadata.pop("pending_reason", None)
@@ -284,11 +318,15 @@ def _require_issue_action(actor, issue: MemoryIngestionIssue, action: str) -> No
         if not can_manage_memory_search_index(actor):
             raise PermissionDenied("Управление поисковым индексом памяти недоступно.")
         return
-    _require_issue_review(actor, issue)
+    _require_issue_review(actor, issue, action=action)
 
 
-def _require_issue_review(actor, issue: MemoryIngestionIssue) -> None:
+def _require_issue_review(actor, issue: MemoryIngestionIssue, *, action: str) -> None:
     if issue.issue_kind in PRIVACY_ISSUE_KINDS:
+        if action in {IssueReviewAction.ACKNOWLEDGE, IssueReviewAction.COMMENT}:
+            if not can_review_memory_issues(actor):
+                raise PermissionDenied("Ревью проблем памяти недоступно.")
+            return
         if not can_review_memory_privacy_issues(actor):
             raise PermissionDenied("Ревью проблем приватности памяти недоступно.")
         return
@@ -296,20 +334,97 @@ def _require_issue_review(actor, issue: MemoryIngestionIssue) -> None:
         raise PermissionDenied("Ревью проблем памяти недоступно.")
 
 
-def _resolve_assignee(value):
+def _resolve_assignee(value, *, issue):
     raw_value = str(value or "").strip()
     if not raw_value:
         return None
     User = get_user_model()
     try:
-        return User.objects.get(pk=int(raw_value))
+        assignee = (
+            User.objects.select_for_update()
+            .filter(pk=int(raw_value), is_active=True)
+            .prefetch_related("groups")
+            .first()
+        )
     except (ValueError, User.DoesNotExist) as exc:
         raise ValidationError("Назначенный пользователь не существует.") from exc
+    if assignee is None:
+        raise ValidationError("Назначенный пользователь не существует или отключен.")
+    if not can_review_memory_issues(assignee):
+        raise ValidationError("Назначить проблему можно только оператору ревью памяти.")
+    if issue.issue_kind in PRIVACY_ISSUE_KINDS and not can_review_memory_privacy_issues(assignee):
+        raise ValidationError("Проблему приватности можно назначить только оператору приватности памяти.")
+    if not can_review_scoped_issue(assignee, issue):
+        raise ValidationError("Назначенный пользователь не имеет доступа к объекту проблемы.")
+    return assignee
+
+
+def _lock_active_actor(actor):
+    actor_id = getattr(actor, "pk", None)
+    if not actor_id:
+        raise PermissionDenied("Действие доступно только активному пользователю.")
+    User = get_user_model()
+    current = (
+        User.objects.select_for_update()
+        .prefetch_related("groups")
+        .filter(pk=actor_id, is_active=True)
+        .first()
+    )
+    if current is None or not is_active_actor(current):
+        raise PermissionDenied("Действие доступно только активному пользователю.")
+    return current
+
+
+def _lock_issue(issue):
+    locked = (
+        MemoryIngestionIssue.objects.select_for_update()
+        .select_related("source", "source_object", "source_object__source", "assigned_to")
+        .get(pk=issue.pk)
+    )
+    if not issue_source_is_consistent(locked):
+        raise PermissionDenied("Проблема содержит несогласованный источник и объект источника.")
+    return locked
+
+
+def _lock_document(document):
+    return (
+        MemorySearchDocument.objects.select_for_update()
+        .select_related("knowledge_item", "source_object", "source_object__source")
+        .get(pk=document.pk)
+    )
+
+
+def _lock_pending_item(item):
+    locked = MemoryKnowledgeItem.objects.select_for_update().select_related("owner_user", "created_by").filter(pk=item.pk).first()
+    if locked is None or (locked.metadata or {}).get("lifecycle") != "pending":
+        raise ValidationError("Элемент памяти уже не находится в очереди ревью.")
+    return locked
+
+
+def _require_pending_item_access(actor, *, item, parsed) -> None:
+    if not can_review_organization_memory(actor):
+        raise PermissionDenied("Ревью кандидатов памяти недоступно.")
+    current_tokens = [str(token).strip() for token in (item.scope_tokens or []) if str(token).strip()]
+    proposed_tokens = [
+        str(token).strip()
+        for token in ((parsed.metadata or {}).get("scope_tokens") or [])
+        if str(token).strip()
+    ]
+    if not current_tokens or not proposed_tokens:
+        raise PermissionDenied("Область текущего или предлагаемого знания не определена.")
+    actor_tokens = user_scope_tokens(actor)
+    if not getattr(actor, "is_superuser", False) and (
+        not scope_tokens_match(current_tokens, actor_tokens)
+        or not scope_tokens_match(proposed_tokens, actor_tokens)
+    ):
+        raise PermissionDenied("Текущее или предлагаемое знание вне области ревью пользователя.")
 
 
 def _create_reindex_job_for_issue(*, actor, issue: MemoryIngestionIssue, dry_run: bool):
     if issue.source_object_id is None:
         raise ValidationError("У проблемы нет объекта источника для переиндексации.")
+    if not issue_source_is_consistent(issue):
+        raise PermissionDenied("Переиндексация несогласованной проблемы запрещена.")
     return enqueue_memory_queue_task(
         job_kind=MemoryQueueJobKind.REINDEX,
         source_code=issue.source.code if issue.source_id else "",

@@ -4,6 +4,26 @@ from apps.memory.tests._common import *  # noqa: F401,F403
 
 class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
     databases = RUNTIME_DATABASES
+
+    def test_source_data_search_fallback_uses_ephemeral_document_projection(self):
+        from ..retrieval import _source_object_document
+
+        source = self.create_source(code="fallback-ephemeral-source")
+        source_object = MemorySourceObject.objects.create(
+            source=source,
+            object_id="fallback-ephemeral-object",
+            object_uri="source://fallback-ephemeral-object",
+            relative_path="fallback.txt",
+            file_name="fallback.txt",
+            content_hash="fallback-hash",
+            metadata={"scope_tokens": ["org:default"]},
+        )
+        self.assertEqual(MemorySearchDocument.objects.filter(source_object=source_object).count(), 0)
+        projection = _source_object_document(source_object)
+        self.assertIsNone(projection.pk)
+        self.assertEqual(projection.document_id.startswith("source:"), True)
+        self.assertEqual(MemorySearchDocument.objects.filter(source_object=source_object).count(), 0)
+
     def test_search_document_backend_is_idempotent_and_scope_filtered(self):
         from ..vector_backends import MemoryIndexRecord, SQLiteFTSMemoryBackend
 

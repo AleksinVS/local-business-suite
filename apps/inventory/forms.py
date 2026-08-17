@@ -3,6 +3,7 @@ from django import forms
 from apps.core.models import Department
 
 from .models import MedicalDevice
+from .selectors import creation_departments_queryset, visible_departments_queryset
 
 
 # Имя подразделения-агрегатора. Должно совпадать с CATCHALL_DEPARTMENT_NAME
@@ -24,13 +25,21 @@ class MedicalDeviceForm(forms.ModelForm):
         queryset=Department.objects.select_related("parent").order_by("parent_id", "name", "id"),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if user is not None:
+            departments = (
+                visible_departments_queryset(user)
+                if self.instance and self.instance.pk
+                else creation_departments_queryset(user)
+            )
+            self.fields["department"].queryset = departments
         # Агрегатор показываем первым в списке и подставляем по умолчанию
         # при создании нового изделия. На существующей записи initial не
         # перетирает уже выбранное подразделение.
+        department_queryset = self.fields["department"].queryset
         catchall = (
-            Department.objects.filter(
+            department_queryset.filter(
                 parent=None, name=CATCHALL_DEPARTMENT_NAME
             )
             .order_by("id")
@@ -41,12 +50,12 @@ class MedicalDeviceForm(forms.ModelForm):
 
         # Переупорядочиваем queryset: сначала агрегатор, затем остальные
         # в порядке иерархии (parent_id, name, id).
-        others = Department.objects.exclude(pk=catchall.pk).select_related(
+        others = department_queryset.exclude(pk=catchall.pk).select_related(
             "parent"
         ).order_by("parent_id", "name", "id")
-        self.fields["department"].queryset = Department.objects.order_by(
-            "pk"
-        ).filter(pk=catchall.pk) | others
+        self.fields["department"].queryset = department_queryset.filter(
+            pk__in=[catchall.pk, *others.values_list("pk", flat=True)]
+        )
 
         if not self.instance.pk or not self.instance.department_id:
             self.fields["department"].initial = catchall.pk

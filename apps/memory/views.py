@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect
@@ -18,6 +17,7 @@ from .policies import (
 )
 from .review_selectors import (
     INDEX_REVIEW_DISPLAY_LIMIT,
+    assignees_for_issue,
     index_document_queryset,
     issue_detail_context,
     pending_item_kind,
@@ -79,7 +79,7 @@ class MemoryIssueDetailView(MemoryReviewAccessMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(issue_detail_context(self.issue, user=self.request.user))
-        context["assignees"] = get_user_model().objects.filter(is_active=True).order_by("username")
+        context["assignees"] = assignees_for_issue(self.issue, actor=self.request.user)
         return context
 
 

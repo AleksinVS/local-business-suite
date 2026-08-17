@@ -2,7 +2,9 @@ from collections import OrderedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views import View
@@ -10,8 +12,10 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from .forms import MedicalDeviceForm
 from .models import MedicalDevice, OperationalStatus
+from .selectors import visible_departments_queryset, visible_devices_queryset
+from .services import archive_device_command, create_device_command, update_device_command
 from apps.workorders.policies import can_manage_inventory
-from apps.core.models import Department
+from apps.workorders.selectors import resolve_active_actor
 
 
 class MedicalDeviceListView(LoginRequiredMixin, ListView):
@@ -23,14 +27,14 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
     paginator = None
 
     def get_queryset(self):
-        queryset = MedicalDevice.objects.order_by("name", "inventory_number", "id")
+        archived = self.request.GET.get("archived", "").strip() == "1"
+        queryset = visible_devices_queryset(
+            self.request.user,
+            include_archived=archived,
+        )
         q = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status_value = self.request.GET.get("operational_status", "").strip()
-        archived = self.request.GET.get("archived", "").strip()
-
-        if archived != "1":
-            queryset = queryset.filter(is_archived=False)
 
         if q:
             queryset = queryset.filter(
@@ -46,7 +50,9 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
                 | Q(address__icontains=q)
             )
         if department:
-            selected_department = Department.objects.filter(pk=department).first()
+            selected_department = visible_departments_queryset(self.request.user).filter(
+                pk=department
+            ).first()
             if selected_department:
                 queryset = queryset.filter(department_id__in=selected_department.descendant_ids())
             else:
@@ -58,14 +64,15 @@ class MedicalDeviceListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["status_choices"] = OperationalStatus.choices
-        context["departments"] = Department.objects.select_related("parent").order_by("parent_id", "name", "id")
+        context["departments"] = visible_departments_queryset(self.request.user)
         context["filters"] = {
             "q": self.request.GET.get("q", ""),
             "department": self.request.GET.get("department", ""),
             "operational_status": self.request.GET.get("operational_status", ""),
             "archived": self.request.GET.get("archived", ""),
         }
-        context["can_manage_inventory"] = can_manage_inventory(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        context["can_manage_inventory"] = actor is not None and can_manage_inventory(actor)
 
         # Группировка отфильтрованных изделий по подразделению.
         # OrderedDict сохраняет порядок первого появления; финальная сортировка
@@ -96,8 +103,22 @@ class MedicalDeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
     template_name = "inventory/device_form.html"
     success_url = reverse_lazy("inventory:list")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_manage_inventory(actor)
+
+    def form_valid(self, form):
+        self.object = create_device_command(
+            actor=self.request.user,
+            payload=form.cleaned_data,
+        )
+        messages.success(self.request, "Изделие создано.")
+        return redirect(self.get_success_url())
 
 
 class MedicalDeviceDetailView(LoginRequiredMixin, DetailView):
@@ -106,11 +127,15 @@ class MedicalDeviceDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "device"
 
     def get_queryset(self):
-        return MedicalDevice.objects.select_related("department")
+        return visible_devices_queryset(
+            self.request.user,
+            include_archived=True,
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["can_manage_inventory"] = can_manage_inventory(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        context["can_manage_inventory"] = actor is not None and can_manage_inventory(actor)
         return context
 
 
@@ -120,20 +145,40 @@ class MedicalDeviceUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateVie
     template_name = "inventory/device_form.html"
     success_url = reverse_lazy("inventory:list")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def get_queryset(self):
+        return visible_devices_queryset(
+            self.request.user,
+            include_archived=True,
+        )
+
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_manage_inventory(actor)
 
     def form_valid(self, form):
+        self.object = update_device_command(
+            actor=self.request.user,
+            device_id=self.get_object().pk,
+            payload=form.cleaned_data,
+        )
         messages.success(self.request, "Изделие обновлено.")
-        return super().form_valid(form)
+        return redirect(self.get_success_url())
 
 
 class MedicalDeviceArchiveView(LoginRequiredMixin, UserPassesTestMixin, View):
     def test_func(self):
-        return can_manage_inventory(self.request.user)
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_manage_inventory(actor)
 
     def post(self, request, pk):
-        device = get_object_or_404(MedicalDevice, pk=pk)
-        device.archive()
+        try:
+            archive_device_command(actor=request.user, device_id=pk)
+        except PermissionDenied:
+            return HttpResponseForbidden("Архивирование изделия запрещено")
         messages.success(request, "Изделие перемещено в архив.")
         return redirect("inventory:list")

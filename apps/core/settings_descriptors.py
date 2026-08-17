@@ -14,7 +14,7 @@ def get_settings_descriptors():
             value_type="json",
             widget="workflow_transition_matrix",
             write_policy="editable",
-            required_permission="settings_center.manage",
+            required_permission="manage_settings",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_ROLE_RULES_FILE",
                 "settings_payload_attr": "LOCAL_BUSINESS_ROLE_RULES",
@@ -32,7 +32,7 @@ def get_settings_descriptors():
             value_type="json",
             widget="json_editor",
             write_policy="editable",
-            required_permission="settings_center.manage",
+            required_permission="manage_settings",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_WORKFLOW_RULES_FILE",
                 "settings_payload_attr": "LOCAL_BUSINESS_WORKFLOW_RULES",

@@ -8,6 +8,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "role_definition_editor_roles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "role_assignment_allowlist": {
           "type": "object",
           "additionalProperties": {
@@ -84,6 +89,7 @@
         "view_analytics": { "type": "boolean" },
         "manage_departments": { "type": "boolean" },
         "manage_roles": { "type": "boolean" },
+        "manage_settings": { "type": "boolean" },
         "manage_ai_skills": { "type": "boolean" },
         "memory_organization_write": { "type": "boolean" },
         "memory_organization_review": { "type": "boolean" },
@@ -138,6 +144,7 @@
         "view_analytics",
         "manage_departments",
         "manage_roles",
+        "manage_settings",
         "manage_ai_skills",
         "memory_organization_write",
         "memory_organization_review",

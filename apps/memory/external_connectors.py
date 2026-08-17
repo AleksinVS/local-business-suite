@@ -18,6 +18,7 @@ from apps.core.json_utils import atomic_write_json
 from .models import MemoryExternalConnectorJob, MemorySearchDocument, MemorySource, MemorySourceObject
 from .vector_backends import MemoryIndexRecord, get_default_backend
 from .security import scan_for_secrets
+from .source_lifecycle import enabled_source_operation
 
 
 ENVELOPE_SCHEMA_VERSION = "external-memory-envelope-v1"
@@ -516,20 +517,39 @@ def enqueue_external_envelope(
     request_id: str = "",
     priority: int = 0,
 ):
-    envelope_path = write_external_landing_artifacts(source=source, envelope=envelope, raw_response=raw_response)
-    backend = get_external_queue_backend()
-    idempotency_key = f"{source.code}:{envelope['collection']}:{envelope['external_id']}:{envelope['content_hash']}"
-    return backend.enqueue(
-        source_code=source.code,
-        job_kind=ExternalJobKind.HANDOFF_EXTERNAL_OBJECT_TO_MEMORY,
-        payload={"envelope_path": str(envelope_path)},
-        idempotency_key=idempotency_key,
-        priority=priority,
-        request_id=request_id,
-    )
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        envelope_path = _write_external_landing_artifacts_locked(
+            source=fresh_source,
+            envelope=envelope,
+            raw_response=raw_response,
+        )
+        backend = get_external_queue_backend()
+        idempotency_key = f"{fresh_source.code}:{envelope['collection']}:{envelope['external_id']}:{envelope['content_hash']}"
+        return backend.enqueue(
+            source_code=fresh_source.code,
+            job_kind=ExternalJobKind.HANDOFF_EXTERNAL_OBJECT_TO_MEMORY,
+            payload={"envelope_path": str(envelope_path)},
+            idempotency_key=idempotency_key,
+            priority=priority,
+            request_id=request_id,
+        )
 
 
 def write_external_landing_artifacts(*, source: MemorySource, envelope: dict, raw_response: dict | None = None) -> Path:
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        return _write_external_landing_artifacts_locked(
+            source=fresh_source,
+            envelope=envelope,
+            raw_response=raw_response,
+        )
+
+
+def _write_external_landing_artifacts_locked(
+    *,
+    source: MemorySource,
+    envelope: dict,
+    raw_response: dict | None = None,
+) -> Path:
     validate_external_envelope(envelope)
     assert_external_upsert_not_stale(source=source, envelope=envelope)
     rendered = render_external_envelope_text(envelope)
@@ -654,7 +674,20 @@ def process_external_connector_job(job: ExternalQueueJob) -> dict:
 
 def handoff_external_envelope_to_memory(*, envelope: dict, envelope_path: Path | None = None) -> dict:
     validate_external_envelope(envelope)
-    source = MemorySource.objects.get(code=envelope["source_code"])
+    with enabled_source_operation(source_code=envelope["source_code"]) as source:
+        return _handoff_external_envelope_to_memory_locked(
+            envelope=envelope,
+            source=source,
+            envelope_path=envelope_path,
+        )
+
+
+def _handoff_external_envelope_to_memory_locked(
+    *,
+    envelope: dict,
+    source: MemorySource,
+    envelope_path: Path | None = None,
+) -> dict:
     assert_external_upsert_not_stale(source=source, envelope=envelope)
     source_object_ref = _source_object_ref(envelope)
     if envelope["operation"] == "delete":
@@ -671,7 +704,7 @@ def handoff_external_envelope_to_memory(*, envelope: dict, envelope_path: Path |
         )
         if document_ids:
             get_default_backend().deactivate(document_ids)
-        append_external_tombstone(source=source, envelope=envelope)
+        _append_external_tombstone_locked(source=source, envelope=envelope)
         return {"operation": "delete", "source_object_id": source_object_ref, "deactivated_documents": updated}
 
     safe_text = render_external_envelope_text(envelope)
@@ -797,6 +830,12 @@ def scan_external_raw_response_for_secrets(raw_response: dict):
 
 
 def append_external_tombstone(*, source: MemorySource, envelope: dict) -> Path:
+    """Append a tombstone under a fresh enabled-source fence."""
+    with enabled_source_operation(source_id=source.pk) as fresh_source:
+        return _append_external_tombstone_locked(source=fresh_source, envelope=envelope)
+
+
+def _append_external_tombstone_locked(*, source: MemorySource, envelope: dict) -> Path:
     tombstone_path = _external_tombstone_path(source=source, envelope=envelope)
     tombstone_path.parent.mkdir(parents=True, exist_ok=True)
     record = {

@@ -16,7 +16,7 @@ from django.utils import timezone
 from apps.core.file_locks import exclusive_file_lock
 
 from .models import MemoryKnowledgeItem
-from .policies import can_access_knowledge_item
+from .policies import can_access_knowledge_item, resolve_active_actor, user_scope_tokens
 
 
 FRONT_MATTER_SEPARATOR = "---"
@@ -323,7 +323,7 @@ def rebuild_all_knowledge_logs() -> list[str]:
     return written
 
 
-def recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
+def _recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
     """Return the most recent commits across the whole knowledge repo.
 
     Used by the review UI's combined audit feed (ADR-0030 decision 4): unlike
@@ -335,6 +335,38 @@ def recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
     if not (root / ".git").exists():
         return []
     return _git_log_entries(root, rel_dir=None, exclude_relative_paths=(), limit=limit)
+
+
+def recent_knowledge_commits_for_actor(*, actor, limit: int = 50) -> list[dict[str, str]]:
+    """Return only git history in scopes visible to ``actor``.
+
+    Git history is repository-wide by default, which is inappropriate for a
+    review screen: a personal page's commit subject can reveal its existence
+    even when the page body is not visible.  The UI therefore asks for an
+    actor-bound feed and queries only the actor's own personal directory and
+    organization directory when the actor has an organization scope.
+    """
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return []
+    root = knowledge_repo_root()
+    if not (root / ".git").exists():
+        return []
+    if getattr(actor, "is_superuser", False):
+        return _recent_knowledge_commits(limit=limit)
+    allowed_prefixes = [f"users/{actor.pk}/"]
+    if "org:default" in user_scope_tokens(actor):
+        allowed_prefixes.append("org/")
+    entries_by_hash = {}
+    # Query complete commit paths, not a pathspec-limited history.  A commit
+    # touching the actor's directory and another user's personal directory is
+    # intentionally omitted as a mixed/ambiguous audit entry.
+    for entry in _git_log_entries_with_paths(root, limit=max(int(limit) * 4, 50)):
+        paths = entry.pop("paths", ())
+        if not paths or any(not any(path.startswith(prefix) for prefix in allowed_prefixes) for path in paths):
+            continue
+        entries_by_hash.setdefault(entry["hash"], entry)
+    return sorted(entries_by_hash.values(), key=lambda item: item.get("date", ""), reverse=True)[: max(int(limit), 1)]
 
 
 def _git_log_entries(
@@ -365,6 +397,36 @@ def _git_log_entries(
             continue
         commit_hash, date, author, subject = parts
         entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject})
+    return entries
+
+
+def _git_log_entries_with_paths(root: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """Read complete commit path lists for actor-bound privacy filtering."""
+    args = [
+        "log",
+        "--no-merges",
+        "--date=iso-strict",
+        # Start each record with the separator so the following --name-only
+        # paths stay attached to the commit they describe.
+        "--pretty=format:%x1e%h\x1f%ad\x1f%an\x1f%s",
+        "--name-only",
+    ]
+    if limit:
+        args.append(f"-n{int(limit)}")
+    result = _run_git_optional(root, *args)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    entries = []
+    for record in result.stdout.split("\x1e"):
+        lines = [line.strip() for line in record.splitlines()]
+        if not lines:
+            continue
+        parts = lines[0].split("\x1f")
+        if len(parts) != 4:
+            continue
+        commit_hash, date, author, subject = parts
+        paths = tuple(line for line in lines[1:] if line)
+        entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject, "paths": paths})
     return entries
 
 

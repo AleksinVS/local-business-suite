@@ -31,6 +31,7 @@ FALLBACK_BOOLEAN_CAPABILITIES = (
     ("view_analytics", "Просмотр аналитики", ""),
     ("manage_departments", "Управление подразделениями", ""),
     ("manage_roles", "Управление ролями", ""),
+    ("manage_settings", "Управление настройками", ""),
     ("manage_ai_skills", "Управление ИИ-навыками", ""),
     ("memory_organization_write", "Запись в память организации", ""),
     ("memory_organization_review", "Ревью памяти организации", ""),
@@ -309,10 +310,6 @@ def can_edit(user, workorder: WorkOrder) -> bool:
     if not can_view(user, workorder):
         return False
     return any(scope_matches(user, workorder, rule.get("edit_scope")) for rule in active_role_rules(user))
-
-
-def can_delete(user, workorder: WorkOrder) -> bool:
-    return can_edit(user, workorder)
 
 
 def can_assign(user, workorder: WorkOrder) -> bool:

@@ -21,16 +21,17 @@ class MedicalDevice(models.Model):
     )
     manufacturer = models.CharField("Производитель", max_length=255, blank=True)
     production_country = models.CharField("Страна производства", max_length=128, blank=True)
-    model = models.CharField("Модель", max_length=255, blank=True)
+    # TextField: в эксплуатации встречаются описания модели длиннее лимитов
+    # CharField (выявлено dry-run миграции на PostgreSQL, 2026-08-18).
+    model = models.TextField("Модель", blank=True)
     serial_number = models.CharField(
         "Серийный номер",
         max_length=128,
         blank=True,
         null=True,
     )
-    inventory_number = models.CharField(
+    inventory_number = models.TextField(
         "Инвентарный номер",
-        max_length=128,
         blank=True,
         null=True,
         unique=True,

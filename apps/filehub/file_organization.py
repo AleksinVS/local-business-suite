@@ -24,7 +24,12 @@ from .models import (
     MemoryFileVirtualView,
 )
 from apps.memory.policies import is_active_actor
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+    memory_source_lifecycle_lock_path,
+)
 from .selectors import can_access_file_object
 
 
@@ -153,7 +158,7 @@ def ensure_file_object_for_source_object(source_object: MemorySourceObject) -> M
     hold the common file-organization lock.  Keeping this wrapper preserves
     the small service API without leaving an unlocked write path.
     """
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             return _ensure_file_object_for_source_object_locked(source_object=source_object)
 
@@ -323,7 +328,7 @@ def _ensure_file_object_for_source_object_locked(*, source_object: MemorySourceO
 
 
 def sync_file_objects_from_source_objects(*, source: MemorySource, dry_run: bool = False, limit: int | None = None) -> dict:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             get_file_organization_profile(source)
@@ -349,13 +354,17 @@ def _sync_file_objects_from_source_objects_locked(*, source: MemorySource, dry_r
 
 
 def save_user_virtual_placement(*, actor, file_object_id: int, virtual_path: str) -> MemoryFileVirtualPlacement:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
-        with transaction.atomic():
-            return _save_user_virtual_placement_locked(
-                actor=actor,
-                file_object_id=file_object_id,
-                virtual_path=virtual_path,
-            )
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
+                with transaction.atomic():
+                    return _save_user_virtual_placement_locked(
+                        actor=actor,
+                        file_object_id=file_object_id,
+                        virtual_path=virtual_path,
+                    )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
 
 
 def _save_user_virtual_placement_locked(*, actor, file_object_id: int, virtual_path: str) -> MemoryFileVirtualPlacement:
@@ -455,7 +464,7 @@ def get_or_create_system_view(
     baseline_profile: str = "",
     dry_run: bool = False,
 ) -> MemoryFileVirtualView | None:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             require_enabled_file_source(source)
@@ -505,7 +514,7 @@ def create_file_organization_issue(
     severity=MemoryIngestionIssue.Severity.WARNING,
     issue_kind=MemoryIngestionIssue.IssueKind.CANONICALIZATION_CONFLICT,
 ) -> MemoryIngestionIssue:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             require_enabled_file_source(source)

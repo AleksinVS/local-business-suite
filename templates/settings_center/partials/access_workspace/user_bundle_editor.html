@@ -1,4 +1,4 @@
-<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
+<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
   {% csrf_token %}
   <input type="hidden" name="view" value="users">
   <input type="hidden" name="object" value="{{ selected.object }}">

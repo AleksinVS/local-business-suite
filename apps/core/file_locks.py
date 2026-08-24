@@ -24,6 +24,12 @@ def access_control_write_lock_path() -> Path:
     return root / ".settings-contract-write.lock"
 
 
+def memory_source_lifecycle_lock_path() -> Path:
+    """Общий lock для статуса источника и длительных операций памяти/FileHub."""
+    root = Path(getattr(settings, "RUNTIME_CONTRACTS_DIR", Path(settings.DATA_DIR) / "contracts"))
+    return root / ".memory-source-lifecycle.lock"
+
+
 @contextlib.contextmanager
 def exclusive_file_lock(path, *, timeout: float = 10.0, poll_interval: float = 0.05):
     """Получить исключительную межпроцессную блокировку с ограничением времени."""

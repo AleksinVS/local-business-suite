@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 from apps.memory.chat_memory import _index_knowledge_item_locked, index_knowledge_item
 from apps.memory.document_ingestion import (
     _ingest_source_object_text_locked,
@@ -73,7 +73,7 @@ class Command(BaseCommand):
                     dry_run=dry_run,
                     force=force,
                 )
-        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
             return self._handle_locked(
                 source=None,
                 corpus=corpus,
@@ -164,7 +164,7 @@ class Command(BaseCommand):
                     dry_run=dry_run,
                     source_fenced=True,
                 )
-        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
             return self._run_reindex_locked(
                 source=None,
                 corpus=corpus,

@@ -6,7 +6,9 @@
   var compact = window.matchMedia("(max-width: 1200px)");
   var focusKey = "access-workspace-focus";
   var activePanel = null;
-  var pendingNavigation = null;
+  var requestContextsByXhr = new WeakMap();
+  var requestContexts = [];
+  var requestContextsByTarget = new WeakMap();
 
   function revealFieldSidebar() {
     var field = document.querySelector(".access-sidebar-editor[data-access-panel='field']");
@@ -119,10 +121,8 @@
     });
   }
 
-  function refreshPanels() {
+  function refreshPanels(navigation) {
     root = document.querySelector("[data-access-workspace]");
-    var navigation = pendingNavigation;
-    pendingNavigation = null;
     var fieldHost = document.getElementById("access-field-sidebar-host");
     var chatHost = document.getElementById("access-ai-chat-host");
     var launcher = document.querySelector("[data-access-ai-launcher]");
@@ -271,11 +271,87 @@
   });
 
   document.querySelectorAll(".access-context-form").forEach(markDirty);
+  function findRequestContext(event) {
+    var detail = event && event.detail || {};
+    var xhr = detail.xhr;
+    if (xhr && requestContextsByXhr.has(xhr)) return requestContextsByXhr.get(xhr);
+    var matches = requestContexts.filter(function (context) {
+      if (context.settled) return false;
+      if (detail.elt && context.elt !== detail.elt) return false;
+      if (detail.target && context.target !== detail.target) return false;
+      return true;
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+  function trackRequestTarget(context) {
+    if (!context.target) return;
+    var contexts = requestContextsByTarget.get(context.target);
+    if (!contexts) {
+      contexts = new Set();
+      requestContextsByTarget.set(context.target, contexts);
+    }
+    contexts.add(context);
+  }
+  function hasPendingTargetRequest(target, excludedContext) {
+    var contexts = target && requestContextsByTarget.get(target);
+    if (!contexts) return false;
+    var pending = false;
+    contexts.forEach(function (context) {
+      if (context !== excludedContext && !context.settled && !context.visualCleared) pending = true;
+    });
+    return pending;
+  }
+  function clearTargetBusyState(context) {
+    var target = context && context.target;
+    if (!target || hasPendingTargetRequest(target, context)) return;
+    target.removeAttribute("aria-busy");
+    target.classList.remove("htmx-request");
+  }
+  function forgetRequestContext(context) {
+    if (!context || context.settled) return;
+    context.settled = true;
+    if (context.xhr && requestContextsByXhr.get(context.xhr) === context) {
+      requestContextsByXhr.delete(context.xhr);
+    }
+    var index = requestContexts.indexOf(context);
+    if (index !== -1) requestContexts.splice(index, 1);
+    if (context.target) {
+      var contexts = requestContextsByTarget.get(context.target);
+      contexts?.delete(context);
+      if (contexts && !contexts.size) requestContextsByTarget.delete(context.target);
+    }
+    clearTargetBusyState(context);
+  }
+  function clearFormBusyState(form) {
+    if (!form) return;
+    form.classList.remove("htmx-request");
+    form.removeAttribute("aria-busy");
+    form.dataset.accessRequestActive = "false";
+    form.querySelectorAll("button[data-access-disabled-by-request='true'], input[data-access-disabled-by-request='true']").forEach(function (button) {
+      button.disabled = false;
+      delete button.dataset.accessDisabledByRequest;
+    });
+  }
+  function clearBusyState(event, context) {
+    context = context || findRequestContext(event);
+    if (!context || context.visualCleared) return context;
+    context.visualCleared = true;
+    clearFormBusyState(context.form);
+    clearTargetBusyState(context);
+    return context;
+  }
   document.body.addEventListener("htmx:beforeRequest", function (event) {
     var detail = event.detail || {};
     var element = detail.elt;
     var isForm = Boolean(element && element.matches(".access-context-form"));
     var isClose = Boolean(element && element.closest(".access-panel-close, .access-inspector-overlay"));
+    if (isForm && element.dataset.accessRequestActive === "true") {
+      // HTMX can receive a second submit before the first response arrives.
+      // Keep the original request and draft intact instead of sending a
+      // duplicate authority-bearing mutation.
+      event.preventDefault();
+      return;
+    }
     var triggeringEvent = detail.triggeringEvent;
     var submitter = triggeringEvent && triggeringEvent.submitter;
     if (!submitter && isForm && document.activeElement && element.contains(document.activeElement) && document.activeElement.matches("button, input[type='submit']")) {
@@ -286,14 +362,21 @@
       event.preventDefault();
       return;
     }
-    pendingNavigation = {
+    var context = {
+      xhr: detail.xhr || null,
       isForm: isForm,
       isClose: isClose,
       form: isForm ? element : null,
       wasDirty: wasDirty,
       submitterName: submitter ? submitter.name || "" : element && element.dataset.accessSubmitterName || "",
       submitterValue: submitter ? submitter.value || "" : element && element.dataset.accessSubmitterValue || "",
+      target: detail.target || null,
+      visualCleared: false,
+      settled: false,
     };
+    if (context.xhr) requestContextsByXhr.set(context.xhr, context);
+    requestContexts.push(context);
+    trackRequestTarget(context);
     var target = detail.target;
     if (target && target.id === "access-field-sidebar-host" && !isForm) {
       var chatHost = document.getElementById("access-ai-chat-host");
@@ -303,41 +386,98 @@
       chatHost?.setAttribute("aria-hidden", "true");
       launcher?.setAttribute("aria-expanded", "false");
     }
-    if (target) target.setAttribute("aria-busy", "true");
+    if (isForm) {
+      element.dataset.accessRequestActive = "true";
+      element.setAttribute("aria-busy", "true");
+      element.classList.add("htmx-request");
+      element.querySelectorAll("button[type='submit'], input[type='submit']").forEach(function (button) {
+        if (button.disabled) return;
+        button.dataset.accessDisabledByRequest = "true";
+        button.disabled = true;
+      });
+    }
+    if (target) {
+      target.setAttribute("aria-busy", "true");
+      target.classList.add("htmx-request");
+    }
   });
   document.body.addEventListener("htmx:afterSwap", function (event) {
-    var target = event.detail && event.detail.target;
-    if (target) target.removeAttribute("aria-busy");
-    refreshPanels();
+    var context = findRequestContext(event);
+    clearBusyState(event, context);
+    refreshPanels(context);
   });
-  function restoreFailedEditor() {
-    var navigation = pendingNavigation;
+  function formForFailedRequest(context) {
+    return context && context.form && context.form.isConnected ? context.form : null;
+  }
+  function showClientError(context, message) {
+    var form = formForFailedRequest(context);
+    if (!form) return;
+    form.dataset.accessDirty = "true";
+    var error = form.querySelector(".access-client-error");
+    if (!error) {
+      error = document.createElement("p");
+      error.className = "form-error access-client-error";
+      error.setAttribute("role", "alert");
+      var actions = form.querySelector(".access-form-actions, .role-definition-actions");
+      if (actions) form.insertBefore(error, actions);
+      else form.appendChild(error);
+    }
+    error.textContent = message || "Не удалось сохранить изменения. Черновик сохранён; повторите попытку.";
+  }
+  function restoreFailedEditor(context) {
+    var navigation = context;
     if (!navigation || !navigation.isForm || !navigation.wasDirty) return;
-    var form = navigation.form && navigation.form.isConnected ? navigation.form : document.querySelector(".access-context-form");
+    var form = navigation.form && navigation.form.isConnected ? navigation.form : null;
     if (form) form.dataset.accessDirty = "true";
   }
   document.body.addEventListener("htmx:beforeSwap", function (event) {
     var xhr = event.detail && event.detail.xhr;
     if (xhr && xhr.status >= 400) {
+      var context = findRequestContext(event);
       event.detail.shouldSwap = false;
       event.detail.isError = true;
-      restoreFailedEditor();
+      restoreFailedEditor(context);
+      clearBusyState(event, context);
+      showClientError(context, "Сервер не принял изменения. Черновик сохранён; проверьте данные и повторите попытку.");
     }
   });
   function clearHtmxBusy(event) {
-    var target = event.detail && event.detail.target;
-    if (target) target.removeAttribute("aria-busy");
-    if (["htmx:responseError", "htmx:sendError", "htmx:timeout"].indexOf(event.type) !== -1) {
-      restoreFailedEditor();
-      pendingNavigation = null;
+    var failed = [
+      "htmx:responseError",
+      "htmx:sendError",
+      "htmx:timeout",
+      "htmx:onLoadError",
+      "htmx:loadError",
+      "htmx:swapError",
+      "htmx:sendAbort",
+      "htmx:abort",
+    ].indexOf(event.type) !== -1;
+    var context = findRequestContext(event);
+    clearBusyState(event, context);
+    if (failed) {
+      restoreFailedEditor(context);
+      showClientError(context, "Не удалось сохранить изменения. Черновик сохранён; повторите попытку.");
+      forgetRequestContext(context);
+      return;
+    }
+    // Для transport error HTMX сначала посылает afterRequest, а уже затем
+    // timeout/sendError/sendAbort. Не забываем context на первом событии,
+    // иначе последующее сообщение об ошибке потеряет конкретную форму.
+    if (event.type === "htmx:afterRequest" && event.detail && event.detail.successful === true) {
+      forgetRequestContext(context);
     }
   }
   document.body.addEventListener("htmx:afterRequest", clearHtmxBusy);
   document.body.addEventListener("htmx:responseError", clearHtmxBusy);
   document.body.addEventListener("htmx:sendError", clearHtmxBusy);
   document.body.addEventListener("htmx:timeout", clearHtmxBusy);
-  document.body.addEventListener("htmx:afterSettle", refreshPanels);
-  document.body.addEventListener("htmx:historyRestore", refreshPanels);
+  document.body.addEventListener("htmx:onLoadError", clearHtmxBusy);
+  document.body.addEventListener("htmx:loadError", clearHtmxBusy);
+  document.body.addEventListener("htmx:swapError", clearHtmxBusy);
+  document.body.addEventListener("htmx:sendAbort", clearHtmxBusy);
+  document.body.addEventListener("htmx:abort", clearHtmxBusy);
+  document.body.addEventListener("htmx:afterSettle", function () { refreshPanels(null); });
+  document.body.addEventListener("htmx:historyRestore", function () { refreshPanels(null); });
   window.addEventListener("beforeunload", function (event) {
     if (!dirtyForms().length) return;
     event.preventDefault();

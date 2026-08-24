@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 from .file_organization import (
     BASELINE_VIEW_SLUG,
     _create_file_organization_issue_locked,
@@ -48,7 +48,7 @@ def build_baseline_virtual_structure(
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             return _build_baseline_virtual_structure_locked(

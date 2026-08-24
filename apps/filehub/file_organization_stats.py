@@ -11,7 +11,12 @@ from django.utils import timezone
 
 from apps.memory.models import MemorySource
 from apps.memory.policies import can_review_organization_memory, can_view_memory_review_queue, is_active_actor
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+    memory_source_lifecycle_lock_path,
+)
 
 from .file_organization import (
     decimal_confidence,
@@ -47,17 +52,21 @@ def record_file_usage_event(
     metadata: dict | None = None,
 ) -> MemoryFileUsageEvent:
     """Public actor-aware usage writer; system pipelines use the private helper."""
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
-        with transaction.atomic():
-            return _record_file_usage_event_locked(
-                source=source,
-                event_kind=event_kind,
-                file_object=file_object,
-                view=view,
-                actor=actor,
-                virtual_path=virtual_path,
-                metadata=metadata,
-            )
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
+                with transaction.atomic():
+                    return _record_file_usage_event_locked(
+                        source=source,
+                        event_kind=event_kind,
+                        file_object=file_object,
+                        view=view,
+                        actor=actor,
+                        virtual_path=virtual_path,
+                        metadata=metadata,
+                    )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
 
 
 def _record_file_usage_event_locked(
@@ -136,7 +145,7 @@ def build_organization_proposals(
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             return _build_organization_proposals_locked(source=source, dry_run=dry_run)
@@ -291,15 +300,19 @@ def apply_organization_proposal_decision(
     comment: str = "",
     create_jobs: bool = False,
 ):
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
-        with transaction.atomic():
-            return _apply_organization_proposal_decision_locked(
-                proposal=proposal,
-                actor=actor,
-                decision=decision,
-                comment=comment,
-                create_jobs=create_jobs,
-            )
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
+                with transaction.atomic():
+                    return _apply_organization_proposal_decision_locked(
+                        proposal=proposal,
+                        actor=actor,
+                        decision=decision,
+                        comment=comment,
+                        create_jobs=create_jobs,
+                    )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
 
 
 def _apply_organization_proposal_decision_locked(

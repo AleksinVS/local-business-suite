@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 from apps.core.source_adapters import (
     ACCESS_MODE_ADAPTER_CHECK,
     OPERATION_DELETE,
@@ -45,7 +45,7 @@ from .vector_backends import (
 
 
 def sync_sources_from_contract(sources_payload):
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             return _sync_sources_from_contract_locked(sources_payload)
 
@@ -96,7 +96,7 @@ def upsert_memory_projection_from_envelope(
         )
     # An administrative source shutdown is a fence: it waits for an already
     # running projection and prevents a new one from starting with stale state.
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         return _upsert_memory_projection_from_envelope_locked(
             envelope,
             index_backends=index_backends,
@@ -589,7 +589,7 @@ def set_memory_source_status(*, source_code: str, status: str, error_message: st
 
     if status not in MemorySource.Status.values:
         raise ValidationError("Неизвестный статус источника памяти.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().filter(code=source_code).first()
             if source is None:

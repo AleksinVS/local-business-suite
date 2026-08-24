@@ -6,6 +6,26 @@ from apps.memory.tests._common import *  # noqa: F401,F403
 
 class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
     databases = RUNTIME_DATABASES
+
+    def test_source_lifecycle_fence_is_independent_from_access_lock(self):
+        from apps.core.file_locks import (
+            access_control_write_lock_path,
+            exclusive_file_lock,
+            memory_source_lifecycle_lock_path,
+        )
+        from apps.memory.source_lifecycle import enabled_source_operation
+
+        source = self.create_source(code="independent-source-lifecycle-fence")
+        with TemporaryDirectory() as tmpdir, self.settings(RUNTIME_CONTRACTS_DIR=Path(tmpdir)):
+            access_path = access_control_write_lock_path()
+            memory_path = memory_source_lifecycle_lock_path()
+            with exclusive_file_lock(access_path, timeout=0.2):
+                with enabled_source_operation(source_id=source.pk, timeout=0.2) as fresh_source:
+                    self.assertEqual(fresh_source.pk, source.pk)
+                    self.assertEqual(fresh_source.status, MemorySource.Status.ENABLED)
+
+            self.assertNotEqual(access_path, memory_path)
+
     def test_memory_source_defaults_and_unique_code(self):
         source = self.create_source()
 

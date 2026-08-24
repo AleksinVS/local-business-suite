@@ -131,6 +131,29 @@ def valid_memory_graph_schema_payload():
 
 @pytest.mark.unit
 class CrossPlatformFileLockTests(SimpleTestCase):
+    def test_access_and_memory_locks_are_independent_and_mutually_exclusive_per_path(self):
+        from apps.core.file_locks import (
+            access_control_write_lock_path,
+            memory_source_lifecycle_lock_path,
+            exclusive_file_lock,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(RUNTIME_CONTRACTS_DIR=Path(tmpdir)):
+            access_path = access_control_write_lock_path()
+            memory_path = memory_source_lifecycle_lock_path()
+            self.assertNotEqual(access_path, memory_path)
+            self.assertEqual(access_path.name, ".settings-contract-write.lock")
+            self.assertEqual(memory_path.name, ".memory-source-lifecycle.lock")
+
+            # Holding a lifecycle lock must not delay a short access mutation,
+            # and vice versa.  Each path still retains normal exclusion.
+            with exclusive_file_lock(memory_path):
+                with exclusive_file_lock(access_path, timeout=0.1):
+                    pass
+            with exclusive_file_lock(access_path):
+                with exclusive_file_lock(memory_path, timeout=0.1):
+                    pass
+
     def test_second_writer_times_out_then_acquires_after_release(self):
         from apps.core.file_locks import FileLockTimeoutError, exclusive_file_lock
 

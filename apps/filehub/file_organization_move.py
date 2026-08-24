@@ -11,7 +11,12 @@ from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+    memory_source_lifecycle_lock_path,
+)
 from apps.memory.document_ingestion import sha256_file
 from apps.memory.models import MemorySource, MemorySourceObject
 from apps.memory.policies import can_review_organization_memory, can_view_memory_review_queue, is_active_actor
@@ -175,12 +180,19 @@ def _create_move_job_for_file(
 
 
 def create_move_jobs_for_accepted_proposal(*, proposal: MemoryFileOrganizationProposal, approved_by) -> dict:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
-        with transaction.atomic():
-            return _create_move_jobs_for_accepted_proposal_locked(
-                proposal=proposal,
-                approved_by=approved_by,
-            )
+    # This is an actor-aware, source-sensitive decision.  Keep the fresh
+    # actor/policy/snapshot checks in the helper and acquire fences in the
+    # canonical access -> memory order.
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
+                with transaction.atomic():
+                    return _create_move_jobs_for_accepted_proposal_locked(
+                        proposal=proposal,
+                        approved_by=approved_by,
+                    )
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
 
 
 def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrganizationProposal, approved_by) -> dict:
@@ -318,7 +330,7 @@ def run_move_worker(
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         source = MemorySource.objects.get(pk=source.pk)
         require_enabled_file_source(source)
         return _run_move_worker_locked(source=source, dry_run=dry_run, limit=limit)
@@ -435,7 +447,7 @@ _recover_stale_copy_staged_jobs = _recover_stale_move_jobs
 
 
 def execute_move_job(*, job_id: int | None = None, claim_token: str = "", job: MemoryFileMoveJob | None = None) -> str:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         return _execute_move_job_locked(job_id=job_id, claim_token=claim_token, job=job)
 
 
@@ -661,7 +673,7 @@ def purge_ready_source_files(
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         return _purge_ready_source_files_locked(
             source=source,
             backup_checkpoint_ref=backup_checkpoint_ref,

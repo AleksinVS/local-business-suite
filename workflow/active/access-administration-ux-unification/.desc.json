@@ -33,5 +33,7 @@
   "EXECUTOR_REPORT.filehub-scope.md": "Отчёт ограничения области FileHub",
   "TASK_ACCEPTANCE.filehub-scope.md": "Приёмка области FileHub и физических операций",
   "TASK_ACCEPTANCE.security-e2e-docs-acceptance.md": "Итоговая приёмка безопасности, e2e и документации пакетов 14–18",
+  "EXECUTOR_REPORT.access-save-liveness.md": "Отчёт исправления отзывчивости сохранения ролей и пользователей",
+  "TASK_ACCEPTANCE.access-save-liveness.md": "Приёмка разделения блокировок и защиты HTMX от бесконечной загрузки",
   "RETROSPECTIVE.md": "Ретроспектива пакетов безопасности и предметных границ 14–18"
 }

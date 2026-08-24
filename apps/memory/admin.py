@@ -3,7 +3,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 
 from .models import (
     MemoryAccessAudit,
@@ -80,7 +80,7 @@ class MemorySourceAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         # Django Admin is the documented reserve path.  It still participates
         # in the same source-status fence as FileHub workers.
-        with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+        with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
             with transaction.atomic():
                 if obj.pk:
                     MemorySource.objects.select_for_update().filter(pk=obj.pk).first()

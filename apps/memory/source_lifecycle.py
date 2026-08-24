@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 
 from .models import MemorySource
 
@@ -18,7 +18,7 @@ def enabled_source_operation(*, source_id: int | None = None, source_code: str =
 
     if not source_id and not source_code:
         raise ValidationError("Не указан источник памяти.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=timeout):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=timeout):
         with transaction.atomic():
             queryset = MemorySource.objects.select_for_update()
             source = (

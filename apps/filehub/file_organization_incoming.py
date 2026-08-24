@@ -8,7 +8,7 @@ from pathlib import Path
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 from apps.memory.document_ingestion import build_source_object_payload, get_source_ingestion_profile, resolve_source_root, sha256_file
 from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
 from apps.memory.security import scan_for_secrets
@@ -37,7 +37,7 @@ def process_incoming_folder(
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
             return _process_incoming_folder_locked(source=source, dry_run=dry_run, limit=limit)

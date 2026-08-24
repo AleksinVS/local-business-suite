@@ -325,6 +325,7 @@ docs: # Документация проекта
     ADR-0038-privileged-flags-access-assignment.md: file # ADR: Технические флаги в управляемом назначении доступа
     ADR-0039-default-board-view-access.md: file # ADR: Базовый просмотр канбан-доски без назначенной роли
     ADR-0040-unified-access-administration-control-plane.md: file # Принятый ADR: единый контур администрирования доступа и канонические пути изменения
+    ADR-0041-access-and-memory-lock-partition.md: file # Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -584,6 +585,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения и рекомендуемое распределение задач
       BLOCK_BRIEF.md: file # Цель, границы, gate и приемка блока
+      EXECUTOR_REPORT.access-save-liveness.md: file # Отчёт исправления отзывчивости сохранения ролей и пользователей
       EXECUTOR_REPORT.business-resource-boundaries.md: file # Отчёт усиления предметных границ заявок, инвентаря и аналитики
       EXECUTOR_REPORT.composite-user-draft-and-sidebar-shell.md: file # Отчёт реализации единого черновика пользователя и оболочки сайдбаров
       EXECUTOR_REPORT.contract-board-role-memory-slice.md: file # Отчёт реализации пакетов 00c, 00d и 03
@@ -599,6 +601,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.waiting-list-capability-model.md: file # Отчёт реализации явной модели прав листа ожидания
       EXECUTOR_REPORT.workspace-ux-critique-cycle.md: file # Отчёт цикла критики и исправлений единого окна workspace
       RETROSPECTIVE.md: file # Ретроспектива пакетов безопасности и предметных границ 14–18
+      TASK_ACCEPTANCE.access-save-liveness.md: file # Приёмка разделения блокировок и защиты HTMX от бесконечной загрузки
       TASK_ACCEPTANCE.business-resource-boundaries.md: file # Приёмка предметных границ ресурсов
       TASK_ACCEPTANCE.capability-ui-taxonomy-correction.md: file # Приёмка пользовательской карты группировки прав роли
       TASK_ACCEPTANCE.composite-user-draft-and-sidebar-shell.md: file # Техническая и визуальная приёмка пакета 10

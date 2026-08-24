@@ -1,0 +1,52 @@
+{
+  "task_id": "19-access-save-liveness",
+  "goal": "Устранить зависание сохранения ролей и пользователей, отделив длительные операции памяти от короткой блокировки доступа и ограничив ожидание HTMX.",
+  "write_scope": [
+    "apps/core/file_locks.py",
+    "apps/core/tests.py",
+    "apps/memory/source_lifecycle.py",
+    "apps/memory/services.py",
+    "apps/memory/admin.py",
+    "apps/memory/chat_memory.py",
+    "apps/memory/management/commands/memory_reindex.py",
+    "apps/memory/tests/",
+    "apps/filehub/file_organization.py",
+    "apps/filehub/file_organization_baseline.py",
+    "apps/filehub/file_organization_incoming.py",
+    "apps/filehub/file_organization_move.py",
+    "apps/filehub/file_organization_stats.py",
+    "apps/filehub/tests.py",
+    "static/src/js/access_workspace.js",
+    "templates/settings_center/access_workspace.html",
+    "templates/settings_center/partials/access_workspace/field_editor.html",
+    "templates/settings_center/partials/access_workspace/role_definition_editor.html",
+    "templates/settings_center/partials/access_workspace/user_bundle_editor.html",
+    "scripts/e2e/run-smoke.sh",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "workflow/active/access-administration-ux-unification/EXECUTOR_REPORT.access-save-liveness.md"
+  ],
+  "invariants": [
+    "Routine ingestion/reindex/FileHub workers не удерживают access-lock во время длительного I/O.",
+    "Memory-lock остаётся единым барьером статуса источника для ingestion, reindex и FileHub worker.",
+    "Если нужны обе блокировки, порядок только access -> memory; обратный порядок запрещён.",
+    "Авторская операция повторно проверяет активного actor и policy перед authority-bearing commit.",
+    "Отключённый источник не допускает новую или финализируемую файловую операцию.",
+    "HTMX timeout не сбрасывает черновик и не оставляет aria-busy/htmx-request.",
+    "Runtime-контракты и рабочие пользовательские данные тестами не изменяются."
+  ],
+  "acceptance": [
+    "Удерживаемый memory-lock не задерживает применение роли и карточки пользователя.",
+    "Отдельные тесты подтверждают взаимное исключение memory lifecycle и независимость access-lock.",
+    "Actor-aware короткие FileHub/review операции сохраняют fresh actor и scope checks.",
+    "Chromium применяет и возвращает изменение пользователя и определения роли без перезагрузки документа.",
+    "После success, timeout и transport error отсутствуют aria-busy и htmx-request; при ошибке форма остаётся dirty и показывает сообщение.",
+    "Целевые core, settings_center, memory, filehub и UI проверки проходят."
+  ],
+  "non_goals": [
+    "Per-source locks и параллельная обработка разных источников.",
+    "Новый фоновой runtime или очередь заданий.",
+    "Фазовый durable-протокол accept/reject знания и физического удаления устаревшего индекса.",
+    "Изменение модели ролей, capability-контракта или разрешений Django Admin."
+  ]
+}

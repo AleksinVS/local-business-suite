@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.ai.models import ChatMessage
-from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 
 from .models import (
     MemoryKnowledgeItem,
@@ -263,7 +263,7 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
 def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
     # Keep source status stable for the complete index update, not only while
     # obtaining the source row.  The lock is intentionally acquired once.
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         return _index_knowledge_item_locked(item, index_backends=index_backends)
 
 
@@ -526,7 +526,7 @@ def _source_refs_for_remember(*, session, message_ids: list[int]) -> list[dict[s
 
 
 def _chat_memory_source(scope: str) -> MemorySource:
-    with exclusive_file_lock(access_control_write_lock_path(), timeout=300.0):
+    with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         return _chat_memory_source_locked(scope)
 
 

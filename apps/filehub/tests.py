@@ -728,6 +728,7 @@ class MemoryFileHubScopeBoundaryTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(list(visible_file_objects(stale_root, source=source)), [])
 
     def test_access_lock_is_taken_before_nested_actor_write(self):
+        from apps.core.file_locks import access_control_write_lock_path, memory_source_lifecycle_lock_path
         from .file_organization import save_user_virtual_placement
         from .file_organization_stats import record_file_usage_event
 
@@ -735,13 +736,54 @@ class MemoryFileHubScopeBoundaryTests(MemoryModelFactoryMixin, TestCase):
         with lock as lock_mock, patch("apps.filehub.file_organization._save_user_virtual_placement_locked", return_value=None):
             lock_mock.return_value.__enter__.return_value = None
             save_user_virtual_placement(actor=self.actor, file_object_id=999999, virtual_path="x")
-            lock_mock.assert_called_once()
+            self.assertEqual(lock_mock.call_count, 2)
+            self.assertEqual(lock_mock.call_args_list[0].args[0], access_control_write_lock_path())
+            self.assertEqual(lock_mock.call_args_list[1].args[0], memory_source_lifecycle_lock_path())
 
         with patch("apps.filehub.file_organization_stats.exclusive_file_lock") as event_lock:
             event_lock.return_value.__enter__.return_value = None
             with self.assertRaises(PermissionDenied):
                 record_file_usage_event(source=MemorySource(code="missing"), event_kind="file_opened")
-            event_lock.assert_called_once()
+            self.assertEqual(event_lock.call_count, 2)
+            self.assertEqual(event_lock.call_args_list[0].args[0], access_control_write_lock_path())
+            self.assertEqual(event_lock.call_args_list[1].args[0], memory_source_lifecycle_lock_path())
+
+    def test_actor_aware_filehub_wrappers_translate_lock_timeout_to_validation_error(self):
+        from apps.core.file_locks import FileLockTimeoutError
+        from . import file_organization, file_organization_move, file_organization_stats
+
+        cases = (
+            (
+                file_organization,
+                file_organization.save_user_virtual_placement,
+                {"actor": self.actor, "file_object_id": 1, "virtual_path": "docs/example.txt"},
+            ),
+            (
+                file_organization_stats,
+                file_organization_stats.record_file_usage_event,
+                {"source": MemorySource(code="lock-timeout-source"), "event_kind": "file_opened", "actor": self.actor},
+            ),
+            (
+                file_organization_stats,
+                file_organization_stats.apply_organization_proposal_decision,
+                {
+                    "proposal": MemoryFileOrganizationProposal(pk=1),
+                    "actor": self.actor,
+                    "decision": MemoryFileOrganizationDecision.Decision.REJECT,
+                },
+            ),
+            (
+                file_organization_move,
+                file_organization_move.create_move_jobs_for_accepted_proposal,
+                {"proposal": MemoryFileOrganizationProposal(pk=1), "approved_by": self.actor},
+            ),
+        )
+        for module, operation, kwargs in cases:
+            with self.subTest(operation=operation.__name__):
+                with patch.object(module, "exclusive_file_lock", side_effect=FileLockTimeoutError("lock held")):
+                    with self.assertRaisesRegex(ValidationError, "Файловый контур занят") as raised:
+                        operation(**kwargs)
+                self.assertIsInstance(raised.exception.__cause__, FileLockTimeoutError)
 
     def test_duplicate_jobs_for_same_file_different_target_are_rejected_at_approval(self):
         source, file_object = self.create_scoped_file(
@@ -1145,6 +1187,36 @@ class MemoryFileHubScopeBoundaryTests(MemoryModelFactoryMixin, TestCase):
             recovery.index("MemoryFileObject.objects.select_for_update"),
             recovery.index("MemoryFileMoveJob.objects.select_for_update"),
         )
+
+    def test_memory_workers_use_lifecycle_lock_and_actor_decisions_use_access_then_memory(self):
+        from . import file_organization, file_organization_baseline, file_organization_incoming, file_organization_move, file_organization_stats
+
+        for operation in (
+            file_organization.ensure_file_object_for_source_object,
+            file_organization.sync_file_objects_from_source_objects,
+            file_organization_baseline.build_baseline_virtual_structure,
+            file_organization_incoming.process_incoming_folder,
+            file_organization_stats.build_organization_proposals,
+            file_organization_move.run_move_worker,
+            file_organization_move.execute_move_job,
+            file_organization_move.purge_ready_source_files,
+        ):
+            source = inspect.getsource(operation)
+            self.assertIn("memory_source_lifecycle_lock_path", source, operation.__name__)
+            self.assertNotIn("access_control_write_lock_path", source, operation.__name__)
+
+        for operation in (
+            file_organization.save_user_virtual_placement,
+            file_organization_stats.record_file_usage_event,
+            file_organization_stats.apply_organization_proposal_decision,
+            file_organization_move.create_move_jobs_for_accepted_proposal,
+        ):
+            source = inspect.getsource(operation)
+            self.assertLess(
+                source.index("access_control_write_lock_path"),
+                source.index("memory_source_lifecycle_lock_path"),
+                operation.__name__,
+            )
 
     def test_source_statuses_gate_source_wide_access_and_profiles(self):
         source, _file_object = self.create_scoped_file(source_code="filehub-source-statuses", token=f"user:{self.actor.pk}")

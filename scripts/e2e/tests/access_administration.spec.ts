@@ -23,6 +23,11 @@ async function closeAccessPanels(page: Page) {
   }
 }
 
+async function expectAccessRequestIdle(page: Page) {
+  await expect(page.locator(".access-context-form.htmx-request, .access-context-form[aria-busy='true']")).toHaveCount(0);
+  await expect(page.locator("#access-field-sidebar-host.htmx-request, #access-field-sidebar-host[aria-busy='true'], #access-inspector-host.htmx-request, #access-inspector-host[aria-busy='true']")).toHaveCount(0);
+}
+
 test("@smoke access workspace exposes the six access cuts and master-detail panels", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/");
@@ -168,6 +173,7 @@ test("@smoke composite user draft saves profile and role together and can be rev
   if (await riskConfirmation.count()) await riskConfirmation.check();
   await form.getByRole("button", { name: "Сохранить все" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
+  await expectAccessRequestIdle(page);
 
   form = page.locator("[data-access-bundle-form]");
   await expect(form.locator('input[name="first_name"]')).toHaveValue(changedFirstName);
@@ -184,6 +190,7 @@ test("@smoke composite user draft saves profile and role together and can be rev
   if (await revertRiskConfirmation.count()) await revertRiskConfirmation.check();
   await form.getByRole("button", { name: "Сохранить все" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
+  await expectAccessRequestIdle(page);
   await expect(page.locator("[data-access-bundle-form] input[name='first_name']")).toHaveValue(originalFirstName);
 });
 
@@ -339,6 +346,8 @@ test("@smoke access workspace restores dirty marker after failed HTMX editor req
   });
   await form.getByRole("button", { name: "Проверить" }).click();
   await expect(form).toHaveAttribute("data-access-dirty", "true");
+  await expect(page.getByText(/Не удалось сохранить изменения/)).toBeVisible();
+  await expectAccessRequestIdle(page);
   await page.unroute("**/*");
 
   let confirmed = false;
@@ -349,6 +358,102 @@ test("@smoke access workspace restores dirty marker after failed HTMX editor req
   await editor.locator(".access-panel-close").click();
   expect(confirmed).toBe(true);
   await expect(editor).toBeVisible();
+});
+
+test("@smoke access workspace times out a hung POST without losing the dirty draft", async ({ page }) => {
+  test.setTimeout(45_000);
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.locator(".access-users-table tbody tr").first().locator('.access-cell-link[href*="field=ad"]').click();
+  const editor = page.locator(".access-sidebar-editor");
+  const form = editor.locator(".access-context-form");
+  await editor.locator("textarea").last().fill("dirty-after-timeout");
+  await page.route("**/*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.pathname === "/settings/access/" && route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 16_000));
+      try { await route.abort("timedout"); } catch (_) { /* browser already aborted the request */ }
+      return;
+    }
+    await route.continue();
+  });
+  await form.getByRole("button", { name: "Проверить" }).click();
+  await expect(form.getByRole("button", { name: "Проверить" })).toBeDisabled({ timeout: 3_000 });
+  await expect(form).toHaveAttribute("data-access-dirty", "true", { timeout: 20_000 });
+  await expect(page.getByText(/Не удалось сохранить изменения/)).toBeVisible();
+  await expectAccessRequestIdle(page);
+  await page.unroute("**/*");
+});
+
+test("@smoke completing one parallel access request keeps the other form busy", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  await page.locator(".access-users-table tbody tr").first().locator('.access-cell-link[href*="field=ad"]').click();
+  const original = page.locator(".access-sidebar-editor .access-context-form");
+  await expect(original).toBeVisible();
+  await page.evaluate(() => {
+    const source = document.querySelector<HTMLFormElement>(".access-sidebar-editor .access-context-form");
+    if (!source) throw new Error("Access form is missing");
+    source.setAttribute("hx-swap", "none");
+    source.insertAdjacentHTML("beforeend", '<input type="hidden" name="e2e_request_marker" value="first">');
+    const host = document.createElement("div");
+    host.id = "access-parallel-request-host";
+    const clone = source.cloneNode(true) as HTMLFormElement;
+    clone.id = "access-parallel-request-form";
+    clone.setAttribute("hx-target", "#access-parallel-request-host");
+    clone.querySelector<HTMLInputElement>('input[name="e2e_request_marker"]')!.value = "second";
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    (window as Window & { htmx: { process: (element: Element) => void } }).htmx.process(clone);
+  });
+
+  const clone = page.locator("#access-parallel-request-form");
+  await page.evaluate(() => {
+    const forms = document.querySelectorAll<HTMLFormElement>(
+      ".access-sidebar-editor .access-context-form, #access-parallel-request-form",
+    );
+    if (forms.length !== 2) throw new Error("Parallel access forms are missing");
+    const target = document.getElementById("access-field-sidebar-host");
+    if (!target) throw new Error("Access field target is missing");
+    const xhrs = [{}, {}];
+    (window as Window & { __accessParallelXhrs?: object[] }).__accessParallelXhrs = xhrs;
+    forms.forEach((form, index) => {
+      form.dispatchEvent(new CustomEvent("htmx:beforeRequest", {
+        bubbles: true,
+        cancelable: true,
+        detail: { elt: form, target, xhr: xhrs[index] },
+      }));
+    });
+  });
+  await expect(original).toHaveAttribute("aria-busy", "true");
+  await expect(clone).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("#access-field-sidebar-host")).toHaveAttribute("aria-busy", "true");
+
+  await page.evaluate(() => {
+    const form = document.querySelector<HTMLFormElement>(".access-sidebar-editor .access-context-form")!;
+    const target = document.getElementById("access-field-sidebar-host")!;
+    const xhr = (window as Window & { __accessParallelXhrs?: object[] }).__accessParallelXhrs![0];
+    form.dispatchEvent(new CustomEvent("htmx:afterRequest", {
+      bubbles: true,
+      detail: { elt: form, target, xhr, successful: true },
+    }));
+  });
+  await expect(original).not.toHaveAttribute("aria-busy", "true");
+  await expect(clone).toHaveAttribute("aria-busy", "true");
+  await expect(clone.getByRole("button", { name: "Проверить" })).toBeDisabled();
+  await expect(page.locator("#access-field-sidebar-host")).toHaveAttribute("aria-busy", "true");
+
+  await page.evaluate(() => {
+    const form = document.querySelector<HTMLFormElement>("#access-parallel-request-form")!;
+    const target = document.getElementById("access-field-sidebar-host")!;
+    const xhr = (window as Window & { __accessParallelXhrs?: object[] }).__accessParallelXhrs![1];
+    form.dispatchEvent(new CustomEvent("htmx:afterRequest", {
+      bubbles: true,
+      detail: { elt: form, target, xhr, successful: true },
+    }));
+  });
+  await expect(clone).not.toHaveAttribute("aria-busy", "true");
+  await expectAccessRequestIdle(page);
 });
 
 test("@smoke access workspace restores source focus after drawer close at layout boundaries", async ({ page }) => {
@@ -460,11 +565,23 @@ test("@smoke role inspector preview renders impact and diff without navigation",
   });
   await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
   const editor = page.locator(".role-capability-editor");
-  await editor.locator('input[name="display_name"]').fill(`${await editor.locator('input[name="display_name"]').inputValue()} preview`);
+  const originalName = await editor.locator('input[name="display_name"]').inputValue();
+  await editor.locator('input[name="display_name"]').fill(`${originalName} preview`);
   await editor.getByRole("button", { name: "Проверить изменение" }).click();
   await expect(editor.getByRole("table", { name: "Сравнение изменений роли" })).toBeVisible();
   await expect(editor.getByText(/фактически изменится доступ/)).toBeVisible();
   expect(await page.evaluate(() => (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity)).toBe(pageIdentity);
+  await editor.getByRole("button", { name: "Подтвердить и применить" }).click();
+  await expect(page.getByText(/Роль изменена/)).toBeVisible();
+  await expectAccessRequestIdle(page);
+
+  const restoredEditor = page.locator(".role-capability-editor");
+  await restoredEditor.locator('input[name="display_name"]').fill(originalName);
+  await restoredEditor.getByRole("button", { name: "Проверить изменение" }).click();
+  await expect(restoredEditor.getByRole("table", { name: "Сравнение изменений роли" })).toBeVisible();
+  await restoredEditor.getByRole("button", { name: "Подтвердить и применить" }).click();
+  await expect(page.getByText(/Роль изменена/)).toBeVisible();
+  await expectAccessRequestIdle(page);
 });
 
 test("@smoke Django Admin reserve remains available from the workspace standalone action", async ({ page }) => {

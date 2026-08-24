@@ -21,5 +21,6 @@
   "15-waiting-list-capability-model.json": "Ролевые области и статусная матрица листа ожидания",
   "16-business-resource-boundaries.json": "Scoped selectors и сервисные границы заявок, инвентаря, главной страницы и AI",
   "17-administration-and-memory-boundaries.json": "Разделение продуктовых, технических и резервных административных полномочий",
-  "18-security-e2e-docs-acceptance.json": "Сквозная security-матрица, runtime migration, документация и приёмка"
+  "18-security-e2e-docs-acceptance.json": "Сквозная security-матрица, runtime migration, документация и приёмка",
+  "19-access-save-liveness.json": "Разделение блокировок доступа и памяти, ограничение ожидания HTMX"
 }

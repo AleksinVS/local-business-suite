@@ -1184,7 +1184,7 @@ class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
         self.assertIn("[string]$ExpectedBackupIdentity", self.script)
         self.assertIn("[string]$ApplicationIdentity", self.script)
         self.assertIn('S-1-5-18', self.script)
-        self.assertIn('C:\\ProgramData\\LocalBusinessSuite\\backup', self.script)
+        self.assertIn('C:\\ProgramData\\LocalBusinessSuite', self.script)
         self.assertIn("BackupStateRoot должен находиться вне PortalRoot", self.script)
         self.assertNotIn('Join-Path $PortalRoot "data\\backups', self.script)
 
@@ -1193,7 +1193,12 @@ class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
         self.assertIn("FileAttributes]::ReparsePoint", self.script)
         self.assertIn("function Assert-PrivateBackupAcl", self.script)
         self.assertIn("AreAccessRulesProtected", self.script)
+        self.assertIn("-ArgumentList $acl.Owner", self.script)
+        self.assertIn("$TrustedOwnerSids -notcontains $ownerSid", self.script)
         self.assertIn("$AllowedWriteSids -notcontains $sid", self.script)
+        self.assertIn("function Assert-TrustedAnchorParentAcl", self.script)
+        self.assertIn("DeleteSubdirectoriesAndFiles", self.script)
+        self.assertIn("$trustedParentSids -notcontains $sid", self.script)
         for sid in ("S-1-5-18", "S-1-5-32-544"):
             with self.subTest(sid=sid):
                 self.assertIn(sid, self.script)

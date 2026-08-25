@@ -14,7 +14,7 @@ param(
     [string]$DbName = "local_business_suite",
     [string]$DbUser = "local_business_app",
     [int]$RetentionDays = 7,
-    [string]$BackupStateRoot = "C:\ProgramData\LocalBusinessSuite\backup",
+    [string]$BackupStateRoot = "C:\ProgramData\LocalBusinessSuite",
     [Parameter(Mandatory = $true)]
     [string]$ExpectedBackupIdentity,
     [string]$ApplicationIdentity = "IIS APPPOOL\DefaultAppPool"
@@ -52,6 +52,22 @@ function Assert-PrivateBackupAcl([string]$Path) {
     $acl = Get-Acl -LiteralPath $Path
     if (-not $acl.AreAccessRulesProtected) {
         throw "BackupStateRoot обязан иметь отключённое наследование ACL: $Path"
+    }
+    try {
+        $ownerAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $acl.Owner
+        $ownerSid = $ownerAccount.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+    }
+    catch {
+        throw "Не удалось проверить SID владельца BackupStateRoot."
+    }
+    $TrustedOwnerSids = @(
+        "S-1-5-18",      # SYSTEM
+        "S-1-5-32-544"   # BUILTIN\Administrators
+    )
+    if ($TrustedOwnerSids -notcontains $ownerSid) {
+        throw "Недоверенный владелец BackupStateRoot: $ownerSid"
     }
 
     $writeMask = [int64]0
@@ -91,6 +107,48 @@ function Assert-PrivateBackupAcl([string]$Path) {
     }
     if (-not $backupIdentityCanWrite) {
         throw "Backup identity не имеет явного write-доступа к BackupStateRoot."
+    }
+}
+
+function Assert-TrustedAnchorParentAcl([string]$Path) {
+    $parent = Split-Path -Parent (Get-NormalizedPath $Path)
+    if (-not $parent) {
+        throw "У BackupStateRoot отсутствует проверяемый родительский каталог."
+    }
+    Assert-NoReparsePoint $parent
+    $acl = Get-Acl -LiteralPath $parent
+    try {
+        $ownerAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $acl.Owner
+        $ownerSid = $ownerAccount.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+    }
+    catch {
+        throw "Не удалось проверить владельца родителя BackupStateRoot."
+    }
+    $trustedParentSids = @("S-1-5-18", "S-1-5-32-544")
+    if ($trustedParentSids -notcontains $ownerSid) {
+        throw "Недоверенный владелец родителя BackupStateRoot: $ownerSid"
+    }
+    $deleteChild = [int64][System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles
+    foreach ($rule in $acl.Access) {
+        if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+            continue
+        }
+        $inheritOnly = (
+            $rule.PropagationFlags -band
+            [System.Security.AccessControl.PropagationFlags]::InheritOnly
+        ) -ne 0
+        if ($inheritOnly) { continue }
+        $sid = $rule.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        if (
+            (([int64]$rule.FileSystemRights -band $deleteChild) -ne 0) -and
+            $trustedParentSids -notcontains $sid
+        ) {
+            throw "Недоверенный SID $sid может удалить/заменить BackupStateRoot через родителя."
+        }
     }
 }
 
@@ -138,6 +196,7 @@ if (-not (Test-Path -LiteralPath $BackupStateRoot -PathType Container)) {
 }
 
 Assert-NoReparsePoint $BackupStateRoot
+Assert-TrustedAnchorParentAcl $BackupStateRoot
 Assert-PrivateBackupAcl $BackupStateRoot
 
 $BackupDir = Join-Path $BackupStateRoot "postgresql"

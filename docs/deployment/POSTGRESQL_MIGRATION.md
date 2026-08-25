@@ -58,12 +58,13 @@ ACL. Пример подготовки из PowerShell администрато�
 
 ```powershell
 $BackupIdentity = "MSCHER\gmsa_portal_backup$"
-$BackupRoot = "C:\ProgramData\LocalBusinessSuite\backup"
+$BackupRoot = "C:\ProgramData\LocalBusinessSuite"
 New-Item -ItemType Directory -Path "$BackupRoot\secrets" -Force | Out-Null
 icacls $BackupRoot /inheritance:r /grant:r `
   "BUILTIN\Administrators:(OI)(CI)(F)" `
   "NT AUTHORITY\SYSTEM:(OI)(CI)(F)" `
   "${BackupIdentity}:(OI)(CI)(M)"
+icacls $BackupRoot /setowner "BUILTIN\Administrators" /T /C
 icacls "C:\inetpub\portal\data\contracts" /grant `
   "${BackupIdentity}:(OI)(CI)(RX)"
 ```
@@ -74,7 +75,14 @@ icacls "C:\inetpub\portal\data\contracts" /grant `
 `Users`, `Authenticated Users` или `Everyone` право записи в `$BackupRoot`.
 Скрипт применяет fail-closed проверку: write/delete ACE разрешены только самой
 backup identity, `BUILTIN\Administrators` и `SYSTEM`; любая другая локальная или
-доменная группа останавливает backup до исправления ACL.
+доменная группа останавливает backup до исправления ACL. Владельцем backup root
+должен быть только `BUILTIN\Administrators` или `SYSTEM`: владелец может менять
+DACL даже без отдельной write ACE, поэтому application/backup identity как owner
+не допускаются.
+Якорем безопасности является весь `$BackupRoot`, а не вложенный каталог с
+дампами. Скрипт также проверяет владельца его непосредственного родителя и
+отклоняет любую недоверенную ACE с `DeleteSubdirectoriesAndFiles`, которая могла
+бы удалить или заменить защищённый якорь через parent ACL.
 
 Если старая задача была создана от `SYSTEM`, сначала отключите её:
 

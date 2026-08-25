@@ -30,10 +30,11 @@
 `data\backups`. Независимое ревью признало этот вариант небезопасным из-за
 возможной подмены каталога NTFS junction. До следующего запуска задачу нужно
 отключить и пересоздать под отдельной backup identity с каталогом
-`C:\ProgramData\LocalBusinessSuite\backup`, закрытым ACL и параметрами identity
+`C:\ProgramData\LocalBusinessSuite`, закрытым ACL и параметрами identity
 из `docs/deployment/POSTGRESQL_MIGRATION.md`. Обновлённый скрипт fail-closed
 разрешает write ACE только backup identity, Administrators и SYSTEM, проверяет
-principal/reparse points и не удаляет посторонние файлы. Это
+trusted owner (`Administrators`/`SYSTEM`), principal/reparse points и не удаляет
+посторонние файлы. Это
 обязательное внешнее действие deployment; commit сам не меняет Scheduled Task.
 
 ## Смоук-проверки после cutover (все пройдены)

@@ -81,18 +81,11 @@
   }
 
   function dirtyForms() {
-    return Array.from(document.querySelectorAll(".access-context-form[data-access-dirty='true']"));
+    return window.SharedAccessEditor?.dirtyForms(document) || [];
   }
 
   function canLeave() {
-    var dirty = dirtyForms();
-    if (!dirty.length) return true;
-    if (!window.confirm("Есть несохранённые изменения. Покинуть редактор?")) return false;
-    // Confirmation means that the current draft is intentionally discarded.
-    // Clearing the marker also prevents a second beforeunload prompt while the
-    // accepted link or form navigation is being completed.
-    dirty.forEach(function (form) { form.dataset.accessDirty = "false"; });
-    return true;
+    return window.SharedAccessEditor?.confirmDiscard(document) ?? true;
   }
 
   function trapFocus(event) {
@@ -105,19 +98,9 @@
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  function markDirty(form) {
-    if (form.dataset.accessDirtyBound === "true") return;
-    form.dataset.accessDirtyBound = "true";
-    form.addEventListener("input", function () { form.dataset.accessDirty = "true"; });
-    form.addEventListener("change", function () { form.dataset.accessDirty = "true"; });
-    form.addEventListener("submit", function (event) {
-      form.dataset.accessSubmittedDirty = form.dataset.accessDirty === "true" ? "true" : "false";
-      var submitter = event.submitter;
-      if (submitter) {
-        form.dataset.accessSubmitterName = submitter.name || "";
-        form.dataset.accessSubmitterValue = submitter.value || "";
-      }
-      form.dataset.accessDirty = "false";
+  function boundRequests(container) {
+    (container || document).querySelectorAll("[hx-get], [hx-post], [hx-put], [hx-delete]").forEach(function (node) {
+      if (!node.hasAttribute("hx-request")) node.setAttribute("hx-request", '{"timeout":15000}');
     });
   }
 
@@ -144,11 +127,8 @@
       }
       launcher?.toggleAttribute("hidden", !hasField || chatHost.classList.contains("is-expanded"));
     }
-    document.querySelectorAll(".access-context-form").forEach(markDirty);
-    document.querySelectorAll("[data-access-bundle-form]").forEach(function (bundle) {
-      var active = bundle.querySelector("input[name='active_editor']");
-      setActiveEditor(bundle, active && active.value ? active.value : "roles");
-    });
+    window.SharedAccessEditor?.init(document);
+    boundRequests(root);
     document.querySelectorAll(".role-capability-editor").forEach(function (editor) {
       window.SharedRoleCapabilityEditor?.init(editor);
     });
@@ -181,21 +161,6 @@
   }
 
   document.addEventListener("click", function (event) {
-    var editorLink = event.target.closest("[data-editor-target]");
-    if (editorLink) {
-      event.preventDefault();
-      var target = editorLink.getAttribute("data-editor-target");
-      var bundle = editorLink.closest("[data-access-bundle-form]") || document.querySelector("[data-access-bundle-form]");
-      if (bundle && target) setActiveEditor(bundle, target);
-      return;
-    }
-    var editorTab = event.target.closest("[data-editor-tab]");
-    if (editorTab) {
-      event.preventDefault();
-      var tabBundle = editorTab.closest("[data-access-bundle-form]");
-      if (tabBundle) setActiveEditor(tabBundle, editorTab.getAttribute("data-editor-tab"));
-      return;
-    }
     var sidebarToggle = event.target.closest(".sidebar-toggle");
     if (sidebarToggle && !canLeave()) {
       event.preventDefault();
@@ -215,23 +180,6 @@
     var source = link.closest(".access-object-link, .access-cell-link, .access-status-link");
     if (source && !findActivePanel()) rememberFocus(source);
   }, true);
-
-  function setActiveEditor(bundle, target) {
-    var allowed = ["department", "ad", "roles", "memory-groups"];
-    if (!bundle || allowed.indexOf(target) === -1) return;
-    var active = bundle.querySelector("input[name='active_editor']");
-    if (active) active.value = target;
-    bundle.querySelectorAll("[data-editor-group]").forEach(function (group) {
-      var selected = group.getAttribute("data-editor-group") === target;
-      group.hidden = !selected;
-      group.setAttribute("aria-hidden", String(!selected));
-    });
-    bundle.querySelectorAll("[data-editor-tab]").forEach(function (tab) {
-      var selected = tab.getAttribute("data-editor-tab") === target;
-      tab.setAttribute("aria-selected", String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-    });
-  }
 
   document.addEventListener("click", function (event) {
     var launcher = event.target.closest("[data-access-ai-launcher]");
@@ -270,7 +218,8 @@
     close.click();
   });
 
-  document.querySelectorAll(".access-context-form").forEach(markDirty);
+  window.SharedAccessEditor?.init(document);
+  boundRequests(root);
   function findRequestContext(event) {
     var detail = event && event.detail || {};
     var xhr = detail.xhr;

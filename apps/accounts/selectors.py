@@ -3,17 +3,17 @@ from __future__ import annotations
 import json
 from collections import OrderedDict
 
-from django.contrib.auth.models import Permission
-
 from apps.core.contract_store import get_contract
 from apps.workorders.policies import (
-    DEFAULT_BOARD_VIEW_ROLE,
+    LEGACY_DEFAULT_BOARD_VIEW_ROLE,
     default_board_access_applies,
     default_board_view_rules,
+    runtime_viewer_enabled,
 )
 
 
 RISK_LABELS = {"elevated": "повышенный риск", "critical": "критический риск"}
+ROLE_METADATA_FIELDS = {"display_name", "description", "protected"}
 
 
 def contract_role_configs() -> OrderedDict[str, dict]:
@@ -27,55 +27,6 @@ def contract_role_configs() -> OrderedDict[str, dict]:
 
 def contract_role_names() -> tuple[str, ...]:
     return tuple(contract_role_configs())
-
-
-def role_assignment_allowlist() -> dict[str, tuple[str, ...]]:
-    administration = get_contract("role_rules").get("$administration", {})
-    raw_allowlist = (
-        administration.get("role_assignment_allowlist", {})
-        if isinstance(administration, dict)
-        else {}
-    )
-    if not isinstance(raw_allowlist, dict):
-        return {}
-    return {
-        actor_role: tuple(target_roles)
-        for actor_role, target_roles in raw_allowlist.items()
-        if isinstance(actor_role, str)
-        and isinstance(target_roles, list)
-        and all(isinstance(role, str) for role in target_roles)
-    }
-
-
-def role_definition_editor_roles(rules_payload=None) -> tuple[str, ...]:
-    """Return the product role codes allowed to edit role definitions.
-
-    The value is deliberately resolved from one role-rules snapshot.  A missing
-    field is the short-lived legacy default; malformed or unknown values fail
-    closed instead of silently broadening the editor set.
-    """
-    rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
-    administration = rules.get("$administration", {})
-    if not isinstance(administration, dict):
-        return ()
-    if "role_definition_editor_roles" not in administration:
-        raw_roles = ["admin"]
-    else:
-        raw_roles = administration.get("role_definition_editor_roles")
-    if not isinstance(raw_roles, list) or not raw_roles:
-        return ()
-    if not all(isinstance(role, str) and role for role in raw_roles):
-        return ()
-    if len(raw_roles) != len(set(raw_roles)):
-        return ()
-    known_roles = {
-        role
-        for role, config in rules.items()
-        if isinstance(role, str) and not role.startswith("$") and isinstance(config, dict)
-    }
-    if set(raw_roles) - known_roles:
-        return ()
-    return tuple(raw_roles)
 
 
 def capability_catalog() -> dict[str, dict]:
@@ -124,16 +75,16 @@ def selected_role_names_for_user(user) -> list[str]:
 def effective_capabilities_for_roles(role_names) -> dict[str, list[dict]]:
     configs = contract_role_configs()
     canonical_role_names = sorted(set(role_names))
-    if not canonical_role_names:
-        configs[DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
-        canonical_role_names = [DEFAULT_BOARD_VIEW_ROLE]
+    if not canonical_role_names and not runtime_viewer_enabled():
+        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
+        canonical_role_names = [LEGACY_DEFAULT_BOARD_VIEW_ROLE]
     effective: dict[str, list[dict]] = {}
     for role_name in canonical_role_names:
         config = configs.get(role_name)
         if not config:
             continue
         for capability, value in config.items():
-            if capability in {"display_name", "description"} or not _is_effective_value(value):
+            if capability in ROLE_METADATA_FIELDS or not _is_effective_value(value):
                 continue
             effective.setdefault(capability, []).append({"role": role_name, "value": value})
     return effective
@@ -159,9 +110,13 @@ def access_assignment_consequences(before_roles, after_roles) -> dict:
 
 def user_access_overview(user) -> dict:
     role_groups, technical_groups = split_user_groups(user)
+    from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+    memory_names = set(MEMORY_REVIEW_GROUP_CAPABILITIES)
     return {
         "roles": [group.name for group in role_groups],
-        "technical_groups": [group.name for group in technical_groups],
+        "technical_groups": [group.name for group in technical_groups if group.name not in memory_names],
+        "memory_groups": [group.name for group in technical_groups if group.name in memory_names],
         "is_staff": bool(user.is_staff),
         "is_superuser": bool(user.is_superuser),
     }
@@ -169,12 +124,30 @@ def user_access_overview(user) -> dict:
 
 def effective_access_for_user(user) -> dict:
     configs = contract_role_configs()
-    configs[DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
+    if not runtime_viewer_enabled():
+        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
     catalog = capability_catalog()
     role_groups, technical_groups = split_user_groups(user)
+    memory_group_names = set()
+    try:
+        from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+        memory_group_names = set(MEMORY_REVIEW_GROUP_CAPABILITIES)
+    except ImportError:
+        # Keep this selector usable during early app loading.  Memory groups
+        # are still separated whenever the memory policy module is available.
+        pass
     role_names = [group.name for group in role_groups]
-    capability_sources = effective_capabilities_for_roles(role_names)
-    if user.is_superuser:
+    is_active = bool(getattr(user, "is_active", False))
+    # Enforcement short-circuits to the superuser reserve.  Do not mix the
+    # legacy roleless fallback into that explanation: assigned roles remain
+    # visible as facts below, while effective grants have one truthful source.
+    capability_sources = (
+        effective_capabilities_for_roles(role_names)
+        if is_active and not user.is_superuser
+        else {}
+    )
+    if is_active and user.is_superuser:
         for key, metadata in catalog.items():
             capability_type = (metadata or {}).get("type")
             value = True if capability_type == "flag" else "*" if capability_type == "targets" else "all"
@@ -203,59 +176,37 @@ def effective_access_for_user(user) -> dict:
                 "label": config.get("display_name", group.name),
                 "description": config.get("description", ""),
                 "risk_markers": role_risk_markers(group.name, config),
+                "effective": is_active,
             }
         )
-    if default_board_access_applies(user):
-        default_config = configs[DEFAULT_BOARD_VIEW_ROLE]
+    if is_active and default_board_access_applies(user):
+        default_config = configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE]
         roles.append(
             {
-                "code": DEFAULT_BOARD_VIEW_ROLE,
+                "code": LEGACY_DEFAULT_BOARD_VIEW_ROLE,
                 "label": default_config["display_name"],
                 "description": default_config["description"],
                 "risk_markers": [],
                 "source": "default_policy",
+                "effective": True,
             }
         )
 
     technical = []
+    memory = []
     for group in technical_groups:
         profile = getattr(group, "profile", None)
-        technical.append(
-            {
-                "code": group.name,
-                "label": getattr(profile, "title", "") or group.name,
-                "description": getattr(profile, "description", "") or "",
-                "source": "special_group",
-            }
-        )
-
-    direct_permission_ids = set(user.user_permissions.values_list("id", flat=True))
-    group_permission_rows = Permission.objects.filter(group__user=user).values_list(
-        "id", "group__name"
-    )
-    groups_by_permission: dict[int, set[str]] = {}
-    for permission_id, group_name in group_permission_rows:
-        groups_by_permission.setdefault(permission_id, set()).add(group_name)
-    permission_ids = direct_permission_ids | set(groups_by_permission)
-    permissions = []
-    for permission in Permission.objects.filter(id__in=permission_ids).select_related("content_type").order_by(
-        "content_type__app_label", "codename"
-    ):
-        sources = []
-        if permission.id in direct_permission_ids:
-            sources.append("Назначено пользователю напрямую")
-        sources.extend(f"Группа {name}" for name in sorted(groups_by_permission.get(permission.id, set())))
-        permissions.append(
-            {
-                "code": f"{permission.content_type.app_label}.{permission.codename}",
-                "label": permission.name,
-                "sources": sources,
-                "source": "django_permission",
-            }
-        )
+        row = {
+            "code": group.name,
+            "label": getattr(profile, "title", "") or group.name,
+            "description": getattr(profile, "description", "") or "",
+            "source": "technical_group",
+            "effective": is_active,
+        }
+        (memory if group.name in memory_group_names else technical).append(row)
 
     flags = []
-    if user.is_staff:
+    if is_active and user.is_staff:
         flags.append(
             {
                 "code": "is_staff",
@@ -263,7 +214,7 @@ def effective_access_for_user(user) -> dict:
                 "source": "is_staff",
             }
         )
-    if user.is_superuser:
+    if is_active and user.is_superuser:
         flags.append(
             {
                 "code": "is_superuser",
@@ -275,9 +226,32 @@ def effective_access_for_user(user) -> dict:
     return {
         "roles": roles,
         "technical_groups": technical,
+        "memory_groups": memory,
         "flags": flags,
         "capabilities": capabilities,
-        "django_permissions": permissions,
+        "superuser_reserve": {
+            "assigned": bool(user.is_superuser),
+            "effective": bool(is_active and user.is_superuser),
+            "source": "superuser_reserve",
+        },
+        # ACL and workflow are object-scoped restrictions, not grant sources.
+        # Keep their presence explicit without serializing complete ACLs.
+        "constraints": [
+            {
+                "type": "acl",
+                "source": "resource_acl",
+                "label": "ACL конкретного ресурса сужает доступ",
+                "object_scoped": True,
+                "effect": "narrows_role_scope",
+            },
+            {
+                "type": "workflow",
+                "source": "workflow",
+                "label": "Статус и переходы процесса сужают доступ",
+                "object_scoped": True,
+                "effect": "narrows_transitions",
+            },
+        ],
     }
 
 

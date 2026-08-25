@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Новая роль доступа{% endblock %}
+
+{% block content %}
+<section class="panel role-create-workspace">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow"><a href="{% url 'settings_center:role_catalog' %}">Роли</a> / новая роль</p>
+      <h1>Новая роль доступа</h1>
+      <p class="description">Создайте роль без исходных прав. Нужные права и сотрудников можно добавить после создания.</p>
+    </div>
+  </div>
+
+  <form method="post" class="role-create-form" data-access-dirty="false">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.base_hash }}
+
+    <div class="access-form-field">
+      {{ form.code.label_tag }}
+      {{ form.code }}
+      {{ form.code.errors }}
+      {% if form.code.help_text %}<p class="helptext">{{ form.code.help_text }}</p>{% endif %}
+    </div>
+    <div class="access-form-field">
+      {{ form.display_name.label_tag }}
+      {{ form.display_name }}
+      {{ form.display_name.errors }}
+    </div>
+    <div class="access-form-field">
+      {{ form.description.label_tag }}
+      {{ form.description }}
+      {{ form.description.errors }}
+    </div>
+    {% if form.protected %}
+      <div class="access-form-field">
+        <label for="{{ form.protected.id_for_label }}">{{ form.protected }} {{ form.protected.label }}</label>
+        {{ form.protected.errors }}
+        <p class="helptext">Защищённую роль может изменять и назначать только активный суперпользователь.</p>
+      </div>
+    {% endif %}
+
+    <div class="role-create-actions">
+      <a class="button-link" href="{% url 'settings_center:role_catalog' %}">Отмена</a>
+      <button class="button" type="submit">Создать роль</button>
+    </div>
+  </form>
+</section>
+
+<style>
+  .role-create-workspace { max-width: 760px; }
+  .role-create-form { display: grid; gap: 1rem; }
+  .role-create-actions { display: flex; justify-content: flex-end; gap: 0.75rem; }
+  @media (max-width: 700px) { .role-create-actions { flex-direction: column-reverse; } }
+</style>
+<script>
+  (() => {
+    const form = document.querySelector(".role-create-form");
+    if (!form) return;
+    form.addEventListener("input", () => { form.dataset.accessDirty = "true"; });
+    form.addEventListener("change", () => { form.dataset.accessDirty = "true"; });
+    form.addEventListener("submit", () => { form.dataset.accessDirty = "false"; });
+    window.addEventListener("beforeunload", (event) => {
+      if (form.dataset.accessDirty === "true") {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    });
+  })();
+</script>
+{% endblock %}

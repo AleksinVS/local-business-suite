@@ -14,10 +14,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
 from apps.accounts.selectors import capability_catalog, contract_role_configs, role_risk_markers, split_user_groups
-from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code
+from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code, role_is_protected
 from apps.core.models import Department
 from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES, MEMORY_REVIEW_GROUP_PROFILES
 from apps.workorders.models import Board
+from apps.workorders.policies import default_board_access_applies, default_board_view_rules
 
 
 TABS = (
@@ -100,6 +101,7 @@ def workspace_context(*, query_params=None):
     field = query_params.get("field", "")
     if field not in FIELD_CODES.get(tab, ()):
         field = "profile" if tab == "users" else "definition" if tab == "roles" else ""
+    creating_role = query_params.get("create") == "role" and tab == "roles"
     return {
         "tabs": [{"code": code, "label": label, "active": code == tab} for code, label in TABS],
         "active_tab": tab,
@@ -113,13 +115,18 @@ def workspace_context(*, query_params=None):
         "selected_field": field if selected else "",
         "selected_field_label": FIELD_LABELS.get(field, field),
         "selected_kind_label": KIND_LABELS.get(selected.get("kind"), selected.get("kind", "")) if selected else "",
-        "selected_panel": "field" if selected and query_params.get("panel") == "field" else ("inspector" if selected else ""),
+        "selected_panel": (
+            "field"
+            if selected and query_params.get("panel") == "field"
+            else ("inspector" if selected or creating_role else "")
+        ),
         "standalone_target": _standalone_target(selected),
         "access_filter_state": filter_state,
         "attention_value": ATTENTION_VALUE,
         "role_filter_options": _role_filter_options(role_configs),
         "department_filter_options": filter_options,
         "filter_query": urlencode({key: query_params.get(key) for key in ("q", "role", "department", "attention") if query_params.get(key)}),
+        "creating_role": creating_role,
     }
 
 
@@ -195,11 +202,12 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
         if identity:
             ad_label = identity.upn or identity.username or identity.subject_id or identity.domain
         sections = set()
-        for role_code in role_codes:
+        for role_code in role_codes if user.is_active else ():
             sections.update(section_by_role.get(role_code, ()))
-        if not role_codes and user.is_active:
+        fallback = default_board_access_applies(user)
+        if fallback:
             sections.add(SECTION_LABELS["kanban"])
-        if user.is_superuser:
+        if user.is_active and user.is_superuser:
             sections.update(_section_labels(catalog))
         rows.append(
             {
@@ -213,15 +221,17 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
                 "ad_identity": identity,
                 "department": user.department.name if user.department else "Без подразделения",
                 "department_full": (department_paths or {}).get(user.department_id, "Без подразделения"),
-                "role_sources": ([{"label": "Базовый просмотр канбана", "code": "default_board_viewer", "read_only": True}] if not role_codes and user.is_active else []),
+                "role_sources": ([{"label": default_board_view_rules().get("display_name", "Базовый просмотр канбана"), "code": "default_board_viewer", "read_only": True}] if fallback else []),
                 "status": {
                     "icon": "●" if user.is_active else "○",
                     "label": "Активен" if user.is_active else "Отключён",
                     "class": "is-active" if user.is_active else "is-inactive",
                 },
-                "roles": role_labels or (["Базовый просмотр канбана"] if not role_codes and user.is_active else []),
-                "roles_text": ", ".join(role_labels or (["Базовый просмотр канбана"] if not role_codes and user.is_active else [])),
+                "roles": role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else []),
+                "roles_text": ", ".join(role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else [])),
+                "roles_effective": bool(user.is_active),
                 "role_codes": role_codes,
+                "effective": bool(user.is_active),
                 "site_sections": sorted(sections),
                 "site_sections_text": ", ".join(sorted(sections)),
                 "technical_groups": technical,
@@ -238,7 +248,7 @@ def _sections_by_role(role_configs, catalog):
     result = defaultdict(set)
     for role_code, config in role_configs.items():
         for code, value in config.items():
-            if code in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
+            if code in {"display_name", "description", "protected"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(code) or {}
             section = capability_group_code(code, metadata)
@@ -271,9 +281,16 @@ def _role_rows(users, role_configs):
             "user_objects": members.get(code, []),
             "member_count": len(members.get(code, [])),
             "risk": {},
+            "protected": role_is_protected(config),
         }
         risk_markers = role_risk_markers(code, config)
         row["risk"] = {"markers": risk_markers}
+        row["protection_label"] = "Защищённая роль" if row["protected"] else "Обычная роль"
+        row["assignment_denial_reason"] = (
+            "Назначение и изменение доступны только активному суперпользователю."
+            if row["protected"]
+            else ""
+        )
         rows.append(row)
     return rows
 
@@ -303,7 +320,7 @@ def _section_rows(users, role_configs, catalog):
     sections = defaultdict(set)
     for code, config in role_configs.items():
         for capability, value in config.items():
-            if capability in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
+            if capability in {"display_name", "description", "protected"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(capability) or {}
             section = capability_group_code(capability, metadata)

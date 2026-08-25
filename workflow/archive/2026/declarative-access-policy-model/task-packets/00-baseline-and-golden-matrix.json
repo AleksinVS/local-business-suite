@@ -1,0 +1,43 @@
+{
+  "id": "00-baseline-and-golden-matrix",
+  "goal": "Freeze current authorization decisions after the documentation-only baseline has been pushed.",
+  "owner": "primary_agent",
+  "reviewer": "sol_high",
+  "review_model": "gpt-5.6-sol",
+  "review_reasoning": "high",
+  "read_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/accounts/selectors.py",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/services.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/waiting_list/policies.py",
+    "apps/waiting_list/selectors.py",
+    "apps/memory/policies.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/access_bundle_services.py",
+    "apps/settings_center/contract_services.py",
+    "apps/ai/services.py",
+    "apps/ai/tooling.py",
+    "apps/accounts/ldap_backend.py"
+  ],
+  "write_scope": [
+    "apps/accounts/tests.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/tests.py",
+    "apps/settings_center/tests.py",
+    "apps/memory/tests/test_review_boundaries.py",
+    "apps/ai/tests/test_views.py",
+    "apps/accounts/test_ldap_role_sync.py",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.00-baseline.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.00-baseline.md"
+  ],
+  "acceptance": [
+    "Map all 26 current capabilities to enforcement and clients.",
+    "Cover current no-role viewer, superuser, technical groups, resource ACL, and whole-role evaluation.",
+    "Mark target-behavior tests as later-package tests rather than changing current behavior.",
+    "Do not change production code, contracts, templates, or runtime data."
+  ]
+}

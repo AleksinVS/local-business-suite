@@ -28,6 +28,27 @@ async function expectAccessRequestIdle(page: Page) {
   await expect(page.locator("#access-field-sidebar-host.htmx-request, #access-field-sidebar-host[aria-busy='true'], #access-inspector-host.htmx-request, #access-inspector-host[aria-busy='true']")).toHaveCount(0);
 }
 
+async function openGlobalAccessEditor(page: Page, targetType: "user" | "role", targetId: string) {
+  const query = new URLSearchParams({
+    view: targetType === "user" ? "users" : "roles",
+    object: targetId,
+    field: targetType === "user" ? "roles" : "definition",
+    panel: "inspector",
+  }).toString();
+  await page.evaluate((url) => {
+    return (window as Window & { LocalBusinessRightPanel?: { open: (command: object) => Promise<boolean> } }).LocalBusinessRightPanel?.open({
+      type: "access.open_editor",
+      target: "#global-right-panel-content",
+      drawer_size: "large",
+      title: "Редактор доступа",
+      htmx_url: url,
+    });
+  }, `/settings/access/?${query}`);
+  await expect(page.locator("#global-right-panel.active")).toBeVisible();
+  await expect(page.locator("#global-right-panel")).toHaveAttribute("role", "dialog");
+  await expect(page.locator("#global-right-panel")).toHaveAttribute("aria-modal", "true");
+}
+
 test("@smoke access workspace exposes the six access cuts and master-detail panels", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/");
@@ -67,7 +88,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
 
   await closeAccessPanels(page);
   await page.getByRole("link", { name: "Роли", exact: true }).click();
-  await expect(page.locator(".access-roles-table thead th")).toHaveCount(4);
+  await expect(page.locator(".access-roles-table thead th")).toHaveCount(5);
   const roleRow = page.locator(".access-roles-table tbody tr").first();
   await roleRow.locator(".access-object-link").click();
   await expect(page.locator(".access-inspector")).toBeVisible();
@@ -471,7 +492,7 @@ test("@smoke role definition groups switch locally and retain draft", async ({ p
     (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity = identity;
     return identity;
   });
-  await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
+  await page.locator(".access-roles-table tbody tr", { hasText: "customer" }).first().locator(".access-object-link").click();
   const editor = page.locator(".role-capability-editor");
   await expect(editor).toBeVisible();
   const name = editor.locator('input[name="display_name"]');
@@ -540,7 +561,7 @@ test("@smoke role inspector saves without navigation", async ({ page }) => {
     (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity = identity;
     return identity;
   });
-  await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
+  await page.locator(".access-roles-table tbody tr", { hasText: "customer" }).first().locator(".access-object-link").click();
   const editor = page.locator(".role-capability-editor");
   const originalName = await editor.locator('input[name="display_name"]').inputValue();
   await editor.locator('input[name="display_name"]').fill(`${originalName} saved`);
@@ -554,6 +575,84 @@ test("@smoke role inspector saves without navigation", async ({ page }) => {
   await restoredEditor.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Роль изменена/)).toBeVisible();
   await expectAccessRequestIdle(page);
+});
+
+test("@smoke ordinary role creation and editing stay inside the right overlay", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/?view=roles");
+  await page.getByRole("link", { name: "Создать роль" }).click();
+  const code = `e2e_role_${Date.now().toString().slice(-8)}`;
+  const createForm = page.locator(".access-inspector .role-create-editor");
+  await expect(createForm).toBeVisible();
+  await createForm.locator('input[name="code"]').fill(code);
+  await createForm.locator('input[name="display_name"]').fill("E2E ordinary role");
+  await createForm.locator('textarea[name="description"]').fill("Disposable E2E role.");
+  const navigationCount = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+  await createForm.getByRole("button", { name: "Создать роль" }).click();
+  await expect(page.locator(".access-inspector .role-capability-editor")).toBeVisible();
+  await expect(page.locator("#access-table-panel")).toContainText("E2E ordinary role");
+  await expect(page.locator(".access-inspector .role-capability-editor input[name='display_name']")).toHaveValue("E2E ordinary role");
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(navigationCount);
+});
+
+test("@smoke server-owned access editor works from a non-workspace page with tabs and dirty-close protection", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/access/");
+  const userHref = await page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first().locator(".access-object-link").getAttribute("href");
+  const userId = userHref?.match(/[?&]object=(\d+)/)?.[1];
+  expect(userId).toBeTruthy();
+  await page.goto("/settings/access/?view=roles");
+  const roleHref = await page.locator(".access-roles-table tbody tr", { hasText: "Обычная роль" }).first().locator(".access-object-link").getAttribute("href");
+  const roleCode = roleHref?.match(/[?&]object=([^&]+)/)?.[1];
+  expect(roleCode).toBeTruthy();
+  await page.goto("/settings/");
+  await openGlobalAccessEditor(page, "user", userId || "");
+  let form = page.locator("#global-right-panel [data-access-bundle-form]");
+  await form.locator("[data-editor-tab='ad']").click();
+  await expect(form.locator("[data-editor-group='ad']")).toBeVisible();
+  const originalEmail = await form.locator('input[name="email"]').inputValue();
+  const changedEmail = `global-e2e-${Date.now()}@example.invalid`;
+  const navigationCount = await page.evaluate(() => performance.getEntriesByType("navigation").length);
+  await form.locator('input[name="email"]').fill(changedEmail);
+  await form.getByLabel("Причина всех изменений").fill("Сквозная проверка сохранения в глобальной панели.");
+  await form.getByRole("button", { name: "Сохранить" }).click();
+  await expect(page.locator("#global-right-panel").getByText(/Карточка пользователя сохранена/)).toBeVisible();
+  form = page.locator("#global-right-panel [data-access-bundle-form]");
+  await expect(form.locator('input[name="email"]')).toHaveValue(changedEmail);
+  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(navigationCount);
+  await form.locator('input[name="email"]').fill(originalEmail);
+  await form.getByLabel("Причина всех изменений").fill("Возврат данных после проверки глобальной панели.");
+  await form.getByRole("button", { name: "Сохранить" }).click();
+  form = page.locator("#global-right-panel [data-access-bundle-form]");
+  await expect(form.locator('input[name="email"]')).toHaveValue(originalEmail);
+  await form.locator('input[name="email"]').fill("global-dirty@example.invalid");
+  page.once("dialog", async (dialog) => { expect(dialog.type()).toBe("confirm"); await dialog.dismiss(); });
+  await page.locator("#global-right-panel .access-panel-close").click();
+  await expect(page.locator("#global-right-panel.active")).toBeVisible();
+  page.once("dialog", async (dialog) => { await dialog.accept(); });
+  await page.locator("#global-right-panel .access-panel-close").click();
+  await expect(page.locator("#global-right-panel.active")).toHaveCount(0);
+  await openGlobalAccessEditor(page, "role", roleCode || "");
+  const roleEditor = page.locator("#global-right-panel .role-capability-editor");
+  await expect(roleEditor).toBeVisible();
+  await roleEditor.locator("[data-role-editor-tab]").last().click();
+  await expect(roleEditor.locator("[data-role-editor-panel]:not([hidden])")).toHaveCount(1);
+});
+
+test("@smoke global access editor is full viewport and keyboard-modal at 320px", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 760 });
+  await login(page);
+  await page.goto("/settings/access/");
+  const userHref = await page.locator(".access-users-table tbody tr", { hasText: targetUsername || "" }).first().locator(".access-object-link").getAttribute("href");
+  const userId = userHref?.match(/[?&]object=(\d+)/)?.[1];
+  expect(userId).toBeTruthy();
+  await page.goto("/settings/");
+  await openGlobalAccessEditor(page, "user", userId || "");
+  const box = await page.locator("#global-right-panel").boundingBox();
+  expect(Math.round(box?.width || 0)).toBe(320);
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#global-right-panel")).toHaveAttribute("aria-modal", "true");
 });
 
 test("@smoke Django Admin reserve remains available from the workspace standalone action", async ({ page }) => {

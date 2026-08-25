@@ -27,15 +27,27 @@ class RoleDefinitionForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
+    protected = forms.BooleanField(
+        label="Защищённая роль",
+        required=False,
+        help_text="Изменять и назначать эту роль может только активный суперпользователь.",
+    )
     base_hash = forms.CharField(widget=forms.HiddenInput)
     active_group = forms.CharField(widget=forms.HiddenInput, required=False)
 
-    def __init__(self, *args, role_read_model, **kwargs):
+    def __init__(self, *args, role_read_model, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.role_read_model = role_read_model
         self.capability_groups = []
         self.fields["display_name"].initial = role_read_model["label"]
         self.fields["description"].initial = role_read_model["description"]
+        self.fields["protected"].initial = role_read_model.get("explicit_protected", False)
+        if not (
+            getattr(actor, "is_authenticated", False)
+            and getattr(actor, "is_active", False)
+            and getattr(actor, "is_superuser", False)
+        ):
+            self.fields.pop("protected")
         for section in role_read_model["sections"]:
             for capability in section["capabilities"]:
                 code = capability["code"]
@@ -143,6 +155,14 @@ class RoleDefinitionForm(forms.Form):
             "display_name": display_name,
             "description": description,
         }
+        if "protected" in self.fields:
+            proposed["protected"] = (
+                self.cleaned_data.get("protected", False)
+                if self.is_bound and "protected" in self.data
+                else self.fields["protected"].initial
+            )
+        elif "protected" in self.role_read_model["config"]:
+            proposed["protected"] = self.role_read_model["config"]["protected"]
         for section in self.role_read_model["sections"]:
             for capability in section["capabilities"]:
                 code = capability["code"]
@@ -152,6 +172,33 @@ class RoleDefinitionForm(forms.Form):
                     value = "*" if "*" in value else list(value)
                 proposed[code] = value
         return proposed
+
+
+class RoleCreateForm(forms.Form):
+    code = forms.RegexField(
+        label="Код роли",
+        regex=r"^[a-z][a-z0-9_]{1,62}$",
+        max_length=63,
+        help_text="Строчные латинские буквы, цифры и подчёркивание.",
+    )
+    display_name = forms.CharField(label="Название роли", max_length=150)
+    description = forms.CharField(
+        label="Описание роли",
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    protected = forms.BooleanField(label="Защищённая роль", required=False)
+    base_hash = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not (
+            getattr(actor, "is_authenticated", False)
+            and getattr(actor, "is_active", False)
+            and getattr(actor, "is_superuser", False)
+        ):
+            self.fields.pop("protected")
 
 
 class RoleDescriptionForm(forms.Form):

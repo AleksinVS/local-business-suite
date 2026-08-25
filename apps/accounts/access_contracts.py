@@ -4,25 +4,51 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import uuid
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Count
 
 from apps.core.contract_store import ContractStoreError, get_contract, normalized_hash
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+)
+from apps.workorders.policies import DEFAULT_BOARD_VIEW_ROLE, active_role_rules
 
+from .models import GroupProfile
 from .selectors import (
     capability_catalog,
     contract_role_configs,
-    role_definition_editor_roles,
     role_risk_markers,
 )
 
 
 ROLE_DEFINITION_PREVIEW_SALT = "accounts.role-definition-preview.v1"
 ROLE_DEFINITION_PREVIEW_MAX_AGE_SECONDS = 600
+ROLE_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,62}$")
+RESERVED_ROLE_CODES = frozenset({"superuser", "viewer", DEFAULT_BOARD_VIEW_ROLE})
+PROTECTED_CAPABILITIES = frozenset(
+    {
+        "manage_roles",
+        "manage_settings",
+        "manage_ai_skills",
+        "memory_organization_review",
+        "create_waiting_list",
+        "waiting_list_view_scope",
+        "waiting_list_edit_scope",
+        "waiting_list_edit_statuses",
+        "waiting_list_transition_scope",
+        "waiting_list_transition_from_statuses",
+        "waiting_list_transition_targets",
+    }
+)
 
 SCOPE_LABELS = {
     "all": "Все",
@@ -54,8 +80,7 @@ CAPABILITY_RISK_LABELS = {
     "critical": "Критический риск",
 }
 ROLE_DEFINITION_EDITOR_DENIED_MESSAGE = (
-    "Определения ролей доступны активному суперпользователю или участнику "
-    "настроенной роли редакторов определений."
+    "Для управления определениями ролей требуется право manage_roles."
 )
 
 CAPABILITY_GROUP_BY_CAPABILITY = {
@@ -99,13 +124,77 @@ def can_edit_role_definitions(actor, *, rules_snapshot=None):
     if current.is_superuser:
         return True
     try:
-        editor_roles = role_definition_editor_roles(rules_snapshot)
-    except ContractStoreError:
+        rules = (
+            rules_snapshot
+            if isinstance(rules_snapshot, dict)
+            else get_contract("role_rules")
+        )
+        return any(
+            rule.get("manage_roles") is True
+            for rule in active_role_rules(current, rules_payload=rules)
+        )
+    except (ContractStoreError, ValidationError, TypeError, ValueError):
         return False
-    return bool(
-        editor_roles
-        and current.groups.filter(name__in=editor_roles).exists()
-    )
+
+
+def role_is_protected(config, *, catalog=None) -> bool:
+    """Return effective protected state; malformed security data fails closed."""
+
+    if not isinstance(config, dict):
+        return True
+    explicit = config.get("protected", False)
+    if type(explicit) is not bool:
+        return True
+    if explicit:
+        return True
+    if catalog is None:
+        try:
+            catalog = capability_catalog()
+        except Exception:
+            return True
+    if not isinstance(catalog, dict):
+        return True
+    for code in PROTECTED_CAPABILITIES:
+        metadata = catalog.get(code)
+        if not isinstance(metadata, dict) or code not in config:
+            return True
+        effective = _strict_capability_effective(
+            code=code,
+            metadata=metadata,
+            value=config.get(code),
+            catalog=catalog,
+        )
+        if effective is None or effective:
+            return True
+    return False
+
+
+def _strict_capability_effective(*, code, metadata, value, catalog):
+    capability_type = metadata.get("type")
+    if capability_type == "flag":
+        return value if type(value) is bool else None
+    if capability_type not in {"scope", "targets"}:
+        return None
+    try:
+        from apps.workorders.contracts import capability_values, resolve_capability_values_source
+
+        source = resolve_capability_values_source(code, metadata, metadata=catalog)
+        allowed = set(capability_values(source, workflow_payload=get_contract("workflow_rules")))
+    except Exception:
+        return None
+    if capability_type == "scope":
+        if not isinstance(value, str) or value not in allowed:
+            return None
+        return value != "none"
+    if value == "*":
+        return True if "*" in allowed else None
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    if len(value) != len(set(value)):
+        return None
+    if "*" in value or any(item not in allowed for item in value):
+        return None
+    return bool(value)
 
 
 def capability_group_code(code, _metadata=None):
@@ -144,6 +233,7 @@ def role_catalog_rows():
         .annotate(total=Count("id"))
     }
     rows = []
+    catalog = capability_catalog()
     for code, config in contract_role_configs().items():
         risk_markers = role_risk_markers(code, config)
         risk_labels = [marker.split(": ", 1)[-1] for marker in risk_markers]
@@ -155,6 +245,7 @@ def role_catalog_rows():
             "risk_markers": risk_markers,
             "risk_labels": risk_labels[:3],
             "additional_risk_count": max(0, len(risk_labels) - 3),
+            "protected": role_is_protected(config, catalog=catalog),
         })
     return rows
 
@@ -196,6 +287,8 @@ def role_definition_read_model(role_code):
         "code": role_code,
         "label": config.get("display_name", role_code),
         "description": config.get("description", ""),
+        "protected": role_is_protected(config, catalog=catalog),
+        "explicit_protected": config.get("protected", False) is True,
         "config": copy.deepcopy(config),
         "sections": sections,
         "member_count": get_user_model().objects.filter(groups__name=role_code).distinct().count(),
@@ -234,7 +327,8 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
     _assert_role_definition_target_policy(
         actor=actor,
         role_code=role_code,
-        changes=changes,
+        before=before,
+        after=after,
         rules_snapshot=rules,
     )
     impact = _role_change_impact(
@@ -304,7 +398,8 @@ def apply_role_definition_change(
     _assert_role_definition_target_policy(
         actor=actor,
         role_code=role_code,
-        changes=changes,
+        before=before,
+        after=after,
         rules_snapshot=rules,
     )
     impact = _role_change_impact(
@@ -358,7 +453,8 @@ def apply_role_definition_change(
         _assert_role_definition_target_policy(
             actor=current_actor,
             role_code=role_code,
-            changes=current_changes,
+            before=current_before,
+            after=current_after,
             rules_snapshot=current_rules,
         )
         current_impact = _role_change_impact(
@@ -439,6 +535,275 @@ def save_role_definition_change(*, actor, role_code, proposed_config, base_hash)
     )
 
 
+def save_role_creation(
+    *, actor, role_code, display_name, description="", protected=False, base_hash
+):
+    """Create one least-privilege role after reserving its Django group.
+
+    The empty predefined Group is materialized under the access lock before
+    the contract can make its name authoritative. A hard process stop can
+    therefore leave only an inert orphan Group, never an active role backed by
+    an unrelated technical or AD group.
+    """
+
+    rules = get_contract("role_rules")
+    actor = _require_role_definition_editor(actor, rules_snapshot=rules)
+    if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    role_code = _normalize_new_role_code(role_code)
+    catalog = rules.get("$capabilities")
+    if not isinstance(catalog, dict):
+        raise ValidationError("Справочник прав роли некорректен.")
+    after = _new_role_config(
+        role_code=role_code,
+        display_name=display_name,
+        description=description,
+        protected=protected,
+        catalog=catalog,
+    )
+    existing = rules.get(role_code)
+    if existing is not None:
+        if existing == after:
+            _assert_role_definition_target_policy(
+                actor=actor,
+                role_code=role_code,
+                before=None,
+                after=after,
+                rules_snapshot=rules,
+            )
+            _repair_role_materialization(
+                actor=actor,
+                role_code=role_code,
+                expected_config=after,
+                expected_hash=normalized_hash(rules),
+            )
+            return None
+        raise ValidationError("Роль с таким кодом уже существует.")
+    _assert_new_role_code_available(
+        role_code=role_code,
+        rules_snapshot=rules,
+        expected_config=after,
+    )
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=role_code,
+        before=None,
+        after=after,
+        rules_snapshot=rules,
+    )
+    signed_payload = {
+        "action": "create",
+        "actor_id": actor.pk,
+        "actor_state": _role_editor_actor_state(actor, rules_snapshot=rules),
+        "role_code": role_code,
+        "base_hash": normalized_hash(rules),
+        "after": after,
+        "member_fingerprint": _role_member_fingerprint(role_code),
+        "nonce": str(uuid.uuid4()),
+    }
+    preview_token = signing.dumps(
+        signed_payload,
+        salt=ROLE_DEFINITION_PREVIEW_SALT,
+        compress=True,
+    )
+
+    def locked_precondition(current_actor, current_rules):
+        if normalized_hash(current_rules) != signed_payload["base_hash"]:
+            raise ValidationError("Контракт ролей изменился после предпросмотра.")
+        current_actor = _require_role_definition_editor(
+            current_actor, rules_snapshot=current_rules
+        )
+        if signed_payload["actor_state"] != _role_editor_actor_state(
+            current_actor, rules_snapshot=current_rules
+        ):
+            raise ValidationError("Права администратора изменились после предпросмотра.")
+        _assert_new_role_code_available(
+            role_code=role_code,
+            rules_snapshot=current_rules,
+            expected_config=after,
+        )
+        _assert_role_definition_target_policy(
+            actor=current_actor,
+            role_code=role_code,
+            before=None,
+            after=after,
+            rules_snapshot=current_rules,
+        )
+
+    def raw_payload_factory(current_rules):
+        candidate = copy.deepcopy(current_rules)
+        candidate[role_code] = copy.deepcopy(after)
+        return json.dumps(candidate, ensure_ascii=False)
+
+    def pre_write_callback(_current_actor, written_rules):
+        _materialize_role_group(
+            role_code,
+            written_rules[role_code],
+            require_new=True,
+            allow_inert_reservation=True,
+        )
+
+    from apps.settings_center.contract_services import _apply_role_definition_payload
+
+    change = _apply_role_definition_payload(
+        actor=actor,
+        role_code=role_code,
+        confirmed=True,
+        base_hash=signed_payload["base_hash"],
+        preview_token=preview_token,
+        risk_confirmed=True,
+        operation_fingerprint=hashlib.sha256(preview_token.encode("utf-8")).hexdigest(),
+        raw_payload_factory=raw_payload_factory,
+        locked_precondition=locked_precondition,
+        pre_write_callback=pre_write_callback,
+        audit_context={
+            "source": "role_definition_creator",
+            "role_code": role_code,
+            "protected": role_is_protected(after, catalog=catalog),
+        },
+    )
+    return change
+
+
+def _normalize_new_role_code(value):
+    code = str(value or "").strip()
+    if not ROLE_CODE_PATTERN.fullmatch(code):
+        raise ValidationError(
+            "Код роли должен начинаться со строчной латинской буквы и содержать "
+            "только строчные буквы, цифры и подчёркивание."
+        )
+    if code in RESERVED_ROLE_CODES:
+        raise ValidationError("Этот код роли зарезервирован системой.")
+    return code
+
+
+def _is_inert_role_group_reservation(group, config):
+    profile = GroupProfile.objects.filter(group=group).first()
+    return bool(
+        profile is not None
+        and profile.is_predefined
+        and profile.title == str(config.get("display_name", ""))
+        and profile.description == str(config.get("description", ""))
+        and not group.user_set.exists()
+        and not group.permissions.exists()
+    )
+
+
+def _assert_new_role_code_available(
+    *, role_code, rules_snapshot, expected_config=None
+):
+    if role_code in rules_snapshot:
+        raise ValidationError("Роль с таким кодом уже существует.")
+    from apps.memory.policies import MEMORY_REVIEW_GROUP_PROFILES
+
+    if role_code in MEMORY_REVIEW_GROUP_PROFILES:
+        raise ValidationError("Код роли совпадает с технической группой памяти.")
+    group = Group.objects.filter(name=role_code).first()
+    if group is not None and not (
+        isinstance(expected_config, dict)
+        and _is_inert_role_group_reservation(group, expected_config)
+    ):
+        raise ValidationError(
+            "Код роли совпадает с существующей технической или AD-группой."
+        )
+
+
+def _new_role_config(*, role_code, display_name, description, protected, catalog):
+    display_name = str(display_name or "").strip()
+    description = str(description or "").strip()
+    if not display_name:
+        raise ValidationError("Название роли не может быть пустым.")
+    if type(protected) is not bool:
+        raise ValidationError("Признак защищённой роли должен быть логическим значением.")
+    config = {
+        "display_name": display_name,
+        "description": description,
+        "protected": protected,
+    }
+    for code, metadata in catalog.items():
+        if not isinstance(metadata, dict):
+            raise ValidationError(f"Описание права '{code}' некорректно.")
+        capability_type = metadata.get("type")
+        if capability_type == "flag":
+            config[code] = False
+        elif capability_type == "targets":
+            config[code] = []
+        elif capability_type == "scope":
+            from apps.workorders.contracts import capability_values, resolve_capability_values_source
+
+            source = resolve_capability_values_source(code, metadata, metadata=catalog)
+            values = capability_values(source, workflow_payload=get_contract("workflow_rules"))
+            if "none" not in values:
+                raise ValidationError(
+                    f"Для права '{code}' нельзя построить закрытое значение новой роли."
+                )
+            config[code] = "none"
+        else:
+            raise ValidationError(f"Неизвестный тип права '{code}'.")
+    return config
+
+
+@transaction.atomic
+def _materialize_role_group(
+    role_code,
+    config,
+    *,
+    require_new=False,
+    allow_inert_reservation=False,
+):
+    group, created = Group.objects.get_or_create(name=role_code)
+    if require_new and not created:
+        group = Group.objects.select_for_update().get(pk=group.pk)
+        if not (
+            allow_inert_reservation
+            and _is_inert_role_group_reservation(group, config)
+        ):
+            raise ValidationError(
+                "Группа с кодом роли занята технической или AD-группой (гонка создания)."
+            )
+    if not created:
+        profile = GroupProfile.objects.select_for_update().filter(group=group).first()
+        expected_title = str(config.get("display_name", ""))
+        expected_description = str(config.get("description", ""))
+        if (
+            profile is None
+            or not profile.is_predefined
+            or profile.title != expected_title
+            or profile.description != expected_description
+        ):
+            raise ValidationError(
+                "Группа с кодом роли занята технической или AD-группой."
+            )
+    GroupProfile.objects.update_or_create(
+        group=group,
+        defaults={
+            "title": str(config.get("display_name", "")),
+            "description": str(config.get("description", "")),
+            "is_predefined": True,
+        },
+    )
+    return group
+
+
+def _repair_role_materialization(*, actor, role_code, expected_config, expected_hash):
+    try:
+        with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+            rules = get_contract("role_rules")
+            actor = _require_role_definition_editor(actor, rules_snapshot=rules)
+            if normalized_hash(rules) != expected_hash or rules.get(role_code) != expected_config:
+                raise ValidationError("Контракт роли изменился; повторите операцию.")
+            _assert_role_definition_target_policy(
+                actor=actor,
+                role_code=role_code,
+                before=None,
+                after=expected_config,
+                rules_snapshot=rules,
+            )
+            return _materialize_role_group(role_code, expected_config)
+    except FileLockTimeoutError as exc:
+        raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
 def _require_role_definition_editor(actor, *, rules_snapshot=None):
     if not getattr(actor, "is_authenticated", False):
         raise PermissionDenied("Требуется вход в систему.")
@@ -455,12 +820,23 @@ def _role_editor_actor_state(actor, *, rules_snapshot=None):
         "is_active": bool(actor.is_active),
         "is_superuser": bool(actor.is_superuser),
         "roles": sorted(actor.groups.values_list("name", flat=True)),
-        "editor_roles": list(role_definition_editor_roles(rules)),
+        "can_manage_roles": any(
+            rule.get("manage_roles") is True
+            for rule in active_role_rules(actor, rules_payload=rules)
+        ),
     }
 
 
-def _assert_role_definition_target_policy(*, actor, role_code, changes, rules_snapshot):
-    """Enforce the delegated editor ceiling from one fresh role snapshot."""
+def _assert_role_definition_target_policy(
+    *, actor, role_code, before, after, rules_snapshot
+):
+    """Enforce held-role and protected-before-or-after boundaries."""
+    # ``viewer`` is a migration-owned frozen role.  Its contract value is
+    # intentionally ``protected=false`` so the catalog describes its
+    # least-privilege nature, but ordinary role writers must not edit it after
+    # cutover or turn it into a second privilege-escalation path.
+    if role_code == "viewer":
+        raise PermissionDenied("Роль viewer изменяется только dedicated migration service.")
     if actor.is_superuser:
         return
     held_roles = {
@@ -476,16 +852,13 @@ def _assert_role_definition_target_policy(*, actor, role_code, changes, rules_sn
         raise PermissionDenied(
             "Делегированный редактор не может изменять определение роли, которой сам обладает."
         )
-    critical_changes = [
-        change
-        for change in changes
-        if change.get("risk") == "critical"
-    ]
-    if critical_changes and any(
-        change.get("direction") != "reduction" for change in critical_changes
+    catalog = rules_snapshot.get("$capabilities")
+    if (
+        (before is not None and role_is_protected(before, catalog=catalog))
+        or role_is_protected(after, catalog=catalog)
     ):
         raise PermissionDenied(
-            "Делегированный редактор может только сужать критические права чужой роли."
+            "Защищённую роль может создавать или изменять только активный суперпользователь."
         )
 
 
@@ -498,9 +871,13 @@ def _validate_role_definition_transport_request(
         raise PermissionDenied("Предпросмотр относится к другой роли или администратору.")
     if signed.get("base_hash") != normalized_hash(before):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
+    action = signed.get("action", "edit")
     current_before = before.get(role_code)
     current_after = after.get(role_code)
-    if not isinstance(current_before, dict) or not isinstance(current_after, dict):
+    if action == "create":
+        if current_before is not None or not isinstance(current_after, dict):
+            raise ValidationError("Новая роль уже существует или стала некорректной.")
+    elif not isinstance(current_before, dict) or not isinstance(current_after, dict):
         raise ValidationError("Роль исчезла или стала некорректной.")
     if signed.get("after") != current_after:
         raise ValidationError("Поля роли изменились после предпросмотра.")
@@ -508,16 +885,26 @@ def _validate_role_definition_transport_request(
     if signed.get("actor_state") != _role_editor_actor_state(actor, rules_snapshot=before):
         raise ValidationError("Права администратора изменились после предпросмотра.")
     catalog = before.get("$capabilities", {})
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=role_code,
+        before=current_before,
+        after=current_after,
+        rules_snapshot=before,
+    )
+    if action == "create":
+        _assert_new_role_code_available(
+            role_code=role_code,
+            rules_snapshot=before,
+            expected_config=current_after,
+        )
+        if signed.get("member_fingerprint") != _role_member_fingerprint(role_code):
+            raise ValidationError("Состав участников новой роли изменился.")
+        return
     changes = _role_definition_changes(
         before=current_before,
         after=current_after,
         catalog=catalog,
-    )
-    _assert_role_definition_target_policy(
-        actor=actor,
-        role_code=role_code,
-        changes=changes,
-        rules_snapshot=before,
     )
     impact = _role_change_impact(
         role_code=role_code,
@@ -546,19 +933,23 @@ def _role_member_fingerprint(role_code):
 def _normalize_proposed_role(*, role_code, before, proposed, catalog):
     if not isinstance(before, dict) or not isinstance(proposed, dict):
         raise ValidationError("Некорректное определение роли.")
-    metadata_fields = {"display_name", "description"}
+    metadata_fields = {"display_name", "description", "protected"}
     unknown = sorted(set(proposed) - set(catalog) - metadata_fields)
     if unknown:
         raise ValidationError(
             "Переданы неизвестные права роли: " + ", ".join(unknown) + "."
         )
     after = copy.deepcopy(before)
-    for field in metadata_fields:
+    for field in {"display_name", "description"}:
         if field in proposed:
             value = str(proposed[field] or "").strip()
             if field == "display_name" and not value:
                 raise ValidationError("Название роли не может быть пустым.")
             after[field] = value
+    if "protected" in proposed:
+        if type(proposed["protected"]) is not bool:
+            raise ValidationError("Признак защищённой роли должен быть логическим значением.")
+        after["protected"] = proposed["protected"]
     for capability in catalog:
         if capability not in proposed:
             raise ValidationError(f"Не передано право '{capability}' роли '{role_code}'.")
@@ -568,6 +959,20 @@ def _normalize_proposed_role(*, role_code, before, proposed, catalog):
 
 def _role_definition_changes(*, before, after, catalog):
     changes = []
+    if before.get("protected", False) is not after.get("protected", False):
+        changes.append(
+            {
+                "code": "protected",
+                "label": "Защищённая роль",
+                "section": "Основные сведения",
+                "type": "flag",
+                "risk": "critical",
+                "direction": "expansion" if after.get("protected") is True else "reduction",
+                "risk_label": "критический риск",
+                "before": before.get("protected", False),
+                "after": after.get("protected", False),
+            }
+        )
     for code, label in (("display_name", "Название роли"), ("description", "Описание роли")):
         if before.get(code, "") == after.get(code, ""):
             continue

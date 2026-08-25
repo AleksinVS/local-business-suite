@@ -2571,7 +2571,7 @@ class CapabilityRegistryTests(TestCase):
         )
         for code in waiting_codes:
             legacy["$capabilities"].pop(code)
-            for role in ("customer", "technician", "manager", "admin", "doctor"):
+            for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
                 legacy[role].pop(code)
         legacy["$capabilities"]["view_waiting_list"] = {
             "type": "flag",
@@ -2580,7 +2580,7 @@ class CapabilityRegistryTests(TestCase):
             "label": "Просмотр листа ожидания",
             "description": "Совместимый старый флаг просмотра листа ожидания.",
         }
-        for role in ("customer", "technician", "manager", "admin", "doctor"):
+        for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
             legacy[role]["view_waiting_list"] = role == "doctor"
         for code in (
             "view_scope",
@@ -2596,22 +2596,39 @@ class CapabilityRegistryTests(TestCase):
 
         validate_role_rules_payload(legacy)
 
-    def test_role_assignment_allowlist_rejects_critical_or_unknown_roles(self):
-        critical = copy.deepcopy(self.base_role_rules)
-        critical["$administration"]["role_assignment_allowlist"]["manager"] = ["admin"]
-        with self.assertRaisesMessage(ValidationError, "критичные роли"):
-            validate_role_rules_payload(critical)
+    def test_legacy_administration_metadata_is_parseable_but_inert(self):
+        legacy = copy.deepcopy(self.base_role_rules)
+        legacy["$administration"] = {
+            "role_definition_editor_roles": ["missing"],
+            "role_assignment_allowlist": {"missing": ["admin"]},
+        }
 
-        unknown = copy.deepcopy(self.base_role_rules)
-        unknown["$administration"]["role_assignment_allowlist"]["manager"] = ["missing"]
-        with self.assertRaisesMessage(ValidationError, "неизвестные роли"):
-            validate_role_rules_payload(unknown)
+        validate_role_rules_payload(legacy)
 
     def test_missing_assignment_allowlist_is_backward_compatible_and_fail_closed(self):
         legacy = copy.deepcopy(self.base_role_rules)
-        legacy.pop("$administration")
+        legacy.pop("$administration", None)
 
         validate_role_rules_payload(legacy)
+
+    def test_explicit_protected_flag_must_be_boolean(self):
+        invalid = copy.deepcopy(self.base_role_rules)
+        invalid["customer"]["protected"] = "false"
+        with self.assertRaisesMessage(ValidationError, "логическим"):
+            validate_role_rules_payload(invalid)
     can_comment,
     can_create,
     can_edit,
+
+
+@pytest.mark.unit
+class ExplicitViewerPolicyPhaseTests(TestCase):
+    def test_runtime_viewer_presence_disables_legacy_fallback(self):
+        payload = copy.deepcopy(get_contract("role_rules"))
+        payload["viewer"] = copy.deepcopy(
+            json_utils.load_json_file(Path(settings.BASE_DIR) / "contracts" / "role_rules.json")["viewer"]
+        )
+        user = User.objects.create_user(username="runtime-viewer-phase")
+        with _override_contract_file("LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", payload):
+            self.assertFalse(default_board_access_applies(user))
+            self.assertEqual(active_role_rules(user), [])

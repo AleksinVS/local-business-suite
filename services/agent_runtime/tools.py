@@ -329,21 +329,6 @@ def build_tools(
         )
         return result
 
-    @tool("access.update_role_permissions")
-    def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
-        """Updates permissions for a specific role. Requires administrator privileges."""
-        result = gateway_client.execute_tool(
-            tool_code="access.update_role_permissions",
-            actor=actor,
-            payload={"role_name": role_name, "permissions_map": permissions_map},
-            session_id=session_id,
-            conversation_id=conversation_id,
-            request_id=request_id,
-            origin_channel=origin_channel,
-            actor_version=actor_version,
-        )
-        return result
-
     @tool("access.get_role_rules")
     def get_role_rules() -> dict:
         """Returns current role and permission configuration. Useful before making changes."""
@@ -374,18 +359,28 @@ def build_tools(
         )
         return result
 
-    @tool("access.users.update")
-    def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None) -> dict:
-        """Updates lifecycle/profile fields. Roles and groups use the access card."""
-        payload = {"user_id": user_id}
-        if is_active is not None:
-            payload["is_active"] = is_active
-        if department_id is not None:
-            payload["department_id"] = department_id
+    @tool("access.users.explain")
+    def explain_user_access(user_id: int) -> dict:
+        """Explain one user's effective access from enforcement sources only."""
         result = gateway_client.execute_tool(
-            tool_code="access.users.update",
+            tool_code="access.users.explain",
             actor=actor,
-            payload=payload,
+            payload={"user_id": user_id},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.open_editor")
+    def open_access_editor(target_type: str, target_id: str) -> dict:
+        """Open the server-authorized human access editor; never saves changes."""
+        result = gateway_client.execute_tool(
+            tool_code="access.open_editor",
+            actor=actor,
+            payload={"target_type": target_type, "target_id": target_id},
             session_id=session_id,
             conversation_id=conversation_id,
             request_id=request_id,
@@ -441,10 +436,10 @@ def build_tools(
         remember_memory,
         update_personal_memory,
         create_or_update_ai_skill,
-        update_role_permissions,
         get_role_rules,
         list_users,
-        update_user,
+        explain_user_access,
+        open_access_editor,
         list_groups,
         activate_skill,
     ]

@@ -73,6 +73,14 @@ REQUIRED_AI_CHAT_SETTINGS_ROOT_KEYS = {
 AI_CHAT_SURFACE_VALUES = {"full_page", "sidebar"}
 AI_CHAT_SESSION_MODE_VALUES = {"default", "dedicated"}
 
+# Access administration is intentionally human-only (ADR-0043).  Keep these
+# retired identifiers fail-closed at the runtime-contract boundary so an old
+# deployment payload cannot silently advertise the removed write paths again.
+FORBIDDEN_ACCESS_MUTATION_TOOL_IDS = frozenset({
+    "access.update_role_permissions",
+    "access.users.update",
+})
+
 # Minimum identity fields the runtime request identity model must carry, per
 # the identity_model contract in contracts/ai/registry.json.
 IDENTITY_MINIMUM_FIELDS = frozenset({
@@ -103,6 +111,28 @@ def validate_ai_tools_payload(payload):
     tools = payload.get("tools")
     if not isinstance(tools, list) or not tools:
         raise ValidationError("Реестр инструментов ИИ должен содержать непустой список tools.")
+    tool_ids = {
+        item.get("id")
+        for item in tools
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    forbidden = sorted(tool_ids & FORBIDDEN_ACCESS_MUTATION_TOOL_IDS)
+    forbidden.extend(
+        sorted(
+            item.get("id", "")
+            for item in tools
+            if isinstance(item, dict)
+            and item.get("domain") == "access"
+            and item.get("mode") != "read"
+            and item.get("id") not in forbidden
+        )
+    )
+    if forbidden:
+        raise ValidationError(
+            "Контракт ИИ содержит запрещённые инструменты изменения доступа: "
+            + ", ".join(forbidden)
+            + "."
+        )
     for item in tools:
         if not isinstance(item, dict):
             raise ValidationError("Каждый инструмент ИИ должен быть JSON-объектом.")

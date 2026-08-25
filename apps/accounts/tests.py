@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.db.models.deletion import ProtectedError
 from django.contrib.auth.models import Group, Permission
@@ -25,7 +26,12 @@ from .department_policy import (
     ORGANIZATION_ROOT_DEPARTMENT_NAME,
     UNASSIGNED_USER_DEPARTMENT_NAME,
 )
-from .selectors import effective_access_for_user, role_risk_markers, selected_role_names_for_user
+from .selectors import (
+    effective_access_for_user,
+    effective_capabilities_for_roles,
+    role_risk_markers,
+    selected_role_names_for_user,
+)
 from .services import (
     apply_external_identity_change,
     apply_role_assignment,
@@ -386,6 +392,30 @@ class SeedRolesCommandTests(TestCase):
         self.assertEqual(doctor_profile.description, original_description)
         self.assertNotEqual(doctor_profile.description, "испорчено вручную")
 
+    def test_seed_roles_repairs_authoritative_contract_group_without_profile(self):
+        group = Group.objects.create(name="doctor")
+
+        call_command("seed_roles")
+
+        profile = GroupProfile.objects.get(group=group)
+        self.assertTrue(profile.is_predefined)
+        self.assertTrue(profile.title)
+
+    def test_seed_roles_does_not_overwrite_non_predefined_profile(self):
+        group = Group.objects.create(name="doctor")
+        GroupProfile.objects.create(
+            group=group,
+            title="Technical collision",
+            is_predefined=False,
+        )
+
+        with self.assertRaises(CommandError):
+            call_command("seed_roles")
+
+        group.profile.refresh_from_db()
+        self.assertEqual(group.profile.title, "Technical collision")
+        self.assertFalse(group.profile.is_predefined)
+
 
 @pytest.mark.integration
 class AccessAssignmentServiceTests(TestCase):
@@ -652,7 +682,7 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertIn(admin_group, updated.groups.all())
         self.assertEqual(audit.actor_id, audit.target_user_id)
 
-    def test_manager_assignment_is_limited_by_contract_allowlist(self):
+    def test_manage_roles_actor_can_assign_ordinary_but_not_protected_role(self):
         technician, _ = Group.objects.get_or_create(name="technician")
         preview = preview_role_assignment(
             actor=self.actor,
@@ -668,7 +698,7 @@ class AccessAssignmentServiceTests(TestCase):
         )
         self.assertIn(technician, updated.groups.all())
 
-        with self.assertRaisesMessage(PermissionDenied, "Недостаточно прав"):
+        with self.assertRaisesMessage(PermissionDenied, "Защищённые роли"):
             preview_role_assignment(
                 actor=self.actor,
                 target_user=self.target,
@@ -1047,21 +1077,29 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertFalse(model_admin.has_delete_permission(request, obj=technical))
 
     def test_effective_access_explains_all_supported_sources(self):
-        permission = Permission.objects.select_related("content_type").first()
-        self.target.user_permissions.add(permission)
         self.target.is_staff = True
         self.target.save(update_fields=["is_staff"])
 
         access = effective_access_for_user(self.target)
 
         self.assertEqual(access["roles"][0]["code"], "customer")
-        self.assertEqual(access["technical_groups"][0]["code"], "memory_auditor")
+        self.assertEqual(access["memory_groups"][0]["code"], "memory_auditor")
         self.assertIn("is_staff", {item["source"] for item in access["flags"]})
-        self.assertIn(
-            f"{permission.content_type.app_label}.{permission.codename}",
-            {item["code"] for item in access["django_permissions"]},
-        )
+        self.assertNotIn("django_permissions", access)
         self.assertTrue(any(source["type"] == "role" for item in access["capabilities"] for source in item["sources"]))
+
+    def test_inactive_access_keeps_membership_facts_but_has_no_effective_grants(self):
+        self.target.is_active = False
+        self.target.is_superuser = True
+        self.target.save(update_fields=["is_active", "is_superuser"])
+
+        access = effective_access_for_user(self.target)
+
+        self.assertEqual(access["roles"][0]["code"], "customer")
+        self.assertFalse(access["roles"][0]["effective"])
+        self.assertFalse(access["capabilities"])
+        self.assertFalse(access["flags"])
+        self.assertFalse(access["superuser_reserve"]["effective"])
 
     def test_effective_access_explains_default_board_view_for_roleless_user(self):
         roleless = get_user_model().objects.create_user(username="access-default-viewer")
@@ -1084,6 +1122,18 @@ class AccessAssignmentServiceTests(TestCase):
         access = effective_access_for_user(superuser)
 
         self.assertTrue(access["capabilities"])
+        self.assertEqual(access["roles"], [])
+        self.assertNotIn(
+            "protected",
+            effective_capabilities_for_roles(["admin"]),
+        )
+        self.assertFalse(
+            any(
+                source.get("role") == "default_board_viewer"
+                for capability in access["capabilities"]
+                for source in capability["sources"]
+            )
+        )
         self.assertTrue(
             all(
                 any(source["type"] == "is_superuser" for source in capability["sources"])

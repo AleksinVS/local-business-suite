@@ -6,23 +6,8 @@
     "$schema": { "type": "string" },
     "$administration": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "role_definition_editor_roles": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "role_assignment_allowlist": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "uniqueItems": true,
-            "items": { "type": "string", "minLength": 1 }
-          }
-        }
-      },
-      "required": ["role_assignment_allowlist"]
+      "description": "Deprecated deployment-migration input. Runtime authorization ignores this block.",
+      "additionalProperties": true
     },
     "$capabilities": {
       "type": "object",
@@ -67,6 +52,7 @@
       "properties": {
         "display_name": { "type": "string" },
         "description": { "type": "string" },
+        "protected": { "type": "boolean" },
         "view_scope": {
           "enum": ["none", "all", "visible", "authored", "department_branch", "assigned", "assigned_or_unassigned", "assigned_or_unassigned_or_authored"]
         },

@@ -2,7 +2,7 @@
 
 Статус: deployment note.
 
-Дата: 2026-05-20.
+Дата: 2026-08-25.
 
 ## Required Steps
 
@@ -59,15 +59,22 @@ MEMORY_ACL_CACHE_TTL_SECONDS=3600
 
 ```bash
 python manage.py sync_ai_tool_registry
+python manage.py migrate_role_administration \
+  --operator-id <active-superuser-id> \
+  --expected-runtime-hash <current-runtime-sha256> \
+  --expected-git-hash <deployed-git-default-sha256> \
+  --reason "ADR-0043: remove inert legacy role administration"
 python manage.py seed_roles
 python manage.py validate_architecture_contracts
 ```
 
-Дефолт `contracts/role_rules.json` содержит
-`$administration.role_assignment_allowlist` (`manager` → `customer`, `technician`).
-В существующей изменённой рабочей копии блок можно добавить через защищённый
-редактор либо эксплуатационную процедуру контракта. Если блока нет, делегированное
-назначение закрыто; superuser сохраняет штатные возможности.
+Команда `migrate_role_administration` нужна только установкам, чья рабочая копия
+ещё содержит `$administration`. Она требует точные нормализованные SHA-256
+текущего runtime и развёрнутого Git-default, повторно проверяет active
+superuser под общей блокировкой, удаляет только этот устаревший блок, создаёт
+backup и `SettingsChange`. Если блока уже нет, команда штатно отклоняет no-op и
+её запускать не нужно. Обычный Settings Center и rollback изменить этот блок не
+могут.
 
 5. Configure external secret link base URL if Vaultwarden-style links are used:
 
@@ -119,6 +126,15 @@ python manage.py reconcile_settings_changes --apply
 по хешам before/after и никогда не переписывает контракт. `INCONSISTENT`,
 `path_changed` или нечитаемый файл требуют ручного разбора до новых записей.
 
+### Viewer migration
+
+Отчёты, утверждённые manifests и резервные копии миграции хранятся только в
+`data/access-migrations/` с ограниченными правами. Сначала проверяется полный
+roleless cohort, затем выполняется подготовка, а `cutover_explicit_viewer`
+атомарно добавляет только Git-определение `viewer`. Rollback сначала удаляет
+`viewer` из runtime-контракта и только затем снимает добавленные миграцией
+назначения и ACL. Обычные role writers этот набор ролей изменить не могут.
+
 Если AI-действие осталось в `reconciliation_required`, сначала вручную проверьте
 его предметный эффект по журналам домена, затем запишите операторское наблюдение:
 
@@ -140,10 +156,11 @@ python manage.py reconcile_ai_action --token <uuid> --outcome failed --operator 
 короче 32 символов; нельзя повторять `DJANGO_SECRET_KEY`. При ротации увеличьте
 версию ключа.
 
-Опредения ролей меняет активный аутентифицированный superuser или участник
-роли из `$administration.role_definition_editor_roles` (по умолчанию `admin`).
-`is_staff` сохраняет только вход в Django Admin; одного `manage_roles` для
-редактора определений недостаточно. Стандартные access-поля User,
+Создание, изменение и назначение обычных ролей доступно active actor с
+`manage_roles`. Собственные memberships, определения удерживаемых ролей и
+защищённые роли для него закрыты. Active superuser сохраняет полный путь,
+включая self-assignment. `is_staff` означает только вход в Django Admin и не
+даёт продуктового полномочия. Стандартные access-поля User,
 permissions Group и `Board.allowed_groups` в Django Admin доступны только для
 чтения; резервное назначение открывается отдельной ссылкой в карточке User и
 обязательно требует причину, preview и подтверждение. В карточке Board есть такой
@@ -177,6 +194,10 @@ Manual checks:
   предпросмотром и доменным аудитом;
 - `/settings/access/roles/` показывает каталог, а изменение одной роли сначала
   показывает серверный diff и число затронутых сотрудников;
-- manager can assign only `customer`/`technician` and cannot edit own roles;
+- manager с `manage_roles` может создавать/редактировать/назначать обычные роли,
+  но не собственную membership, удерживаемую или защищённую роль;
+- разрез «Роли» открывает создание обычной роли и редактор в правой панели без
+  полной перезагрузки документа; защищённые роли видимым текстом показывают
+  ограничение active superuser;
 - `.env` proposal file is created under `data/settings_center/env_proposals/`;
 - memory ingestion with unresolved ACL creates `acl_unresolved` issue and does not publish chunks.

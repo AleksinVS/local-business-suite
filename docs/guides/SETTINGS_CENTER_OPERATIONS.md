@@ -2,7 +2,7 @@
 
 Статус: актуальное эксплуатационное руководство.
 
-Дата обновления: 2026-08-17.
+Дата обновления: 2026-08-25.
 
 ## Назначение
 
@@ -56,8 +56,89 @@ audit `SettingsChange`). Против потерянного обновлени�
 
 Store отдает файл как есть, без legacy-нормализации: на старых копиях `role_rules` без
 ключей `view_analytics`/`manage_departments`/`manage_roles` роли не получат этих прав
-(fail-closed), поэтому при обновлении старых установок пересохраните `role_rules` через
-Settings Center — запись допишет недостающие ключи.
+(fail-closed). Новые capability-ключи нельзя дописывать обычным сохранением:
+для них используется deployment-процедура ниже.
+
+### Замороженный `$capabilities`
+
+Обычный Settings Center, rollback и ограниченный редактор роли могут менять
+только определения ролей. Под общей access-блокировкой сервис всегда проверяет:
+
+```text
+hash(data/contracts/role_rules.json.$capabilities)
+  == hash(contracts/role_rules.json.$capabilities)
+candidate.$capabilities == runtime.$capabilities
+```
+
+Несовпадение закрывает любую обычную запись. Не пытайтесь исправить его через raw JSON
+или rollback: это защита от изменения security-semantics во время работы.
+
+Для планового deployment-изменения:
+
+1. В Git обновите `contracts/role_rules.json`, enforcement points и тесты.
+2. Из текущего runtime-контракта подготовьте полный reviewed candidate JSON. В нем можно
+   изменить только catalog metadata и соответствующие значения этих capability в каждой
+   роли. Набор ролей, `$administration`, описания, признаки защиты и значения неизменённых
+   capability должны остать прежними.
+3. Получите три полных SHA-256: текущего runtime catalog, целевого Git catalog и всего
+   текущего runtime-контракта. Хеши вычисляются по нормализованному JSON, как
+   `apps.core.contract_store.normalized_hash`.
+4. Запустите от deployment-оператора:
+
+```bash
+python manage.py migrate_role_capabilities \
+  --operator-id <active-superuser-id> \
+  --candidate <reviewed-full-role-rules.json> \
+  --expected-runtime-catalog-hash <sha256> \
+  --expected-git-catalog-hash <sha256> \
+  --expected-runtime-hash <sha256> \
+  --reason "<change-ticket/review reason>"
+```
+
+Команда повторно загружает active superuser, сверяет все хеши под общей блокировкой,
+повторно валидирует полный candidate, делает копию исходного файла в
+`data/contracts/backups/`, создаёт staged `SettingsChange`, атомарно заменяет runtime-файл и
+проверяет итоговый хеш. No-op и любое несовпадение отклоняются. В stdout выводятся
+только ID аудита, короткие хеши и имя backup; JSON и значения прав не печатаются.
+
+Восстановление backup не выполняется обычным rollback: исторический catalog будет отклонён.
+Для обратного deployment подготовьте обратный Git commit и reviewed candidate из резервной копии,
+затем повторите ту же команду с новыми expected hashes. Не копируйте backup поверх runtime-файла вручную.
+
+### Удаление legacy `$administration`
+
+Полномочие создания, изменения и назначения обычных ролей определяется только
+`manage_roles`. Старые `role_definition_editor_roles` и
+`role_assignment_allowlist` остаются parseable для совместимого запуска старой
+рабочей копии, но полностью игнорируются политиками. Обычная запись и rollback
+не могут изменить или удалить `$administration`.
+
+После deployment Git-default без этого блока вычислите нормализованные полные
+хеши текущего runtime и Git-default и выполните один раз:
+
+```bash
+python manage.py migrate_role_administration \
+  --operator-id <active-superuser-id> \
+  --expected-runtime-hash <current-runtime-sha256> \
+  --expected-git-hash <deployed-git-default-sha256> \
+  --reason "<change-ticket/review reason>"
+```
+
+Команда повторно загружает active superuser под общей access-блокировкой,
+требует отсутствия `$administration` в Git-default и строит кандидат сама:
+точная runtime-копия без этого единственного блока. Она создаёт проверенный
+backup в `data/contracts/backups/`, staged audit, атомарно заменяет файл и
+печатает только ID, короткие хеши и имя backup. Неверный хеш, отсутствующий
+блок или любая ошибка не создают успешную миграцию.
+
+Создание новой роли выполняется fail-closed: под общей блокировкой сначала
+резервируется пустая предопределённая `Group/GroupProfile`, а затем атомарно
+активируется запись контракта и аудит. Поэтому сбой или аварийная остановка до
+записи контракта не может превратить техническую/AD-группу в роль. Безопасная
+пустая группа-резерв не выдаёт доступ; повтор с теми же кодом, названием и
+описанием завершает создание. Любая группа с участниками, Django permissions,
+другим профилем или без предопределённого профиля считается посторонней и
+отклоняется.
 
 ### Дрейф default/runtime
 
@@ -104,6 +185,55 @@ Python-каталог инструментов с JSON, а не default-файл
 Для переходов статусов заявок есть отдельный экран `/settings/workflow/transitions/`. Он редактирует тот же `workflow_rules` contract, но показывает матрицу `из статуса -> в статус`. Кнопка `Разрешить все` включает все переходы между разными статусами; права ролей из `role_rules` продолжают применяться отдельно.
 
 После изменения memory sources/profiles/routing/ingestion profiles может потребоваться reindex. После изменения role/workflow rules нужно проверить доступы на тестовом пользователе.
+
+## Объяснение доступа и передача в редактор
+
+Карточка доступа и AI read-инструменты используют одну privacy-safe проекцию.
+В ней отдельно показаны контрактные роли, резерв суперпользователя, обычные
+технические группы и группы памяти. Прямые Django permissions, email и AD
+identity в объяснение не входят. ACL ресурса и workflow отображаются только
+как ограничения, которые сужают уже найденный доступ; полный список ACL не
+выгружается.
+В машинном ответе это фиксируется признаками `object_scoped=true` и эффектами
+`narrows_role_scope`/`narrows_transitions`.
+
+Неактивный пользователь может сохранить назначенные membership-факты для
+разбора, но его эффективные capability и резерв суперпользователя пусты.
+Инструмент `access.users.explain` доступен свежему active actor с `manage_roles`
+или active superuser и не создаёт `PendingAction`.
+
+`access.open_editor` принимает только `target_type=user|role` и `target_id`.
+Settings Center provider повторно проверяет цель и строит фиксированный
+локальный URL канонического `AccessWorkspaceView`. Ответом является только
+HTMX-фрагмент в `#global-right-panel-content`: таблица и навигация не заменяются,
+а сохранение остаётся внутри выезжающей панели. ИИ получает команду открытия,
+но изменение применяется только кнопкой «Сохранить» в редакторе.
+`ui.open_right_panel` остаётся режимом просмотра и не может открыть этот
+редактор через произвольный URL.
+
+## Явная роль viewer: операция миграции
+
+Переход с `default_board_viewer` выполняется только active superuser. Runtime-признак фазы — наличие `viewer` в `data/contracts/role_rules.json`; постоянный флаг или таблица миграции не используются.
+
+```bash
+python manage.py report_roleless_users --output data/access-migrations/roleless-users.json
+python manage.py apply_roleless_user_manifest --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+python manage.py cutover_explicit_viewer --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+python manage.py rollback_explicit_viewer --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+```
+
+Manifest обязан содержать ровно один выбор (`viewer`, `customer`, другая существующая роль или `no_role`) для каждого текущего roleless пользователя и отдельный логический выбор ACL для каждой доски, открытой `customer`. Подготовка создаёт инертную группу и аудируемые назначения/ACL под общей блокировкой; до cutover они не дают продуктового доступа. Любой дрейф пользователей, подразделений, технических флагов, групп, ACL или контракта завершает операцию отказом.
+
+Исходный отчёт показывает точные доски до миграции и точные изменения для
+`no_role`, `customer` и других существующих ролей. Для `viewer` итог зависит от
+отдельных решений по доскам, поэтому до подготовки он помечен
+`requires_board_choices=true`. Команда подготовки записывает в подписанный
+operation-файл `final_access_deltas` с точными `before/after/added/removed` уже
+с учётом всех решений по доскам и superuser-reserve. Перед `cutover` владелец
+обязан проверить этот раздел; подготовленные назначения и ACL ещё инертны, так
+что проверка не меняет фактический продуктовый доступ.
+
+Во всех трёх изменяющих командах нужно передавать одну и ту же формулировку `--reason`. Каждая команда атомарно обновляет тот же подписанный файл операции. Если процесс прервался, повторите ту же команду с тем же файлом, суперпользователем и причиной: сервис сверит рабочее состояние с журналами и либо безопасно завершит этап, либо остановится при постороннем изменении. Не редактируйте файл после выполнения команды подготовки.
 
 ## Users And AD Link
 

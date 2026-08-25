@@ -1,0 +1,11 @@
+{
+  ".": "Task packets: lean role administration",
+  "00-baseline-and-golden-matrix.json": "Current authorization inventory and golden decisions",
+  "01-freeze-capability-metadata.json": "Reject runtime capability metadata changes",
+  "02-disable-ai-ad-access-mutations.json": "Disable AI and AD access mutation side paths",
+  "03-single-role-administration-authority.json": "One manage_roles authority and protected roles",
+  "04-explicit-viewer-migration.json": "Least-privilege viewer and explicit roleless-user migration",
+  "05-explain-cleanup.json": "Align explain sources with enforcement",
+  "06-ui-and-e2e-acceptance.json": "Minimal UI adaptation and browser acceptance",
+  "07-final-security-acceptance.json": "Full verification and Sol high review"
+}

@@ -217,79 +217,13 @@ def validate_role_rules_payload(payload, workflow_payload=None):
     if workflow_payload:
         known_statuses = set(workflow_payload.get("statuses", []))
 
-    role_names = {
-        role
-        for role, config in payload.items()
-        if isinstance(role, str) and not role.startswith("$") and isinstance(config, dict)
-    }
     administration = payload.get("$administration", {})
     if not isinstance(administration, dict):
         raise ValidationError("Блок $administration должен быть JSON-объектом.")
-    allowlist = administration.get("role_assignment_allowlist", {})
-    if not isinstance(allowlist, dict):
-        raise ValidationError(
-            "Поле $administration.role_assignment_allowlist должно быть JSON-объектом."
-        )
-    if "role_definition_editor_roles" in administration:
-        editor_roles = administration["role_definition_editor_roles"]
-        if (
-            not isinstance(editor_roles, list)
-            or not editor_roles
-            or not all(isinstance(role, str) and role for role in editor_roles)
-        ):
-            raise ValidationError(
-                "Поле $administration.role_definition_editor_roles должно быть "
-                "непустым списком кодов ролей."
-            )
-        if len(editor_roles) != len(set(editor_roles)):
-            raise ValidationError(
-                "Поле $administration.role_definition_editor_roles содержит повторяющиеся роли."
-            )
-        unknown_editor_roles = sorted(set(editor_roles) - role_names)
-        if unknown_editor_roles:
-            raise ValidationError(
-                "Поле $administration.role_definition_editor_roles содержит неизвестные роли: "
-                + ", ".join(unknown_editor_roles)
-                + "."
-            )
     capability_metadata = payload.get(CAPABILITY_METADATA_KEY, {})
     legacy_compat = is_legacy_capability_metadata(capability_metadata)
     if capability_metadata:
         _validate_capability_metadata(capability_metadata, legacy_compat=legacy_compat)
-    for actor_role, target_roles in allowlist.items():
-        if actor_role not in role_names:
-            raise ValidationError(
-                f"Allowlist назначения ссылается на неизвестную роль актора '{actor_role}'."
-            )
-        if not isinstance(target_roles, list) or not all(
-            isinstance(role, str) and role for role in target_roles
-        ):
-            raise ValidationError(
-                f"Allowlist роли '{actor_role}' должен содержать список непустых кодов ролей."
-            )
-        if len(target_roles) != len(set(target_roles)):
-            raise ValidationError(
-                f"Allowlist роли '{actor_role}' содержит повторяющиеся роли."
-            )
-        unknown_targets = sorted(set(target_roles) - role_names)
-        if unknown_targets:
-            raise ValidationError(
-                f"Allowlist роли '{actor_role}' содержит неизвестные роли: "
-                + ", ".join(unknown_targets)
-                + "."
-            )
-        critical_targets = [
-            role
-            for role in target_roles
-            if _role_has_critical_capability(payload[role], capability_metadata)
-        ]
-        if critical_targets:
-            raise ValidationError(
-                f"Allowlist роли '{actor_role}' содержит критичные роли: "
-                + ", ".join(sorted(critical_targets))
-                + ". Их может назначать только суперпользователь."
-            )
-
     for role, config in payload.items():
         if role.startswith("$"):
             if role == CAPABILITY_METADATA_KEY:
@@ -298,7 +232,11 @@ def validate_role_rules_payload(payload, workflow_payload=None):
         if not isinstance(config, dict):
             raise ValidationError(f"Роль '{role}' должна быть JSON-объектом.")
         if capability_metadata:
-            allowed_role_keys = set(capability_metadata) | {"display_name", "description"}
+            allowed_role_keys = set(capability_metadata) | {
+                "display_name",
+                "description",
+                "protected",
+            }
             unknown_role_keys = sorted(set(config) - allowed_role_keys)
             if unknown_role_keys:
                 raise ValidationError(
@@ -324,6 +262,10 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             legacy_admin_value = bool(config.get("manage_inventory"))
             for key in BACKWARD_COMPAT_ROLE_DEFAULT_KEYS:
                 config.setdefault(key, legacy_admin_value)
+        if "protected" in config and type(config["protected"]) is not bool:
+            raise ValidationError(
+                f"У роли '{role}' protected должен быть логическим значением."
+            )
         missing = REQUIRED_ROLE_KEYS - set(config.keys())
         if missing:
             raise ValidationError(
@@ -354,18 +296,6 @@ def validate_role_rules_payload(payload, workflow_payload=None):
             raise ValidationError(
                 f"У роли '{role}' указаны неизвестные статусы перехода: {invalid}."
             )
-
-
-def _role_has_critical_capability(config, metadata):
-    if not isinstance(config, dict) or not isinstance(metadata, dict):
-        return False
-    for capability, value in config.items():
-        definition = metadata.get(capability)
-        if not isinstance(definition, dict) or definition.get("risk") != "critical":
-            continue
-        if value not in (None, False, "", "none", [], {}):
-            return True
-    return False
 
 
 def _validate_role_capability_values(

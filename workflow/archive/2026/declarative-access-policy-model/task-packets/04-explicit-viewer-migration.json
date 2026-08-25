@@ -1,0 +1,102 @@
+{
+  "id": "04-explicit-viewer-migration",
+  "goal": "Replace implicit default_board_viewer access with one explicit least-privilege viewer role through an owner-approved, atomic contract cutover.",
+  "owner": "primary_agent_and_sol_high",
+  "policy_model": "gpt-5.6-sol",
+  "policy_reasoning": "high",
+  "executor_model": "gpt-5.6-luna",
+  "executor_reasoning": "high",
+  "critic_model": "gpt-5.6-luna",
+  "critic_reasoning": "xhigh",
+  "read_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/accounts/models.py",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/accounts/services.py",
+    "apps/accounts/management/commands/seed_roles.py",
+    "apps/workorders/models.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/services.py",
+    "apps/settings_center/models.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/core/file_locks.py",
+    "apps/core/contract_store.py",
+    "apps/core/json_utils.py"
+  ],
+  "write_scope": [
+    "contracts/role_rules.json",
+    "apps/accounts/management/commands/report_roleless_users.py",
+    "apps/accounts/management/commands/apply_roleless_user_manifest.py",
+    "apps/accounts/management/commands/cutover_explicit_viewer.py",
+    "apps/accounts/management/commands/rollback_explicit_viewer.py",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/accounts/services.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/access_migration_services.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/tests.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/services.py",
+    "apps/workorders/tests.py",
+    "apps/accounts/management/commands/access_management_e2e.py",
+    "docs/adr/ADR-0039-default-board-view-access.md",
+    "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/architecture/DECLARATIVE_ACCESS_POLICY_ARCHITECTURE.md",
+    "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.04-viewer-migration.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.04-viewer-migration.md"
+  ],
+  "runtime_artifacts": [
+    "Reports, owner-approved manifests, backups and results belong under data/access-migrations/ with restrictive permissions; they are never committed.",
+    "The runtime role contract may be changed only by the dedicated audited cutover/rollback services with expected hashes and atomic replacement."
+  ],
+  "state_machine": [
+    "Compatibility: while the valid runtime role contract lacks viewer, active users without an explicit contract role retain the legacy default_board_viewer profile.",
+    "Prepared: under one access lock and DB transaction, an active superuser applies a complete owner-approved manifest. Only the exact predefined viewer Group/Profile, viewer memberships and approved Board ACL additions are staged and audited. Because viewer is not yet a runtime contract role, these grants are inert and the fallback remains active. Choices of already-active roles remain signed instructions and are not written during prepare.",
+    "Cutover: under the access lock, re-read actor, complete roleless cohort, viewer membership, technical flags, departments, customer-open boards, all relevant ACLs and hashes. Apply owner-approved existing-role choices through migration-only domain adapters with deterministic audit fingerprints, then atomically add only the exact Git-default viewer role to the runtime contract through the staged SettingsChange writer. A crash between these writes may expose only already approved existing-role grants, leaves fallback active for viewer/no_role choices, and is completed idempotently on retry.",
+    "Active: runtime viewer presence activates its explicit contract rules and simultaneously disables the legacy fallback. A user without an explicit contract role receives no role-derived general access.",
+    "Rollback: only on exact post-cutover state, atomically remove runtime viewer first to restore the fallback, then remove only migration-added memberships and ACL entries through audited domain services. A retry recognizes the audited contract rollback and resumes DB cleanup; any unrelated later membership/ACL drift aborts rollback."
+  ],
+  "authority": [
+    "Report generation is read-only and does not require product-role mutation authority.",
+    "Prepare, cutover and rollback require a freshly loaded active superuser; is_staff or manage_roles alone is insufficient.",
+    "A roleless superuser may explicitly choose viewer, customer, another ordinary role or no_role; no choice is automatic and the existing superuser self-assignment rule remains intact.",
+    "Technical groups, is_staff and is_superuser are fingerprints and are never changed by this migration."
+  ],
+  "durability": [
+    "The report and every mutable manifest/result path must resolve under data/access-migrations; directories and files are private and commands never print personal payloads to stdout.",
+    "Prepare validates the immutable report hash, exact Git/runtime hashes, complete cohort/ACL snapshots, explicit choices, active-superuser approver and reason, then writes a Django-signed operation envelope before DB mutation.",
+    "Every migration-owned AccessAssignmentAudit and BoardAccessAudit has a deterministic unique fingerprint derived from the signed operation and target. Retries either reconstruct the completed phase from exact audits/state or fail closed on a partial mismatch.",
+    "Cutover and rollback use deterministic SettingsChange operation fingerprints. A retry after atomic contract replacement resolves the applied change and reconstructs the result instead of attempting a second write.",
+    "No new persistent authorization flag/model is introduced; signed private artifacts plus existing domain/SettingsChange audits form the operational recovery journal."
+  ],
+  "acceptance": [
+    "viewer exactly matches the former read-only department-branch profile, contains the complete frozen capability catalog, protected=false, and has no write capability.",
+    "Legacy runtime without viewer preserves the current fallback; prepared inert viewer membership and ACL do not change effective product access before cutover.",
+    "The report lists every active user without an explicit runtime contract role, identifies technical-only users, and shows exact user and board/resource deltas for every allowed choice without a default.",
+    "The manifest requires exactly one explicit viewer, customer, other existing role, or no_role choice for every current roleless user and one explicit ACL choice for every customer-open board.",
+    "Prepare rejects unrelated pre-existing viewer Group/Profile, Django permissions, members or ACL references; it rechecks the complete cohort and board versions under the access lock, then changes only inert viewer memberships and ACLs in one DB transaction through migration-only domain adapters with correlated AccessAssignmentAudit and BoardAccessAudit.",
+    "Prepare adds viewer only to owner-approved boards and preserves customer plus every existing valid ACL group; any user, department, group, board, ACL or contract drift aborts without partial state.",
+    "Cutover repeats the full signed-manifest check, applies any approved already-active role choices through correlated domain audits, and atomically adds only the exact Git-default viewer role to the runtime contract with backup, expected hashes and SettingsChange audit; ordinary role writers remain unable to change the role set.",
+    "After cutover no explicit role means no role-derived general access, approved viewer users retain the former read-only board scope, customer/other roles retain their defined access, and technical authority is unchanged.",
+    "A new or newly roleless active user between prepare and cutover aborts cutover; a new user after cutover receives no implicit product role.",
+    "Crash before/after prepare commit, before/after contract replacement, and after contract rollback before DB cleanup is recoverable through the signed artifact plus deterministic domain/SettingsChange audits. Retry is idempotent or fails closed on partial/inconsistent state.",
+    "Rollback removes the runtime viewer role before prepared DB grants and refuses any post-cutover viewer membership or Board ACL drift.",
+    "HTTP, effective-access explanation, selectors and UI agree with enforcement before and after cutover; the e2e command covers prepare, cutover and rollback."
+  ],
+  "non_goals": [
+    "No persistent migration flag or new authorization-state model.",
+    "No automatic assignment to viewer, customer or any other role.",
+    "No direct unaudited user.groups or Board.allowed_groups mutation.",
+    "No deletion of arbitrary roles and no general relaxation of the frozen role-set writer."
+  ]
+}

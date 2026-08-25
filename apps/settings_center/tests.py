@@ -27,12 +27,16 @@ from django.urls import reverse
 from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity, GroupProfile
 from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
+from apps.core.right_panels import build_right_panel_descriptor
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
 from apps.memory.models import MemoryGroupMembershipAudit
 
 from .contract_services import (
+    _assert_deployment_catalog_candidate_delta,
     apply_contract_payload,
+    migrate_role_administration_metadata,
+    migrate_role_capability_catalog,
     preview_contract_rollback,
     read_contract_value,
     reconcile_pending_contract_changes,
@@ -45,6 +49,7 @@ from .forms import (
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
     RoleDefinitionForm,
+    RoleCreateForm,
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, build_help_context
@@ -56,7 +61,260 @@ User = get_user_model()
 pytestmark = pytest.mark.integration
 
 
+class AccessEditorRightPanelTests(TestCase):
+    def test_provider_builds_fixed_user_and_role_edit_descriptors(self):
+        actor = User.objects.create_superuser(username="panel-root", password="pass")
+        target = User.objects.create_user(username="panel-target", password="pass")
+
+        user_descriptor = build_right_panel_descriptor(
+            user=actor,
+            source_code="settings_center",
+            object_type="user",
+            object_id=str(target.pk),
+            mode="edit",
+        )
+        self.assertEqual(
+            user_descriptor.htmx_url,
+            f"{reverse('settings_center:access_workspace')}?view=users&object={target.pk}&field=roles&panel=inspector",
+        )
+        self.assertEqual(user_descriptor.metadata["target_type"], "user")
+        self.assertEqual(user_descriptor.title, f"Редактор доступа: пользователь #{target.pk}")
+        self.assertNotIn(target.username, user_descriptor.title)
+
+        role_descriptor = build_right_panel_descriptor(
+            user=actor,
+            source_code="settings_center",
+            object_type="role",
+            object_id="customer",
+            mode="edit",
+        )
+        self.assertEqual(role_descriptor.metadata["target_type"], "role")
+        self.assertEqual(
+            role_descriptor.htmx_url,
+            f"{reverse('settings_center:access_workspace')}?view=roles&object=customer&field=definition&panel=inspector",
+        )
+
+    def test_provider_rejects_unknown_or_view_mode_targets(self):
+        actor = User.objects.create_superuser(username="panel-root-deny", password="pass")
+
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="technical-group",
+                object_id="memory_admin",
+                mode="edit",
+            )
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="role",
+                object_id="customer",
+                mode="view",
+            )
+
+    def test_provider_rechecks_fresh_actor_and_target_state(self):
+        actor = User.objects.create_superuser(username="panel-race-root", password="pass")
+        target = User.objects.create_user(username="panel-race-target", password="pass")
+        actor.is_active = False
+        actor.save(update_fields=["is_active"])
+        with self.assertRaises(PermissionDenied):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="user",
+                object_id=str(target.pk),
+                mode="edit",
+            )
+
+        actor.is_active = True
+        actor.save(update_fields=["is_active"])
+        target.delete()
+        with self.assertRaises(PermissionDenied):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="user",
+                object_id="999999",
+                mode="edit",
+            )
+
+
+def _role_catalog_target(payload, code="future_catalog_flag"):
+    target = copy.deepcopy(payload)
+    target["$capabilities"][code] = {
+        "type": "flag",
+        "label": "Future catalog flag",
+        "description": "Deployment-only test capability.",
+        "section": "organization",
+        "risk": "normal",
+    }
+    for role_code, role in target.items():
+        if not role_code.startswith("$"):
+            role[code] = role_code == "admin"
+    return target
+
+
+def _write_role_catalog_sandbox(root, *, runtime_payload, git_payload, candidate_payload=None):
+    root = Path(root)
+    runtime_root = root / "data" / "contracts"
+    git_root = root / "contracts"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    git_root.mkdir(parents=True, exist_ok=True)
+    runtime_path = runtime_root / "role_rules.json"
+    git_path = git_root / "role_rules.json"
+    runtime_path.write_text(json.dumps(runtime_payload, ensure_ascii=False), encoding="utf-8")
+    git_path.write_text(json.dumps(git_payload, ensure_ascii=False), encoding="utf-8")
+    candidate_path = root / "reviewed-role-rules.json"
+    if candidate_payload is not None:
+        candidate_path.write_text(
+            json.dumps(candidate_payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    settings_override = override_settings(
+        BASE_DIR=root,
+        DATA_DIR=root / "data",
+        RUNTIME_CONTRACTS_DIR=runtime_root,
+        LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+    )
+    return settings_override, runtime_path, candidate_path
+
+
 class AccessWorkspaceTests(TestCase):
+    def test_global_right_panel_get_is_a_workspace_fragment(self):
+        actor = User.objects.create_superuser(username="workspace-global-root", password="pass")
+        target = User.objects.create_user(username="workspace-global-target")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "users", "object": target.pk, "field": "roles", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<!doctype html>", html=False)
+        self.assertContains(response, "access-global-inspector")
+        self.assertContains(response, "access-user-bundle-form")
+
+    def test_roles_cut_explains_protection_and_offers_workspace_creation(self):
+        actor = User.objects.create_superuser(username="workspace-role-root", password="pass")
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:access_workspace"), {"view": "roles"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Создать роль")
+        self.assertContains(response, "Защищённая роль")
+        self.assertContains(response, "Назначение и изменение доступны только активному суперпользователю.")
+
+    def test_role_creation_editor_is_rendered_in_global_overlay(self):
+        actor = User.objects.create_user(username="workspace-role-manager")
+        self.client.force_login(actor)
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "create": "role", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, "Защищённые роли создаются только активным суперпользователем.")
+        self.assertNotContains(response, 'name="protected"', html=False)
+
+    def test_role_creation_editor_is_rendered_in_workspace_overlay(self):
+        actor = User.objects.create_superuser(username="workspace-role-local-root", password="pass")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "create": "role", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="access-inspector-host",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, 'class="drawer drawer-large access-inspector active"', html=False)
+
+    def test_global_role_create_errors_keep_retry_target(self):
+        actor = User.objects.create_user(username="workspace-role-retry")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+
+        response = self.client.post(
+            url,
+            {
+                "view": "roles", "create": "role", "panel": "inspector",
+                "action": "create_role", "code": "bad code", "display_name": "Retry",
+                "description": "", "base_hash": "invalid",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, 'hx-target="#global-right-panel-content"', html=False)
+
+    def test_global_role_create_posts_in_sandbox_and_refreshes_role_editor(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="workspace-role-sandbox")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        base = load_json_file("contracts/role_rules.json")
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=base, git_payload=base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    response = self.client.post(
+                        reverse("settings_center:access_workspace"),
+                        {
+                            "view": "roles", "create": "role", "field": "definition", "panel": "inspector",
+                            "action": "create_role", "code": "sandbox_role", "display_name": "Sandbox role",
+                            "description": "Created in an isolated contract sandbox.",
+                            "base_hash": normalized_hash(base),
+                        },
+                        HTTP_HX_REQUEST="true",
+                        HTTP_HX_TARGET="global-right-panel-content",
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    self.assertContains(response, 'id="access-table-panel" hx-swap-oob="innerHTML"', html=False)
+                    self.assertContains(response, "role-capability-editor")
+                    self.assertIn("sandbox_role", load_json_file(runtime_path))
+                finally:
+                    _reset_for_tests()
+
+    def test_delegated_manager_sees_explicit_denial_for_protected_role_editors(self):
+        actor = User.objects.create_user(username="workspace-protected-manager")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        for field in ("definition", "description", "users"):
+            with self.subTest(field=field):
+                response = self.client.get(
+                    url,
+                    {"view": "roles", "object": "admin", "field": field, "panel": "inspector"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Защищённая роль")
+                self.assertContains(response, "активному суперпользователю")
+                self.assertNotContains(response, "role-capability-editor")
+
     def test_capability_groups_are_complete_and_use_user_facing_sections(self):
         from apps.accounts.access_contracts import (
             CAPABILITY_GROUP_BY_CAPABILITY,
@@ -159,6 +417,7 @@ class AccessWorkspaceTests(TestCase):
             "Память организации",
         } <= site_section_names)
         self.assertFalse(site_section_names & {"Заявки", "Доски", "Система"})
+        self.assertNotIn("Прочие права", site_section_names)
         actor_row = next(row for row in response.context["users"] if row["id"] == actor.pk)
         self.assertIn("Канбан-доска", actor_row["site_sections"])
         self.assertFalse(set(actor_row["site_sections"]) & {"Заявки", "Доски", "Система"})
@@ -185,7 +444,11 @@ class AccessWorkspaceTests(TestCase):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         admin.groups.add(admin_group)
         manager.groups.add(manager_group)
-        targets = ((superuser, "admin"), (admin, "manager"))
+        targets = (
+            (superuser, "admin"),
+            (admin, "customer"),
+            (manager, "technician"),
+        )
         for actor, target_role in targets:
             with self.subTest(actor=actor.username):
                 self.assertTrue(can_edit_role_definitions(actor))
@@ -226,7 +489,7 @@ class AccessWorkspaceTests(TestCase):
                     200,
                 )
 
-        denied = (staff, manager, regular, inactive)
+        denied = (staff, regular, inactive)
         for actor in denied:
             with self.subTest(actor=actor.username):
                 self.assertFalse(can_edit_role_definitions(actor))
@@ -237,22 +500,18 @@ class AccessWorkspaceTests(TestCase):
                     reverse("settings_center:access_workspace"),
                     {"view": "roles", "object": "admin", "panel": "inspector"},
                 )
-                if actor is manager:
-                    self.assertEqual(workspace_response.status_code, 200)
-                    self.assertNotContains(workspace_response, "role-capability-editor")
-                else:
-                    self.assertIn(workspace_response.status_code, {302, 403})
+                self.assertIn(workspace_response.status_code, {302, 403})
                 self.assertIn(
                     self.client.get(reverse("settings_center:role_definition", args=["admin"])).status_code,
                     {302, 403},
                 )
 
-        role_model = role_definition_read_model("manager")
+        role_model = role_definition_read_model("customer")
         proposed = copy.deepcopy(role_model["config"])
         proposed["display_name"] = "Изменение до смены editor role"
         preview = preview_role_definition_change(
             actor=admin,
-            role_code="manager",
+            role_code="customer",
             proposed_config=proposed,
             base_hash=role_model["base_hash"],
         )
@@ -260,7 +519,7 @@ class AccessWorkspaceTests(TestCase):
         with self.assertRaises((ValidationError, PermissionDenied)):
             apply_role_definition_change(
                 actor=admin,
-                role_code="manager",
+                role_code="customer",
                 proposed_config=proposed,
                 base_hash=role_model["base_hash"],
                 preview_token=preview["preview_token"],
@@ -275,12 +534,12 @@ class AccessWorkspaceTests(TestCase):
         admin_group, _ = Group.objects.get_or_create(name="admin")
         actor.groups.add(admin_group)
         with patch(
-            "apps.accounts.access_contracts.role_definition_editor_roles",
+            "apps.accounts.access_contracts.get_contract",
             side_effect=ContractStoreError("role contract unavailable"),
         ):
             self.assertFalse(can_edit_role_definitions(actor))
 
-    def test_delegated_editor_critical_policy_and_target_role_ceiling(self):
+    def test_manage_roles_editor_protected_before_after_and_held_role_ceiling(self):
         from apps.accounts.access_contracts import (
             apply_role_definition_change,
             preview_role_definition_change,
@@ -314,21 +573,13 @@ class AccessWorkspaceTests(TestCase):
             model = role_definition_read_model("manager")
             proposed = copy.deepcopy(model["config"])
             proposed["manage_roles"] = False
-            preview = preview_role_definition_change(
-                actor=actor,
-                role_code="manager",
-                proposed_config=proposed,
-                base_hash=model["base_hash"],
-            )
-            change = apply_role_definition_change(
-                actor=actor,
-                role_code="manager",
-                proposed_config=proposed,
-                base_hash=model["base_hash"],
-                preview_token=preview["preview_token"],
-                risk_confirmed=True,
-            )
-            self.assertEqual(change.status, SettingsChange.Status.APPLIED)
+            with self.assertRaises(PermissionDenied):
+                preview_role_definition_change(
+                    actor=actor,
+                    role_code="manager",
+                    proposed_config=proposed,
+                    base_hash=model["base_hash"],
+                )
 
         run_with_payload(critical_reduction)
 
@@ -376,12 +627,12 @@ class AccessWorkspaceTests(TestCase):
         run_with_payload(own_role)
 
         def actor_state_changed(_role_file):
-            model = role_definition_read_model("manager")
+            model = role_definition_read_model("customer")
             proposed = copy.deepcopy(model["config"])
             proposed["description"] = "устарело"
             preview = preview_role_definition_change(
                 actor=actor,
-                role_code="manager",
+                role_code="customer",
                 proposed_config=proposed,
                 base_hash=model["base_hash"],
             )
@@ -389,7 +640,7 @@ class AccessWorkspaceTests(TestCase):
             with self.assertRaises(ValidationError):
                 apply_role_definition_change(
                     actor=actor,
-                    role_code="manager",
+                    role_code="customer",
                     proposed_config=proposed,
                     base_hash=model["base_hash"],
                     preview_token=preview["preview_token"],
@@ -1224,7 +1475,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-catalog-admin", password="pass")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         sibling_code = next(
             role for role in role_rules if not role.startswith("$") and role != role_code
         )
@@ -1291,7 +1542,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-unknown-admin")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         proposed = {
             code: copy.deepcopy(role_rules[role_code][code])
             for code in role_rules["$capabilities"]
@@ -1326,7 +1577,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-member-stale-root")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         role_group, _ = Group.objects.get_or_create(name=role_code)
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1375,7 +1626,7 @@ class SettingsCenterRegistryTests(TestCase):
         actor = User.objects.create_superuser(username="role-lifecycle-root")
         lifecycle_operator = User.objects.create_superuser(username="role-lifecycle-operator")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             role_file = root / "role_rules.json"
@@ -1518,6 +1769,10 @@ class SettingsCenterContractTests(TestCase):
         actor.groups.add(admin_group)
         self.assertFalse(hasattr(contract_services, "apply_role_definition_payload"))
         base_payload = load_json_file("contracts/role_rules.json")
+        base_payload["$administration"] = {
+            "role_definition_editor_roles": ["admin"],
+            "role_assignment_allowlist": {"manager": ["customer"]},
+        }
         with TemporaryDirectory() as tmpdir:
             role_file = Path(tmpdir) / "role_rules.json"
             role_file.write_text(json.dumps(base_payload, ensure_ascii=False), encoding="utf-8")
@@ -1528,35 +1783,39 @@ class SettingsCenterContractTests(TestCase):
                 _reset_for_tests()
                 self.addCleanup(_reset_for_tests)
                 base_hash = normalized_hash(base_payload)
-                for block in ("customer", "$administration", "$capabilities"):
+                for block in ("technician", "$administration", "$capabilities"):
                     with self.subTest(block=block):
-                        proposed_manager = copy.deepcopy(base_payload["manager"])
+                        proposed_manager = copy.deepcopy(base_payload["customer"])
                         proposed_manager["description"] = "изменение цели"
                         preview = preview_role_definition_change(
                             actor=actor,
-                            role_code="manager",
+                            role_code="customer",
                             proposed_config=proposed_manager,
                             base_hash=base_hash,
                         )
 
                         def factory(before, block=block):
                             candidate = copy.deepcopy(before)
-                            if block == "customer":
-                                candidate["customer"]["description"] = "обход"
+                            if block == "technician":
+                                candidate["technician"]["description"] = "обход"
                             elif block == "$administration":
                                 candidate["$administration"]["role_definition_editor_roles"] = ["manager"]
                             else:
                                 candidate["$capabilities"]["view_scope"]["label"] = "обход"
-                            candidate["manager"]["description"] = "изменение цели"
+                            candidate["customer"]["description"] = "изменение цели"
                             return json.dumps(candidate, ensure_ascii=False)
 
-                        with self.assertRaisesMessage(
-                            ValidationError,
-                            "не может изменять соседние роли или служебные блоки",
-                        ):
+                        expected_message = (
+                            "$capabilities нельзя изменять"
+                            if block == "$capabilities"
+                            else "$administration нельзя изменять"
+                            if block == "$administration"
+                            else "не может изменять соседние роли или служебные блоки"
+                        )
+                        with self.assertRaisesMessage(ValidationError, expected_message):
                             contract_services._apply_role_definition_payload(
                                 actor=actor,
-                                role_code="manager",
+                                role_code="customer",
                                 base_hash=base_hash,
                                 confirmed=True,
                                 raw_payload_factory=factory,
@@ -1608,21 +1867,25 @@ class SettingsCenterContractTests(TestCase):
                 )
                 self.assertEqual(change.status, SettingsChange.Status.APPLIED)
 
-    def test_role_definition_editor_selector_fails_closed(self):
-        from apps.accounts.selectors import role_definition_editor_roles
+    def test_legacy_administration_metadata_is_inert_for_role_authority(self):
+        from apps.accounts.access_contracts import can_edit_role_definitions
 
+        actor = User.objects.create_user(username="legacy-inert-admin")
+        ordinary = User.objects.create_user(username="legacy-listed-customer")
+        admin_group, _ = Group.objects.get_or_create(name="admin")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        actor.groups.add(admin_group)
+        ordinary.groups.add(customer_group)
         base = load_json_file("contracts/role_rules.json")
         legacy = copy.deepcopy(base)
-        legacy.pop("$administration")
-        self.assertEqual(role_definition_editor_roles(legacy), ("admin",))
+        legacy["$administration"] = {
+            "role_definition_editor_roles": ["customer"],
+            "role_assignment_allowlist": {"missing": ["missing"]},
+        }
+        self.assertTrue(can_edit_role_definitions(actor, rules_snapshot=legacy))
+        self.assertFalse(can_edit_role_definitions(ordinary, rules_snapshot=legacy))
 
-        for value in ("admin", [], ["admin", "admin"], ["missing"]):
-            with self.subTest(value=value):
-                malformed = copy.deepcopy(base)
-                malformed["$administration"]["role_definition_editor_roles"] = value
-                self.assertEqual(role_definition_editor_roles(malformed), ())
-
-    def test_delegated_critical_scope_and_targets_are_monotonic(self):
+    def test_protected_role_reductions_and_expansions_require_superuser(self):
         from apps.accounts.access_contracts import preview_role_definition_change, role_definition_read_model
 
         actor = User.objects.create_user(username="critical-scope-editor")
@@ -1637,13 +1900,13 @@ class SettingsCenterContractTests(TestCase):
             with self.subTest(field=field, direction="reduction"):
                 proposed = copy.deepcopy(model["config"])
                 proposed[field] = reduced
-                preview = preview_role_definition_change(
-                    actor=actor,
-                    role_code="doctor",
-                    proposed_config=proposed,
-                    base_hash=model["base_hash"],
-                )
-                self.assertTrue(preview["preview_token"])
+                with self.assertRaises(PermissionDenied):
+                    preview_role_definition_change(
+                        actor=actor,
+                        role_code="doctor",
+                        proposed_config=proposed,
+                        base_hash=model["base_hash"],
+                    )
 
         for field, expanded in (
             ("waiting_list_edit_scope", "all"),
@@ -1667,7 +1930,7 @@ class SettingsCenterContractTests(TestCase):
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             changed_payload = {**payload}
-            first_role = next(role for role in changed_payload if not role.startswith("$"))
+            first_role = next(role for role in changed_payload if not role.startswith("$") and role != "viewer")
             changed_payload[first_role] = {**changed_payload[first_role], "display_name": "Changed role name"}
 
             with override_settings(
@@ -1695,7 +1958,7 @@ class SettingsCenterContractTests(TestCase):
             role_file = Path(tmpdir) / "role_rules.json"
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            first_role = next(role for role in payload if not role.startswith("$"))
+            first_role = next(role for role in payload if not role.startswith("$") and role != "viewer")
 
             with override_settings(
                 LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
@@ -1794,7 +2057,7 @@ class SettingsContractRecoveryTests(TransactionTestCase):
 
     def _changed(self, label):
         changed = copy.deepcopy(self.payload)
-        first_role = next(role for role in changed if not role.startswith("$"))
+        first_role = next(role for role in changed if not role.startswith("$") and role != "viewer")
         changed[first_role]["display_name"] = label
         return changed
 
@@ -1851,7 +2114,11 @@ class SettingsContractRecoveryTests(TransactionTestCase):
                 env=env,
                 text=True,
                 capture_output=True,
-                timeout=90,
+                # A full isolated schema is intentionally built here so both
+                # writer processes use the same real database. On loaded CI
+                # and development hosts this can exceed 90 seconds even while
+                # migrations are actively progressing.
+                timeout=180,
             )
             self.assertEqual(migrate.returncode, 0, migrate.stderr)
             create_actor = subprocess.run(
@@ -2973,3 +3240,1269 @@ class ProductSettingsAuthorityTests(TestCase):
                 confirmed=True,
                 raw_payload_factory=lambda _rules: "{}",
             )
+
+
+class FrozenRoleCapabilityCatalogTests(TestCase):
+    def setUp(self):
+        self.root = User.objects.create_superuser(username="catalog-deployment-root")
+        self.base = load_json_file("contracts/role_rules.json")
+
+    def test_ordinary_generic_write_rejects_already_drifted_runtime_catalog(self):
+        runtime = copy.deepcopy(self.base)
+        runtime["$capabilities"]["manage_roles"]["label"] = "Runtime drift"
+        candidate = copy.deepcopy(runtime)
+        candidate["manager"]["description"] = "Otherwise valid ordinary change"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=runtime,
+                git_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "Git-default"):
+                apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(candidate, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(runtime),
+                )
+
+            self.assertEqual(load_json_file(runtime_path), runtime)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_ordinary_generic_write_rejects_candidate_catalog_mutation(self):
+        candidate = copy.deepcopy(self.base)
+        candidate["$capabilities"]["manage_roles"]["description"] = "Candidate mutation"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "обычную запись"):
+                apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(candidate, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(self.base),
+                )
+
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_historical_rollback_cannot_restore_capability_metadata(self):
+        historical = copy.deepcopy(self.base)
+        historical["$capabilities"]["manage_roles"]["label"] = "Historical label"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+            )
+            with override:
+                source = SettingsChange.objects.create(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    domain="core",
+                    storage_kind="runtime_contract",
+                    action=SettingsChange.Action.APPLY,
+                    status=SettingsChange.Status.APPLIED,
+                    before_hash=normalized_hash(historical),
+                    after_hash=normalized_hash(self.base),
+                    before_snapshot=historical,
+                    after_snapshot=self.base,
+                    contract_relpath="role_rules.json",
+                )
+                preview = preview_contract_rollback(actor=self.root, change_id=source.pk)
+                with self.assertRaisesMessage(ValidationError, "rollback"):
+                    rollback_contract_change(
+                        actor=self.root,
+                        change_id=source.pk,
+                        confirmed=True,
+                        base_hash=preview["base_hash"],
+                    )
+
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertEqual(SettingsChange.objects.count(), 1)
+
+    def test_constrained_role_save_rejects_git_runtime_catalog_drift(self):
+        from apps.accounts.access_contracts import (
+            role_definition_read_model,
+            save_role_definition_change,
+        )
+        from apps.core.contract_store import _reset_for_tests
+
+        runtime = copy.deepcopy(self.base)
+        runtime["$capabilities"]["manage_roles"]["label"] = "Runtime drift"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=runtime,
+                git_payload=self.base,
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    model = role_definition_read_model("manager")
+                    proposed = copy.deepcopy(model["config"])
+                    proposed["description"] = "Constrained change"
+                    with self.assertRaisesMessage(ValidationError, "Git-default"):
+                        save_role_definition_change(
+                            actor=self.root,
+                            role_code="manager",
+                            proposed_config=proposed,
+                            base_hash=model["base_hash"],
+                        )
+                finally:
+                    _reset_for_tests()
+
+            self.assertEqual(load_json_file(runtime_path), runtime)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_deployment_hash_mismatches_and_noop_leave_runtime_unchanged(self):
+        target = _role_catalog_target(self.base)
+        hashes = {
+            "expected_runtime_catalog_hash": normalized_hash(self.base["$capabilities"]),
+            "expected_git_catalog_hash": normalized_hash(target["$capabilities"]),
+            "expected_runtime_hash": normalized_hash(self.base),
+        }
+        cases = (
+            "expected_runtime_catalog_hash",
+            "expected_git_catalog_hash",
+            "expected_runtime_hash",
+        )
+        for wrong_field in cases:
+            with self.subTest(wrong_field=wrong_field), TemporaryDirectory() as tmpdir:
+                override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                    tmpdir,
+                    runtime_payload=self.base,
+                    git_payload=target,
+                    candidate_payload=target,
+                )
+                wrong = dict(hashes)
+                wrong[wrong_field] = "0" * 64
+                with override, self.assertRaises(ValidationError):
+                    migrate_role_capability_catalog(
+                        actor=self.root,
+                        candidate_path=candidate_path,
+                        reason="Hash mismatch test",
+                        **wrong,
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.base)
+                self.assertFalse(SettingsChange.objects.exists())
+                self.assertFalse((Path(tmpdir) / "data" / "contracts" / "backups").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+                candidate_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "нет изменений"):
+                migrate_role_capability_catalog(
+                    actor=self.root,
+                    candidate_path=candidate_path,
+                    expected_runtime_catalog_hash=normalized_hash(self.base["$capabilities"]),
+                    expected_git_catalog_hash=normalized_hash(self.base["$capabilities"]),
+                    expected_runtime_hash=normalized_hash(self.base),
+                    reason="No-op test",
+                )
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_deployment_candidate_rejects_unrelated_deltas(self):
+        target = _role_catalog_target(self.base)
+
+        def mutate_grant(candidate):
+            candidate["customer"]["create_workorder"] = not candidate["customer"][
+                "create_workorder"
+            ]
+
+        def mutate_role_set(candidate):
+            candidate["extra-role"] = copy.deepcopy(candidate["customer"])
+
+        def mutate_administration(candidate):
+            candidate["$administration"] = {
+                "role_definition_editor_roles": ["manager"]
+            }
+
+        def mutate_metadata(candidate):
+            candidate["manager"]["description"] = "Unrelated role metadata"
+
+        for label, mutate in (
+            ("grant", mutate_grant),
+            ("role_set", mutate_role_set),
+            ("administration", mutate_administration),
+            ("role_metadata", mutate_metadata),
+        ):
+            with self.subTest(delta=label), TemporaryDirectory() as tmpdir:
+                candidate = copy.deepcopy(target)
+                mutate(candidate)
+                override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                    tmpdir,
+                    runtime_payload=self.base,
+                    git_payload=target,
+                    candidate_payload=candidate,
+                )
+                with override, self.assertRaises(ValidationError):
+                    migrate_role_capability_catalog(
+                        actor=self.root,
+                        candidate_path=candidate_path,
+                        expected_runtime_catalog_hash=normalized_hash(
+                            self.base["$capabilities"]
+                        ),
+                        expected_git_catalog_hash=normalized_hash(target["$capabilities"]),
+                        expected_runtime_hash=normalized_hash(self.base),
+                        reason=f"Reject unrelated {label}",
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.base)
+                self.assertFalse(SettingsChange.objects.exists())
+
+    def test_delta_validator_allows_only_changed_catalog_role_keys(self):
+        target = _role_catalog_target(self.base)
+        _assert_deployment_catalog_candidate_delta(
+            runtime_payload=self.base,
+            candidate_payload=target,
+        )
+
+        invalid = copy.deepcopy(target)
+        invalid["admin"]["display_name"] = "Changed outside catalog"
+        with self.assertRaises(ValidationError):
+            _assert_deployment_catalog_candidate_delta(
+                runtime_payload=self.base,
+                candidate_payload=invalid,
+            )
+
+    def test_deployment_command_migrates_new_capability_and_preserves_ordinary_writes(self):
+        target = _role_catalog_target(self.base)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=target,
+                candidate_payload=target,
+            )
+            output = StringIO()
+            with override:
+                call_command(
+                    "migrate_role_capabilities",
+                    operator_id=self.root.pk,
+                    candidate=candidate_path,
+                    expected_runtime_catalog_hash=normalized_hash(
+                        self.base["$capabilities"]
+                    ),
+                    expected_git_catalog_hash=normalized_hash(target["$capabilities"]),
+                    expected_runtime_hash=normalized_hash(self.base),
+                    reason="Reviewed catalog deployment",
+                    stdout=output,
+                )
+                applied = SettingsChange.objects.get()
+                self.assertEqual(applied.status, SettingsChange.Status.APPLIED)
+                self.assertEqual(applied.actor_id, self.root.pk)
+                self.assertEqual(
+                    applied.validation_result["operation"],
+                    "deployment_role_capability_catalog_migration",
+                )
+                self.assertEqual(
+                    applied.validation_result["reason"],
+                    "Reviewed catalog deployment",
+                )
+                written = load_json_file(runtime_path)
+                self.assertEqual(written, target)
+                backups = list(
+                    (Path(tmpdir) / "data" / "contracts" / "backups").glob(
+                        "role_rules.*.json"
+                    )
+                )
+                self.assertEqual(len(backups), 1)
+                self.assertEqual(load_json_file(backups[0]), self.base)
+                self.assertNotIn("future_catalog_flag", output.getvalue())
+
+                ordinary = copy.deepcopy(written)
+                ordinary["manager"]["description"] = "Ordinary write after migration"
+                second = apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(ordinary, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(written),
+                )
+                self.assertEqual(second.status, SettingsChange.Status.APPLIED)
+                self.assertEqual(load_json_file(runtime_path), ordinary)
+
+
+class LeanRoleAdministrationAuthorityTests(TestCase):
+    def setUp(self):
+        self.base = load_json_file("contracts/role_rules.json")
+        self.root = User.objects.create_superuser(username="lean-role-root")
+
+    def test_protected_capabilities_use_strict_effective_semantics(self):
+        from apps.accounts.access_contracts import role_is_protected
+
+        catalog = self.base["$capabilities"]
+        ordinary = copy.deepcopy(self.base["customer"])
+        self.assertFalse(role_is_protected(ordinary, catalog=catalog))
+
+        cases = []
+        explicit = copy.deepcopy(ordinary)
+        explicit["protected"] = True
+        cases.append(explicit)
+        flag = copy.deepcopy(ordinary)
+        flag["manage_roles"] = True
+        cases.append(flag)
+        scope = copy.deepcopy(ordinary)
+        scope["waiting_list_view_scope"] = "all"
+        cases.append(scope)
+        targets = copy.deepcopy(ordinary)
+        targets["waiting_list_edit_statuses"] = ["waiting"]
+        cases.append(targets)
+        malformed_flag = copy.deepcopy(ordinary)
+        malformed_flag["manage_roles"] = "false"
+        cases.append(malformed_flag)
+        malformed_scope = copy.deepcopy(ordinary)
+        malformed_scope["waiting_list_view_scope"] = "future"
+        cases.append(malformed_scope)
+        malformed_targets = copy.deepcopy(ordinary)
+        malformed_targets["waiting_list_edit_statuses"] = ["waiting", "waiting"]
+        cases.append(malformed_targets)
+        unhashable_targets = copy.deepcopy(ordinary)
+        unhashable_targets["waiting_list_edit_statuses"] = [{"status": "waiting"}]
+        cases.append(unhashable_targets)
+        missing_value = copy.deepcopy(ordinary)
+        missing_value.pop("manage_roles")
+        cases.append(missing_value)
+        for config in cases:
+            with self.subTest(config=config):
+                self.assertTrue(role_is_protected(config, catalog=catalog))
+
+        unknown_type_catalog = copy.deepcopy(catalog)
+        unknown_type_catalog["manage_roles"]["type"] = "future"
+        self.assertTrue(role_is_protected(ordinary, catalog=unknown_type_catalog))
+
+    def test_generic_writer_cannot_create_or_delete_roles(self):
+        for operation in ("create", "delete"):
+            with self.subTest(operation=operation), TemporaryDirectory() as tmpdir:
+                candidate = copy.deepcopy(self.base)
+                if operation == "create":
+                    candidate["raw_bypass"] = copy.deepcopy(candidate["customer"])
+                else:
+                    candidate.pop("customer")
+                override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                    tmpdir, runtime_payload=self.base, git_payload=self.base
+                )
+                with override, self.assertRaisesMessage(ValidationError, "Набор ролей"):
+                    apply_contract_payload(
+                        actor=self.root,
+                        setting_id="core.contract.role_rules",
+                        raw_payload=json.dumps(candidate, ensure_ascii=False),
+                        confirmed=True,
+                        base_hash=normalized_hash(self.base),
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.base)
+
+    def test_role_create_http_authority_and_protected_field_visibility(self):
+        manager_actor = User.objects.create_user(
+            username="role-create-http-manager", password="pass"
+        )
+        manager, _ = Group.objects.get_or_create(name="manager")
+        manager_actor.groups.add(manager)
+        staff = User.objects.create_user(
+            username="role-create-http-staff", password="pass", is_staff=True
+        )
+        url = reverse("settings_center:role_create")
+
+        self.client.force_login(manager_actor)
+        manager_page = self.client.get(url)
+        self.assertEqual(manager_page.status_code, 200)
+        self.assertContains(manager_page, 'name="code"', html=False)
+        self.assertNotContains(manager_page, 'name="protected"', html=False)
+
+        self.client.force_login(self.root)
+        root_page = self.client.get(url)
+        self.assertEqual(root_page.status_code, 200)
+        self.assertContains(root_page, 'name="protected"', html=False)
+
+        self.client.force_login(staff)
+        self.assertIn(self.client.get(url).status_code, {302, 403})
+
+    def test_manage_roles_actor_creates_ordinary_role_through_http(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(
+            username="role-create-http-operator", password="pass"
+        )
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    response = self.client.post(
+                        reverse("settings_center:role_create"),
+                        {
+                            "code": "http_support",
+                            "display_name": "HTTP support",
+                            "description": "Created through the product route.",
+                            "base_hash": normalized_hash(self.base),
+                        },
+                    )
+                    self.assertRedirects(
+                        response,
+                        reverse(
+                            "settings_center:role_definition",
+                            kwargs={"role_code": "http_support"},
+                        ),
+                        fetch_redirect_response=False,
+                    )
+                    written = load_json_file(runtime_path)
+                    self.assertIn("http_support", written)
+                    self.assertFalse(written["http_support"]["protected"])
+                    group = Group.objects.get(name="http_support")
+                    self.assertTrue(group.profile.is_predefined)
+                finally:
+                    _reset_for_tests()
+
+    def test_manage_roles_creates_ordinary_role_and_materializes_group_idempotently(self):
+        from apps.accounts.access_contracts import save_role_creation
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="ordinary-role-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    change = save_role_creation(
+                        actor=actor,
+                        role_code="support_team",
+                        display_name="Поддержка",
+                        description="Обычная роль без исходных прав.",
+                        protected=False,
+                        base_hash=normalized_hash(self.base),
+                    )
+                    self.assertEqual(change.status, SettingsChange.Status.APPLIED)
+                    written = load_json_file(runtime_path)
+                    self.assertFalse(written["support_team"]["protected"])
+                    self.assertTrue(
+                        all(
+                            value in (False, "none", [])
+                            for code, value in written["support_team"].items()
+                            if code not in {"display_name", "description", "protected"}
+                        )
+                    )
+                    profile = Group.objects.get(name="support_team").profile
+                    self.assertTrue(profile.is_predefined)
+                    self.assertEqual(profile.title, "Поддержка")
+                    repaired = save_role_creation(
+                        actor=actor,
+                        role_code="support_team",
+                        display_name="Поддержка",
+                        description="Обычная роль без исходных прав.",
+                        protected=False,
+                        base_hash=normalized_hash(written),
+                    )
+                    self.assertIsNone(repaired)
+                    self.assertEqual(Group.objects.filter(name="support_team").count(), 1)
+                    protected_change = save_role_creation(
+                        actor=self.root,
+                        role_code="protected_support",
+                        display_name="Защищённая поддержка",
+                        protected=True,
+                        base_hash=normalized_hash(load_json_file(runtime_path)),
+                    )
+                    self.assertEqual(
+                        protected_change.status, SettingsChange.Status.APPLIED
+                    )
+                    self.assertTrue(
+                        load_json_file(runtime_path)["protected_support"]["protected"]
+                    )
+                finally:
+                    _reset_for_tests()
+
+    def test_creation_rejects_protected_reserved_and_group_collisions(self):
+        from apps.accounts.access_contracts import save_role_creation
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="bounded-role-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        Group.objects.create(name="ad_finance")
+        cases = (
+            ("protected_new", True),
+            ("superuser", False),
+            ("viewer", False),
+            ("memory_admin", False),
+            ("ad_finance", False),
+            ("Invalid-Code", False),
+        )
+        for code, protected in cases:
+            with self.subTest(code=code), TemporaryDirectory() as tmpdir:
+                override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                    tmpdir, runtime_payload=self.base, git_payload=self.base
+                )
+                with override:
+                    _reset_for_tests()
+                    try:
+                        with self.assertRaises((PermissionDenied, ValidationError)):
+                            save_role_creation(
+                                actor=actor,
+                                role_code=code,
+                                display_name="Новая роль",
+                                protected=protected,
+                                base_hash=normalized_hash(self.base),
+                            )
+                    finally:
+                        _reset_for_tests()
+                self.assertEqual(load_json_file(runtime_path), self.base)
+
+    def test_materialization_race_fails_without_reclassifying_technical_group(self):
+        from apps.accounts import access_contracts
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="role-race-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        original = access_contracts._materialize_role_group
+
+        def collide(role_code, config, **kwargs):
+            Group.objects.create(name=role_code)
+            return original(role_code, config, **kwargs)
+
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    with patch(
+                        "apps.accounts.access_contracts._materialize_role_group",
+                        side_effect=collide,
+                    ), self.assertRaisesMessage(ValidationError, "технической или AD"):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="race_group",
+                            display_name="Гонка",
+                            base_hash=normalized_hash(self.base),
+                        )
+                    self.assertNotIn("race_group", load_json_file(runtime_path))
+                    group = Group.objects.get(name="race_group")
+                    self.assertFalse(GroupProfile.objects.filter(group=group).exists())
+                    self.assertFalse(SettingsChange.objects.exists())
+                    with self.assertRaisesMessage(ValidationError, "технической или AD"):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="race_group",
+                            display_name="Гонка",
+                            base_hash=normalized_hash(self.base),
+                        )
+                    self.assertNotIn("race_group", load_json_file(runtime_path))
+                    self.assertFalse(GroupProfile.objects.filter(group=group).exists())
+                finally:
+                    _reset_for_tests()
+
+    def test_hard_stop_before_contract_write_is_inert_and_retryable(self):
+        from apps.accounts import access_contracts
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="role-hard-stop-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    with patch(
+                        "apps.settings_center.contract_services._write_validated_contract_change",
+                        side_effect=SystemExit("simulated hard stop"),
+                    ), self.assertRaisesRegex(SystemExit, "simulated hard stop"):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="reserved_group",
+                            display_name="Зарезервированная группа",
+                            base_hash=normalized_hash(self.base),
+                        )
+
+                    self.assertNotIn("reserved_group", load_json_file(runtime_path))
+                    group = Group.objects.get(name="reserved_group")
+                    self.assertTrue(group.profile.is_predefined)
+                    self.assertFalse(group.user_set.exists())
+                    self.assertFalse(group.permissions.exists())
+                    self.assertFalse(SettingsChange.objects.exists())
+
+                    change = access_contracts.save_role_creation(
+                        actor=actor,
+                        role_code="reserved_group",
+                        display_name="Зарезервированная группа",
+                        base_hash=normalized_hash(self.base),
+                    )
+                    self.assertEqual(change.status, SettingsChange.Status.APPLIED)
+                    self.assertIn("reserved_group", load_json_file(runtime_path))
+                    self.assertEqual(
+                        Group.objects.filter(name="reserved_group").count(),
+                        1,
+                    )
+                finally:
+                    _reset_for_tests()
+
+    def test_materialization_does_not_overwrite_mismatched_predefined_profile(self):
+        from apps.accounts.access_contracts import _materialize_role_group
+
+        group = Group.objects.create(name="mismatched_predefined")
+        profile = GroupProfile.objects.create(
+            group=group,
+            title="Другая предопределённая группа",
+            description="Не принадлежит создаваемой роли",
+            is_predefined=True,
+        )
+        with self.assertRaisesMessage(ValidationError, "технической или AD"):
+            _materialize_role_group(
+                "mismatched_predefined",
+                {"display_name": "Новая роль", "description": "Иное описание"},
+            )
+        profile.refresh_from_db()
+        self.assertEqual(profile.title, "Другая предопределённая группа")
+        self.assertEqual(profile.description, "Не принадлежит создаваемой роли")
+
+    def test_materialization_retry_rechecks_fresh_actor(self):
+        from apps.accounts import access_contracts
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="role-revoked-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    with patch(
+                        "apps.accounts.access_contracts._materialize_role_group",
+                        side_effect=ValidationError("DB unavailable"),
+                    ), self.assertRaisesMessage(ValidationError, "DB unavailable"):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="retry_role",
+                            display_name="Повтор",
+                            base_hash=normalized_hash(self.base),
+                        )
+                    self.assertNotIn("retry_role", load_json_file(runtime_path))
+                    actor.is_active = False
+                    actor.save(update_fields=["is_active"])
+                    with self.assertRaises(PermissionDenied):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="retry_role",
+                            display_name="Повтор",
+                            base_hash=normalized_hash(load_json_file(runtime_path)),
+                        )
+                    self.assertFalse(Group.objects.filter(name="retry_role").exists())
+                finally:
+                    _reset_for_tests()
+
+    def test_non_superuser_http_form_hides_and_ignores_forged_protected_flag(self):
+        from apps.accounts.access_contracts import role_definition_read_model
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="role-http-manager", password="pass")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    url = reverse("settings_center:role_definition", args=["technician"])
+                    page = self.client.get(url)
+                    self.assertEqual(page.status_code, 200)
+                    self.assertNotContains(page, 'name="protected"', html=False)
+                    model = role_definition_read_model("technician")
+                    data = {
+                        "base_hash": model["base_hash"],
+                        "display_name": model["label"],
+                        "description": "Изменено без повышения защиты",
+                        "protected": "on",
+                    }
+                    for section in model["sections"]:
+                        for capability in section["capabilities"]:
+                            value = capability["value"]
+                            if capability["type"] == "flag":
+                                if value:
+                                    data[f"capability__{capability['code']}"] = "on"
+                            elif capability["type"] == "targets":
+                                data[f"capability__{capability['code']}"] = (
+                                    ["*"] if value == "*" else list(value)
+                                )
+                            else:
+                                data[f"capability__{capability['code']}"] = value
+                    response = self.client.post(url, data)
+                    self.assertEqual(response.status_code, 302)
+                    written = load_json_file(runtime_path)
+                    self.assertFalse(written["technician"]["protected"])
+                finally:
+                    _reset_for_tests()
+
+
+class RoleAdministrationMigrationTests(TestCase):
+    def setUp(self):
+        self.root = User.objects.create_superuser(username="administration-migration-root")
+        self.git_default = load_json_file("contracts/role_rules.json")
+        self.runtime = copy.deepcopy(self.git_default)
+        self.runtime["$administration"] = {
+            "role_definition_editor_roles": ["admin"],
+            "role_assignment_allowlist": {"manager": ["customer", "technician"]},
+        }
+
+    def test_ordinary_writer_cannot_remove_legacy_administration(self):
+        candidate = copy.deepcopy(self.runtime)
+        candidate.pop("$administration")
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.runtime, git_payload=self.git_default
+            )
+            with override, self.assertRaisesMessage(ValidationError, "$administration нельзя"):
+                apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(candidate, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(self.runtime),
+                )
+            self.assertEqual(load_json_file(runtime_path), self.runtime)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_migration_hash_mismatch_is_no_write(self):
+        for field in ("expected_runtime_hash", "expected_git_hash"):
+            with self.subTest(field=field), TemporaryDirectory() as tmpdir:
+                override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                    tmpdir, runtime_payload=self.runtime, git_payload=self.git_default
+                )
+                kwargs = {
+                    "expected_runtime_hash": normalized_hash(self.runtime),
+                    "expected_git_hash": normalized_hash(self.git_default),
+                }
+                kwargs[field] = "0" * 64
+                with override, self.assertRaises(ValidationError):
+                    migrate_role_administration_metadata(
+                        actor=self.root,
+                        reason="Reviewed legacy cleanup",
+                        **kwargs,
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.runtime)
+                self.assertFalse(SettingsChange.objects.exists())
+                self.assertFalse((Path(tmpdir) / "data" / "contracts" / "backups").exists())
+
+    def test_migration_requires_fresh_active_superuser(self):
+        inactive = User.objects.create_superuser(username="inactive-administration-root")
+        inactive.is_active = False
+        inactive.save(update_fields=["is_active"])
+        staff = User.objects.create_user(
+            username="staff-administration-operator", is_staff=True
+        )
+        for actor in (inactive, staff):
+            with self.subTest(actor=actor.username), TemporaryDirectory() as tmpdir:
+                override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                    tmpdir, runtime_payload=self.runtime, git_payload=self.git_default
+                )
+                with override, self.assertRaises(PermissionDenied):
+                    migrate_role_administration_metadata(
+                        actor=actor,
+                        expected_runtime_hash=normalized_hash(self.runtime),
+                        expected_git_hash=normalized_hash(self.git_default),
+                        reason="Unauthorized cleanup",
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.runtime)
+                self.assertFalse(SettingsChange.objects.exists())
+
+    def test_command_removes_only_administration_with_backup_and_audit(self):
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.runtime, git_payload=self.git_default
+            )
+            output = StringIO()
+            with override:
+                call_command(
+                    "migrate_role_administration",
+                    operator_id=self.root.pk,
+                    expected_runtime_hash=normalized_hash(self.runtime),
+                    expected_git_hash=normalized_hash(self.git_default),
+                    reason="ADR-0043 legacy cleanup",
+                    stdout=output,
+                )
+            expected = copy.deepcopy(self.runtime)
+            expected.pop("$administration")
+            self.assertEqual(load_json_file(runtime_path), expected)
+            change = SettingsChange.objects.get()
+            self.assertEqual(change.status, SettingsChange.Status.APPLIED)
+            self.assertEqual(change.actor_id, self.root.pk)
+            self.assertEqual(
+                change.validation_result["operation"],
+                "deployment_remove_role_administration",
+            )
+            backups = list(
+                (Path(tmpdir) / "data" / "contracts" / "backups").glob(
+                    "role_rules.*.json"
+                )
+            )
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(load_json_file(backups[0]), self.runtime)
+            self.assertNotIn("role_assignment_allowlist", output.getvalue())
+
+
+class ExplicitViewerMigrationReportTests(TestCase):
+    def test_report_is_explicit_and_read_only(self):
+        target = User.objects.create_user(username="viewer-report-target")
+        before_groups = set(target.groups.values_list("name", flat=True))
+        from .access_migration_services import report_roleless_users
+
+        report = report_roleless_users()
+        row = next(item for item in report["users"] if item["id"] == target.pk)
+        self.assertIsNone(row["choice"])
+        self.assertIn("viewer", row["allowed_choices"])
+        self.assertIn("no_role", row["allowed_choices"])
+        self.assertEqual(set(target.groups.values_list("name", flat=True)), before_groups)
+        self.assertNotIn("viewer", get_contract("role_rules"))
+
+    def test_report_uses_exact_board_deltas_for_each_role_choice_and_superuser(self):
+        from .access_migration_services import report_roleless_users
+
+        target = User.objects.create_user(username="viewer-delta-target")
+        root = User.objects.create_superuser(username="viewer-delta-root")
+        customer, _ = Group.objects.get_or_create(name="customer")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        customer_board = Board.objects.create(title="Клиентская доска", slug="viewer-delta-customer")
+        customer_board.allowed_groups.add(customer)
+        technician_board = Board.objects.create(title="Доска техников", slug="viewer-delta-technician")
+        technician_board.allowed_groups.add(technician)
+        shared_board = Board.objects.create(title="Общая доска", slug="viewer-delta-shared")
+        shared_board.allowed_groups.add(customer, technician)
+        private_board = Board.objects.create(title="Закрытая доска", slug="viewer-delta-private")
+        customer_board_ids = sorted(
+            Board.objects.filter(allowed_groups=customer).values_list("pk", flat=True)
+        )
+        technician_board_ids = sorted(
+            Board.objects.filter(allowed_groups=technician).values_list("pk", flat=True)
+        )
+
+        report = report_roleless_users(output_path=False)
+        row = next(item for item in report["users"] if item["id"] == target.pk)
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_before"], customer_board_ids)
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_after"], [])
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_removed"], customer_board_ids)
+        self.assertEqual(row["deltas"]["customer"]["board_ids_added"], [])
+        self.assertEqual(row["deltas"]["customer"]["board_ids_removed"], [])
+        self.assertEqual(row["deltas"]["technician"]["board_ids_after"], technician_board_ids)
+        self.assertEqual(
+            row["deltas"]["technician"]["board_ids_added"],
+            sorted(set(technician_board_ids) - set(customer_board_ids)),
+        )
+        self.assertEqual(
+            row["deltas"]["technician"]["board_ids_removed"],
+            sorted(set(customer_board_ids) - set(technician_board_ids)),
+        )
+        self.assertIsNone(row["deltas"]["viewer"]["board_ids_after"])
+        self.assertTrue(row["deltas"]["viewer"]["requires_board_choices"])
+
+        root_row = next(item for item in report["users"] if item["id"] == root.pk)
+        all_boards = sorted(Board.objects.values_list("pk", flat=True))
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_before"], all_boards)
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_after"], all_boards)
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_removed"], [])
+
+    def test_prepare_signs_viewer_delta_after_explicit_board_choices(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import (
+            _verify_envelope,
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+        )
+
+        actor = User.objects.create_superuser(username="viewer-delta-owner")
+        target = User.objects.create_user(username="viewer-delta-viewer")
+        customer, _ = Group.objects.get_or_create(name="customer")
+        board = Board.objects.create(title="Доска выбора viewer", slug="viewer-delta-choice")
+        board.allowed_groups.add(customer)
+        excluded_board = Board.objects.create(
+            title="Исключённая доска viewer",
+            slug="viewer-delta-excluded",
+        )
+        excluded_board.allowed_groups.add(customer)
+        customer_board_ids = sorted(
+            Board.objects.filter(allowed_groups=customer).values_list("pk", flat=True)
+        )
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                try:
+                    report = report_roleless_users(output_path=False)
+                    for row in report["users"]:
+                        row["choice"] = "viewer" if row["id"] == target.pk else "no_role"
+                    for row in report["customer_open_boards"]:
+                        row["add_viewer"] = row["id"] == board.pk
+                    prepared = prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="Проверка точного влияния viewer",
+                        output_path=Path(tmpdir) / "access-migrations" / "delta.operation.json",
+                    )
+                    delta = next(
+                        item for item in prepared["final_access_deltas"]
+                        if item["user_id"] == target.pk
+                    )
+                    self.assertEqual(delta["board_ids_before"], customer_board_ids)
+                    self.assertEqual(delta["board_ids_after"], [board.pk])
+                    self.assertEqual(delta["board_ids_added"], [])
+                    self.assertEqual(
+                        delta["board_ids_removed"],
+                        sorted(set(customer_board_ids) - {board.pk}),
+                    )
+                    self.assertFalse(delta["requires_board_choices"])
+                    self.assertEqual(
+                        _verify_envelope(prepared["envelope"])["final_access_deltas"],
+                        prepared["final_access_deltas"],
+                    )
+                finally:
+                    _reset_for_tests()
+
+    def test_prepare_rejects_non_customer_board_acl_drift(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import (
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+        )
+
+        actor = User.objects.create_superuser(username="viewer-drift-owner")
+        User.objects.create_user(username="viewer-drift-target")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        board = Board.objects.create(
+            title="Доска с изменяемым ACL",
+            slug="viewer-delta-drift",
+        )
+        board.allowed_groups.add(technician)
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(
+                    load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE),
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                try:
+                    report = report_roleless_users(output_path=False)
+                    for row in report["users"]:
+                        row["choice"] = "no_role"
+                    for row in report["customer_open_boards"]:
+                        row["add_viewer"] = False
+                    board.allowed_groups.add(manager)
+
+                    with self.assertRaisesMessage(
+                        ValidationError,
+                        "ACL досок изменились",
+                    ):
+                        prepare_explicit_viewer_migration(
+                            actor=actor,
+                            manifest=report,
+                            reason="Проверка дрейфа полного набора досок",
+                            output_path=(
+                                Path(tmpdir)
+                                / "access-migrations"
+                                / "drift.operation.json"
+                            ),
+                        )
+                finally:
+                    _reset_for_tests()
+
+    def test_signed_envelope_tamper_and_private_path_are_rejected(self):
+        from django.core.exceptions import ValidationError
+        from .access_migration_services import (
+            _load_manifest,
+            _operation_envelope,
+            _private_artifact_path,
+            _sign_phase_manifest,
+            _verify_envelope,
+        )
+
+        payload, signed = _operation_envelope(
+            report={"report_hash": "r", "runtime_contract_hash": "x", "git_contract_hash": "g", "viewer_definition": {}, "all_active_users": [], "boards": []},
+            actor=SimpleNamespace(pk=1), reason="test", user_choices={}, board_choices={}
+        )
+        self.assertEqual(_verify_envelope(signed)["operation_id"], payload["operation_id"])
+        with self.assertRaises(ValidationError):
+            _verify_envelope(signed + "tampered")
+        with self.assertRaises(ValidationError):
+            _private_artifact_path("/tmp/not-private.json")
+        unsigned_pending = _sign_phase_manifest(
+            {
+                "schema_version": 1,
+                "operation_id": payload["operation_id"],
+                "envelope": signed,
+                "users": [],
+                "customer_open_boards": [],
+            },
+            "prepare_pending",
+        )
+        unsigned_pending.pop("phase_signature")
+        with self.assertRaisesMessage(ValidationError, "Подпись этапа"):
+            _load_manifest(unsigned_pending)
+        forged_wrapper = {
+            "schema_version": 1,
+            "phase": "prepare_pending",
+            "operation_id": payload["operation_id"],
+            "envelope": signed,
+            "manifest": {
+                "schema_version": 1,
+                "users": [],
+                "customer_open_boards": [],
+            },
+        }
+        with self.assertRaisesMessage(ValidationError, "не подписано"):
+            _load_manifest(forged_wrapper)
+
+    def test_prepare_existing_role_choice_is_inert_and_viewer_audit_is_correlated(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import prepare_explicit_viewer_migration, report_roleless_users
+
+        actor = User.objects.create_superuser(username="viewer-migration-owner")
+        target = User.objects.create_user(username="viewer-migration-target")
+        customer_target = User.objects.create_user(username="viewer-migration-customer-target")
+        Group.objects.get_or_create(name="customer")
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False), encoding="utf-8")
+            with override_settings(DATA_DIR=Path(tmpdir), RUNTIME_CONTRACTS_DIR=Path(tmpdir), LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path):
+                report = report_roleless_users(output_path=False)
+                for row in report["users"]:
+                    row["choice"] = "viewer" if row["id"] == target.pk else "customer" if row["id"] == customer_target.pk else "no_role"
+                for row in report["customer_open_boards"]:
+                    row["add_viewer"] = False
+                operation_path = Path(tmpdir) / "access-migrations" / "operation.json"
+                _reset_for_tests()
+                prepared = prepare_explicit_viewer_migration(
+                    actor=actor, manifest=report, reason="focused test", output_path=operation_path
+                )
+                target.refresh_from_db()
+                customer_target.refresh_from_db()
+                self.assertNotIn("customer", customer_target.groups.values_list("name", flat=True))
+                self.assertTrue(AccessAssignmentAudit.objects.filter(
+                    target_user=target, preview_fingerprint__isnull=False
+                ).exists())
+                self.assertEqual(
+                    AccessAssignmentAudit.objects.filter(target_user=target).values_list("preview_fingerprint", flat=True).count(),
+                    AccessAssignmentAudit.objects.filter(target_user=target).values_list("preview_fingerprint", flat=True).distinct().count(),
+                )
+                tampered = copy.deepcopy(prepared)
+                tampered["added_users"][0]["choice"] = "customer"
+                with self.assertRaises(ValidationError):
+                    __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(
+                        actor=actor, manifest=tampered, reason="focused test"
+                    )
+                cutover = __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(actor=actor, manifest=prepared, reason="focused test")
+                customer_target.refresh_from_db()
+                self.assertIn("customer", customer_target.groups.values_list("name", flat=True))
+                retry = __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(actor=actor, manifest=cutover, reason="focused test")
+                rolled = __import__("apps.settings_center.access_migration_services", fromlist=["rollback_explicit_viewer"]).rollback_explicit_viewer(actor=actor, manifest=retry, reason="focused test")
+                again = __import__("apps.settings_center.access_migration_services", fromlist=["rollback_explicit_viewer"]).rollback_explicit_viewer(actor=actor, manifest=rolled, reason="focused test")
+                self.assertTrue(again["rolled_back"])
+                self.assertTrue(prepared["operation_id"])
+                _reset_for_tests()
+
+    def test_each_migration_phase_recovers_from_audited_partial_state(self):
+        from apps.accounts.services import apply_viewer_migration_role_locked
+        from django.contrib.auth.models import Permission
+        from apps.core.contract_store import _reset_for_tests
+        from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+        from .access_migration_services import (
+            _persist_phase,
+            cutover_explicit_viewer,
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+            rollback_explicit_viewer,
+        )
+        from .contract_services import rollback_explicit_viewer_contract_locked
+        from .models import SettingsChange
+
+        actor = User.objects.create_superuser(username="viewer-recovery-owner")
+        viewer_target = User.objects.create_user(username="viewer-recovery-target")
+        customer_target = User.objects.create_user(username="viewer-recovery-customer")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        board = Board.objects.create(title="Доска восстановления", slug="viewer-recovery")
+        board.allowed_groups.add(customer_group)
+
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                report = report_roleless_users(output_path=False)
+                for row in report["users"]:
+                    row["choice"] = (
+                        "viewer" if row["id"] == viewer_target.pk
+                        else "customer" if row["id"] == customer_target.pk
+                        else "no_role"
+                    )
+                for row in report["customer_open_boards"]:
+                    row["add_viewer"] = row["id"] == board.pk
+                operation_path = Path(tmpdir) / "access-migrations" / "recovery.json"
+                def interrupt_after_prepare_commit(path, phase, manifest):
+                    if phase == "prepared":
+                        raise RuntimeError("simulated crash after prepare commit")
+                    return _persist_phase(path, phase, manifest)
+
+                # Имитируем остановку после commit подготовки, пока на диске
+                # остался только подписанный prepare_pending.
+                with patch(
+                    "apps.settings_center.access_migration_services._persist_phase",
+                    side_effect=interrupt_after_prepare_commit,
+                ), self.assertRaisesRegex(RuntimeError, "simulated crash"):
+                    prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="recovery test",
+                        output_path=operation_path,
+                    )
+                prepared = prepare_explicit_viewer_migration(
+                    actor=actor,
+                    manifest=operation_path,
+                    reason="recovery test",
+                    output_path=operation_path,
+                )
+
+                customer_change = next(
+                    row for row in prepared["added_users"] if row["id"] == customer_target.pk
+                )
+                # Имитируем commit DB-фазы cutover до записи её артефакта.
+                with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+                    with transaction.atomic():
+                        apply_viewer_migration_role_locked(
+                            actor=actor,
+                            target_user=customer_target,
+                            role_name="customer",
+                            operation_id=prepared["operation_id"],
+                            expected_before=customer_change["roles_after"],
+                            expected_after=customer_change["cutover_roles_after"],
+                            reason="recovery test",
+                        )
+                cutover = cutover_explicit_viewer(
+                    actor=actor, manifest=prepared, reason="recovery test"
+                )
+                # Имитируем потерю результата после атомарной замены контракта.
+                viewer_group = Group.objects.get(name="viewer")
+                inactive = User.objects.create_user(username="viewer-recovery-inactive", is_active=False)
+                inactive.groups.add(viewer_group)
+                with self.assertRaisesMessage(ValidationError, "Состав роли"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                inactive.groups.remove(viewer_group)
+                permission = Permission.objects.order_by("pk").first()
+                self.assertIsNotNone(permission)
+                viewer_group.permissions.add(permission)
+                with self.assertRaisesMessage(ValidationError, "Django permissions"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                viewer_group.permissions.remove(permission)
+                profile = GroupProfile.objects.get(group=viewer_group)
+                original_title = profile.title
+                profile.title = "Изменённый профиль"
+                profile.save(update_fields=["title"])
+                with self.assertRaisesMessage(ValidationError, "drifted"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                profile.title = original_title
+                profile.save(update_fields=["title"])
+                recovered_cutover = cutover_explicit_viewer(
+                    actor=actor, manifest=prepared, reason="recovery test"
+                )
+                self.assertEqual(recovered_cutover["cutover_change_id"], cutover["cutover_change_id"])
+
+                cutover_change = SettingsChange.objects.get(pk=cutover["cutover_change_id"])
+                rollback_fingerprint = normalized_hash({
+                    "operation_id": prepared["operation_id"],
+                    "operation": "rollback",
+                })
+                # Имитируем удаление контракта и частичную очистку БД до записи
+                # финального результата отката.
+                with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+                    rollback_explicit_viewer_contract_locked(
+                        actor=actor,
+                        expected_post_cutover_hash=cutover["post_cutover_contract_hash"],
+                        expected_before=cutover_change.before_snapshot,
+                        cutover_change=cutover_change,
+                        reason="recovery test",
+                        operation_fingerprint=rollback_fingerprint,
+                    )
+                    with transaction.atomic():
+                        apply_viewer_migration_role_locked(
+                            actor=actor,
+                            target_user=customer_target,
+                            role_name="customer",
+                            operation_id=prepared["operation_id"],
+                            expected_before=customer_change["cutover_roles_after"],
+                            expected_after=customer_change["roles_before"],
+                            reason="recovery test",
+                            remove=True,
+                        )
+                rolled_back = rollback_explicit_viewer(
+                    actor=actor, manifest=cutover, reason="recovery test"
+                )
+                self.assertTrue(rolled_back["rolled_back"])
+                viewer_target.refresh_from_db()
+                customer_target.refresh_from_db()
+                self.assertFalse(viewer_target.groups.filter(name="viewer").exists())
+                self.assertFalse(customer_target.groups.filter(name="customer").exists())
+                self.assertFalse(board.allowed_groups.filter(name="viewer").exists())
+                self.assertNotIn("viewer", get_contract("role_rules"))
+                artifact_before = operation_path.read_bytes()
+                with self.assertRaisesMessage(ValidationError, "более поздний этап"):
+                    prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="recovery test",
+                        output_path=operation_path,
+                    )
+                self.assertEqual(operation_path.read_bytes(), artifact_before)
+                _reset_for_tests()

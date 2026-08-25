@@ -1,0 +1,43 @@
+{
+  "id": "07-final-security-acceptance",
+  "goal": "Verify, review, publish, merge, and archive the exact accepted feature state.",
+  "owner": "primary_agent",
+  "reviewer": "sol_high",
+  "review_model": "gpt-5.6-sol",
+  "review_reasoning": "high",
+  "read_scope": [
+    "AGENTS.md",
+    "README.md",
+    "docs/guides/TESTING_POLICY.md",
+    "docs/architecture/ARCHITECTURE.md",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
+    "docs/planning/backlog.md",
+    "docs/planning/active/declarative-access-policy-model.md",
+    "workflow/active/declarative-access-policy-model/"
+  ],
+  "write_scope": [
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.final.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.final.md",
+    "workflow/active/declarative-access-policy-model/RETROSPECTIVE.md",
+    "docs/planning/archive/2026/declarative-access-policy-model.md",
+    "workflow/archive/2026/declarative-access-policy-model/",
+    "docs/planning/active/.desc.json",
+    "docs/planning/archive/2026/.desc.json",
+    "workflow/active/.desc.json",
+    "workflow/archive/2026/.desc.json",
+    "docs/planning/backlog.md",
+    "README.md",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "acceptance": [
+    "Targeted verify-fast suites pass.",
+    "Contracts, AI, memory, and UI profiles pass.",
+    "One verify-full passes.",
+    "Architecture contracts and generated structure are valid.",
+    "Owner approval of the roleless-user migration result and UI is recorded.",
+    "The completed plan and workflow are archived, the backlog item is removed, structure is regenerated, and all final documentation is committed before selecting the review SHA.",
+    "The tree is clean and Sol high reports no unresolved S1/S2 findings for that exact feature commit SHA.",
+    "No tracked files change after review; that SHA is pushed, only that state is merged, the main merge commit is verified, and main is pushed."
+  ]
+}

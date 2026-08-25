@@ -1,11 +1,5 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
-  "$administration": {
-    "role_definition_editor_roles": ["admin"],
-    "role_assignment_allowlist": {
-      "manager": ["customer", "technician"]
-    }
-  },
   "$capabilities": {
     "view_scope": {
       "type": "scope",
@@ -204,9 +198,41 @@
       "description": "Статусы, в которые разрешено переводить запись в пределах глобального графа переходов."
     }
   },
+  "viewer": {
+    "display_name": "Наблюдатель канбана",
+    "description": "Явно назначаемая роль: только просмотр заявок ветки своего подразделения.",
+    "protected": false,
+    "view_scope": "department_branch",
+    "create_workorder": false,
+    "edit_scope": "none",
+    "comment_scope": "none",
+    "upload_attachment_scope": "none",
+    "confirm_closure_scope": "none",
+    "rate_scope": "none",
+    "transition_scope": "none",
+    "transition_targets": [],
+    "manage_inventory": false,
+    "manage_board_columns": false,
+    "manage_assignments": false,
+    "view_analytics": false,
+    "manage_departments": false,
+    "manage_roles": false,
+    "manage_settings": false,
+    "manage_ai_skills": false,
+    "memory_organization_write": false,
+    "memory_organization_review": false,
+    "create_waiting_list": false,
+    "waiting_list_view_scope": "none",
+    "waiting_list_edit_scope": "none",
+    "waiting_list_edit_statuses": [],
+    "waiting_list_transition_scope": "none",
+    "waiting_list_transition_from_statuses": [],
+    "waiting_list_transition_targets": []
+  },
   "customer": {
     "display_name": "Заказчик (Пользователь)",
     "description": "Сотрудник подразделения: подаёт заявки на ремонт и обслуживание техники и следит за их выполнением. Видит только заявки ветки своего подразделения.",
+    "protected": false,
     "view_scope": "department_branch",
     "create_workorder": true,
     "edit_scope": "authored",
@@ -237,6 +263,7 @@
   "technician": {
     "display_name": "Техник (Медтехник)",
     "description": "Исполнитель: берёт заявки в работу, меняет их статусы, прикладывает файлы о выполненных работах. Видит назначенные на себя и свободные заявки.",
+    "protected": false,
     "view_scope": "assigned_or_unassigned_or_authored",
     "create_workorder": false,
     "edit_scope": "none",
@@ -267,6 +294,7 @@
   "manager": {
     "display_name": "Менеджер (Руководитель)",
     "description": "Руководитель направления: видит все заявки, управляет назначениями, досками, инвентарём, аналитикой и настройками ролей.",
+    "protected": true,
     "view_scope": "all",
     "create_workorder": true,
     "edit_scope": "all",
@@ -297,6 +325,7 @@
   "admin": {
     "display_name": "Администратор портала",
     "description": "Администратор: все права портала, включая управление ролями, подразделениями и ИИ. Для входа в панель администрирования дополнительно нужен флаг «Доступ к администрированию» в карточке пользователя.",
+    "protected": true,
     "view_scope": "all",
     "create_workorder": true,
     "edit_scope": "all",
@@ -327,6 +356,7 @@
   "doctor": {
     "display_name": "Врач",
     "description": "Врач: работает с листом ожидания пациентов — просматривает и добавляет записи. Лист ожидания доступен только врачам; доступа к заявкам и другим разделам роль не даёт.",
+    "protected": true,
     "view_scope": "none",
     "create_workorder": false,
     "edit_scope": "none",

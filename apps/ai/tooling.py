@@ -116,12 +116,15 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
     if tool_code == "ui.open_right_panel":
         from apps.core.right_panels import build_right_panel_descriptor
 
+        mode = payload.get("mode", "view") or "view"
+        if mode != "view":
+            raise ValidationError("ui.open_right_panel поддерживает только режим просмотра.")
         descriptor = build_right_panel_descriptor(
             user=actor,
             source_code=payload.get("source_code", ""),
             object_type=payload.get("object_type", ""),
             object_id=payload.get("object_id", ""),
-            mode=payload.get("mode", "view") or "view",
+            mode=mode,
         )
         return {
             "status": "ok",
@@ -235,18 +238,18 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         from .skill_authoring import create_or_update_runtime_skill_for_actor
 
         return create_or_update_runtime_skill_for_actor(actor=actor, payload=payload)
-    elif tool_code == "access.update_role_permissions":
-        from .services import update_role_permissions_for_actor
-        return update_role_permissions_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.get_role_rules":
         from .services import get_role_rules_for_actor
         return get_role_rules_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.users.list":
         from .services import list_users_for_actor
         return list_users_for_actor(actor=actor, payload=payload)
-    elif tool_code == "access.users.update":
-        from .services import update_user_for_actor
-        return update_user_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.users.explain":
+        from .services import explain_user_access_for_actor
+        return explain_user_access_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.open_editor":
+        from .services import open_access_editor_for_actor
+        return open_access_editor_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.groups.list":
         from .services import list_groups_for_actor
         return list_groups_for_actor(actor=actor, payload=payload)
@@ -322,20 +325,6 @@ def execute_tool(
 
     requires_confirmation = tool.get("requires_confirmation", False)
     confirmation_preview = None
-    if requires_confirmation and tool_code == "access.update_role_permissions":
-        from .services import prepare_role_permissions_change_for_actor
-
-        payload, confirmation_preview = prepare_role_permissions_change_for_actor(
-            actor=actor,
-            payload=payload,
-        )
-    elif requires_confirmation and tool_code == "access.users.update":
-        from .services import prepare_user_update_for_actor
-
-        payload, confirmation_preview = prepare_user_update_for_actor(
-            actor=actor,
-            payload=payload,
-        )
 
     confirmation_state = "not_required"
     if requires_confirmation and not confirmed_token:

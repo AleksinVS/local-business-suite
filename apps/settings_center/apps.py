@@ -5,3 +5,8 @@ class SettingsCenterConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.settings_center"
     verbose_name = "Центр настроек"
+
+    def ready(self):
+        from . import right_panel
+
+        right_panel.register()

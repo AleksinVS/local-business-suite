@@ -22,6 +22,7 @@
             <td><strong>{{ role.label }}</strong><br><code>{{ role.code }}</code></td>
             <td>{{ role.description|default:"Описание не задано" }}</td>
             <td>
+              <strong>{{ role.protected|yesno:"Защищённая роль,Обычная роль" }}</strong><br>
               {% if role.risk_labels %}
                 {{ role.risk_labels|join:", " }}{% if role.additional_risk_count %}; ещё {{ role.additional_risk_count }}{% endif %}
               {% else %}Обычный{% endif %}

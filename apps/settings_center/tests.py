@@ -73,7 +73,10 @@ class AccessEditorRightPanelTests(TestCase):
             object_id=str(target.pk),
             mode="edit",
         )
-        self.assertEqual(user_descriptor.htmx_url, reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
+        self.assertEqual(
+            user_descriptor.htmx_url,
+            f"{reverse('settings_center:access_workspace')}?view=users&object={target.pk}&field=roles&panel=inspector",
+        )
         self.assertEqual(user_descriptor.metadata["target_type"], "user")
         self.assertEqual(user_descriptor.title, f"Редактор доступа: пользователь #{target.pk}")
         self.assertNotIn(target.username, user_descriptor.title)
@@ -86,7 +89,10 @@ class AccessEditorRightPanelTests(TestCase):
             mode="edit",
         )
         self.assertEqual(role_descriptor.metadata["target_type"], "role")
-        self.assertEqual(role_descriptor.htmx_url, reverse("settings_center:role_definition", kwargs={"role_code": "customer"}))
+        self.assertEqual(
+            role_descriptor.htmx_url,
+            f"{reverse('settings_center:access_workspace')}?view=roles&object=customer&field=definition&panel=inspector",
+        )
 
     def test_provider_rejects_unknown_or_view_mode_targets(self):
         actor = User.objects.create_superuser(username="panel-root-deny", password="pass")
@@ -176,6 +182,139 @@ def _write_role_catalog_sandbox(root, *, runtime_payload, git_payload, candidate
 
 
 class AccessWorkspaceTests(TestCase):
+    def test_global_right_panel_get_is_a_workspace_fragment(self):
+        actor = User.objects.create_superuser(username="workspace-global-root", password="pass")
+        target = User.objects.create_user(username="workspace-global-target")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "users", "object": target.pk, "field": "roles", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<!doctype html>", html=False)
+        self.assertContains(response, "access-global-inspector")
+        self.assertContains(response, "access-user-bundle-form")
+
+    def test_roles_cut_explains_protection_and_offers_workspace_creation(self):
+        actor = User.objects.create_superuser(username="workspace-role-root", password="pass")
+        self.client.force_login(actor)
+
+        response = self.client.get(reverse("settings_center:access_workspace"), {"view": "roles"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Создать роль")
+        self.assertContains(response, "Защищённая роль")
+        self.assertContains(response, "Назначение и изменение доступны только активному суперпользователю.")
+
+    def test_role_creation_editor_is_rendered_in_global_overlay(self):
+        actor = User.objects.create_user(username="workspace-role-manager")
+        self.client.force_login(actor)
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "create": "role", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, "Защищённые роли создаются только активным суперпользователем.")
+        self.assertNotContains(response, 'name="protected"', html=False)
+
+    def test_role_creation_editor_is_rendered_in_workspace_overlay(self):
+        actor = User.objects.create_superuser(username="workspace-role-local-root", password="pass")
+        self.client.force_login(actor)
+
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "create": "role", "panel": "inspector"},
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="access-inspector-host",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, 'class="drawer drawer-large access-inspector active"', html=False)
+
+    def test_global_role_create_errors_keep_retry_target(self):
+        actor = User.objects.create_user(username="workspace-role-retry")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+
+        response = self.client.post(
+            url,
+            {
+                "view": "roles", "create": "role", "panel": "inspector",
+                "action": "create_role", "code": "bad code", "display_name": "Retry",
+                "description": "", "base_hash": "invalid",
+            },
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="global-right-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-create-editor")
+        self.assertContains(response, 'hx-target="#global-right-panel-content"', html=False)
+
+    def test_global_role_create_posts_in_sandbox_and_refreshes_role_editor(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="workspace-role-sandbox")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        base = load_json_file("contracts/role_rules.json")
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=base, git_payload=base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    self.client.force_login(actor)
+                    response = self.client.post(
+                        reverse("settings_center:access_workspace"),
+                        {
+                            "view": "roles", "create": "role", "field": "definition", "panel": "inspector",
+                            "action": "create_role", "code": "sandbox_role", "display_name": "Sandbox role",
+                            "description": "Created in an isolated contract sandbox.",
+                            "base_hash": normalized_hash(base),
+                        },
+                        HTTP_HX_REQUEST="true",
+                        HTTP_HX_TARGET="global-right-panel-content",
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    self.assertContains(response, 'id="access-table-panel" hx-swap-oob="innerHTML"', html=False)
+                    self.assertContains(response, "role-capability-editor")
+                    self.assertIn("sandbox_role", load_json_file(runtime_path))
+                finally:
+                    _reset_for_tests()
+
+    def test_delegated_manager_sees_explicit_denial_for_protected_role_editors(self):
+        actor = User.objects.create_user(username="workspace-protected-manager")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+        for field in ("definition", "description", "users"):
+            with self.subTest(field=field):
+                response = self.client.get(
+                    url,
+                    {"view": "roles", "object": "admin", "field": field, "panel": "inspector"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Защищённая роль")
+                self.assertContains(response, "активному суперпользователю")
+                self.assertNotContains(response, "role-capability-editor")
+
     def test_capability_groups_are_complete_and_use_user_facing_sections(self):
         from apps.accounts.access_contracts import (
             CAPABILITY_GROUP_BY_CAPABILITY,

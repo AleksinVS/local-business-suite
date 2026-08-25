@@ -1,0 +1,16 @@
+<form class="access-context-form role-create-editor" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="{% if global_panel %}#global-right-panel-content{% else %}#access-inspector-host{% endif %}" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
+  {% csrf_token %}
+  <input type="hidden" name="view" value="roles">
+  <input type="hidden" name="create" value="role">
+  <input type="hidden" name="panel" value="inspector">
+  <input type="hidden" name="field" value="definition">
+  {{ field_form.base_hash }}
+  {{ field_form.non_field_errors }}
+  <div class="access-readonly-explanation"><strong>Обычная роль</strong> создаётся без прав. После создания откроется тот же редактор, где можно добавить только необходимые возможности.</div>
+  <div class="access-form-field{% if field_form.code.errors %} has-error{% endif %}">{{ field_form.code.label_tag }}{{ field_form.code }}{% if field_form.code.help_text %}<small class="muted">{{ field_form.code.help_text }}</small>{% endif %}{{ field_form.code.errors }}</div>
+  <div class="access-form-field{% if field_form.display_name.errors %} has-error{% endif %}">{{ field_form.display_name.label_tag }}{{ field_form.display_name }}{{ field_form.display_name.errors }}</div>
+  <div class="access-form-field{% if field_form.description.errors %} has-error{% endif %}">{{ field_form.description.label_tag }}{{ field_form.description }}{{ field_form.description.errors }}</div>
+  {% if field_form.protected %}<div class="access-form-field access-protected-create">{{ field_form.protected }}{{ field_form.protected.label_tag }}<small class="muted">Защищённую роль может создать только активный суперпользователь.</small>{{ field_form.protected.errors }}</div>{% else %}<p class="muted">Защищённые роли создаются только активным суперпользователем.</p>{% endif %}
+  {% if editor_error %}<p class="form-error" role="alert">{{ editor_error }}</p>{% endif %}
+  <div class="access-form-actions"><button class="button" type="submit" name="action" value="create_role">Создать роль</button></div>
+</form>

@@ -14,7 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
 from apps.accounts.selectors import capability_catalog, contract_role_configs, role_risk_markers, split_user_groups
-from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code
+from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code, role_is_protected
 from apps.core.models import Department
 from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES, MEMORY_REVIEW_GROUP_PROFILES
 from apps.workorders.models import Board
@@ -101,6 +101,7 @@ def workspace_context(*, query_params=None):
     field = query_params.get("field", "")
     if field not in FIELD_CODES.get(tab, ()):
         field = "profile" if tab == "users" else "definition" if tab == "roles" else ""
+    creating_role = query_params.get("create") == "role" and tab == "roles"
     return {
         "tabs": [{"code": code, "label": label, "active": code == tab} for code, label in TABS],
         "active_tab": tab,
@@ -114,13 +115,18 @@ def workspace_context(*, query_params=None):
         "selected_field": field if selected else "",
         "selected_field_label": FIELD_LABELS.get(field, field),
         "selected_kind_label": KIND_LABELS.get(selected.get("kind"), selected.get("kind", "")) if selected else "",
-        "selected_panel": "field" if selected and query_params.get("panel") == "field" else ("inspector" if selected else ""),
+        "selected_panel": (
+            "field"
+            if selected and query_params.get("panel") == "field"
+            else ("inspector" if selected or creating_role else "")
+        ),
         "standalone_target": _standalone_target(selected),
         "access_filter_state": filter_state,
         "attention_value": ATTENTION_VALUE,
         "role_filter_options": _role_filter_options(role_configs),
         "department_filter_options": filter_options,
         "filter_query": urlencode({key: query_params.get(key) for key in ("q", "role", "department", "attention") if query_params.get(key)}),
+        "creating_role": creating_role,
     }
 
 
@@ -275,9 +281,16 @@ def _role_rows(users, role_configs):
             "user_objects": members.get(code, []),
             "member_count": len(members.get(code, [])),
             "risk": {},
+            "protected": role_is_protected(config),
         }
         risk_markers = role_risk_markers(code, config)
         row["risk"] = {"markers": risk_markers}
+        row["protection_label"] = "Защищённая роль" if row["protected"] else "Обычная роль"
+        row["assignment_denial_reason"] = (
+            "Назначение и изменение доступны только активному суперпользователю."
+            if row["protected"]
+            else ""
+        )
         rows.append(row)
     return rows
 

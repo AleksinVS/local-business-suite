@@ -1,6 +1,6 @@
 {
   "id": "06-ui-and-e2e-acceptance",
-  "goal": "Adapt the existing one-window access UI to ordinary/protected roles and role creation without redesigning navigation.",
+  "goal": "Complete the existing one-window access UI for ordinary/protected roles, role creation, and server-owned access-editor handoff without redesigning navigation or duplicating write paths.",
   "owner": "luna_high_cycle",
   "executor_model": "gpt-5.6-luna",
   "executor_reasoning": "high",
@@ -10,13 +10,16 @@
     "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
     "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
     "apps/settings_center/access_workspace.py",
+    "apps/settings_center/right_panel.py",
     "apps/settings_center/forms.py",
     "apps/settings_center/views.py",
     "templates/settings_center/access_workspace.html",
+    "templates/base.html",
     "templates/settings_center/partials/access_workspace/role_definition_editor.html",
     "templates/settings_center/partials/access_workspace/inspector_host.html",
     "templates/settings_center/partials/access_workspace/table_panel.html",
     "static/src/js/access_workspace.js",
+    "static/src/js/right_panel.js",
     "static/src/js/role_capability_editor.js",
     "static/src/css/app.css",
     "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
@@ -24,10 +27,14 @@
   ],
   "write_scope": [
     "apps/settings_center/access_workspace.py",
+    "apps/settings_center/right_panel.py",
     "apps/settings_center/forms.py",
     "apps/settings_center/views.py",
     "apps/settings_center/tests.py",
     "templates/settings_center/access_workspace.html",
+    "templates/base.html",
+    "templates/settings_center/partials/access_workspace/role_create_editor.html",
+    "templates/settings_center/partials/access_workspace/global_inspector.html",
     "templates/settings_center/role_catalog.html",
     "templates/settings_center/role_definition_form.html",
     "templates/settings_center/partials/access_workspace/role_definition_editor.html",
@@ -35,6 +42,7 @@
     "templates/settings_center/partials/access_workspace/table_panel.html",
     "static/src/css/app.css",
     "static/src/js/access_workspace.js",
+    "static/src/js/right_panel.js",
     "static/src/js/role_capability_editor.js",
     "scripts/e2e/tests/access_administration.spec.ts",
     "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
@@ -45,10 +53,35 @@
   ],
   "acceptance": [
     "The existing one-window slices and left/right sidebar mechanics remain intact.",
+    "AccessWorkspaceView remains the canonical editor and the only workspace write adapter; no duplicate user or role mutation service is introduced for AI or global-panel rendering.",
+    "The workspace right editor remains a Kanban-style overlay. A server-owned access.open_editor command renders the same user or role editor as an HTMX fragment in #global-right-panel-content, never a complete HTML document, and Save stays inside the drawer without a document reload.",
+    "Standalone user and role URLs remain usable as reserve new-tab routes, while their normal links do not become a second navigation hierarchy.",
     "Ordinary and protected roles and denial reasons are clear.",
-    "An authorized administrator can create an ordinary role and then edit or assign it; protected creation remains superuser-only.",
+    "The Roles cut contains an obvious Create role action. An authorized administrator creates an ordinary role in the right overlay, then edits and assigns it without leaving the workspace; protected creation remains superuser-only and is visibly explained.",
     "Site sections remain read-only projections and advanced identity or memory fields do not appear as role grants.",
-    "Desktop and narrow-screen Save, dirty state, errors, keyboard use, and sidebars pass browser e2e.",
+    "Role rows visibly distinguish ordinary and protected roles without relying only on color; protected-role assignment and edit denials are shown next to the unavailable action.",
+    "Desktop and 320px narrow-screen Save, dirty-close confirmation, server validation errors, Escape/focus behavior, left-sidebar resizing/chat restoration, access.open_editor rendering, and absence of full document reload pass browser e2e.",
+    "All HTMX/fetch requests are bounded; timeout or transport failure clears busy state and preserves the dirty draft with a retryable error.",
     "The owner records explicit UI acceptance before final merge."
-  ]
+  ],
+  "architecture": {
+    "canonical_write_path": "AccessWorkspaceView delegates to the existing account/role services; fragments must not bypass them.",
+    "right_panel": "Use the existing drawer/overlay behavior and #global-right-panel-content for server-owned handoff. The provider resolves a canonical workspace query from trusted target type/id; callers cannot supply a URL or HTML target.",
+    "role_creation": "Treat create-role as an explicit workspace editor state with a blank ordinary-role form. On success, render the newly created role definition in the same right overlay and refresh the Roles table out-of-band when that table exists.",
+    "standalone_routes": "Keep current full-page GET/POST routes as reserve paths; shared partials or helpers may be extracted, but mutation logic remains service-backed and identical.",
+    "responsive": "Desktop uses the overlay drawer above the workspace; at narrow width it occupies the viewport. The left field editor remains in the sidebar location on desktop and becomes a floating layer only on narrow screens.",
+    "security_invariants": [
+      "Fresh actor authorization is rechecked by existing services at save time.",
+      "Role base_hash and user base_version/CAS semantics remain mandatory where currently defined.",
+      "Only ordinary role creation is delegated; a protected role can be created, edited, or assigned only by an active superuser.",
+      "Site-section, technical-group, and memory-group projections do not become role capability grants.",
+      "No preview/confirmation token or risk checkbox is reintroduced."
+    ],
+    "non_goals": [
+      "No navigation redesign beyond the existing six cuts.",
+      "No capability-catalog or role-contract schema change.",
+      "No AI write tool and no generic arbitrary edit panel.",
+      "No change to the Django Admin reserve path."
+    ]
+  }
 }

@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.urls import reverse
+from urllib.parse import urlencode
 
 from apps.accounts.selectors import contract_role_configs
 from apps.core.right_panels import RightPanelDescriptor, register_right_panel_provider
@@ -51,7 +52,7 @@ class _AccessEditorProvider:
                 object_id=object_id,
                 mode=mode,
                 title=f"Редактор роли: {label}",
-                htmx_url=reverse("settings_center:role_definition", kwargs={"role_code": object_id}),
+                htmx_url=f"{reverse('settings_center:access_workspace')}?{urlencode({'view': 'roles', 'object': object_id, 'field': 'definition', 'panel': 'inspector'})}",
                 drawer_size="large",
                 context_hint=f"settings_center / role / {object_id}",
                 metadata={"target_type": "role"},
@@ -66,7 +67,7 @@ class _AccessEditorProvider:
             object_id=str(target.pk),
             mode=mode,
             title=f"Редактор доступа: пользователь #{target.pk}",
-            htmx_url=reverse("settings_center:user_edit", kwargs={"pk": target.pk}),
+            htmx_url=f"{reverse('settings_center:access_workspace')}?{urlencode({'view': 'users', 'object': target.pk, 'field': 'roles', 'panel': 'inspector'})}",
             drawer_size="large",
             context_hint=f"settings_center / user / {target.pk}",
             metadata={"target_type": "user"},

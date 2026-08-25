@@ -120,9 +120,8 @@ class SettingsDashboardView(SettingsManagementMixin, TemplateView):
 class AccessWorkspaceView(UserManagementMixin, TemplateView):
     """Canonical master-detail access administration shell.
 
-    Existing standalone editors remain the write adapters for now.  The
-    workspace owns navigation and read projections; package 07 can attach
-    context editors without changing this URL contract.
+    Existing standalone editors remain reserve routes.  The workspace owns
+    navigation, fragments, and the single context write adapter.
     """
 
     template_name = "settings_center/access_workspace.html"
@@ -130,6 +129,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         "access-field-sidebar-host",
         "access-inspector-host",
         "access-table-panel",
+        "global-right-panel-content",
     }
 
     def test_func(self):
@@ -166,7 +166,13 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(workspace_context(query_params=self.request.GET))
-        context["field_form"] = self._build_editor_form(self.request, context)
+        if context.get("creating_role"):
+            context["field_form"] = RoleCreateForm(
+                actor=self.request.user,
+                initial={"base_hash": self._role_contract_hash()},
+            )
+        else:
+            context["field_form"] = self._build_editor_form(self.request, context)
         context["can_manage_board_access"] = can_manage_board_access(self.request.user)
         context["can_manage_roles"] = can_manage_roles(self.request.user)
         return context
@@ -175,11 +181,13 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         """Dispatch one context editor while preserving the signed service flow."""
         state = workspace_context(query_params=self._post_workspace_params(request))
         try:
+            action = request.POST.get("action", "save")
+            if action == "create_role":
+                return self._post_role_create(request)
             selected = state["selected"]
             if not selected:
                 raise ValidationError("Выберите объект доступа.")
             field = state["selected_field"]
-            action = request.POST.get("action", "save")
             if (
                 selected["kind"] == "user"
                 and self._requested_panel(request) == "inspector"
@@ -202,6 +210,48 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             state["editor_error"] = str(exc)
             state["field_form"] = self._build_editor_form(request, state)
             return self._response_for_editor(request, state)
+
+    @staticmethod
+    def _role_contract_hash():
+        return normalized_hash(read_contract_value(get_registry().get("core.contract.role_rules")))
+
+    def _post_role_create(self, request):
+        form = RoleCreateForm(request.POST, actor=request.user)
+        global_panel = self._hx_target(request) == "#global-right-panel-content"
+        if not form.is_valid():
+            state = workspace_context(query_params=self._post_workspace_params(request))
+            state.update({"creating_role": True, "selected_panel": "inspector", "field_form": form, "global_panel": global_panel})
+            return self._response_for_editor(request, state)
+        try:
+            change = save_role_creation(
+                actor=request.user,
+                role_code=form.cleaned_data["code"],
+                display_name=form.cleaned_data["display_name"],
+                description=form.cleaned_data["description"],
+                protected=form.cleaned_data.get("protected", False),
+                base_hash=form.cleaned_data["base_hash"],
+            )
+        except (PermissionDenied, ValidationError) as exc:
+            form.add_error(None, exc)
+            state = workspace_context(query_params=self._post_workspace_params(request))
+            state.update({"creating_role": True, "selected_panel": "inspector", "field_form": form, "global_panel": global_panel})
+            return self._response_for_editor(request, state)
+        role_code = form.cleaned_data["code"]
+        messages.success(request, f"Роль создана. Аудит #{change.pk}." if change is not None else "Роль создана.")
+        if not self._is_htmx(request):
+            return redirect(self._workspace_url("roles", role_code, "definition", request=request))
+        params = self._post_workspace_params(request)
+        params.update({"view": "roles", "object": role_code, "field": "definition", "panel": "inspector", "create": ""})
+        state = workspace_context(query_params=params)
+        state["field_form"] = self._build_editor_form(request, state, use_post=False)
+        state["inline_messages"] = list(get_messages(request))
+        state["refresh_table"] = True
+        target = self._hx_target(request)
+        if not target:
+            return HttpResponseBadRequest("Unknown HTMX target.")
+        if target == "#global-right-panel-content":
+            state["global_panel"] = True
+        return self._render_hx_panel(state, target, applied=True)
 
     def _post_user_bundle(self, request, selected):
         user = selected["user"]
@@ -263,6 +313,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             template = "settings_center/partials/access_workspace/field_apply_response.html" if applied else "settings_center/partials/access_workspace/field_sidebar_response.html"
         elif target == "#access-inspector-host":
             template = "settings_center/partials/access_workspace/inspector_apply_response.html" if applied else "settings_center/partials/access_workspace/inspector_response.html"
+        elif target == "#global-right-panel-content":
+            template = "settings_center/partials/access_workspace/global_inspector.html"
         else:
             template = "settings_center/partials/access_workspace/table_panel.html"
         return render(self.request, template, state)
@@ -286,6 +338,9 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         target = self._hx_target(request)
         if not target:
             return HttpResponseBadRequest("Unknown HTMX target.")
+        if target == "#global-right-panel-content":
+            state["global_panel"] = True
+            state["refresh_table"] = True
         return self._render_hx_panel(state, target, applied=True)
 
     def _post_user(self, request, selected, field):
@@ -381,6 +436,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         return self._success_response(request, "users", updated.pk, "roles")
 
     def _post_role(self, request, selected, field):
+        if not self._can_edit_field(request, selected, field):
+            raise PermissionDenied("Изменение определения и состава защищённой роли доступно только активному суперпользователю.")
         if field in {"definition", "description"}:
             role_model = role_definition_read_model(selected["code"])
             form_class = RoleDescriptionForm if field == "description" else RoleDefinitionForm
@@ -489,14 +546,23 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             value = request.POST.get(f"filter_{name}", "")
             if value:
                 params[name] = value
+        params["create"] = request.POST.get("create", "")
         return params
 
     @staticmethod
     def _can_edit_field(request, selected, field):
         if selected["kind"] == "user" and field in {"profile", "status", "department", "ad", "memory-groups"}:
             return bool(request.user.is_active and request.user.is_superuser)
-        if selected["kind"] == "role" and field in {"definition", "description"}:
-            return can_edit_role_definitions(request.user)
+        if selected["kind"] == "role" and field in {"definition", "description", "users"}:
+            if selected.get("protected"):
+                return bool(
+                    request.user.is_authenticated
+                    and request.user.is_active
+                    and request.user.is_superuser
+                )
+            if field in {"definition", "description"}:
+                return can_edit_role_definitions(request.user)
+            return can_manage_roles(request.user)
         if selected["kind"] == "board" and field == "groups":
             return can_manage_board_access(request.user)
         if selected["kind"] == "user" and field == "roles":
@@ -600,6 +666,14 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
             self.role_read_model = role_definition_read_model(self.role_code)
         except ValidationError as exc:
             raise Http404("Роль не найдена.") from exc
+        if self.role_read_model.get("protected") and not (
+            self.request.user.is_authenticated
+            and self.request.user.is_active
+            and self.request.user.is_superuser
+        ):
+            raise PermissionDenied(
+                "Изменение определения защищённой роли доступно только активному суперпользователю."
+            )
 
     def get(self, request, *args, **kwargs):
         self._load_role(kwargs)

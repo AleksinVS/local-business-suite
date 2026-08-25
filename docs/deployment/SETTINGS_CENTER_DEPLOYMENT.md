@@ -196,5 +196,8 @@ Manual checks:
   показывает серверный diff и число затронутых сотрудников;
 - manager с `manage_roles` может создавать/редактировать/назначать обычные роли,
   но не собственную membership, удерживаемую или защищённую роль;
+- разрез «Роли» открывает создание обычной роли и редактор в правой панели без
+  полной перезагрузки документа; защищённые роли видимым текстом показывают
+  ограничение active superuser;
 - `.env` proposal file is created under `data/settings_center/env_proposals/`;
 - memory ingestion with unresolved ACL creates `acl_unresolved` issue and does not publish chunks.

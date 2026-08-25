@@ -10,6 +10,7 @@
       <p class="eyebrow"><a href="{% url 'settings_center:role_catalog' %}">Роли</a> / {{ role.code }}</p>
       <h1>{{ role.label }}</h1>
       <p class="description">{{ role.description|default:"Описание роли не задано." }}</p>
+      <p class="access-role-protection-note"><strong>{% if role.protected %}Защищённая роль{% else %}Обычная роль{% endif %}</strong>{% if role.protected %}: изменение и назначение доступны только активному суперпользователю.{% else %}: назначение выполняется через предметный сервис доступа.{% endif %}</p>
       <p class="muted">Назначено сотрудникам: {{ role.member_count }}</p>
     </div>
     <a class="button-link" href="{% url 'settings_center:user_list' %}?role={{ role.code }}">Сотрудники этой роли</a>
@@ -53,18 +54,13 @@
   .role-definition-actions { display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; padding: 0.75rem 0; background: var(--surface); }
   @media (max-width: 700px) { .role-definition-actions { position: static; flex-direction: column; } }
 </style>
-<script src="{% static 'src/js/role_capability_editor.js' %}?v=role-capability-v1"></script>
 <script>
   (() => {
     const root = document.querySelector("[data-standalone-role-editor]");
     if (!root) return;
     const hidden = root.closest("form")?.querySelector("input[name='active_group']");
     window.SharedRoleCapabilityEditor?.init(root);
-    const form = root.closest("form");
-    form?.addEventListener("input", () => { form.dataset.accessDirty = "true"; });
-    form?.addEventListener("change", () => { form.dataset.accessDirty = "true"; });
-    form?.addEventListener("submit", () => { form.dataset.accessDirty = "false"; });
-    window.addEventListener("beforeunload", (event) => { if (form?.dataset.accessDirty === "true") { event.preventDefault(); event.returnValue = ""; } });
+    window.SharedAccessEditor?.init(document);
   })();
 </script>
 {% endblock %}

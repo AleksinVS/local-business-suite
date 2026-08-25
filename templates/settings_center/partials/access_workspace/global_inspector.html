@@ -1,0 +1,26 @@
+<div class="drawer-content access-global-inspector" data-access-global-editor>
+  {% include "settings_center/partials/access_workspace/inline_messages.html" %}
+  {% if creating_role %}
+    <div class="access-panel-title"><div><span class="eyebrow">Роль</span><h2>Создать роль</h2><p class="muted">Новая обычная роль</p></div><button type="button" class="access-panel-close" onclick="closeGlobalRightPanel()" aria-label="Закрыть редактор">×</button></div>
+    {% include "settings_center/partials/access_workspace/role_create_editor.html" %}
+  {% elif selected %}
+    <div class="access-panel-title"><div><span class="eyebrow">{{ selected_kind_label }}</span><h2>{{ selected.name }}</h2><p class="muted">Канбан-панель доступа</p></div><button type="button" class="access-panel-close" onclick="closeGlobalRightPanel()" aria-label="Закрыть редактор">×</button></div>
+    {% if selected.kind == "user" %}
+      {% include "settings_center/partials/access_workspace/user_bundle_editor.html" %}
+    {% elif selected.kind == "role" and selected_field == "definition" and field_form %}
+      {% include "settings_center/partials/access_workspace/role_definition_editor.html" %}
+    {% elif selected.kind == "role" and selected_field == "users" and field_form %}
+      <h3>Назначение роли</h3>
+      <p class="access-readonly-explanation">Выберите пользователей и сохраните состав роли через предметный сервис. Защищённые роли доступны только активному суперпользователю.</p>
+      {% include "settings_center/partials/access_workspace/field_editor.html" %}
+    {% elif selected.kind == "role" %}
+      <p class="access-readonly-explanation">{{ selected.protection_label }}. {{ selected.assignment_denial_reason|default:"Поля роли доступны через предметный редактор." }}</p>
+    {% else %}
+      <p class="access-readonly-explanation">Этот источник является read-only проекцией. Изменение выполняется через предметный сервис владельца доступа.</p>
+    {% endif %}
+    {% if selected.kind == "role" %}<p class="access-role-protection-note"><strong>{{ selected.protection_label }}</strong>{% if selected.protected %}: назначение и изменение доступны только активному суперпользователю.{% endif %}</p>{% endif %}
+  {% else %}
+    <p class="access-readonly-explanation">Объект доступа не выбран.</p>
+  {% endif %}
+</div>
+{% if refresh_table %}<div id="access-table-panel" hx-swap-oob="innerHTML">{% include "settings_center/partials/access_workspace/table_panel.html" %}</div>{% endif %}

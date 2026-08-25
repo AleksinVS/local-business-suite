@@ -700,32 +700,121 @@ def get_role_rules_for_actor(*, actor, payload):
     return {"rules": get_contract("role_rules")}
 
 def list_users_for_actor(*, actor, payload):
-    """Lists users with their roles and departments. Only for superusers."""
+    """List privacy-safe access facts for the access administration UI."""
     actor = resolve_active_actor(actor, force_refresh=True)
     if actor is None or not actor.is_superuser:
         raise PermissionDenied("Список всех пользователей доступен только администраторам.")
 
     User = get_user_model()
-    query = payload.get("query", "")
-    queryset = User.objects.select_related("department").prefetch_related("groups").all()
+    query = str(payload.get("query", "") or "").strip()
+    queryset = User.objects.select_related("department").prefetch_related("groups__profile").all()
 
     if query:
-        queryset = queryset.filter(username__icontains=query) | queryset.filter(first_name__icontains=query) | queryset.filter(last_name__icontains=query)
+        from django.db.models import Q
 
-    return {
-        "items": [
+        queryset = queryset.filter(
+            Q(username__icontains=query)
+            | Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+        )
+
+    from apps.accounts.selectors import split_user_groups
+
+    items = []
+    for user in queryset.order_by("username", "pk")[:50]:
+        roles, technical = split_user_groups(user)
+        memory_names = set()
+        from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+        memory_names.update(MEMORY_REVIEW_GROUP_CAPABILITIES)
+        technical_names = sorted(group.name for group in technical if group.name not in memory_names)
+        memory_group_names = sorted(group.name for group in technical if group.name in memory_names)
+        items.append(
             {
-                "id": u.id,
-                "username": u.username,
-                "full_name": u.get_full_name(),
-                "email": u.email,
-                "is_active": u.is_active,
-                "is_superuser": u.is_superuser,
-                "department": u.department.name if u.department else None,
-                "groups": list(u.groups.values_list("name", flat=True))
+                "id": user.id,
+                "username": user.username,
+                "full_name": user.get_full_name(),
+                "is_active": bool(user.is_active),
+                "department": user.department.name if user.department else None,
+                "roles": sorted(group.name for group in roles),
+                "technical_groups": technical_names,
+                "memory_groups": memory_group_names,
+                "superuser_reserve": bool(user.is_superuser),
+                "effective": bool(user.is_active),
             }
-            for u in queryset[:50]
-        ]
+        )
+
+    return {"items": items}
+
+
+def _require_access_explain_authority(actor):
+    """Require a fresh manage_roles authority or active superuser reserve."""
+    actor = resolve_active_actor(actor, force_refresh=True)
+    from apps.workorders.policies import can_manage_roles
+
+    if actor is None or not (actor.is_superuser or can_manage_roles(actor)):
+        raise PermissionDenied("Пояснение доступа доступно только администраторам доступа.")
+    return actor
+
+
+def explain_user_access_for_actor(*, actor, payload):
+    """Return a minimal explanation made solely from enforcement inputs."""
+    actor = _require_access_explain_authority(actor)
+    try:
+        user_id = int(str(payload.get("user_id", "")).strip())
+    except (TypeError, ValueError):
+        raise ValidationError("Нужен корректный идентификатор пользователя.")
+    user = get_user_model().objects.select_related("department").prefetch_related("groups__profile").filter(pk=user_id).first()
+    if user is None:
+        raise ValidationError("Пользователь не найден.")
+    from apps.accounts.selectors import effective_access_for_user, split_user_groups
+    from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+    roles, technical = split_user_groups(user)
+    memory_names = set(MEMORY_REVIEW_GROUP_CAPABILITIES)
+    explanation = effective_access_for_user(user)
+    return {
+        "user": {
+            "id": user.pk,
+            "username": user.username,
+            "full_name": user.get_full_name(),
+            "department": user.department.name if user.department else None,
+            "is_active": bool(user.is_active),
+        },
+        "assigned": {
+            "roles": sorted(group.name for group in roles),
+            "technical_groups": sorted(group.name for group in technical if group.name not in memory_names),
+            "memory_groups": sorted(group.name for group in technical if group.name in memory_names),
+            "superuser_reserve": bool(user.is_superuser),
+        },
+        "effective": explanation,
+        "notes": [
+            "Назначенные группы памяти являются отдельным техническим источником.",
+            "ACL ресурсов и workflow только сужают доступ и не являются источниками грантов.",
+        ],
+    }
+
+
+def open_access_editor_for_actor(*, actor, payload):
+    """Build a server-owned, read-only command for the human access editor."""
+    actor = _require_access_explain_authority(actor)
+    target_type = str(payload.get("target_type", "") or "").strip()
+    target_id = str(payload.get("target_id", "") or "").strip()
+    if target_type not in {"user", "role"} or not target_id:
+        raise ValidationError("Редактор доступа принимает только target_type user|role и target_id.")
+    from apps.core.right_panels import build_right_panel_descriptor
+
+    descriptor = build_right_panel_descriptor(
+        user=actor,
+        source_code="settings_center",
+        object_type=target_type,
+        object_id=target_id,
+        mode="edit",
+    )
+    return {
+        "status": "ok",
+        "message": "Команда открытия редактора доступа готова.",
+        "ui_command": descriptor.as_dict(),
     }
 
 

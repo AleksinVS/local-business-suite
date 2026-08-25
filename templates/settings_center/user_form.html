@@ -27,6 +27,9 @@
         Пользователь временно помещён в подразделение «Не назначено». Суперпользователь должен выбрать реальное подразделение в разделе «Учётная запись».
       </div>
     {% endif %}
+    {% if not portal_user.is_active %}
+      <div class="message warning" role="status">Учётная запись отключена: назначенные роли и группы отображаются как факты, но эффективных прав нет.</div>
+    {% endif %}
     {% if request.GET.focus == "assign" %}
       <div class="message success" role="status">Пользователь создан. Теперь назначьте ему роль.</div>
     {% endif %}
@@ -100,6 +103,14 @@
           {% empty %}<dt class="muted">Технических групп нет.</dt><dd></dd>{% endfor %}
         </dl>
 
+        <h3>Группы памяти</h3>
+        <dl>
+          {% for group in effective_access.memory_groups %}
+            <dt>{{ group.label }} <code>{{ group.code }}</code> <span class="muted">Источник: группа памяти</span></dt>
+            <dd>{{ group.description|default:"Описание не заполнено." }}</dd>
+          {% empty %}<dt class="muted">Групп памяти нет.</dt><dd></dd>{% endfor %}
+        </dl>
+
         <h3>Технические флаги</h3>
         <ul>
           {% for flag in effective_access.flags %}
@@ -107,13 +118,12 @@
           {% empty %}<li class="muted">Флаги is_staff/is_superuser не установлены.</li>{% endfor %}
         </ul>
 
-        <h3>Django permissions</h3>
-        <dl>
-          {% for permission in effective_access.django_permissions %}
-            <dt>{{ permission.label }} <code>{{ permission.code }}</code></dt>
-            <dd>Источник: Django permission — {{ permission.sources|join:", " }}</dd>
-          {% empty %}<dt class="muted">Отдельные Django permissions не назначены.</dt><dd></dd>{% endfor %}
-        </dl>
+        <h3>Ограничения объекта</h3>
+        <ul>
+          {% for constraint in effective_access.constraints %}
+            <li>{{ constraint.label }} <span class="muted">Источник: {{ constraint.source }}</span></li>
+          {% empty %}<li class="muted">Ограничения объектов не определены.</li>{% endfor %}
+        </ul>
       </details>
     </section>
     <details>

@@ -1072,21 +1072,29 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertFalse(model_admin.has_delete_permission(request, obj=technical))
 
     def test_effective_access_explains_all_supported_sources(self):
-        permission = Permission.objects.select_related("content_type").first()
-        self.target.user_permissions.add(permission)
         self.target.is_staff = True
         self.target.save(update_fields=["is_staff"])
 
         access = effective_access_for_user(self.target)
 
         self.assertEqual(access["roles"][0]["code"], "customer")
-        self.assertEqual(access["technical_groups"][0]["code"], "memory_auditor")
+        self.assertEqual(access["memory_groups"][0]["code"], "memory_auditor")
         self.assertIn("is_staff", {item["source"] for item in access["flags"]})
-        self.assertIn(
-            f"{permission.content_type.app_label}.{permission.codename}",
-            {item["code"] for item in access["django_permissions"]},
-        )
+        self.assertNotIn("django_permissions", access)
         self.assertTrue(any(source["type"] == "role" for item in access["capabilities"] for source in item["sources"]))
+
+    def test_inactive_access_keeps_membership_facts_but_has_no_effective_grants(self):
+        self.target.is_active = False
+        self.target.is_superuser = True
+        self.target.save(update_fields=["is_active", "is_superuser"])
+
+        access = effective_access_for_user(self.target)
+
+        self.assertEqual(access["roles"][0]["code"], "customer")
+        self.assertFalse(access["roles"][0]["effective"])
+        self.assertFalse(access["capabilities"])
+        self.assertFalse(access["flags"])
+        self.assertFalse(access["superuser_reserve"]["effective"])
 
     def test_effective_access_explains_default_board_view_for_roleless_user(self):
         roleless = get_user_model().objects.create_user(username="access-default-viewer")

@@ -196,12 +196,12 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
         if identity:
             ad_label = identity.upn or identity.username or identity.subject_id or identity.domain
         sections = set()
-        for role_code in role_codes:
+        for role_code in role_codes if user.is_active else ():
             sections.update(section_by_role.get(role_code, ()))
         fallback = default_board_access_applies(user)
         if fallback:
             sections.add(SECTION_LABELS["kanban"])
-        if user.is_superuser:
+        if user.is_active and user.is_superuser:
             sections.update(_section_labels(catalog))
         rows.append(
             {
@@ -223,7 +223,9 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
                 },
                 "roles": role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else []),
                 "roles_text": ", ".join(role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else [])),
+                "roles_effective": bool(user.is_active),
                 "role_codes": role_codes,
+                "effective": bool(user.is_active),
                 "site_sections": sorted(sections),
                 "site_sections_text": ", ".join(sorted(sections)),
                 "technical_groups": technical,

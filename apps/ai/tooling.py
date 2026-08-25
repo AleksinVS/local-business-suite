@@ -116,12 +116,15 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
     if tool_code == "ui.open_right_panel":
         from apps.core.right_panels import build_right_panel_descriptor
 
+        mode = payload.get("mode", "view") or "view"
+        if mode != "view":
+            raise ValidationError("ui.open_right_panel поддерживает только режим просмотра.")
         descriptor = build_right_panel_descriptor(
             user=actor,
             source_code=payload.get("source_code", ""),
             object_type=payload.get("object_type", ""),
             object_id=payload.get("object_id", ""),
-            mode=payload.get("mode", "view") or "view",
+            mode=mode,
         )
         return {
             "status": "ok",
@@ -241,6 +244,12 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
     elif tool_code == "access.users.list":
         from .services import list_users_for_actor
         return list_users_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.users.explain":
+        from .services import explain_user_access_for_actor
+        return explain_user_access_for_actor(actor=actor, payload=payload)
+    elif tool_code == "access.open_editor":
+        from .services import open_access_editor_for_actor
+        return open_access_editor_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.groups.list":
         from .services import list_groups_for_actor
         return list_groups_for_actor(actor=actor, payload=payload)

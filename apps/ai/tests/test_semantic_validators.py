@@ -21,6 +21,50 @@ class SemanticValidatorsTests(SimpleTestCase):
         contract = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
         self.assertTrue(removed.isdisjoint({tool["id"] for tool in contract["tools"]}))
 
+    def test_access_explain_and_editor_are_read_only_tools(self):
+        from apps.ai.tool_definitions import get_registry_payload
+
+        tools = {tool["id"]: tool for tool in get_registry_payload()["tools"]}
+        self.assertEqual(tools["access.users.explain"]["mode"], "read")
+        self.assertEqual(tools["access.open_editor"]["mode"], "read")
+        self.assertFalse(tools["access.open_editor"]["requires_confirmation"])
+
+    def test_runtime_validator_rejects_any_new_access_write_tool(self):
+        from apps.ai.contracts import validate_ai_tools_payload
+        from django.core.exceptions import ValidationError
+
+        contract = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
+        contract["tools"].append({
+            "id": "access.future_write",
+            "title": "Forbidden",
+            "domain": "access",
+            "mode": "write",
+            "execution_mode": "service_layer",
+            "description": "Must remain unavailable.",
+            "inputs": [],
+            "outputs": [],
+            "required_role_scope": "manage_roles",
+        })
+        with self.assertRaisesMessage(ValidationError, "запрещённые инструменты"):
+            validate_ai_tools_payload(contract)
+
+    def test_runtime_validator_rejects_non_read_access_modes(self):
+        from apps.ai.contracts import validate_ai_tools_payload
+        from django.core.exceptions import ValidationError
+
+        base = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
+        access_tool = next(tool for tool in base["tools"] if tool["domain"] == "access")
+        for mode in ("write", "execute", None):
+            with self.subTest(mode=mode):
+                contract = json.loads(json.dumps(base))
+                candidate = next(tool for tool in contract["tools"] if tool["id"] == access_tool["id"])
+                if mode is None:
+                    candidate.pop("mode")
+                else:
+                    candidate["mode"] = mode
+                with self.assertRaises(ValidationError):
+                    validate_ai_tools_payload(contract)
+
     def test_runtime_validator_rejects_retired_access_mutation_tools(self):
         from apps.ai.contracts import validate_ai_tools_payload
 

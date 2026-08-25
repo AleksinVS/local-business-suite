@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from collections import OrderedDict
 
-from django.contrib.auth.models import Permission
-
 from apps.core.contract_store import get_contract
 from apps.workorders.policies import (
     LEGACY_DEFAULT_BOARD_VIEW_ROLE,
@@ -111,9 +109,13 @@ def access_assignment_consequences(before_roles, after_roles) -> dict:
 
 def user_access_overview(user) -> dict:
     role_groups, technical_groups = split_user_groups(user)
+    from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+    memory_names = set(MEMORY_REVIEW_GROUP_CAPABILITIES)
     return {
         "roles": [group.name for group in role_groups],
-        "technical_groups": [group.name for group in technical_groups],
+        "technical_groups": [group.name for group in technical_groups if group.name not in memory_names],
+        "memory_groups": [group.name for group in technical_groups if group.name in memory_names],
         "is_staff": bool(user.is_staff),
         "is_superuser": bool(user.is_superuser),
     }
@@ -125,9 +127,19 @@ def effective_access_for_user(user) -> dict:
         configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
     catalog = capability_catalog()
     role_groups, technical_groups = split_user_groups(user)
+    memory_group_names = set()
+    try:
+        from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES
+
+        memory_group_names = set(MEMORY_REVIEW_GROUP_CAPABILITIES)
+    except ImportError:
+        # Keep this selector usable during early app loading.  Memory groups
+        # are still separated whenever the memory policy module is available.
+        pass
     role_names = [group.name for group in role_groups]
-    capability_sources = effective_capabilities_for_roles(role_names)
-    if user.is_superuser:
+    is_active = bool(getattr(user, "is_active", False))
+    capability_sources = effective_capabilities_for_roles(role_names) if is_active else {}
+    if is_active and user.is_superuser:
         for key, metadata in catalog.items():
             capability_type = (metadata or {}).get("type")
             value = True if capability_type == "flag" else "*" if capability_type == "targets" else "all"
@@ -156,9 +168,10 @@ def effective_access_for_user(user) -> dict:
                 "label": config.get("display_name", group.name),
                 "description": config.get("description", ""),
                 "risk_markers": role_risk_markers(group.name, config),
+                "effective": is_active,
             }
         )
-    if default_board_access_applies(user):
+    if is_active and default_board_access_applies(user):
         default_config = configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE]
         roles.append(
             {
@@ -167,48 +180,25 @@ def effective_access_for_user(user) -> dict:
                 "description": default_config["description"],
                 "risk_markers": [],
                 "source": "default_policy",
+                "effective": True,
             }
         )
 
     technical = []
+    memory = []
     for group in technical_groups:
         profile = getattr(group, "profile", None)
-        technical.append(
-            {
-                "code": group.name,
-                "label": getattr(profile, "title", "") or group.name,
-                "description": getattr(profile, "description", "") or "",
-                "source": "special_group",
-            }
-        )
-
-    direct_permission_ids = set(user.user_permissions.values_list("id", flat=True))
-    group_permission_rows = Permission.objects.filter(group__user=user).values_list(
-        "id", "group__name"
-    )
-    groups_by_permission: dict[int, set[str]] = {}
-    for permission_id, group_name in group_permission_rows:
-        groups_by_permission.setdefault(permission_id, set()).add(group_name)
-    permission_ids = direct_permission_ids | set(groups_by_permission)
-    permissions = []
-    for permission in Permission.objects.filter(id__in=permission_ids).select_related("content_type").order_by(
-        "content_type__app_label", "codename"
-    ):
-        sources = []
-        if permission.id in direct_permission_ids:
-            sources.append("Назначено пользователю напрямую")
-        sources.extend(f"Группа {name}" for name in sorted(groups_by_permission.get(permission.id, set())))
-        permissions.append(
-            {
-                "code": f"{permission.content_type.app_label}.{permission.codename}",
-                "label": permission.name,
-                "sources": sources,
-                "source": "django_permission",
-            }
-        )
+        row = {
+            "code": group.name,
+            "label": getattr(profile, "title", "") or group.name,
+            "description": getattr(profile, "description", "") or "",
+            "source": "technical_group",
+            "effective": is_active,
+        }
+        (memory if group.name in memory_group_names else technical).append(row)
 
     flags = []
-    if user.is_staff:
+    if is_active and user.is_staff:
         flags.append(
             {
                 "code": "is_staff",
@@ -216,7 +206,7 @@ def effective_access_for_user(user) -> dict:
                 "source": "is_staff",
             }
         )
-    if user.is_superuser:
+    if is_active and user.is_superuser:
         flags.append(
             {
                 "code": "is_superuser",
@@ -228,9 +218,32 @@ def effective_access_for_user(user) -> dict:
     return {
         "roles": roles,
         "technical_groups": technical,
+        "memory_groups": memory,
         "flags": flags,
         "capabilities": capabilities,
-        "django_permissions": permissions,
+        "superuser_reserve": {
+            "assigned": bool(user.is_superuser),
+            "effective": bool(is_active and user.is_superuser),
+            "source": "superuser_reserve",
+        },
+        # ACL and workflow are object-scoped restrictions, not grant sources.
+        # Keep their presence explicit without serializing complete ACLs.
+        "constraints": [
+            {
+                "type": "acl",
+                "source": "resource_acl",
+                "label": "ACL конкретного ресурса сужает доступ",
+                "object_scoped": True,
+                "effect": "narrows_role_scope",
+            },
+            {
+                "type": "workflow",
+                "source": "workflow",
+                "label": "Статус и переходы процесса сужают доступ",
+                "object_scoped": True,
+                "effect": "narrows_transitions",
+            },
+        ],
     }
 
 

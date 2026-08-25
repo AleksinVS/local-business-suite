@@ -117,6 +117,16 @@ def validate_ai_tools_payload(payload):
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
     forbidden = sorted(tool_ids & FORBIDDEN_ACCESS_MUTATION_TOOL_IDS)
+    forbidden.extend(
+        sorted(
+            item.get("id", "")
+            for item in tools
+            if isinstance(item, dict)
+            and item.get("domain") == "access"
+            and item.get("mode") != "read"
+            and item.get("id") not in forbidden
+        )
+    )
     if forbidden:
         raise ValidationError(
             "Контракт ИИ содержит запрещённые инструменты изменения доступа: "

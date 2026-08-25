@@ -27,6 +27,7 @@ from django.urls import reverse
 from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity, GroupProfile
 from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.json_utils import load_json_file
+from apps.core.right_panels import build_right_panel_descriptor
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
 from apps.memory.models import MemoryGroupMembershipAudit
@@ -58,6 +59,80 @@ from .registry import get_registry
 
 User = get_user_model()
 pytestmark = pytest.mark.integration
+
+
+class AccessEditorRightPanelTests(TestCase):
+    def test_provider_builds_fixed_user_and_role_edit_descriptors(self):
+        actor = User.objects.create_superuser(username="panel-root", password="pass")
+        target = User.objects.create_user(username="panel-target", password="pass")
+
+        user_descriptor = build_right_panel_descriptor(
+            user=actor,
+            source_code="settings_center",
+            object_type="user",
+            object_id=str(target.pk),
+            mode="edit",
+        )
+        self.assertEqual(user_descriptor.htmx_url, reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
+        self.assertEqual(user_descriptor.metadata["target_type"], "user")
+        self.assertEqual(user_descriptor.title, f"Редактор доступа: пользователь #{target.pk}")
+        self.assertNotIn(target.username, user_descriptor.title)
+
+        role_descriptor = build_right_panel_descriptor(
+            user=actor,
+            source_code="settings_center",
+            object_type="role",
+            object_id="customer",
+            mode="edit",
+        )
+        self.assertEqual(role_descriptor.metadata["target_type"], "role")
+        self.assertEqual(role_descriptor.htmx_url, reverse("settings_center:role_definition", kwargs={"role_code": "customer"}))
+
+    def test_provider_rejects_unknown_or_view_mode_targets(self):
+        actor = User.objects.create_superuser(username="panel-root-deny", password="pass")
+
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="technical-group",
+                object_id="memory_admin",
+                mode="edit",
+            )
+        with self.assertRaises(ValidationError):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="role",
+                object_id="customer",
+                mode="view",
+            )
+
+    def test_provider_rechecks_fresh_actor_and_target_state(self):
+        actor = User.objects.create_superuser(username="panel-race-root", password="pass")
+        target = User.objects.create_user(username="panel-race-target", password="pass")
+        actor.is_active = False
+        actor.save(update_fields=["is_active"])
+        with self.assertRaises(PermissionDenied):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="user",
+                object_id=str(target.pk),
+                mode="edit",
+            )
+
+        actor.is_active = True
+        actor.save(update_fields=["is_active"])
+        target.delete()
+        with self.assertRaises(PermissionDenied):
+            build_right_panel_descriptor(
+                user=actor,
+                source_code="settings_center",
+                object_type="user",
+                object_id="999999",
+                mode="edit",
+            )
 
 
 def _role_catalog_target(payload, code="future_catalog_flag"):

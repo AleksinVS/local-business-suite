@@ -315,6 +315,8 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         )
         self.assertIn("access.get_role_rules", tool_names)
         self.assertIn("access.users.list", tool_names)
+        self.assertIn("access.users.explain", tool_names)
+        self.assertIn("access.open_editor", tool_names)
         self.assertIn("access.groups.list", tool_names)
 
     def test_memory_search_tool_forwards_search_options(self):
@@ -361,6 +363,29 @@ class TestRuntimeMemoryTool(unittest.TestCase):
                 "corpus": "source_data",
             },
         )
+
+    def test_access_editor_tool_forwards_only_bounded_target_fields(self):
+        from services.agent_runtime.tools import build_tools
+
+        class FakeGatewayClient:
+            def __init__(self):
+                self.calls = []
+
+            def execute_tool(self, **kwargs):
+                self.calls.append(kwargs)
+                return {"ok": True}
+
+        gateway = FakeGatewayClient()
+        tools = build_tools(
+            actor={"user_id": 1, "channel": "internal"},
+            session_id="session-1",
+            gateway_client=gateway,
+        )
+        editor = next(tool for tool in tools if tool.name == "access.open_editor")
+        editor.invoke({"target_type": "user", "target_id": "42"})
+
+        self.assertEqual(gateway.calls[0]["tool_code"], "access.open_editor")
+        self.assertEqual(gateway.calls[0]["payload"], {"target_type": "user", "target_id": "42"})
 
     def test_memory_search_tool_schema_excludes_removed_params(self):
         """ADR-0030 decision 6: the removed profile-selection params must not

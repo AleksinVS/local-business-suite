@@ -558,6 +558,99 @@ class AIViewsTests(TestCase):
         self.assertFalse(payload["ok"])
         self.assertIsNone(payload["result"])
 
+    def test_access_explain_and_editor_are_read_only_audited_and_do_not_create_pending_actions(self):
+        before_pending = PendingAction.objects.count()
+
+        explain_response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "access.users.explain"}),
+            data=json.dumps({
+                "actor": {"user_id": self.manager.id, "channel": "internal"},
+                "payload": {"user_id": self.customer.id},
+            }),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(explain_response.status_code, 200)
+        self.assertTrue(explain_response.json()["ok"])
+        self.assertEqual(PendingAction.objects.count(), before_pending)
+        self.assertEqual(
+            AgentActionLog.objects.filter(tool_code="access.users.explain").latest("id").status,
+            AgentActionLog.Status.SUCCEEDED,
+        )
+
+        denied_explain = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "access.users.explain"}),
+            data=json.dumps({
+                "actor": {"user_id": self.customer.id, "channel": "internal"},
+                "payload": {"user_id": self.manager.id},
+            }),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(denied_explain.status_code, 400)
+        self.assertEqual(
+            AgentActionLog.objects.filter(tool_code="access.users.explain").latest("id").status,
+            AgentActionLog.Status.DENIED,
+        )
+        self.assertEqual(PendingAction.objects.count(), before_pending)
+
+        editor_response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "access.open_editor"}),
+            data=json.dumps({
+                "actor": {"user_id": self.manager.id, "channel": "internal"},
+                "payload": {"target_type": "user", "target_id": str(self.customer.id)},
+            }),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(editor_response.status_code, 200)
+        self.assertTrue(editor_response.json()["ok"])
+        self.assertEqual(PendingAction.objects.count(), before_pending)
+        self.assertEqual(
+            AgentActionLog.objects.filter(tool_code="access.open_editor").latest("id").status,
+            AgentActionLog.Status.SUCCEEDED,
+        )
+
+        denied_editor = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "access.open_editor"}),
+            data=json.dumps({
+                "actor": {"user_id": self.customer.id, "channel": "internal"},
+                "payload": {"target_type": "user", "target_id": str(self.manager.id)},
+            }),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(denied_editor.status_code, 400)
+        self.assertEqual(
+            AgentActionLog.objects.filter(tool_code="access.open_editor").latest("id").status,
+            AgentActionLog.Status.DENIED,
+        )
+        self.assertEqual(PendingAction.objects.count(), before_pending)
+
+    def test_generic_right_panel_rejects_edit_mode_at_gateway_boundary(self):
+        root = User.objects.create_superuser(username="access-generic-root", password="pass")
+        response = self.client.post(
+            reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
+            data=json.dumps({
+                "actor": {"user_id": root.id, "channel": "internal"},
+                "payload": {
+                    "source_code": "settings_center",
+                    "object_type": "user",
+                    "object_id": str(self.customer.id),
+                    "mode": "edit",
+                },
+            }),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("только режим просмотра", response.json()["errors"][0])
+        self.assertEqual(
+            AgentActionLog.objects.filter(tool_code="ui.open_right_panel").latest("id").status,
+            AgentActionLog.Status.FAILED,
+        )
+        self.assertFalse(PendingAction.objects.filter(tool_code="ui.open_right_panel").exists())
+
     def test_skill_catalog_includes_module_skills(self):
         response = self.client.get(
             reverse("ai:skill_catalog"),

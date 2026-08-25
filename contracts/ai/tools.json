@@ -567,6 +567,62 @@
       "required_role_scope": "superuser"
     },
     {
+      "id": "access.users.explain",
+      "title": "Объяснить эффективный доступ пользователя",
+      "domain": "access",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Показать источники эффективного доступа выбранного пользователя без Django permissions, email и AD identity.",
+      "inputs": [
+        "user_id"
+      ],
+      "input_schemas": {
+        "user_id": {
+          "description": "Внутренний идентификатор существующего пользователя.",
+          "type": "integer"
+        }
+      },
+      "outputs": [
+        "user",
+        "assigned",
+        "effective",
+        "notes"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "manage_roles"
+    },
+    {
+      "id": "access.open_editor",
+      "title": "Открыть редактор доступа",
+      "domain": "access",
+      "mode": "read",
+      "execution_mode": "service_or_read_only_query",
+      "description": "Вернуть серверную команду открытия существующего редактора пользователя или роли; сохранение выполняет человек.",
+      "inputs": [
+        "target_type",
+        "target_id"
+      ],
+      "input_schemas": {
+        "target_type": {
+          "description": "Тип редактируемого объекта.",
+          "enum": [
+            "user",
+            "role"
+          ]
+        },
+        "target_id": {
+          "description": "Идентификатор существующего пользователя или контрактной роли.",
+          "type": "string"
+        }
+      },
+      "outputs": [
+        "status",
+        "ui_command"
+      ],
+      "requires_confirmation": false,
+      "required_role_scope": "manage_roles"
+    },
+    {
       "id": "access.groups.list",
       "title": "Список групп",
       "domain": "access",

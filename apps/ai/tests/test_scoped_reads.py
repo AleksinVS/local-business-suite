@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase, override_settings
 
 from apps.core.contract_store import _reset_for_tests, get_contract
@@ -33,6 +33,8 @@ from ..services import (
     list_devices_for_actor,
     list_groups_for_actor,
     list_users_for_actor,
+    explain_user_access_for_actor,
+    open_access_editor_for_actor,
     update_device_for_actor,
 )
 
@@ -57,6 +59,13 @@ class ScopedReadServiceTests(TestCase):
         self.assertIn("rules", get_role_rules_for_actor(actor=manager, payload={}))
         self.assertTrue(list_users_for_actor(actor=root, payload={})["items"])
         self.assertIn("manager", list_groups_for_actor(actor=root, payload={})["items"])
+        with self.assertRaises(PermissionDenied):
+            list_users_for_actor(actor=manager, payload={})
+        listed = list_users_for_actor(actor=root, payload={})
+        self.assertTrue(listed["items"])
+        self.assertNotIn("email", listed["items"][0])
+        self.assertIn("technical_groups", listed["items"][0])
+        self.assertIn("memory_groups", listed["items"][0])
 
         root.is_active = False
         root.save(update_fields=["is_active"])
@@ -69,6 +78,42 @@ class ScopedReadServiceTests(TestCase):
         manager.save(update_fields=["is_active"])
         with self.assertRaises(PermissionDenied):
             get_role_rules_for_actor(actor=manager, payload={})
+
+    def test_access_explanation_is_minimal_and_inactive_is_non_effective(self):
+        manager = User.objects.create_user(username="ai-explain-manager", password="pass")
+        role, _ = Group.objects.get_or_create(name="manager")
+        manager.groups.add(role)
+        target = User.objects.create_user(username="ai-explain-target", password="pass")
+        target.is_active = False
+        target.save(update_fields=["is_active"])
+
+        explanation = explain_user_access_for_actor(actor=manager, payload={"user_id": target.pk})
+        self.assertNotIn("email", explanation["user"])
+        self.assertNotIn("django_permissions", explanation["effective"])
+        self.assertFalse(explanation["effective"]["capabilities"])
+        constraints = explanation["effective"]["constraints"]
+        self.assertEqual({item["type"] for item in constraints}, {"acl", "workflow"})
+        self.assertTrue(all(item["object_scoped"] for item in constraints))
+        self.assertEqual(
+            {item["effect"] for item in constraints},
+            {"narrows_role_scope", "narrows_transitions"},
+        )
+
+        with self.assertRaises(PermissionDenied):
+            explain_user_access_for_actor(actor=target, payload={"user_id": target.pk})
+
+    def test_access_editor_accepts_only_server_owned_user_or_role_targets(self):
+        manager = User.objects.create_user(username="ai-editor-manager", password="pass")
+        role, _ = Group.objects.get_or_create(name="manager")
+        manager.groups.add(role)
+        target = User.objects.create_user(username="ai-editor-target", password="pass")
+
+        with self.assertRaises(ValidationError):
+            open_access_editor_for_actor(actor=manager, payload={"target_type": "technical-group", "target_id": "x"})
+        command = open_access_editor_for_actor(actor=manager, payload={"target_type": "user", "target_id": str(target.pk)})
+        self.assertEqual(command["ui_command"]["source_code"], "settings_center")
+        self.assertEqual(command["ui_command"]["object_type"], "user")
+        self.assertEqual(command["ui_command"]["mode"], "edit")
 
     def test_ai_reads_use_the_same_relational_scope_and_fail_closed_for_inactive(self):
         own_department = Department.objects.create(name="AI своя ветка")

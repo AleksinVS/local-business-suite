@@ -359,6 +359,36 @@ def build_tools(
         )
         return result
 
+    @tool("access.users.explain")
+    def explain_user_access(user_id: int) -> dict:
+        """Explain one user's effective access from enforcement sources only."""
+        result = gateway_client.execute_tool(
+            tool_code="access.users.explain",
+            actor=actor,
+            payload={"user_id": user_id},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
+    @tool("access.open_editor")
+    def open_access_editor(target_type: str, target_id: str) -> dict:
+        """Open the server-authorized human access editor; never saves changes."""
+        result = gateway_client.execute_tool(
+            tool_code="access.open_editor",
+            actor=actor,
+            payload={"target_type": target_type, "target_id": target_id},
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            origin_channel=origin_channel,
+            actor_version=actor_version,
+        )
+        return result
+
     @tool("access.groups.list")
     def list_groups() -> dict:
         """Returns a list of all security groups. Requires administrator privileges."""
@@ -408,6 +438,8 @@ def build_tools(
         create_or_update_ai_skill,
         get_role_rules,
         list_users,
+        explain_user_access,
+        open_access_editor,
         list_groups,
         activate_skill,
     ]

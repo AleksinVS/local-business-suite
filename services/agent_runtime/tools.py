@@ -329,21 +329,6 @@ def build_tools(
         )
         return result
 
-    @tool("access.update_role_permissions")
-    def update_role_permissions(role_name: str, permissions_map: dict) -> dict:
-        """Updates permissions for a specific role. Requires administrator privileges."""
-        result = gateway_client.execute_tool(
-            tool_code="access.update_role_permissions",
-            actor=actor,
-            payload={"role_name": role_name, "permissions_map": permissions_map},
-            session_id=session_id,
-            conversation_id=conversation_id,
-            request_id=request_id,
-            origin_channel=origin_channel,
-            actor_version=actor_version,
-        )
-        return result
-
     @tool("access.get_role_rules")
     def get_role_rules() -> dict:
         """Returns current role and permission configuration. Useful before making changes."""
@@ -366,26 +351,6 @@ def build_tools(
             tool_code="access.users.list",
             actor=actor,
             payload={"query": query},
-            session_id=session_id,
-            conversation_id=conversation_id,
-            request_id=request_id,
-            origin_channel=origin_channel,
-            actor_version=actor_version,
-        )
-        return result
-
-    @tool("access.users.update")
-    def update_user(user_id: int, is_active: bool | None = None, department_id: int | None = None) -> dict:
-        """Updates lifecycle/profile fields. Roles and groups use the access card."""
-        payload = {"user_id": user_id}
-        if is_active is not None:
-            payload["is_active"] = is_active
-        if department_id is not None:
-            payload["department_id"] = department_id
-        result = gateway_client.execute_tool(
-            tool_code="access.users.update",
-            actor=actor,
-            payload=payload,
             session_id=session_id,
             conversation_id=conversation_id,
             request_id=request_id,
@@ -441,10 +406,8 @@ def build_tools(
         remember_memory,
         update_personal_memory,
         create_or_update_ai_skill,
-        update_role_permissions,
         get_role_rules,
         list_users,
-        update_user,
         list_groups,
         activate_skill,
     ]

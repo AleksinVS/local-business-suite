@@ -37,7 +37,7 @@
   "acceptance": [
     "No AI dispatcher or tool contract can create, edit, assign, or remove roles, technical groups, privileged flags, account activation, department, username, or AD identity.",
     "access.users.update has no remaining write behavior and is removed from dispatch and tool contracts.",
-    "AI can explain access and open or prefill the human editor.",
+    "Existing read-only access inspection remains available; the access-specific explanation and safe editor handoff are implemented and accepted in task 05.",
     "AD identity/profile sync continues while role mutation remains fail-closed.",
     "PendingAction remains unchanged for non-access AI actions."
   ]

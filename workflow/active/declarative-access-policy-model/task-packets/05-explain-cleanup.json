@@ -13,7 +13,12 @@
     "apps/accounts/access_contracts.py",
     "apps/memory/models.py",
     "apps/memory/policies.py",
-    "apps/settings_center/access_workspace.py"
+    "apps/settings_center/access_workspace.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/services.py",
+    "apps/core/right_panels.py",
+    "services/agent_runtime/tools.py"
   ],
   "write_scope": [
     "apps/accounts/selectors.py",
@@ -21,14 +26,29 @@
     "apps/settings_center/access_workspace.py",
     "apps/settings_center/tests.py",
     "apps/memory/tests/test_review_boundaries.py",
+    "apps/ai/tool_definitions.py",
+    "apps/ai/tooling.py",
+    "apps/ai/services.py",
+    "apps/ai/contracts.py",
+    "apps/ai/tests/test_views.py",
+    "contracts/ai/tools.json",
+    "apps/core/right_panels.py",
+    "apps/core/tests.py",
+    "services/agent_runtime/tools.py",
+    "services/agent_runtime/tests/test_normalization.py",
     "docs/architecture/POLICY_MODEL.md",
     "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
     "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.05-explain.md",
     "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.05-explain.md"
   ],
+  "runtime_operation_scope": [
+    "Migrate data/contracts/ai/tools.json through the reviewed runtime-contract path if task 05 adds read-only access explain or editor-handoff tools; never commit the runtime copy."
+  ],
   "acceptance": [
     "Direct Django permissions are absent from product access explanations unless an enforcement policy reads them.",
     "Role, superuser, technical-group, ACL, and workflow sources remain distinguishable.",
-    "Memory technical-group behavior is unchanged and no group merge occurs."
+    "Memory technical-group behavior is unchanged and no group merge occurs.",
+    "AI can explain a selected user's effective access without exposing an access-mutation tool.",
+    "AI can return a server-authorized command that opens the existing human access editor for the selected user or role; applying changes still requires the editor's Save action."
   ]
 }

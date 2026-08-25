@@ -523,24 +523,6 @@ TOOLS = [
         "required_role_scope": "ai.manage_skills",
     },
     {
-        "id": "access.update_role_permissions",
-        "title": "Обновить права роли",
-        "domain": "access",
-        "mode": "write",
-        "execution_mode": "service_layer",
-        "description": "Обновить права конкретной роли в конфигурации правил ролей.",
-        "inputs": [
-            "role_name",
-            "permissions_map",
-        ],
-        "outputs": [
-            "ok",
-            "message",
-        ],
-        "requires_confirmation": True,
-        "required_role_scope": "role_definition_editor",
-    },
-    {
         "id": "access.get_role_rules",
         "title": "Получить правила ролей",
         "domain": "access",
@@ -566,24 +548,6 @@ TOOLS = [
         "outputs": [
             "items",
         ],
-        "required_role_scope": "superuser",
-    },
-    {
-        "id": "access.users.update",
-        "title": "Обновить пользователя",
-        "domain": "access",
-        "mode": "write",
-        "execution_mode": "service_layer",
-        "description": "Обновить активность и подразделение пользователя через сервис учетных записей. Роли и группы меняются в карточке доступа.",
-        "inputs": [
-            "user_id",
-            "is_active",
-            "department_id",
-        ],
-        "outputs": [
-            "user",
-        ],
-        "requires_confirmation": True,
         "required_role_scope": "superuser",
     },
     {

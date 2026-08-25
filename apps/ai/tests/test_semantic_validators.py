@@ -1,4 +1,7 @@
 """Тесты семантических кросс-валидаторов контрактов AI."""
+import json
+from pathlib import Path
+
 import pytest
 
 from apps.ai.tests._common import *  # noqa: F401,F403
@@ -7,6 +10,36 @@ from apps.ai.tests._common import *  # noqa: F401,F403
 @pytest.mark.unit
 class SemanticValidatorsTests(SimpleTestCase):
     """Tests for the cross-cut semantic validators in json_utils."""
+
+    def test_access_mutation_tools_are_absent_from_python_and_git_catalogs(self):
+        from apps.ai.tool_definitions import get_registry_payload
+
+        removed = {"access.update_role_permissions", "access.users.update"}
+        self.assertTrue(
+            removed.isdisjoint({tool["id"] for tool in get_registry_payload()["tools"]})
+        )
+        contract = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
+        self.assertTrue(removed.isdisjoint({tool["id"] for tool in contract["tools"]}))
+
+    def test_runtime_validator_rejects_retired_access_mutation_tools(self):
+        from apps.ai.contracts import validate_ai_tools_payload
+
+        contract = json.loads(Path("contracts/ai/tools.json").read_text(encoding="utf-8"))
+        retired = {
+            "id": "access.users.update",
+            "title": "Retired access mutation",
+            "domain": "access",
+            "mode": "write",
+            "execution_mode": "service_layer",
+            "description": "Must remain unavailable.",
+            "inputs": ["user_id"],
+            "outputs": ["user"],
+            "required_role_scope": "superuser",
+        }
+        contract["tools"].append(retired)
+
+        with self.assertRaisesMessage(ValidationError, "запрещённые инструменты"):
+            validate_ai_tools_payload(contract)
 
     def test_validate_ai_task_types_tool_alignment_catches_missing_tool(self):
         from apps.ai.contracts import validate_ai_task_types_tool_alignment

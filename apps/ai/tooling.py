@@ -235,18 +235,12 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         from .skill_authoring import create_or_update_runtime_skill_for_actor
 
         return create_or_update_runtime_skill_for_actor(actor=actor, payload=payload)
-    elif tool_code == "access.update_role_permissions":
-        from .services import update_role_permissions_for_actor
-        return update_role_permissions_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.get_role_rules":
         from .services import get_role_rules_for_actor
         return get_role_rules_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.users.list":
         from .services import list_users_for_actor
         return list_users_for_actor(actor=actor, payload=payload)
-    elif tool_code == "access.users.update":
-        from .services import update_user_for_actor
-        return update_user_for_actor(actor=actor, payload=payload)
     elif tool_code == "access.groups.list":
         from .services import list_groups_for_actor
         return list_groups_for_actor(actor=actor, payload=payload)
@@ -322,20 +316,6 @@ def execute_tool(
 
     requires_confirmation = tool.get("requires_confirmation", False)
     confirmation_preview = None
-    if requires_confirmation and tool_code == "access.update_role_permissions":
-        from .services import prepare_role_permissions_change_for_actor
-
-        payload, confirmation_preview = prepare_role_permissions_change_for_actor(
-            actor=actor,
-            payload=payload,
-        )
-    elif requires_confirmation and tool_code == "access.users.update":
-        from .services import prepare_user_update_for_actor
-
-        payload, confirmation_preview = prepare_user_update_for_actor(
-            actor=actor,
-            payload=payload,
-        )
 
     confirmation_state = "not_required"
     if requires_confirmation and not confirmed_token:

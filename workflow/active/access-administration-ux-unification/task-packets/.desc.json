@@ -22,5 +22,6 @@
   "16-business-resource-boundaries.json": "Scoped selectors и сервисные границы заявок, инвентаря, главной страницы и AI",
   "17-administration-and-memory-boundaries.json": "Разделение продуктовых, технических и резервных административных полномочий",
   "18-security-e2e-docs-acceptance.json": "Сквозная security-матрица, runtime migration, документация и приёмка",
-  "19-access-save-liveness.json": "Разделение блокировок доступа и памяти, ограничение ожидания HTMX"
+  "19-access-save-liveness.json": "Разделение блокировок доступа и памяти, ограничение ожидания HTMX",
+  "20-direct-save-access-administration.json": "Один Save для обычных web-редакторов доступа без пользовательского preview/apply"
 }

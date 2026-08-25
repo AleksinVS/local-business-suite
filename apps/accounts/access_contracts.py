@@ -415,6 +415,30 @@ def apply_role_definition_change(
     )
 
 
+def save_role_definition_change(*, actor, role_code, proposed_config, base_hash):
+    """Проверить и сразу применить определение одной роли.
+
+    ``base_hash`` остаётся optimistic-lock открытой формы. Подписанный
+    план создаётся и потребляется внутри одного серверного вызова;
+    браузер не участвует в preview/apply-протоколе.
+    """
+
+    preview = preview_role_definition_change(
+        actor=actor,
+        role_code=role_code,
+        proposed_config=proposed_config,
+        base_hash=base_hash,
+    )
+    return apply_role_definition_change(
+        actor=actor,
+        role_code=role_code,
+        proposed_config=proposed_config,
+        base_hash=preview["base_hash"],
+        preview_token=preview["preview_token"],
+        risk_confirmed=True,
+    )
+
+
 def _require_role_definition_editor(actor, *, rules_snapshot=None):
     if not getattr(actor, "is_authenticated", False):
         raise PermissionDenied("Требуется вход в систему.")

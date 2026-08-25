@@ -184,7 +184,7 @@ class Command(BaseCommand):
                     page_context = self._response_context(page, label="страница роли")
                     form = page_context["field_form"]
                     role_post = {
-                        "action": "preview",
+                        "action": "save",
                         **role_query,
                         "base_hash": form.initial.get("base_hash") or form["base_hash"].value(),
                     }
@@ -203,21 +203,8 @@ class Command(BaseCommand):
                             role_post[field_name] = value
                         elif value is not False and value is not None:
                             role_post[field_name] = value
-                    preview_response = client.post(role_url, role_post)
-                    preview = self._response_context(preview_response, label="предпросмотр роли").get("field_preview")
-                    if not preview or preview["impact"]["role_member_count"] != 2:
-                        raise CommandError("Role preview не показал двух уникальных участников роли.")
-                    if preview["impact"]["effective_change_count"] != 1:
-                        raise CommandError("Role preview неверно посчитал реально затронутого пользователя.")
-                    if preview["impact"]["unchanged_by_other_role_count"] != 1:
-                        raise CommandError("Role preview не учёл сохраняющий доступ manager.")
-                    role_post.update(
-                        action="apply",
-                        preview_token=preview["preview_token"],
-                        risk_confirmed="on",
-                    )
                     if client.post(role_url, role_post).status_code != 302:
-                        raise CommandError("Изменение одной роли не применилось через HTTP.")
+                        raise CommandError("Изменение одной роли не сохранилось через HTTP.")
 
                     client.force_login(member)
                     if client.get(detail_url).status_code != 200:
@@ -235,22 +222,13 @@ class Command(BaseCommand):
                         "panel": "field",
                     }
                     board_data = {
-                        "action": "preview",
+                        "action": "save",
                         **board_query,
                         "group_names": [role_code, control_role_code],
                         "reason": "Сквозная проверка доступа к доске.",
                     }
-                    board_preview_response = client.post(board_url, board_data)
-                    board_preview = self._response_context(board_preview_response, label="предпросмотр доски").get("field_preview")
-                    if not board_preview:
-                        raise CommandError("Board preview не сформирован.")
-                    board_data.update(
-                        action="apply",
-                        preview_token=board_preview["preview_token"],
-                        risk_confirmed="on",
-                    )
                     if client.post(board_url, board_data).status_code != 302:
-                        raise CommandError("Доступ к доске не применился через HTTP.")
+                        raise CommandError("Доступ к доске не сохранился через HTTP.")
 
                     memory_url = reverse("settings_center:access_workspace")
                     memory_query = {
@@ -260,22 +238,13 @@ class Command(BaseCommand):
                         "panel": "field",
                     }
                     memory_data = {
-                        "action": "preview",
+                        "action": "save",
                         **memory_query,
                         "group_names": ["memory_observer"],
                         "reason": "Сквозная проверка экспертного назначения.",
                     }
-                    memory_preview_response = client.post(memory_url, memory_data)
-                    memory_preview = self._response_context(memory_preview_response, label="предпросмотр технической группы").get("field_preview")
-                    if not memory_preview:
-                        raise CommandError("Memory membership preview не сформирован.")
-                    memory_data.update(
-                        action="apply",
-                        preview_token=memory_preview["preview_token"],
-                        confirmed="on",
-                    )
                     if client.post(memory_url, memory_data).status_code != 302:
-                        raise CommandError("Техническая группа памяти не применилась через HTTP.")
+                        raise CommandError("Техническая группа памяти не сохранилась через HTTP.")
 
                     if not SettingsChange.objects.filter(
                         setting_id="core.contract.role_rules",

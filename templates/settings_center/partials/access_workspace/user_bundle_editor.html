@@ -1,4 +1,4 @@
-<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error or field_preview or field_form.preview_token.value %}true{% else %}false{% endif %}">
+<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
   {% csrf_token %}
   <input type="hidden" name="view" value="users">
   <input type="hidden" name="object" value="{{ selected.object }}">
@@ -9,7 +9,7 @@
   <input type="hidden" name="filter_department" value="{{ access_filter_state.department_id|default:'' }}">
   {% if access_filter_state.attention %}<input type="hidden" name="filter_attention" value="{{ attention_value }}">{% endif %}
   {{ field_form.non_field_errors }}
-  {% for hidden in field_form.hidden_fields %}{{ hidden }}{% endfor %}
+  {{ field_form.active_editor }}
 
   <div class="access-inspector-columns access-user-bundle-columns">
     <section class="access-current-fields" aria-labelledby="access-user-inline-title">
@@ -55,19 +55,9 @@
     </section>
   </div>
 
-  {% if field_preview %}
-    <div class="access-preview-box" role="status" aria-live="polite">
-      <strong>Предпросмотр изменений</strong>
-      {% if field_preview.changes %}<ul>{% for item in field_preview.changes %}<li><strong>{{ item.label }}</strong>{% if item.details %}: {{ item.details|join:', ' }}{% endif %}</li>{% endfor %}</ul>{% endif %}
-      {% if field_preview.risk_markers %}<p class="risk-marker risk-marker-critical">{{ field_preview.risk_markers|join:', ' }}</p>{% endif %}
-    </div>
-    {% if field_preview.requires_risk_confirmation %}<div class="access-form-field access-confirmation-field">{{ field_form.confirm_risk }}{{ field_form.confirm_risk.label_tag }}{{ field_form.confirm_risk.errors }}</div>{% endif %}
-    {% if field_preview.requires_memory_confirmation %}<div class="access-form-field access-confirmation-field">{{ field_form.confirm_memory }}{{ field_form.confirm_memory.label_tag }}{{ field_form.confirm_memory.errors }}</div>{% endif %}
-  {% endif %}
   {% if editor_error %}<p class="form-error">{{ editor_error }}</p>{% endif %}
   <div class="access-form-field access-bundle-reason{% if field_form.reason.errors %} has-error{% endif %}">{{ field_form.reason.label_tag }}{{ field_form.reason }}{{ field_form.reason.errors }}</div>
   <div class="access-form-actions">
-    <button class="button" type="submit" name="action" value="bundle_preview">Проверить изменения</button>
-    {% if field_preview or field_form.preview_token.value %}<button class="button" type="submit" name="action" value="bundle_apply">Сохранить все</button>{% endif %}
+    <button class="button" type="submit" name="action" value="save">Сохранить</button>
   </div>
 </form>

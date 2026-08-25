@@ -23,7 +23,7 @@
   <form method="post" class="settings-form board-access-form">
     {% csrf_token %}
     {{ form.non_field_errors }}
-    {{ form.preview_token }}
+    {% if is_break_glass %}{{ form.preview_token }}{% endif %}
     <fieldset>
       <legend>{{ form.group_names.label }}</legend>
       <p class="description">Список строится из действующего контракта ролей.</p>
@@ -37,7 +37,7 @@
       {{ form.reason.errors }}
     </div>
 
-    {% if preview %}
+    {% if is_break_glass and preview %}
       <section class="access-preview" aria-labelledby="board-preview-title">
         <h2 id="board-preview-title" tabindex="-1">Проверка изменения</h2>
         <dl class="diff-summary">
@@ -56,8 +56,12 @@
     {% endif %}
 
     <div class="board-access-actions">
-      <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
-      {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+      {% if is_break_glass %}
+        <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
+        {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+      {% else %}
+        <button class="button" name="action" value="save" type="submit">Сохранить</button>
+      {% endif %}
     </div>
   </form>
 </section>
@@ -96,5 +100,5 @@
   .board-access-actions { display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; padding: 0.75rem 0; background: var(--surface); }
   @media (max-width: 640px) { .diff-summary { grid-template-columns: 1fr; } .board-access-actions { position: static; flex-direction: column; } }
 </style>
-{% if preview %}<script>document.getElementById("board-preview-title")?.focus();</script>{% endif %}
+{% if is_break_glass and preview %}<script>document.getElementById("board-preview-title")?.focus();</script>{% endif %}
 {% endblock %}

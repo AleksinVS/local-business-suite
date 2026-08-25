@@ -35,5 +35,7 @@
   "TASK_ACCEPTANCE.security-e2e-docs-acceptance.md": "Итоговая приёмка безопасности, e2e и документации пакетов 14–18",
   "EXECUTOR_REPORT.access-save-liveness.md": "Отчёт исправления отзывчивости сохранения ролей и пользователей",
   "TASK_ACCEPTANCE.access-save-liveness.md": "Приёмка разделения блокировок и защиты HTMX от бесконечной загрузки",
+  "EXECUTOR_REPORT.20-direct-save-access-administration.md": "Отчёт реализации одного Save в продуктовых редакторах доступа",
+  "TASK_ACCEPTANCE.20-direct-save-access-administration.md": "Техническая и визуальная приёмка прямого сохранения доступа",
   "RETROSPECTIVE.md": "Ретроспектива пакетов безопасности и предметных границ 14–18"
 }

@@ -663,7 +663,7 @@ class AccessWorkspaceTests(TestCase):
         response = self.client.post(
             reverse("settings_center:access_workspace"),
             {**self._bundle_payload(target=target, role=None, memory_group=None),
-             "action": "bundle_preview", "username": " bundle-duplicate-existing "},
+             "action": "save", "username": " bundle-duplicate-existing "},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "уже существует")
@@ -704,7 +704,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertContains(response, "<!doctype html>", html=False)
         self.assertContains(response, 'data-access-workspace')
 
-    def test_user_inspector_bundle_previews_and_applies_all_components_atomically(self):
+    def test_user_inspector_bundle_saves_all_components_atomically(self):
         from apps.core.models import Department
 
         actor = User.objects.create_superuser(username="bundle-root", password="pass")
@@ -731,23 +731,7 @@ class AccessWorkspaceTests(TestCase):
             ad_upn="bundle-ad-user@example.test",
         )
 
-        preview_response = self.client.post(url, {**payload, "action": "bundle_preview"})
-        self.assertEqual(preview_response.status_code, 200)
-        preview = preview_response.context["field_preview"]
-        self.assertEqual(
-            set(preview["components"]),
-            {"profile", "ad", "roles", "memory"},
-        )
-        apply_response = self.client.post(
-            url,
-            {
-                **payload,
-                "action": "bundle_apply",
-                "preview_token": preview["preview_token"],
-                "confirm_risk": "on",
-                "confirm_memory": "on",
-            },
-        )
+        apply_response = self.client.post(url, {**payload, "action": "save"})
 
         self.assertEqual(apply_response.status_code, 302)
         target.refresh_from_db()
@@ -762,7 +746,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(MemoryGroupMembershipAudit.objects.filter(target_user=target).count(), 1)
         self.assertEqual(SettingsChange.objects.filter(actor=actor).count(), 2)
 
-    def test_user_inspector_bundle_rolls_back_earlier_components_when_late_ad_check_fails(self):
+    def test_user_inspector_bundle_rolls_back_earlier_components_when_late_save_fails(self):
         from apps.core.models import Department
 
         actor = User.objects.create_superuser(username="bundle-rollback-root", password="pass")
@@ -785,23 +769,14 @@ class AccessWorkspaceTests(TestCase):
             first_name="После",
             ad_username="bundle-before-preview",
         )
-        preview_response = self.client.post(url, {**payload, "action": "bundle_preview"})
-        preview = preview_response.context["field_preview"]
-
-        apply_response = self.client.post(
-            url,
-            {
-                **payload,
-                "action": "bundle_apply",
-                "preview_token": preview["preview_token"],
-                "confirm_risk": "on",
-                "confirm_memory": "on",
-                "ad_username": "bundle-after-preview",
-            },
-        )
+        with patch(
+            "apps.settings_center.access_bundle_services._apply_external_identity_change_locked",
+            side_effect=ValidationError("Проверка позднего компонента."),
+        ):
+            apply_response = self.client.post(url, {**payload, "action": "save"})
 
         self.assertEqual(apply_response.status_code, 200)
-        self.assertContains(apply_response, "изменились после предпросмотра")
+        self.assertContains(apply_response, "Проверка позднего компонента")
         target.refresh_from_db()
         self.assertEqual(target.first_name, "До")
         self.assertEqual(
@@ -813,7 +788,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertFalse(MemoryGroupMembershipAudit.objects.filter(target_user=target).exists())
         self.assertFalse(SettingsChange.objects.filter(actor=actor).exists())
 
-    def test_workspace_htmx_preview_and_apply_refresh_panel_and_table(self):
+    def test_workspace_htmx_save_refreshes_panel_and_table(self):
         from apps.accounts.selectors import contract_role_names
 
         actor = User.objects.create_superuser(username="workspace-htmx-apply-root", password="pass")
@@ -824,19 +799,11 @@ class AccessWorkspaceTests(TestCase):
         url = reverse("settings_center:access_workspace")
         payload = {
             "view": "users", "object": target.pk, "field": "roles", "panel": "field",
-            "action": "preview", "roles": [role.pk], "is_staff": "", "is_superuser": "",
+            "action": "save", "roles": [role.pk], "is_staff": "", "is_superuser": "",
             "reason": "HTMX-проверка назначения роли.",
         }
         headers = {"HTTP_HX_REQUEST": "true", "HTTP_HX_TARGET": "access-field-sidebar-host"}
 
-        preview_response = self.client.post(url, payload, **headers)
-
-        self.assertEqual(preview_response.status_code, 200)
-        self.assertNotContains(preview_response, "<!doctype html>")
-        self.assertContains(preview_response, "Предпросмотр изменения")
-        self.assertContains(preview_response, 'data-access-dirty="true"')
-        self.assertContains(preview_response, 'id="access-inspector-host" hx-swap-oob="innerHTML"')
-        payload.update(action="apply", preview_token=preview_response.context["field_preview"]["preview_token"], confirm_risk="on")
         apply_response = self.client.post(url, payload, **headers)
 
         self.assertEqual(apply_response.status_code, 200)
@@ -847,7 +814,7 @@ class AccessWorkspaceTests(TestCase):
         next_full_response = self.client.get(url)
         self.assertNotContains(next_full_response, "Доступ пользователя сохранён")
 
-    def test_inline_role_assignment_uses_preview_then_apply_service(self):
+    def test_inline_role_assignment_uses_direct_save_service(self):
         from apps.accounts.selectors import contract_role_names
 
         actor = User.objects.create_superuser(username="workspace-inline-root", password="pass")
@@ -863,36 +830,17 @@ class AccessWorkspaceTests(TestCase):
                 "object": target.pk,
                 "field": "roles",
                 "panel": "field",
-                "action": "preview",
+                "action": "save",
                 "roles": [role.pk],
                 "is_staff": "",
                 "is_superuser": "",
                 "reason": "Проверка назначения роли через карточку.",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        preview = response.context["field_preview"]
-        self.assertTrue(preview["preview_token"])
-        response = self.client.post(
-            url,
-            {
-                "view": "users",
-                "object": target.pk,
-                "field": "roles",
-                "panel": "field",
-                "action": "apply",
-                "roles": [role.pk],
-                "is_staff": "",
-                "is_superuser": "",
-                "reason": "Проверка назначения роли через карточку.",
-                "preview_token": preview["preview_token"],
-                "confirm_risk": "on",
             },
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(target.groups.filter(pk=role.pk).exists())
 
-    def test_inline_role_membership_uses_bulk_preview_apply_and_audits_target(self):
+    def test_inline_role_membership_uses_bulk_save_and_audits_target(self):
         from apps.accounts.selectors import contract_role_names
 
         actor = User.objects.create_superuser(username="workspace-bulk-root", password="pass")
@@ -906,19 +854,10 @@ class AccessWorkspaceTests(TestCase):
             "object": role_name,
             "field": "users",
             "panel": "field",
-            "action": "preview",
+            "action": "save",
             "selected_user_ids": [target.pk],
             "reason": "Проверка состава роли через карточку.",
         }
-        response = self.client.post(url, payload)
-        self.assertEqual(response.status_code, 200)
-        preview = response.context["field_preview"]
-        self.assertEqual(preview["changed_count"], 1)
-        payload.update(
-            action="apply",
-            preview_token=preview["preview_token"],
-            risk_confirmed="on",
-        )
         response = self.client.post(url, payload)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(target.groups.filter(name=role_name).exists())
@@ -979,7 +918,7 @@ class AccessWorkspaceTests(TestCase):
         self.assertTrue(row["role_sources"][0]["read_only"])
         self.assertEqual(row["site_sections"], ["Канбан-доска"])
 
-    def test_profile_editor_requires_signed_preview_and_keeps_inspector_panel(self):
+    def test_profile_editor_saves_directly_and_keeps_inspector_panel(self):
         from apps.core.models import Department
 
         actor = User.objects.create_superuser(username="workspace-profile-root", password="pass")
@@ -996,7 +935,7 @@ class AccessWorkspaceTests(TestCase):
             "object": target.pk,
             "field": "profile",
             "panel": "inspector",
-            "action": "preview",
+            "action": "save",
             "username": target.username,
             "first_name": "Ирина",
             "last_name": "Петрова",
@@ -1007,15 +946,6 @@ class AccessWorkspaceTests(TestCase):
             "reason": "Уточнение рабочего профиля",
         }
 
-        preview_response = self.client.post(url, payload)
-
-        self.assertEqual(preview_response.status_code, 200)
-        self.assertIsInstance(preview_response.context["field_form"], AccessUserProfileForm)
-        self.assertEqual(preview_response.context["selected_panel"], "inspector")
-        preview = preview_response.context["field_preview"]
-        self.assertTrue(preview["preview_token"])
-
-        payload.update(action="apply", preview_token=preview["preview_token"])
         apply_response = self.client.post(url, payload)
 
         self.assertEqual(apply_response.status_code, 302)
@@ -1023,7 +953,7 @@ class AccessWorkspaceTests(TestCase):
         target.refresh_from_db()
         self.assertEqual(target.email, "after@example.test")
 
-    def test_profile_apply_without_preview_is_rejected(self):
+    def test_profile_save_without_preview_is_accepted(self):
         from apps.core.models import Department
 
         actor = User.objects.create_superuser(username="workspace-no-preview-root", password="pass")
@@ -1042,7 +972,7 @@ class AccessWorkspaceTests(TestCase):
                 "object": target.pk,
                 "field": "profile",
                 "panel": "field",
-                "action": "apply",
+                "action": "save",
                 "username": target.username,
                 "first_name": "",
                 "last_name": "",
@@ -1054,10 +984,9 @@ class AccessWorkspaceTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Сначала выполните предпросмотр")
+        self.assertEqual(response.status_code, 302)
         target.refresh_from_db()
-        self.assertEqual(target.email, "before@example.test")
+        self.assertEqual(target.email, "forbidden@example.test")
 
     def test_invalid_editor_response_keeps_dirty_navigation_guard_enabled(self):
         actor = User.objects.create_superuser(username="workspace-invalid-root", password="pass")
@@ -1071,7 +1000,7 @@ class AccessWorkspaceTests(TestCase):
                 "object": target.pk,
                 "field": "profile",
                 "panel": "inspector",
-                "action": "preview",
+                "action": "save",
                 "username": "",
                 "reason": "Проверка ошибки формы",
             },
@@ -1262,7 +1191,7 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
 
-    def test_board_access_workspace_uses_preview_before_apply(self):
+    def test_board_access_workspace_saves_in_one_post(self):
         actor = User.objects.create_superuser(username="board-settings-admin", password="pass")
         customer, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
         technician, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
@@ -1272,25 +1201,15 @@ class SettingsCenterRegistryTests(TestCase):
 
         self.assertEqual(self.client.get(reverse("settings_center:board_access_list")).status_code, 200)
         url = reverse("settings_center:board_access", args=[board.pk])
+        page = self.client.get(url)
+        self.assertContains(page, 'value="save"', html=False)
+        self.assertNotContains(page, 'value="preview"', html=False)
         response = self.client.post(
             url,
             {
-                "action": "preview",
+                "action": "save",
                 "group_names": [ROLE_CUSTOMER, ROLE_TECHNICIAN],
                 "reason": "Рабочая группа техников",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Проверка изменения")
-        preview = response.context["preview"]
-        response = self.client.post(
-            url,
-            {
-                "action": "apply",
-                "group_names": [ROLE_CUSTOMER, ROLE_TECHNICIAN],
-                "reason": "Рабочая группа техников",
-                "preview_token": preview["preview_token"],
-                "risk_confirmed": "on",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1300,7 +1219,7 @@ class SettingsCenterRegistryTests(TestCase):
             BoardAccessAudit.Source.SETTINGS_CENTER,
         )
 
-    def test_single_role_workspace_previews_impact_and_changes_only_selected_role(self):
+    def test_single_role_workspace_saves_and_changes_only_selected_role(self):
         from apps.core.contract_store import _reset_for_tests
 
         actor = User.objects.create_superuser(username="role-catalog-admin", password="pass")
@@ -1333,7 +1252,7 @@ class SettingsCenterRegistryTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 form = response.context["form"]
                 post_data = {
-                    "action": "preview",
+                    "action": "save",
                     "base_hash": response.context["role"]["base_hash"],
                     "display_name": "Роль после предпросмотра",
                     "description": "Описание, сохранённое между проверкой и применением.",
@@ -1355,28 +1274,6 @@ class SettingsCenterRegistryTests(TestCase):
                         post_data[field_name] = current
                     else:
                         post_data[field_name] = current
-                preview_response = self.client.post(url, post_data)
-                self.assertEqual(preview_response.status_code, 200)
-                preview = preview_response.context["preview"]
-                self.assertEqual(preview["impact"]["role_member_count"], 1)
-                self.assertEqual(
-                    {item["code"] for item in preview["changes"]},
-                    {"display_name", "description", changed_code},
-                )
-                self.assertEqual(
-                    preview_response.context["form"]["display_name"].value(),
-                    "Роль после предпросмотра",
-                )
-                self.assertEqual(
-                    preview_response.context["form"]["description"].value(),
-                    "Описание, сохранённое между проверкой и применением.",
-                )
-
-                post_data.update(
-                    action="apply",
-                    preview_token=preview["preview_token"],
-                    risk_confirmed="on",
-                )
                 apply_response = self.client.post(url, post_data)
                 self.assertEqual(apply_response.status_code, 302)
                 saved = load_json_file(role_file)
@@ -2750,7 +2647,7 @@ class SettingsCenterUserViewsTests(TestCase):
             1,
         )
 
-    def test_access_card_preview_confirm_apply_preserves_technical_groups_and_flags(self):
+    def test_access_card_save_preserves_technical_groups_and_flags(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         customer_group, _ = Group.objects.get_or_create(name="customer")
         technician_group, _ = Group.objects.get_or_create(name="technician")
@@ -2762,23 +2659,11 @@ class SettingsCenterUserViewsTests(TestCase):
         self.client.force_login(actor)
         url = reverse("settings_center:user_edit", kwargs={"pk": target.pk})
 
-        direct_apply = self.client.post(url, {"action": "apply", "roles": [technician_group.pk]})
-        self.assertEqual(direct_apply.status_code, 200)
-        self.assertContains(direct_apply, "Сначала выполните предпросмотр")
-        self.assertEqual(set(target.groups.values_list("name", flat=True)), {"customer", "memory_observer"})
-
-        response = self.client.post(url, {"action": "preview", "roles": [technician_group.pk]})
-        self.assertEqual(response.status_code, 200)
-        preview = response.context["preview"]
-        self.assertTrue(preview["requires_confirmation"])
-
         response = self.client.post(
             url,
             {
-                "action": "apply",
+                "action": "save",
                 "roles": [technician_group.pk],
-                "preview_token": preview["preview_token"],
-                "confirm_risk": "on",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -2788,7 +2673,7 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertEqual(set(target.groups.values_list("name", flat=True)), {"technician", "memory_observer"})
         self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
 
-    def test_superuser_access_card_changes_technical_flags_with_preview(self):
+    def test_superuser_access_card_changes_technical_flags_with_save(self):
         actor = User.objects.create_superuser(username="assignment-root")
         target = User.objects.create_user(username="assignment-flags-target")
         self.client.force_login(actor)
@@ -2798,26 +2683,12 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertContains(page, "Супер-пользователь")
         self.assertContains(page, "Доступ к администрированию")
 
-        preview_response = self.client.post(
-            url,
-            {
-                "action": "preview",
-                "is_staff": "on",
-                "is_superuser": "on",
-            },
-        )
-        self.assertEqual(preview_response.status_code, 200)
-        preview = preview_response.context["preview"]
-        self.assertTrue(preview["requires_confirmation"])
-
         apply_response = self.client.post(
             url,
             {
-                "action": "apply",
+                "action": "save",
                 "is_staff": "on",
                 "is_superuser": "on",
-                "preview_token": preview["preview_token"],
-                "confirm_risk": "on",
             },
         )
         self.assertEqual(apply_response.status_code, 302)
@@ -2869,7 +2740,7 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertNotIn("is_staff", form.fields)
         self.assertNotIn("is_superuser", form.fields)
 
-    def test_memory_group_expert_view_is_superuser_only_and_uses_preview_apply(self):
+    def test_memory_group_expert_view_is_superuser_only_and_uses_direct_save(self):
         from apps.memory.models import MemoryGroupMembershipAudit
 
         root = User.objects.create_superuser(username="memory-expert-root")
@@ -2889,23 +2760,12 @@ class SettingsCenterUserViewsTests(TestCase):
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Экспертный сценарий памяти")
-        preview_response = self.client.post(
-            url,
-            {
-                "action": "preview",
-                "group_names": [observer.name],
-                "reason": "Назначение наблюдателя памяти.",
-            },
-        )
-        preview = preview_response.context["preview"]
         apply_response = self.client.post(
             url,
             {
-                "action": "apply",
+                "action": "save",
                 "group_names": [observer.name],
                 "reason": "Назначение наблюдателя памяти.",
-                "preview_token": preview["preview_token"],
-                "confirmed": "on",
             },
         )
 

@@ -34,7 +34,6 @@
     <form method="post" class="settings-small-form" id="assign">
       {% csrf_token %}
       {{ form.non_field_errors }}
-      {{ form.preview_token }}
       <fieldset>
         <legend>{{ form.roles.label }}</legend>
         {{ form.roles.errors }}
@@ -60,32 +59,8 @@
         </details>
       {% endif %}
       <div class="table-actions">
-        <button type="submit" name="action" value="preview" class="button-link">Проверить изменение</button>
+        <button type="submit" name="action" value="save" class="button">Сохранить</button>
       </div>
-
-      {% if preview %}
-        <section class="access-preview" aria-live="polite" aria-labelledby="user-access-preview-title">
-          <h2 id="user-access-preview-title" tabindex="-1">Проверка изменения</h2>
-          <p><strong>Добавятся роли:</strong> {{ preview.added|join:", "|default:"нет" }}</p>
-          <p><strong>Удалятся роли:</strong> {{ preview.removed|join:", "|default:"нет" }}</p>
-          <p><strong>Изменятся технические флаги:</strong>
-            {% for change in preview.flags_changed %}{{ change.label }}: {% if change.before %}включён{% else %}выключен{% endif %} → {% if change.after %}включён{% else %}выключен{% endif %}{% if not forloop.last %}; {% endif %}{% empty %}нет{% endfor %}
-          </p>
-          <p><strong>Новые возможности:</strong> {{ preview.consequences.added|join:", "|default:"нет" }}</p>
-          <p><strong>Утраченные возможности:</strong> {{ preview.consequences.removed|join:", "|default:"нет" }}</p>
-          <p><strong>Изменённые области доступа:</strong> {{ preview.consequences.changed|join:", "|default:"нет" }}</p>
-          {% if preview.risk_markers %}
-            <div class="message warning">
-              <strong>Рискованный доступ</strong>
-              <ul>{% for marker in preview.risk_markers %}<li>{{ marker }}</li>{% endfor %}</ul>
-            </div>
-            <label>{{ form.confirm_risk }} {{ form.confirm_risk.label }}</label>
-          {% endif %}
-          <div class="table-actions">
-            <button type="submit" name="action" value="apply" class="button">Применить показанные изменения</button>
-          </div>
-        </section>
-      {% endif %}
     </form>
 
     <section class="effective-access">
@@ -141,8 +116,6 @@
         </dl>
       </details>
     </section>
-    {% if preview %}<script>document.getElementById("user-access-preview-title")?.focus();</script>{% endif %}
-
     <details>
       <summary>Последние изменения доступа</summary>
       <ul>
@@ -156,14 +129,14 @@
     <form method="post" class="settings-small-form">
       {% csrf_token %}
       {{ form.as_p }}
-      <div class="table-actions"><button type="submit" class="button">Сохранить учётную запись</button></div>
+      <div class="table-actions"><button type="submit" name="action" value="save" class="button">Сохранить учётную запись</button></div>
     </form>
   {% else %}
     <p class="muted">После создания назначьте роли в карточке доступа. Технические группы через этот экран не назначаются.</p>
     <form method="post" class="settings-small-form">
       {% csrf_token %}
       {{ form.as_p }}
-      <div class="table-actions"><button type="submit" class="button">Создать пользователя</button></div>
+      <div class="table-actions"><button type="submit" name="action" value="save" class="button">Создать пользователя</button></div>
     </form>
   {% endif %}
 </section>
@@ -171,7 +144,7 @@
 <style>
   .access-summary { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
   .access-summary p { margin: 0; }
-  .access-preview, .effective-access { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .effective-access { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
   .access-danger-zone, .access-expert-details { margin-top: 1rem; }
   .effective-access dt { margin-top: 0.75rem; font-weight: 600; }
   .effective-access dd { margin: 0.2rem 0 0 1rem; }

@@ -19,7 +19,6 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {{ form.base_hash }}
-    {{ form.preview_token }}
     {{ form.active_group }}
     <div class="role-capability-editor-layout" data-standalone-role-editor>
       <aside class="role-capability-groups" aria-label="Редактор роли">
@@ -41,26 +40,8 @@
       </div>
     </div>
 
-    {% if preview %}
-      <section class="role-preview" aria-labelledby="role-preview-title">
-        <h2 id="role-preview-title" tabindex="-1">Проверка изменения</h2>
-        <p><strong>{{ preview.changes|length }}</strong> изменений · участников роли: <strong>{{ preview.impact.role_member_count }}</strong> · фактически изменится доступ: <strong>{{ preview.impact.effective_change_count }}</strong></p>
-        {% if preview.impact.unchanged_by_other_role_count %}<p class="muted">Сохранят эквивалентный доступ через другие роли: {{ preview.impact.unchanged_by_other_role_count }}</p>{% endif %}
-        {% if preview.impact.system_override_count %}<p class="muted">Системный обход superuser: {{ preview.impact.system_override_count }}</p>{% endif %}
-        {% if preview.impact.requires_object_check_count %}<p class="muted">Для областей доступа итог зависит от конкретной заявки: {{ preview.impact.requires_object_check_count }}</p>{% endif %}
-        <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Сравнение изменений роли">
-          <table class="data-table">
-            <thead><tr><th scope="col">Право</th><th scope="col">Было</th><th scope="col">Станет</th><th scope="col">Риск</th></tr></thead>
-            <tbody>{% for item in preview.changes %}<tr><td>{{ item.label }}</td><td>{{ item.before }}</td><td>{{ item.after }}</td><td>{{ item.risk_label }}</td></tr>{% endfor %}</tbody>
-          </table>
-        </div>
-        {% if preview.requires_confirmation %}<label class="checkbox-row">{{ form.risk_confirmed }} {{ form.risk_confirmed.label }}</label>{% endif %}
-      </section>
-    {% endif %}
-
     <div class="role-definition-actions">
-      <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
-      {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+      <button class="button" name="action" value="save" type="submit">Сохранить</button>
     </div>
   </form>
 </section>
@@ -69,8 +50,6 @@
   .role-definition-form { display: grid; gap: 1rem; }
   .role-definition-form fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 0; overflow: hidden; }
   .role-definition-form legend { margin-left: 0.75rem; padding: 0 0.35rem; font-weight: 700; }
-  .role-preview { border-top: 1px solid var(--border); padding-top: 1rem; }
-  .checkbox-row { display: flex; gap: 0.6rem; align-items: center; min-height: 44px; }
   .role-definition-actions { display: flex; justify-content: flex-end; gap: 0.75rem; position: sticky; bottom: 0; padding: 0.75rem 0; background: var(--surface); }
   @media (max-width: 700px) { .role-definition-actions { position: static; flex-direction: column; } }
 </style>
@@ -87,6 +66,5 @@
     form?.addEventListener("submit", () => { form.dataset.accessDirty = "false"; });
     window.addEventListener("beforeunload", (event) => { if (form?.dataset.accessDirty === "true") { event.preventDefault(); event.returnValue = ""; } });
   })();
-  {% if preview %}document.getElementById("role-preview-title")?.focus();{% endif %}
 </script>
 {% endblock %}

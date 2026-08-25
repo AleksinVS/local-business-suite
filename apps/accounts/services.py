@@ -220,6 +220,46 @@ def apply_role_assignment(
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
+def save_role_assignment(
+    *,
+    actor,
+    target_user,
+    selected_role_names,
+    is_staff=None,
+    is_superuser=None,
+    source=AccessAssignmentAudit.Source.SETTINGS_CENTER,
+    reason="",
+):
+    """Применить назначение ролей одной серверной командой.
+
+    План изменения строится и сразу применяется в рамках одного
+    вызова: браузер не получает и не возвращает preview token. Все
+    полномочия и состояние цели повторно проверяются apply-сервисом
+    под общей блокировкой.
+    """
+
+    preview = preview_role_assignment(
+        actor=actor,
+        target_user=target_user,
+        selected_role_names=selected_role_names,
+        is_staff=is_staff,
+        is_superuser=is_superuser,
+        source=source,
+        reason=reason,
+    )
+    return apply_role_assignment(
+        actor=actor,
+        target_user=target_user,
+        selected_role_names=selected_role_names,
+        preview_token=preview["preview_token"],
+        risk_confirmed=True,
+        is_staff=is_staff,
+        is_superuser=is_superuser,
+        source=source,
+        reason=reason,
+    )
+
+
 def preview_role_membership_change(
     *,
     actor,
@@ -360,6 +400,27 @@ def apply_role_membership_change(
             )
     except FileLockTimeoutError as exc:
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+def save_role_membership_change(
+    *, actor, role_name, selected_user_ids, reason=""
+):
+    """Атомарно сохранить состав роли одной web-командой."""
+
+    preview = preview_role_membership_change(
+        actor=actor,
+        role_name=role_name,
+        selected_user_ids=selected_user_ids,
+        reason=reason,
+    )
+    return apply_role_membership_change(
+        actor=actor,
+        role_name=role_name,
+        selected_user_ids=selected_user_ids,
+        preview_token=preview["preview_token"],
+        risk_confirmed=True,
+        reason=reason,
+    )
 
 
 @transaction.atomic
@@ -571,6 +632,27 @@ def apply_user_profile_change(
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
+def save_user_profile_change(
+    *, actor, target_user, cleaned_data, reason="", audit_callback=None
+):
+    """Проверить и сразу сохранить профиль в одном серверном вызове."""
+
+    preview = preview_user_profile_change(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+        reason=reason,
+    )
+    return apply_user_profile_change(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+        preview_token=preview["preview_token"],
+        reason=reason,
+        audit_callback=audit_callback,
+    )
+
+
 def _apply_user_profile_change_locked(
     *, actor, target_user, cleaned_data, preview_token, reason="", audit_callback=None
 ):
@@ -666,6 +748,27 @@ def apply_external_identity_change(
             )
     except FileLockTimeoutError as exc:
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
+
+
+def save_external_identity_change(
+    *, actor, target_user, cleaned_data, reason="", audit_callback=None
+):
+    """Проверить и сразу сохранить AD-связь одной серверной командой."""
+
+    preview = preview_external_identity_change(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+        reason=reason,
+    )
+    return apply_external_identity_change(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+        preview_token=preview["preview_token"],
+        reason=reason,
+        audit_callback=audit_callback,
+    )
 
 
 def _apply_external_identity_change_locked(

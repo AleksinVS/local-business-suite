@@ -28,11 +28,6 @@ class RoleDefinitionForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
-    risk_confirmed = forms.BooleanField(
-        label="Подтверждаю изменение чувствительных прав",
-        required=False,
-    )
     active_group = forms.CharField(widget=forms.HiddenInput, required=False)
 
     def __init__(self, *args, role_read_model, **kwargs):
@@ -167,8 +162,6 @@ class RoleDescriptionForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 5}),
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
-    risk_confirmed = forms.BooleanField(widget=forms.HiddenInput, required=False)
 
     def __init__(self, *args, role_read_model, **kwargs):
         super().__init__(*args, **kwargs)
@@ -191,11 +184,6 @@ class MemoryGroupMembershipForm(forms.Form):
         label="Причина",
         max_length=1000,
         widget=forms.Textarea(attrs={"rows": 3}),
-    )
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
-    confirmed = forms.BooleanField(
-        label="Подтверждаю изменение технических полномочий памяти",
-        required=False,
     )
 
     def __init__(self, *args, **kwargs):
@@ -270,7 +258,6 @@ class AccessUserProfileForm(PortalUserProfileUpdateForm):
         max_length=1000,
         widget=forms.Textarea(attrs={"rows": 2}),
     )
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
 class PortalUserUpdateForm(forms.Form):
@@ -291,16 +278,11 @@ class PortalUserUpdateForm(forms.Form):
         required=False,
         help_text="Разрешает вход в раздел администрирования Django при наличии нужных прав.",
     )
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
     reason = forms.CharField(
         label="Причина изменения доступа",
         max_length=1000,
         required=False,
         widget=forms.Textarea(attrs={"rows": 2}),
-    )
-    confirm_risk = forms.BooleanField(
-        label="Подтверждаю выдачу рискованного доступа",
-        required=False,
     )
 
     def __init__(self, *args, portal_user=None, actor=None, **kwargs):
@@ -381,7 +363,6 @@ class AccessUserStatusForm(forms.Form):
 
     is_active = forms.BooleanField(label="Активная учетная запись", required=False)
     reason = forms.CharField(label="Причина", max_length=1000)
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
 class AccessUserDepartmentForm(forms.Form):
@@ -391,7 +372,6 @@ class AccessUserDepartmentForm(forms.Form):
         required=True,
     )
     reason = forms.CharField(label="Причина", max_length=1000)
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
 class AccessExternalIdentityForm(ExternalIdentityForm):
@@ -400,7 +380,6 @@ class AccessExternalIdentityForm(ExternalIdentityForm):
         max_length=1000,
         widget=forms.Textarea(attrs={"rows": 2}),
     )
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
 class AccessUserBundleForm(forms.Form):
@@ -447,15 +426,6 @@ class AccessUserBundleForm(forms.Form):
         label="Причина всех изменений",
         max_length=1000,
         widget=forms.Textarea(attrs={"rows": 2}),
-    )
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
-    confirm_risk = forms.BooleanField(
-        label="Подтверждаю риск изменения привилегированного доступа",
-        required=False,
-    )
-    confirm_memory = forms.BooleanField(
-        label="Подтверждаю изменение технических полномочий памяти",
-        required=False,
     )
     active_editor = forms.CharField(widget=forms.HiddenInput, required=False)
 
@@ -550,11 +520,6 @@ class AccessRoleMembershipForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
     )
     reason = forms.CharField(label="Причина изменения состава", max_length=1000)
-    preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
-    risk_confirmed = forms.BooleanField(
-        label="Подтверждаю риск изменения состава роли",
-        required=False,
-    )
 
     def __init__(self, *args, role_name=None, **kwargs):
         super().__init__(*args, **kwargs)

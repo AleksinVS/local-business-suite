@@ -95,15 +95,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   if (await firstMemoryGroup.isChecked()) await firstMemoryGroup.uncheck();
   else await firstMemoryGroup.check();
   await memoryForm.getByLabel("Причина").fill("Сквозная проверка назначения группы памяти.");
-  const previewUrl = page.url();
-  const previewHistoryLength = await page.evaluate(() => history.length);
-  await memoryForm.getByRole("button", { name: "Проверить" }).click();
-  await expect(page.getByText("Предпросмотр изменения")).toBeVisible();
-  await expect(memoryForm.getByRole("button", { name: "Проверить" })).toBeFocused();
-  expect(page.url()).toBe(previewUrl);
-  expect(await page.evaluate(() => history.length)).toBe(previewHistoryLength);
-  await page.locator('.access-sidebar-editor input[name="confirmed"]').check();
-  await page.locator(".access-sidebar-editor").getByRole("button", { name: "Применить" }).click();
+  await memoryForm.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
   await expect(page.locator("#access-field-sidebar-host .flash[role='status'][tabindex='-1']")).toBeFocused();
   expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(documentNavigationBaseline);
@@ -164,14 +156,7 @@ test("@smoke composite user draft saves profile and role together and can be rev
   const roleValue = await role.getAttribute("value");
   await role.check();
   await form.getByLabel("Причина всех изменений").fill("Сквозная проверка единого сохранения карточки.");
-  const navigationBaseline = await page.evaluate(() => performance.getEntriesByType("navigation").length);
-  await form.getByRole("button", { name: "Проверить изменения" }).click();
-  await expect(page.getByText("Предпросмотр изменений")).toBeVisible();
-  expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(navigationBaseline);
-  form = page.locator("[data-access-bundle-form]");
-  const riskConfirmation = form.locator('input[name="confirm_risk"]');
-  if (await riskConfirmation.count()) await riskConfirmation.check();
-  await form.getByRole("button", { name: "Сохранить все" }).click();
+  await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
   await expectAccessRequestIdle(page);
 
@@ -183,12 +168,7 @@ test("@smoke composite user draft saves profile and role together and can be rev
   await form.locator("[data-editor-tab='roles']").click();
   await form.locator(`input[name="roles"][value="${roleValue}"]`).uncheck();
   await form.getByLabel("Причина всех изменений").fill("Возврат данных после сквозной проверки.");
-  await form.getByRole("button", { name: "Проверить изменения" }).click();
-  await expect(page.getByText("Предпросмотр изменений")).toBeVisible();
-  form = page.locator("[data-access-bundle-form]");
-  const revertRiskConfirmation = form.locator('input[name="confirm_risk"]');
-  if (await revertRiskConfirmation.count()) await revertRiskConfirmation.check();
-  await form.getByRole("button", { name: "Сохранить все" }).click();
+  await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
   await expectAccessRequestIdle(page);
   await expect(page.locator("[data-access-bundle-form] input[name='first_name']")).toHaveValue(originalFirstName);
@@ -344,7 +324,7 @@ test("@smoke access workspace restores dirty marker after failed HTMX editor req
     }
     await route.continue();
   });
-  await form.getByRole("button", { name: "Проверить" }).click();
+  await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(form).toHaveAttribute("data-access-dirty", "true");
   await expect(page.getByText(/Не удалось сохранить изменения/)).toBeVisible();
   await expectAccessRequestIdle(page);
@@ -377,8 +357,8 @@ test("@smoke access workspace times out a hung POST without losing the dirty dra
     }
     await route.continue();
   });
-  await form.getByRole("button", { name: "Проверить" }).click();
-  await expect(form.getByRole("button", { name: "Проверить" })).toBeDisabled({ timeout: 3_000 });
+  await form.getByRole("button", { name: "Сохранить" }).click();
+  await expect(form.getByRole("button", { name: "Сохранить" })).toBeDisabled({ timeout: 3_000 });
   await expect(form).toHaveAttribute("data-access-dirty", "true", { timeout: 20_000 });
   await expect(page.getByText(/Не удалось сохранить изменения/)).toBeVisible();
   await expectAccessRequestIdle(page);
@@ -440,7 +420,7 @@ test("@smoke completing one parallel access request keeps the other form busy", 
   });
   await expect(original).not.toHaveAttribute("aria-busy", "true");
   await expect(clone).toHaveAttribute("aria-busy", "true");
-  await expect(clone.getByRole("button", { name: "Проверить" })).toBeDisabled();
+  await expect(clone.getByRole("button", { name: "Сохранить" })).toBeDisabled();
   await expect(page.locator("#access-field-sidebar-host")).toHaveAttribute("aria-busy", "true");
 
   await page.evaluate(() => {
@@ -469,7 +449,7 @@ test("@smoke access workspace restores source focus after drawer close at layout
   }
 });
 
-test("@smoke role sidebar adds a user through preview and confirmation", async ({ page }) => {
+test("@smoke role sidebar adds a user through one save", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/?view=roles");
   const roleRow = page.locator(".access-roles-table tbody tr").first();
@@ -479,10 +459,7 @@ test("@smoke role sidebar adds a user through preview and confirmation", async (
   if (await targetMembership.isChecked()) await targetMembership.uncheck();
   else await targetMembership.check();
   await roleForm.getByLabel("Причина изменения состава").fill("Сквозная проверка состава роли.");
-  await roleForm.getByRole("button", { name: "Проверить" }).click();
-  await expect(page.getByText("Предпросмотр изменения")).toBeVisible();
-  await page.locator('.access-sidebar-editor input[name="risk_confirmed"]').check();
-  await page.locator(".access-sidebar-editor").getByRole("button", { name: "Применить" }).click();
+  await roleForm.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Состав роли изменён/)).toBeVisible();
 });
 
@@ -555,7 +532,7 @@ test("@smoke admin role uses one kanban capability group", async ({ page }) => {
   }
 });
 
-test("@smoke role inspector preview renders impact and diff without navigation", async ({ page }) => {
+test("@smoke role inspector saves without navigation", async ({ page }) => {
   await login(page);
   await page.goto("/settings/access/?view=roles");
   const pageIdentity = await page.evaluate(() => {
@@ -566,20 +543,15 @@ test("@smoke role inspector preview renders impact and diff without navigation",
   await page.locator(".access-roles-table tbody tr").first().locator(".access-object-link").click();
   const editor = page.locator(".role-capability-editor");
   const originalName = await editor.locator('input[name="display_name"]').inputValue();
-  await editor.locator('input[name="display_name"]').fill(`${originalName} preview`);
-  await editor.getByRole("button", { name: "Проверить изменение" }).click();
-  await expect(editor.getByRole("table", { name: "Сравнение изменений роли" })).toBeVisible();
-  await expect(editor.getByText(/фактически изменится доступ/)).toBeVisible();
+  await editor.locator('input[name="display_name"]').fill(`${originalName} saved`);
+  await editor.getByRole("button", { name: "Сохранить" }).click();
   expect(await page.evaluate(() => (window as Window & { __accessRoleEditorIdentity?: string }).__accessRoleEditorIdentity)).toBe(pageIdentity);
-  await editor.getByRole("button", { name: "Подтвердить и применить" }).click();
   await expect(page.getByText(/Роль изменена/)).toBeVisible();
   await expectAccessRequestIdle(page);
 
   const restoredEditor = page.locator(".role-capability-editor");
   await restoredEditor.locator('input[name="display_name"]').fill(originalName);
-  await restoredEditor.getByRole("button", { name: "Проверить изменение" }).click();
-  await expect(restoredEditor.getByRole("table", { name: "Сравнение изменений роли" })).toBeVisible();
-  await restoredEditor.getByRole("button", { name: "Подтвердить и применить" }).click();
+  await restoredEditor.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Роль изменена/)).toBeVisible();
   await expectAccessRequestIdle(page);
 });

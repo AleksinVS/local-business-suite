@@ -16,11 +16,10 @@ from django.views.generic import CreateView, FormView, ListView, TemplateView, U
 
 from apps.accounts.models import AccessAssignmentAudit, ExternalIdentity
 from apps.accounts.access_contracts import (
-    apply_role_definition_change,
     can_edit_role_definitions,
-    preview_role_definition_change,
     role_catalog_rows,
     role_definition_read_model,
+    save_role_definition_change,
 )
 from apps.accounts.selectors import (
     effective_access_for_user,
@@ -28,16 +27,14 @@ from apps.accounts.selectors import (
     user_access_overview,
 )
 from apps.accounts.services import (
-    apply_external_identity_change,
-    apply_role_assignment,
-    apply_user_profile_change,
     create_local_user,
     disable_local_user,
     external_identity_audit_snapshot,
     link_ad_identity,
-    preview_external_identity_change,
-    preview_role_assignment,
-    preview_user_profile_change,
+    save_external_identity_change,
+    save_role_assignment,
+    save_role_membership_change,
+    save_user_profile_change,
     update_local_user,
     user_profile_audit_snapshot,
 )
@@ -46,7 +43,7 @@ from apps.core.json_utils import pretty_json
 from apps.workorders.forms import BoardAccessForm
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import board_access_role_names, can_manage_board_access, can_manage_roles
-from apps.workorders.services import apply_board_access, preview_board_access
+from apps.workorders.services import save_board_access
 
 from .contract_services import apply_contract_payload, preview_contract_payload, read_contract_value
 from .env_services import create_env_proposal, env_status_rows
@@ -69,7 +66,7 @@ from .forms import (
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, initial_help_text
-from .access_bundle_services import apply_user_access_bundle, preview_user_access_bundle
+from .access_bundle_services import save_user_access_bundle
 from .models import SettingsChange
 from .policies import can_manage_settings
 from .registry import get_registry
@@ -180,21 +177,22 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             if not selected:
                 raise ValidationError("Выберите объект доступа.")
             field = state["selected_field"]
-            action = request.POST.get("action", "preview")
+            action = request.POST.get("action", "save")
             if (
                 selected["kind"] == "user"
                 and self._requested_panel(request) == "inspector"
-                and action in {"bundle_preview", "bundle_apply"}
+                and action == "save"
+                and "active_editor" in request.POST
             ):
-                return self._post_user_bundle(request, selected, action)
-            if action not in {"preview", "apply"}:
+                return self._post_user_bundle(request, selected)
+            if action != "save":
                 raise ValidationError("Неизвестное действие редактора.")
             if selected["kind"] == "user":
-                response = self._post_user(request, selected, field, action)
+                response = self._post_user(request, selected, field)
             elif selected["kind"] == "role":
-                response = self._post_role(request, selected, field, action)
+                response = self._post_role(request, selected, field)
             elif selected["kind"] == "board" and field == "groups":
-                response = self._post_board(request, selected, action)
+                response = self._post_board(request, selected)
             else:
                 raise ValidationError("Этот источник доступа доступен только для просмотра.")
             return response
@@ -203,7 +201,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             state["field_form"] = self._build_editor_form(request, state)
             return self._response_for_editor(request, state)
 
-    def _post_user_bundle(self, request, selected, action):
+    def _post_user_bundle(self, request, selected):
         user = selected["user"]
         form = AccessUserBundleForm(
             request.POST,
@@ -214,14 +212,6 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if not form.is_valid():
             return self._editor_response(request, form, selected)
         cleaned = form.cleaned_data.copy()
-        if action == "bundle_preview":
-            preview = preview_user_access_bundle(
-                actor=request.user,
-                target_user=user,
-                cleaned_data=cleaned,
-            )
-            self._set_form_value(form, "preview_token", preview["preview_token"])
-            return self._editor_response(request, form, selected, preview=preview)
         reason = cleaned["reason"]
         profile_descriptor = get_registry().get("accounts.users.local_management")
         ad_descriptor = get_registry().get("accounts.user.ad_identity_link")
@@ -248,13 +238,10 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 validation_result={"valid": True, "field": "bundle", "reason": reason},
             )
 
-        updated, results = apply_user_access_bundle(
+        updated, results = save_user_access_bundle(
             actor=request.user,
             target_user=user,
             cleaned_data=cleaned,
-            preview_token=cleaned["preview_token"],
-            risk_confirmed=cleaned["confirm_risk"],
-            memory_confirmed=cleaned["confirm_memory"],
             profile_audit_callback=profile_audit_callback,
             ad_audit_callback=ad_audit_callback,
         )
@@ -299,7 +286,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             return HttpResponseBadRequest("Unknown HTMX target.")
         return self._render_hx_panel(state, target, applied=True)
 
-    def _post_user(self, request, selected, field, action):
+    def _post_user(self, request, selected, field):
         user = selected["user"]
         reason = request.POST.get("reason", "")
         if field in {"profile", "department", "status"}:
@@ -319,16 +306,6 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     return self._editor_response(request, form, selected)
                 cleaned = form.cleaned_data.copy()
             reason = cleaned.pop("reason")
-            preview_token = cleaned.pop("preview_token", "")
-            if action == "preview":
-                preview = preview_user_profile_change(
-                    actor=request.user,
-                    target_user=user,
-                    cleaned_data=cleaned,
-                    reason=reason,
-                )
-                self._set_form_value(form, "preview_token", preview["preview_token"])
-                return self._editor_response(request, form, selected, preview=preview)
             descriptor = get_registry().get("accounts.users.local_management")
 
             def audit_callback(before, after):
@@ -342,11 +319,10 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     validation_result={"valid": True, "field": field, "reason": reason},
                 )
 
-            apply_user_profile_change(
+            save_user_profile_change(
                 actor=request.user,
                 target_user=user,
                 cleaned_data=cleaned,
-                preview_token=preview_token,
                 reason=reason,
                 audit_callback=audit_callback,
             )
@@ -358,16 +334,6 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 return self._editor_response(request, form, selected)
             cleaned = form.cleaned_data.copy()
             reason = cleaned.pop("reason")
-            preview_token = cleaned.pop("preview_token", "")
-            if action == "preview":
-                preview = preview_external_identity_change(
-                    actor=request.user,
-                    target_user=user,
-                    cleaned_data=cleaned,
-                    reason=reason,
-                )
-                self._set_form_value(form, "preview_token", preview["preview_token"])
-                return self._editor_response(request, form, selected, preview=preview)
             descriptor = get_registry().get("accounts.user.ad_identity_link")
 
             def audit_callback(before, after):
@@ -381,11 +347,10 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     validation_result={"valid": True, "field": "ad", "reason": reason},
                 )
 
-            apply_external_identity_change(
+            save_external_identity_change(
                 actor=request.user,
                 target_user=user,
                 cleaned_data=cleaned,
-                preview_token=preview_token,
                 reason=reason,
                 audit_callback=audit_callback,
             )
@@ -393,35 +358,27 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             return self._success_response(request, "users", user.pk, field)
         if field == "roles":
             form = PortalUserUpdateForm(request.POST, portal_user=user, actor=request.user)
-            return self._post_role_assignment(request, selected, form, action)
+            return self._post_role_assignment(request, selected, form)
         if field == "memory-groups":
             form = MemoryGroupMembershipForm(request.POST)
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
-            from apps.memory.access_services import apply_memory_group_membership, preview_memory_group_membership
-            if action == "preview":
-                preview = preview_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
-                self._set_form_value(form, "preview_token", preview["preview_token"])
-                return self._editor_response(request, form, selected, preview=preview)
-            target, audit = apply_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"], preview_token=form.cleaned_data["preview_token"], confirmed=form.cleaned_data["confirmed"])
+            from apps.memory.access_services import save_memory_group_membership
+            target, audit = save_memory_group_membership(actor=request.user, target_user=user, selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
             messages.success(request, f"Группы памяти пользователя изменены. Аудит #{audit.pk}.")
             return self._success_response(request, "users", target.pk, field)
         raise ValidationError("Это поле доступно только для просмотра.")
 
-    def _post_role_assignment(self, request, selected, form, action):
+    def _post_role_assignment(self, request, selected, form):
         if not form.is_valid():
             return self._editor_response(request, form, selected)
         user = selected["user"]
         selected_role_names = [group.name for group in form.cleaned_data["roles"]]
-        if action == "preview":
-            preview = preview_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
-            self._set_form_value(form, "preview_token", preview["preview_token"])
-            return self._editor_response(request, form, selected, preview=preview)
-        updated, audit = apply_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["confirm_risk"], is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
+        updated, audit = save_role_assignment(actor=request.user, target_user=user, selected_role_names=selected_role_names, is_staff=form.cleaned_data["is_staff"], is_superuser=form.cleaned_data["is_superuser"], reason=form.cleaned_data.get("reason", ""))
         messages.success(request, f"Доступ пользователя сохранён. Аудит #{audit.pk}.")
         return self._success_response(request, "users", updated.pk, "roles")
 
-    def _post_role(self, request, selected, field, action):
+    def _post_role(self, request, selected, field):
         if field in {"definition", "description"}:
             role_model = role_definition_read_model(selected["code"])
             form_class = RoleDescriptionForm if field == "description" else RoleDefinitionForm
@@ -429,54 +386,32 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
             proposed = form.proposed_config()
-            if action == "preview":
-                preview = preview_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"])
-                self._set_form_value(form, "base_hash", preview["base_hash"])
-                self._set_form_value(form, "preview_token", preview["preview_token"])
-                return self._editor_response(request, form, selected, preview=preview)
-            change = apply_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"])
+            change = save_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"])
             messages.success(request, f"Роль изменена. Аудит #{change.pk}.")
             return self._success_response(request, "roles", selected["code"], field)
         if field == "users":
             form = AccessRoleMembershipForm(request.POST, role_name=selected["code"])
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
-            from apps.accounts.services import apply_role_membership_change, preview_role_membership_change
+            from apps.accounts.services import save_role_membership_change
             ids = form.cleaned_data["selected_user_ids"]
-            if action == "preview":
-                preview = preview_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, reason=form.cleaned_data["reason"])
-                self._set_form_value(form, "preview_token", preview["preview_token"])
-                return self._editor_response(request, form, selected, preview=preview)
-            audits = apply_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
+            audits = save_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, reason=form.cleaned_data["reason"])
             messages.success(request, f"Состав роли изменён. Аудитов: {len(audits)}.")
             return self._success_response(request, "roles", selected["code"], "users")
         raise ValidationError("Это поле доступно только для просмотра.")
 
-    def _post_board(self, request, selected, action):
+    def _post_board(self, request, selected):
         form = BoardAccessForm(request.POST)
         if not form.is_valid():
             return self._editor_response(request, form, selected)
-        if action == "preview":
-            preview = preview_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
-            self._set_form_value(form, "preview_token", preview["preview_token"])
-            return self._editor_response(request, form, selected, preview=preview)
-        board, audit = apply_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], preview_token=form.cleaned_data["preview_token"], risk_confirmed=form.cleaned_data["risk_confirmed"], reason=form.cleaned_data["reason"])
+        board, audit = save_board_access(actor=request.user, board=selected["board"], selected_group_names=form.cleaned_data["group_names"], reason=form.cleaned_data["reason"])
         messages.success(request, f"Доступ к доске изменён. Аудит #{audit.pk}.")
         return self._success_response(request, "boards", board.pk, "groups")
 
-    def _editor_response(self, request, form, selected, preview=None):
+    def _editor_response(self, request, form, selected):
         state = workspace_context(query_params=self._post_workspace_params(request))
-        state.update({"selected": selected, "selected_field": request.POST.get("field", state["selected_field"]), "selected_panel": self._requested_panel(request), "field_form": form, "field_preview": preview})
+        state.update({"selected": selected, "selected_field": request.POST.get("field", state["selected_field"]), "selected_panel": self._requested_panel(request), "field_form": form})
         return self._response_for_editor(request, state)
-
-    @staticmethod
-    def _set_form_value(form, name, value):
-        if form.is_bound:
-            data = form.data.copy()
-            data[name] = value
-            form.data = data
-        else:
-            form.initial[name] = value
 
     def _build_editor_form(self, request, state, *, use_post=True):
         selected = state.get("selected")
@@ -604,7 +539,6 @@ class BoardAccessView(BoardAccessManagementMixin, TemplateView):
             {
                 "board": self.board,
                 "form": form,
-                "preview": kwargs.get("preview"),
                 "history": self.board.access_audits.select_related("actor")[:8],
                 "return_url": reverse("settings_center:board_access_list"),
                 "is_break_glass": False,
@@ -624,29 +558,10 @@ class BoardAccessView(BoardAccessManagementMixin, TemplateView):
         selected = form.cleaned_data["group_names"]
         reason = form.cleaned_data["reason"]
         try:
-            if request.POST.get("action") == "preview":
-                preview = preview_board_access(
-                    actor=request.user,
-                    board=self.board,
-                    selected_group_names=selected,
-                    reason=reason,
-                )
-                preview_form = BoardAccessForm(
-                    initial={
-                        "group_names": selected,
-                        "reason": reason,
-                        "preview_token": preview["preview_token"],
-                    }
-                )
-                return self.render_to_response(
-                    self.get_context_data(form=preview_form, preview=preview)
-                )
-            board, audit = apply_board_access(
+            board, audit = save_board_access(
                 actor=request.user,
                 board=self.board,
                 selected_group_names=selected,
-                preview_token=form.cleaned_data["preview_token"],
-                risk_confirmed=form.cleaned_data["risk_confirmed"],
                 reason=reason,
             )
         except ValidationError as exc:
@@ -689,7 +604,6 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
             {
                 "role": self.role_read_model,
                 "form": form,
-                "preview": kwargs.get("preview"),
             }
         )
         return context
@@ -701,38 +615,11 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
             return self.render_to_response(self.get_context_data(form=form))
         proposed = form.proposed_config()
         try:
-            if request.POST.get("action") == "preview":
-                preview = preview_role_definition_change(
-                    actor=request.user,
-                    role_code=self.role_code,
-                    proposed_config=proposed,
-                    base_hash=form.cleaned_data["base_hash"],
-                )
-                preview_form = RoleDefinitionForm(
-                    role_read_model=self.role_read_model,
-                    initial={
-                        "base_hash": preview["base_hash"],
-                        "preview_token": preview["preview_token"],
-                        "active_group": form.cleaned_data.get("active_group", ""),
-                        "display_name": preview["proposed_config"].get("display_name", ""),
-                        "description": preview["proposed_config"].get("description", ""),
-                        **{
-                            f"capability__{code}": (["*"] if value == "*" else value)
-                            for code, value in preview["proposed_config"].items()
-                            if code not in {"display_name", "description"}
-                        },
-                    },
-                )
-                return self.render_to_response(
-                    self.get_context_data(form=preview_form, preview=preview)
-                )
-            change = apply_role_definition_change(
+            change = save_role_definition_change(
                 actor=request.user,
                 role_code=self.role_code,
                 proposed_config=proposed,
                 base_hash=form.cleaned_data["base_hash"],
-                preview_token=form.cleaned_data["preview_token"],
-                risk_confirmed=form.cleaned_data["risk_confirmed"],
             )
         except ValidationError as exc:
             form.add_error(None, exc)
@@ -1098,7 +985,6 @@ class MemoryGroupMembershipView(SuperuserUserManagementMixin, TemplateView):
                 "target_user": self.target_user,
                 "form": kwargs.get("form")
                 or MemoryGroupMembershipForm(initial={"group_names": current}),
-                "preview": kwargs.get("preview"),
                 "history": MemoryGroupMembershipAudit.objects.filter(
                     target_user=self.target_user
                 ).select_related("actor")[:8],
@@ -1107,10 +993,7 @@ class MemoryGroupMembershipView(SuperuserUserManagementMixin, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        from apps.memory.access_services import (
-            apply_memory_group_membership,
-            preview_memory_group_membership,
-        )
+        from apps.memory.access_services import save_memory_group_membership
 
         self._load_target(kwargs)
         form = MemoryGroupMembershipForm(request.POST)
@@ -1119,30 +1002,11 @@ class MemoryGroupMembershipView(SuperuserUserManagementMixin, TemplateView):
         selected = form.cleaned_data["group_names"]
         reason = form.cleaned_data["reason"]
         try:
-            if request.POST.get("action") == "preview":
-                preview = preview_memory_group_membership(
-                    actor=request.user,
-                    target_user=self.target_user,
-                    selected_group_names=selected,
-                    reason=reason,
-                )
-                preview_form = MemoryGroupMembershipForm(
-                    initial={
-                        "group_names": selected,
-                        "reason": reason,
-                        "preview_token": preview["preview_token"],
-                    }
-                )
-                return self.render_to_response(
-                    self.get_context_data(form=preview_form, preview=preview)
-                )
-            target, audit = apply_memory_group_membership(
+            target, audit = save_memory_group_membership(
                 actor=request.user,
                 target_user=self.target_user,
                 selected_group_names=selected,
                 reason=reason,
-                preview_token=form.cleaned_data["preview_token"],
-                confirmed=form.cleaned_data["confirmed"],
             )
         except (PermissionDenied, ValidationError) as exc:
             form.add_error(None, exc)
@@ -1222,31 +1086,11 @@ class UserUpdateView(UserManagementMixin, FormView):
 
     def form_valid(self, form):
         selected_role_names = [group.name for group in form.cleaned_data["roles"]]
-        if self.request.POST.get("action") == "preview":
-            try:
-                preview = preview_role_assignment(
-                    actor=self.request.user,
-                    target_user=self.portal_user,
-                    selected_role_names=selected_role_names,
-                    is_staff=form.cleaned_data["is_staff"],
-                    is_superuser=form.cleaned_data["is_superuser"],
-                    reason=form.cleaned_data.get("reason", ""),
-                )
-            except (PermissionDenied, ValidationError) as exc:
-                form.add_error(None, exc)
-                return self.form_invalid(form)
-            mutable_data = form.data.copy()
-            mutable_data["preview_token"] = preview["preview_token"]
-            form.data = mutable_data
-            return self.render_to_response(self.get_context_data(form=form, preview=preview))
-
         try:
-            _user, audit = apply_role_assignment(
+            _user, audit = save_role_assignment(
                 actor=self.request.user,
                 target_user=self.portal_user,
                 selected_role_names=selected_role_names,
-                preview_token=form.cleaned_data["preview_token"],
-                risk_confirmed=form.cleaned_data["confirm_risk"],
                 is_staff=form.cleaned_data["is_staff"],
                 is_superuser=form.cleaned_data["is_superuser"],
                 reason=form.cleaned_data.get("reason", ""),

@@ -18,7 +18,6 @@
   <form method="post" class="settings-form memory-membership-form">
     {% csrf_token %}
     {{ form.non_field_errors }}
-    {{ form.preview_token }}
     <fieldset>
       <legend>{{ form.group_names.label }}</legend>
       {{ form.group_names.errors }}
@@ -27,18 +26,8 @@
     <label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>
     {{ form.reason }}{{ form.reason.errors }}
 
-    {% if preview %}
-      <section aria-labelledby="memory-membership-preview-title">
-        <h2 id="memory-membership-preview-title" tabindex="-1">Проверка изменения</h2>
-        <p><strong>Добавятся:</strong> {{ preview.added|join:", "|default:"—" }}</p>
-        <p><strong>Удалятся:</strong> {{ preview.removed|join:", "|default:"—" }}</p>
-        <label class="checkbox-row">{{ form.confirmed }} {{ form.confirmed.label }}</label>
-      </section>
-    {% endif %}
-
     <div class="table-actions">
-      <button class="button-link" name="action" value="preview" type="submit">Проверить изменение</button>
-      {% if preview %}<button class="button" name="action" value="apply" type="submit">Подтвердить и применить</button>{% endif %}
+      <button class="button" name="action" value="save" type="submit">Сохранить</button>
     </div>
   </form>
 </section>
@@ -59,5 +48,4 @@
   .memory-membership-form ul label, .checkbox-row { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; }
   .memory-membership-form textarea { width: 100%; }
 </style>
-{% if preview %}<script>document.getElementById("memory-membership-preview-title")?.focus();</script>{% endif %}
 {% endblock %}

@@ -183,6 +183,37 @@ def apply_user_access_bundle(
     return get_user_model().objects.get(pk=target.pk), results
 
 
+def save_user_access_bundle(
+    *,
+    actor,
+    target_user,
+    cleaned_data,
+    profile_audit_callback=None,
+    ad_audit_callback=None,
+):
+    """Атомарно сохранить всю карточку одним пользовательским POST.
+
+    Вложенные планы компонентов остаются внутренней деталью сервиса:
+    они строятся и применяются в одном вызове, а браузер не хранит токены.
+    """
+
+    preview = preview_user_access_bundle(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+    )
+    return apply_user_access_bundle(
+        actor=actor,
+        target_user=target_user,
+        cleaned_data=cleaned_data,
+        preview_token=preview["preview_token"],
+        risk_confirmed=True,
+        memory_confirmed=True,
+        profile_audit_callback=profile_audit_callback,
+        ad_audit_callback=ad_audit_callback,
+    )
+
+
 def _changed_component_payloads(target, cleaned_data):
     profile = {
         "username": cleaned_data["username"],

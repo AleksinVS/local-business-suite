@@ -164,7 +164,7 @@
       restoreFocus();
     } else if (navigation && navigation.isForm) {
       var form = document.querySelector(".access-context-form");
-      if (navigation.submitterValue === "apply") {
+      if (navigation.submitterValue === "save" || navigation.submitterValue === "apply") {
         var status = document.querySelector(".access-field-sidebar-host .flash[role='status'][tabindex='-1'], .access-inspector-host .flash[role='status'][tabindex='-1']");
         if (status) { status.focus(); return; }
       }

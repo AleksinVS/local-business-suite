@@ -83,6 +83,27 @@ def apply_memory_group_membership(
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
+def save_memory_group_membership(
+    *, actor, target_user, selected_group_names, reason
+):
+    """Атомарно сохранить технические группы одной web-командой."""
+
+    preview = preview_memory_group_membership(
+        actor=actor,
+        target_user=target_user,
+        selected_group_names=selected_group_names,
+        reason=reason,
+    )
+    return apply_memory_group_membership(
+        actor=actor,
+        target_user=target_user,
+        selected_group_names=selected_group_names,
+        reason=reason,
+        preview_token=preview["preview_token"],
+        confirmed=True,
+    )
+
+
 @transaction.atomic
 def _apply_memory_group_membership_locked(
     *, actor, target_user, selected_group_names, reason, preview_token, confirmed

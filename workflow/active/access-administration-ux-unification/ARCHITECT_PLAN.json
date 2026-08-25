@@ -24,7 +24,9 @@
     "15-waiting-list-capability-model",
     "16-business-resource-boundaries",
     "17-administration-and-memory-boundaries",
-    "18-security-e2e-docs-acceptance"
+    "18-security-e2e-docs-acceptance",
+    "19-access-save-liveness",
+    "20-direct-save-access-administration"
   ],
   "constraints": [
     "Серверная policy, а не видимость элемента UI, определяет доступ.",
@@ -33,7 +35,8 @@
     "Новая audit UI является read-only projection, а не второй базой истины.",
     "Row-level и service-boundary hardening, подтверждённые аудитом 2026-08-17, выполняются пакетами 14–18.",
     "AG-UI/CopilotKit версии не обновляются без отдельного согласования.",
-    "Временные артефакты создаются только в .local/."
+    "Временные артефакты создаются только в .local/.",
+    "Обычные продуктовые web-редакторы workspace и standalone используют один POST action=save через save_* сервисы; preview/apply сохраняется для Django Admin, AI и generic runtime settings."
   ],
   "recommended_assignment": {
     "00a-direct-write-path-containment": "основной агент или gpt-5.6-sol/high; независимое security review обязательно",
@@ -57,6 +60,8 @@
     "15-waiting-list-capability-model": "основной агент/Sol high задаёт contract/policy model; gpt-5.6-luna/high реализует формы, views и тесты; отдельная Luna-критика",
     "16-business-resource-boundaries": "основной агент/Sol high задаёт selector/service boundaries; gpt-5.6-luna/high выполняет механические адаптеры и матрицу тестов",
     "17-administration-and-memory-boundaries": "основной агент/Sol high из-за settings, privilege ceiling и memory scopes; Luna только по точным пакетам",
-    "18-security-e2e-docs-acceptance": "основной агент принимает; Luna выполняет браузерную и ролевую матрицу; независимый Sol high review обязателен"
+    "18-security-e2e-docs-acceptance": "основной агент принимает; Luna выполняет браузерную и ролевую матрицу; независимый Sol high review обязателен",
+    "19-access-save-liveness": "основной агент/Sol high контролирует lock и timeout; Luna проверяет HTMX/браузерную отзывчивость",
+    "20-direct-save-access-administration": "основной агент контролирует границы доменных save-сервисов; Luna обновляет product web views/forms/templates/JS и узкие Django/Playwright проверки; Admin, AI и generic runtime settings остаются вне миграции"
   }
 }

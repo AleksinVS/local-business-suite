@@ -1,0 +1,64 @@
+{
+  "task_id": "20-direct-save-access-administration",
+  "goal": "Убрать пользовательский двухшаговый preview/apply из обычных редакторов доступа и применять изменения одной кнопкой Сохранить без ослабления серверных политик, атомарности и аудита.",
+  "write_scope": [
+    "apps/accounts/services.py",
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/access_bundle_services.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/forms.py",
+    "apps/memory/access_services.py",
+    "apps/workorders/services.py",
+    "static/src/js/access_workspace.js",
+    "templates/settings_center/partials/access_workspace/user_bundle_editor.html",
+    "templates/settings_center/partials/access_workspace/role_definition_editor.html",
+    "templates/settings_center/partials/access_workspace/field_editor.html",
+    "templates/settings_center/role_definition_form.html",
+    "templates/settings_center/user_form.html",
+    "templates/settings_center/memory_group_membership_form.html",
+    "templates/settings_center/board_access_form.html",
+    "apps/settings_center/tests.py",
+    "scripts/e2e/tests/access_administration.spec.ts",
+    "apps/settings_center/management/commands/access_administration_e2e.py",
+    "docs/adr/ADR-0042-direct-save-access-administration.md",
+    "docs/adr/.desc.json",
+    "docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "workflow/active/access-administration-ux-unification/EXECUTOR_REPORT.20-direct-save-access-administration.md",
+    "workflow/active/access-administration-ux-unification/TASK_ACCEPTANCE.20-direct-save-access-administration.md",
+    "workflow/active/access-administration-ux-unification/.desc.json",
+    "workflow/active/access-administration-ux-unification/task-packets/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "invariants": [
+    "Один web POST Save выполняет серверное планирование и применение без выдачи preview token браузеру.",
+    "Fresh actor, target, role contract и предметная policy повторно проверяются под access-lock.",
+    "Ограничения self-assignment, critical role, privileged flags, last superuser и delegated role ceiling сохраняются.",
+    "Карточка пользователя сохраняется атомарно вместе с предметными аудитами.",
+    "Role definition сохраняет base_hash, single-role writer, schema/cross-contract validation и staged file write.",
+    "AI PendingAction, Django Admin break-glass и generic settings confirmation не меняются.",
+    "Runtime data/contracts тестами и реализацией не перезаписывается."
+  ],
+  "acceptance": [
+    "Workspace и standalone формы пользователей, ролей, состава ролей, досок и групп памяти показывают одну кнопку Сохранить.",
+    "Успешный HTMX Save выполняет ровно один POST, не перезагружает документ и обновляет таблицу/панель.",
+    "Ошибка policy, stale role base_hash, schema validation или позднего компонента не создаёт частичного изменения.",
+    "Superuser self-assignment применяется одним Save и помечается в аудите; non-superuser self-assignment отклоняется.",
+    "Повторный submit подавляется на клиенте, timeout/error сохраняет dirty draft и снимает busy-state.",
+    "Целевые Django, service, management e2e и Chromium проверки проходят."
+  ],
+  "non_goals": [
+    "Изменение role_rules schema, capability taxonomy или состава ролей.",
+    "Удаление AI PendingAction и подтверждения автономных действий.",
+    "Удаление резервного Django Admin или его обязательной причины.",
+    "Изменение generic Settings Center apply/rollback.",
+    "Переименование исторических audit-полей preview_fingerprint."
+  ],
+  "execution": {
+    "architecture_and_critical_review": "root + gpt-5.6-sol/high",
+    "executor": "gpt-5.6-luna/high",
+    "critic": "gpt-5.6-luna/xhigh",
+    "correction": "gpt-5.6-luna/high",
+    "final_acceptance": "root"
+  }
+}

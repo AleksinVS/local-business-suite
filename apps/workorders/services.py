@@ -148,6 +148,34 @@ def apply_board_access(
         raise ValidationError("Доступ сейчас изменяет другой процесс. Повторите позже.") from exc
 
 
+def save_board_access(
+    *,
+    actor,
+    board,
+    selected_group_names,
+    reason="",
+    source=BoardAccessAudit.Source.SETTINGS_CENTER,
+):
+    """Проверить и сразу применить ACL доски одной web-командой."""
+
+    preview = preview_board_access(
+        actor=actor,
+        board=board,
+        selected_group_names=selected_group_names,
+        reason=reason,
+        source=source,
+    )
+    return apply_board_access(
+        actor=actor,
+        board=board,
+        selected_group_names=selected_group_names,
+        preview_token=preview["preview_token"],
+        risk_confirmed=True,
+        reason=reason,
+        source=source,
+    )
+
+
 @transaction.atomic
 def _apply_board_access_locked(
     *,

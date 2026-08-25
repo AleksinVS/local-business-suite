@@ -40,5 +40,6 @@
   "ADR-0038-privileged-flags-access-assignment.md": "ADR: Технические флаги в управляемом назначении доступа",
   "ADR-0039-default-board-view-access.md": "ADR: Базовый просмотр канбан-доски без назначенной роли",
   "ADR-0040-unified-access-administration-control-plane.md": "Принятый ADR: единый контур администрирования доступа и канонические пути изменения",
-  "ADR-0041-access-and-memory-lock-partition.md": "Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти"
+  "ADR-0041-access-and-memory-lock-partition.md": "Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти",
+  "ADR-0042-direct-save-access-administration.md": "Принятый ADR: прямое сохранение изменений доступа без пользовательского preview"
 }

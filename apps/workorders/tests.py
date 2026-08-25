@@ -252,11 +252,16 @@ class BoardAdminAccessTests(TestCase):
         self.board.allowed_groups.add(self.technician_group)
         self.client.force_login(self.actor)
         url = reverse("admin:workorders_board_access", args=[self.board.pk])
+        page = self.client.get(url)
+        self.assertContains(page, 'value="preview"', html=False)
+        self.assertNotContains(page, 'value="save"', html=False)
         response = self.client.post(
             url,
             {"action": "preview", "group_names": [ROLE_CUSTOMER], "reason": "Аварийный отзыв"},
         )
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Проверка изменения")
+        self.assertContains(response, 'value="apply"', html=False)
         preview = response.context["preview"]
         response = self.client.post(
             url,

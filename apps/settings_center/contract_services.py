@@ -90,6 +90,7 @@ def _apply_role_definition_payload(
     operation_fingerprint: str | None = None,
     audit_context: dict | None = None,
     locked_precondition=None,
+    post_write_callback=None,
 ):
     """Internal transport for the signed single-role writer.
 
@@ -113,6 +114,7 @@ def _apply_role_definition_payload(
         _raw_payload_factory=raw_payload_factory,
         _role_definition_preview_token=preview_token,
         _role_definition_risk_confirmed=bool(risk_confirmed),
+        _post_write_callback=post_write_callback,
     )
 
 
@@ -133,6 +135,7 @@ def _apply_contract_payload(
     _raw_payload_factory=None,
     _role_definition_preview_token=None,
     _role_definition_risk_confirmed=False,
+    _post_write_callback=None,
 ):
     descriptor = get_registry().get(setting_id)
     actor = _require_contract_editor(
@@ -201,6 +204,19 @@ def _apply_contract_payload(
                     runtime_payload=before,
                     candidate_payload=after,
                 )
+                _assert_candidate_role_administration_unchanged(
+                    runtime_payload=before,
+                    candidate_payload=after,
+                )
+                _assert_role_set_transport_change(
+                    runtime_payload=before,
+                    candidate_payload=after,
+                    constrained_role_code=(
+                        _role_definition_role_code
+                        if _allow_delegated_role_definition
+                        else None
+                    ),
+                )
             if _allow_delegated_role_definition:
                 _assert_single_role_payload(
                     before=before,
@@ -222,7 +238,7 @@ def _apply_contract_payload(
             if normalized_hash(before) == normalized_hash(after):
                 raise ValidationError("В контракте нет изменений для применения.")
             _validate_cross_contract_candidate(setting_id=setting_id, candidate=after)
-            return _write_validated_contract_change(
+            change = _write_validated_contract_change(
                 actor=actor,
                 descriptor=descriptor,
                 action=_action,
@@ -233,6 +249,9 @@ def _apply_contract_payload(
                 operation_fingerprint=operation_fingerprint,
                 audit_context=audit_context,
             )
+            if _post_write_callback is not None:
+                _post_write_callback(actor, copy.deepcopy(after), change)
+            return change
     except FileLockTimeoutError as exc:
         raise ValidationError(
             "Контракт сейчас изменяет другой процесс. Повторите попытку позже."
@@ -333,6 +352,66 @@ def migrate_role_capability_catalog(
                 "runtime_catalog_hash_before": runtime_catalog_hash,
                 "git_catalog_hash_target": git_catalog_hash,
             }
+    except FileLockTimeoutError as exc:
+        raise ValidationError(
+            "Контракт сейчас изменяет другой процесс. Повторите позже."
+        ) from exc
+
+
+def migrate_role_administration_metadata(
+    *, actor, expected_runtime_hash: str, expected_git_hash: str, reason: str
+):
+    """Remove only inert legacy ``$administration`` during deployment."""
+
+    actor = _require_active_superuser(actor)
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError("Для deployment-миграции нужна причина.")
+    _require_autocommit_boundary()
+    descriptor = get_registry().get("core.contract.role_rules")
+    contract_relpath = _contract_relative_path(descriptor)
+    try:
+        with exclusive_file_lock(_contract_write_lock_path(), timeout=10.0):
+            actor = _require_active_superuser(actor)
+            _resolve_known_pending_changes(setting_id=descriptor.setting_id)
+            before = read_contract_value(descriptor)
+            git_default = _read_git_default_role_rules(descriptor=descriptor)
+            _validate_payload_object(descriptor=descriptor, payload=before)
+            runtime_hash = normalized_hash(before)
+            git_hash = normalized_hash(git_default)
+            _require_matching_hash(expected_runtime_hash, runtime_hash, label="runtime role contract")
+            _require_matching_hash(expected_git_hash, git_hash, label="Git-default role contract")
+            if "$administration" in git_default:
+                raise ValidationError(
+                    "Git-default всё ещё содержит legacy $administration."
+                )
+            if "$administration" not in before:
+                raise ValidationError("Runtime уже не содержит $administration.")
+            _assert_runtime_role_catalog_matches_git_default(
+                runtime_payload=before, descriptor=descriptor
+            )
+            after = copy.deepcopy(before)
+            after.pop("$administration")
+            _validate_payload_object(descriptor=descriptor, payload=after)
+            if {key: value for key, value in before.items() if key != "$administration"} != after:
+                raise ValidationError("Migration candidate содержит посторонние изменения.")
+            backup_path = _write_role_contract_backup(before)
+            change = _write_validated_contract_change(
+                actor=actor,
+                descriptor=descriptor,
+                action=SettingsChange.Action.APPLY,
+                before=before,
+                after=after,
+                rollback_of=None,
+                contract_relpath=contract_relpath,
+                audit_context={
+                    "operation": "deployment_remove_role_administration",
+                    "reason": reason,
+                    "git_default_hash": git_hash,
+                    "backup_file": backup_path.name,
+                },
+            )
+            return {"change": change, "backup_path": backup_path}
     except FileLockTimeoutError as exc:
         raise ValidationError(
             "Контракт сейчас изменяет другой процесс. Повторите позже."
@@ -450,14 +529,15 @@ def _assert_single_role_payload(*, before, after, role_code):
         or not isinstance(after, dict)
     ):
         raise ValidationError("Ограниченный writer получил некорректный контракт ролей.")
+    creating = role_code not in before
+    expected_after_keys = set(before) | ({role_code} if creating else set())
     if (
-        set(before) != set(after)
-        or role_code not in before
-        or not isinstance(before.get(role_code), dict)
+        set(after) != expected_after_keys
         or not isinstance(after.get(role_code), dict)
+        or (not creating and not isinstance(before.get(role_code), dict))
     ):
         raise ValidationError(
-            "Ограниченный writer может изменять только существующую роль."
+            "Ограниченный writer может изменить одну роль или создать одну новую роль."
         )
     changed_top_level = sorted(
         key for key in before if key != role_code and before.get(key) != after.get(key)
@@ -544,6 +624,41 @@ def _assert_candidate_role_catalog_unchanged(*, runtime_payload, candidate_paylo
         raise ValidationError(
             "$capabilities нельзя изменять через обычную запись или rollback."
         )
+
+
+def _assert_candidate_role_administration_unchanged(
+    *, runtime_payload, candidate_payload
+) -> None:
+    missing = object()
+    if runtime_payload.get("$administration", missing) != candidate_payload.get(
+        "$administration", missing
+    ):
+        raise ValidationError(
+            "$administration нельзя изменять через обычную запись или rollback."
+        )
+
+
+def _assert_role_set_transport_change(
+    *, runtime_payload, candidate_payload, constrained_role_code=None
+) -> None:
+    runtime_roles = {
+        key for key, value in runtime_payload.items()
+        if isinstance(key, str) and not key.startswith("$") and isinstance(value, dict)
+    }
+    candidate_roles = {
+        key for key, value in candidate_payload.items()
+        if isinstance(key, str) and not key.startswith("$") and isinstance(value, dict)
+    }
+    if constrained_role_code:
+        allowed = (runtime_roles, runtime_roles | {constrained_role_code})
+        if candidate_roles in allowed:
+            return
+    elif candidate_roles == runtime_roles:
+        return
+    raise ValidationError(
+        "Набор ролей нельзя менять через generic writer или rollback; "
+        "используйте предметную операцию создания роли."
+    )
 
 
 def _assert_deployment_catalog_candidate_delta(*, runtime_payload, candidate_payload) -> None:

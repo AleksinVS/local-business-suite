@@ -21,13 +21,13 @@ from apps.core.file_locks import (
 )
 from apps.workorders.policies import can_manage_roles
 
+from .access_contracts import role_is_protected
 from .department_policy import available_user_departments
 from .models import AccessAssignmentAudit, ExternalIdentity
 from .selectors import (
     access_assignment_consequences,
     capability_catalog,
     contract_role_configs,
-    role_assignment_allowlist,
     role_risk_markers,
     selected_role_names_for_user,
 )
@@ -92,13 +92,14 @@ def assignable_role_names_for_actor(*, actor, target_user):
         return tuple(contract_role_configs())
     if current_actor.pk == target_user.pk:
         return ()
-    allowlist = role_assignment_allowlist()
-    allowed = {
-        target_role
-        for actor_role in selected_role_names_for_user(current_actor)
-        for target_role in allowlist.get(actor_role, ())
-    }
-    return tuple(sorted(allowed))
+    catalog = capability_catalog()
+    return tuple(
+        sorted(
+            role
+            for role, config in contract_role_configs().items()
+            if not role_is_protected(config, catalog=catalog)
+        )
+    )
 
 
 def preview_role_assignment(
@@ -1000,38 +1001,19 @@ def _validate_role_assignment_authority(*, actor, target_user, before, after):
     if target_user.pk == actor.pk:
         raise PermissionDenied("Назначать роли самому себе может только суперпользователь.")
 
-    allowlist = role_assignment_allowlist()
-    actor_roles = selected_role_names_for_user(actor)
-    allowed_roles = {
-        target_role
-        for actor_role in actor_roles
-        for target_role in allowlist.get(actor_role, ())
-    }
-    forbidden_roles = sorted(changed_roles - allowed_roles)
-    if forbidden_roles:
-        raise PermissionDenied(
-            "Недостаточно прав для изменения ролей: " + ", ".join(forbidden_roles) + "."
-        )
     configs = contract_role_configs()
-    critical_roles = sorted(
-        role for role in changed_roles if _role_has_critical_capability(configs.get(role, {}))
+    catalog = capability_catalog()
+    protected_roles = sorted(
+        role
+        for role in changed_roles
+        if role_is_protected(configs.get(role), catalog=catalog)
     )
-    if critical_roles:
+    if protected_roles:
         raise PermissionDenied(
-            "Критичные роли может изменять только суперпользователь: "
-            + ", ".join(critical_roles)
+            "Защищённые роли может назначать только активный суперпользователь: "
+            + ", ".join(protected_roles)
             + "."
         )
-
-
-def _role_has_critical_capability(config):
-    catalog = capability_catalog()
-    return any(
-        isinstance(catalog.get(capability), dict)
-        and catalog[capability].get("risk") == "critical"
-        and value not in (None, False, "", "none", [], {})
-        for capability, value in config.items()
-    )
 
 
 def _assignment_context_risk_markers(

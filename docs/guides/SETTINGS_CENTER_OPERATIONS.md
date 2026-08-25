@@ -105,6 +105,39 @@ python manage.py migrate_role_capabilities \
 Для обратного deployment подготовьте обратный Git commit и reviewed candidate из резервной копии,
 затем повторите ту же команду с новыми expected hashes. Не копируйте backup поверх runtime-файла вручную.
 
+### Удаление legacy `$administration`
+
+Полномочие создания, изменения и назначения обычных ролей определяется только
+`manage_roles`. Старые `role_definition_editor_roles` и
+`role_assignment_allowlist` остаются parseable для совместимого запуска старой
+рабочей копии, но полностью игнорируются политиками. Обычная запись и rollback
+не могут изменить или удалить `$administration`.
+
+После deployment Git-default без этого блока вычислите нормализованные полные
+хеши текущего runtime и Git-default и выполните один раз:
+
+```bash
+python manage.py migrate_role_administration \
+  --operator-id <active-superuser-id> \
+  --expected-runtime-hash <current-runtime-sha256> \
+  --expected-git-hash <deployed-git-default-sha256> \
+  --reason "<change-ticket/review reason>"
+```
+
+Команда повторно загружает active superuser под общей access-блокировкой,
+требует отсутствия `$administration` в Git-default и строит кандидат сама:
+точная runtime-копия без этого единственного блока. Она создаёт проверенный
+backup в `data/contracts/backups/`, staged audit, атомарно заменяет файл и
+печатает только ID, короткие хеши и имя backup. Неверный хеш, отсутствующий
+блок или любая ошибка не создают успешную миграцию.
+
+Создание новой роли выполняется contract-first: валидированный контракт и аудит
+фиксируются под общей блокировкой, затем до её освобождения материализуются
+`Group/GroupProfile`. Сбой БД не создаёт группу-сироту; контракт остаётся
+источником истины. Повтор с теми же полями или `python manage.py seed_roles`
+восстанавливает материализацию. Существующая непредопределённая техническая,
+AD- или memory-группа никогда не переклассифицируется автоматически.
+
 ### Дрейф default/runtime
 
 `get_contract_path` (`config/settings.py`) копирует дефолт из `contracts/` в

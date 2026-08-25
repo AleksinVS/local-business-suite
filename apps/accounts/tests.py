@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.db.models.deletion import ProtectedError
 from django.contrib.auth.models import Group, Permission
@@ -386,6 +387,30 @@ class SeedRolesCommandTests(TestCase):
         self.assertEqual(doctor_profile.description, original_description)
         self.assertNotEqual(doctor_profile.description, "испорчено вручную")
 
+    def test_seed_roles_repairs_authoritative_contract_group_without_profile(self):
+        group = Group.objects.create(name="doctor")
+
+        call_command("seed_roles")
+
+        profile = GroupProfile.objects.get(group=group)
+        self.assertTrue(profile.is_predefined)
+        self.assertTrue(profile.title)
+
+    def test_seed_roles_does_not_overwrite_non_predefined_profile(self):
+        group = Group.objects.create(name="doctor")
+        GroupProfile.objects.create(
+            group=group,
+            title="Technical collision",
+            is_predefined=False,
+        )
+
+        with self.assertRaises(CommandError):
+            call_command("seed_roles")
+
+        group.profile.refresh_from_db()
+        self.assertEqual(group.profile.title, "Technical collision")
+        self.assertFalse(group.profile.is_predefined)
+
 
 @pytest.mark.integration
 class AccessAssignmentServiceTests(TestCase):
@@ -652,7 +677,7 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertIn(admin_group, updated.groups.all())
         self.assertEqual(audit.actor_id, audit.target_user_id)
 
-    def test_manager_assignment_is_limited_by_contract_allowlist(self):
+    def test_manage_roles_actor_can_assign_ordinary_but_not_protected_role(self):
         technician, _ = Group.objects.get_or_create(name="technician")
         preview = preview_role_assignment(
             actor=self.actor,
@@ -668,7 +693,7 @@ class AccessAssignmentServiceTests(TestCase):
         )
         self.assertIn(technician, updated.groups.all())
 
-        with self.assertRaisesMessage(PermissionDenied, "Недостаточно прав"):
+        with self.assertRaisesMessage(PermissionDenied, "Защищённые роли"):
             preview_role_assignment(
                 actor=self.actor,
                 target_user=self.target,

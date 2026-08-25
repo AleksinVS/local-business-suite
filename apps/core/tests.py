@@ -710,14 +710,18 @@ class DepartmentViewTests(TestCase):
         self.assertContains(response, f'action="{reverse("logout")}"')
         self.assertContains(response, "Выйти")
 
-    def test_manager_cannot_open_legacy_role_rules_route(self):
+    def test_active_manage_roles_actor_legacy_route_redirects_to_role_catalog(self):
         self.client.force_login(self.manager)
 
         response = self.client.get(reverse("core:role_rules"))
 
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(
+            response,
+            reverse("settings_center:role_catalog"),
+            fetch_redirect_response=False,
+        )
 
-    def test_active_superuser_legacy_role_rules_route_redirects_to_role_catalog(self):
+    def test_other_active_role_administrators_legacy_route_redirects_to_role_catalog(self):
         for actor in (self.role_admin, self.contract_admin):
             with self.subTest(actor=actor.username):
                 self.client.force_login(actor)
@@ -728,15 +732,16 @@ class DepartmentViewTests(TestCase):
                     fetch_redirect_response=False,
                 )
 
-    def test_inactive_role_definition_editor_and_manager_are_denied_legacy_route(self):
-        inactive_staff = User.objects.create_user(
-            username="inactive-role-editor", password="pass", is_staff=True, is_active=False
+    def test_inactive_manage_roles_actor_and_unauthorized_staff_are_denied_legacy_route(self):
+        inactive_manager = User.objects.create_user(
+            username="inactive-role-manager", password="pass", is_active=False
         )
-        for actor in (self.manager, inactive_staff):
-            with self.subTest(actor=actor.username):
+        manager_group = Group.objects.get(name=ROLE_MANAGER)
+        inactive_manager.groups.add(manager_group)
+        for actor, expected_status in ((inactive_manager, 302), (self.staff, 403)):
+            with self.subTest(actor=actor.username, expected_status=expected_status):
                 self.client.force_login(actor)
                 response = self.client.get(reverse("core:role_rules"))
-                expected_status = 403 if actor is self.manager else 302
                 self.assertEqual(response.status_code, expected_status)
 
     def test_legacy_role_rules_post_is_not_allowed_and_contract_is_unchanged(self):

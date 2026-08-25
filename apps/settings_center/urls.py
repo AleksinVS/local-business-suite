@@ -12,6 +12,7 @@ urlpatterns = [
     path("boards/", views.BoardAccessListView.as_view(), name="board_access_list"),
     path("boards/<int:pk>/access/", views.BoardAccessView.as_view(), name="board_access"),
     path("access/roles/", views.RoleCatalogView.as_view(), name="role_catalog"),
+    path("access/roles/new/", views.RoleCreateView.as_view(), name="role_create"),
     path("access/roles/<str:role_code>/", views.RoleDefinitionView.as_view(), name="role_definition"),
     path("settings/<path:setting_id>/", views.SettingDetailView.as_view(), name="setting_detail"),
     path("env/", views.EnvStatusView.as_view(), name="env_status"),

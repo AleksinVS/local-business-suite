@@ -19,6 +19,7 @@ from apps.accounts.access_contracts import (
     can_edit_role_definitions,
     role_catalog_rows,
     role_definition_read_model,
+    save_role_creation,
     save_role_definition_change,
 )
 from apps.accounts.selectors import (
@@ -63,6 +64,7 @@ from .forms import (
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
     RoleDefinitionForm,
+    RoleCreateForm,
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, initial_help_text
@@ -382,7 +384,11 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if field in {"definition", "description"}:
             role_model = role_definition_read_model(selected["code"])
             form_class = RoleDescriptionForm if field == "description" else RoleDefinitionForm
-            form = form_class(request.POST, role_read_model=role_model)
+            form = form_class(
+                request.POST, role_read_model=role_model, actor=request.user
+            ) if form_class is RoleDefinitionForm else form_class(
+                request.POST, role_read_model=role_model
+            )
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
             proposed = form.proposed_config()
@@ -453,7 +459,12 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if selected["kind"] == "role":
             if field == "definition":
                 model = role_definition_read_model(selected["code"])
-                return RoleDefinitionForm(bound_data, role_read_model=model, initial={"base_hash": model["base_hash"]})
+                return RoleDefinitionForm(
+                    bound_data,
+                    role_read_model=model,
+                    actor=request.user,
+                    initial={"base_hash": model["base_hash"]},
+                )
             if field == "description":
                 model = role_definition_read_model(selected["code"])
                 return RoleDescriptionForm(bound_data, role_read_model=model, initial={"base_hash": model["base_hash"]})
@@ -598,6 +609,7 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         form = kwargs.get("form") or RoleDefinitionForm(
             role_read_model=self.role_read_model,
+            actor=self.request.user,
             initial={"base_hash": self.role_read_model["base_hash"]},
         )
         context.update(
@@ -610,7 +622,9 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         self._load_role(kwargs)
-        form = RoleDefinitionForm(request.POST, role_read_model=self.role_read_model)
+        form = RoleDefinitionForm(
+            request.POST, role_read_model=self.role_read_model, actor=request.user
+        )
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
         proposed = form.proposed_config()
@@ -626,6 +640,42 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
             return self.render_to_response(self.get_context_data(form=form))
         messages.success(request, f"Роль «{self.role_read_model['label']}» изменена. Аудит #{change.pk}.")
         return redirect("settings_center:role_definition", role_code=self.role_code)
+
+
+class RoleCreateView(RoleDefinitionManagementMixin, FormView):
+    template_name = "settings_center/role_create_form.html"
+    form_class = RoleCreateForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["actor"] = self.request.user
+        return kwargs
+
+    def get_initial(self):
+        initial = super().get_initial()
+        initial["base_hash"] = normalized_hash(read_contract_value(
+            get_registry().get("core.contract.role_rules")
+        ))
+        return initial
+
+    def form_valid(self, form):
+        try:
+            change = save_role_creation(
+                actor=self.request.user,
+                role_code=form.cleaned_data["code"],
+                display_name=form.cleaned_data["display_name"],
+                description=form.cleaned_data["description"],
+                protected=form.cleaned_data.get("protected", False),
+                base_hash=form.cleaned_data["base_hash"],
+            )
+        except (PermissionDenied, ValidationError) as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
+        suffix = f" Аудит #{change.pk}." if change is not None else " Группа восстановлена."
+        messages.success(self.request, "Роль создана." + suffix)
+        return redirect(
+            "settings_center:role_definition", role_code=form.cleaned_data["code"]
+        )
 
 
 class SettingDetailView(SettingsManagementMixin, FormView):

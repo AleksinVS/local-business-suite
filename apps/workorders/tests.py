@@ -2596,22 +2596,26 @@ class CapabilityRegistryTests(TestCase):
 
         validate_role_rules_payload(legacy)
 
-    def test_role_assignment_allowlist_rejects_critical_or_unknown_roles(self):
-        critical = copy.deepcopy(self.base_role_rules)
-        critical["$administration"]["role_assignment_allowlist"]["manager"] = ["admin"]
-        with self.assertRaisesMessage(ValidationError, "критичные роли"):
-            validate_role_rules_payload(critical)
+    def test_legacy_administration_metadata_is_parseable_but_inert(self):
+        legacy = copy.deepcopy(self.base_role_rules)
+        legacy["$administration"] = {
+            "role_definition_editor_roles": ["missing"],
+            "role_assignment_allowlist": {"missing": ["admin"]},
+        }
 
-        unknown = copy.deepcopy(self.base_role_rules)
-        unknown["$administration"]["role_assignment_allowlist"]["manager"] = ["missing"]
-        with self.assertRaisesMessage(ValidationError, "неизвестные роли"):
-            validate_role_rules_payload(unknown)
+        validate_role_rules_payload(legacy)
 
     def test_missing_assignment_allowlist_is_backward_compatible_and_fail_closed(self):
         legacy = copy.deepcopy(self.base_role_rules)
-        legacy.pop("$administration")
+        legacy.pop("$administration", None)
 
         validate_role_rules_payload(legacy)
+
+    def test_explicit_protected_flag_must_be_boolean(self):
+        invalid = copy.deepcopy(self.base_role_rules)
+        invalid["customer"]["protected"] = "false"
+        with self.assertRaisesMessage(ValidationError, "логическим"):
+            validate_role_rules_payload(invalid)
     can_comment,
     can_create,
     can_edit,

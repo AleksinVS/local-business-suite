@@ -1193,7 +1193,8 @@ class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
         self.assertIn("FileAttributes]::ReparsePoint", self.script)
         self.assertIn("function Assert-PrivateBackupAcl", self.script)
         self.assertIn("AreAccessRulesProtected", self.script)
-        for sid in ("S-1-1-0", "S-1-5-11", "S-1-5-32-545", "S-1-5-32-568"):
+        self.assertIn("$AllowedWriteSids -notcontains $sid", self.script)
+        for sid in ("S-1-5-18", "S-1-5-32-544"):
             with self.subTest(sid=sid):
                 self.assertIn(sid, self.script)
 

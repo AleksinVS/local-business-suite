@@ -72,6 +72,9 @@ icacls "C:\inetpub\portal\data\contracts" /grant `
 `$BackupRoot\secrets\pg_backup_password.txt` и отдельно ограничьте этот файл
 администраторами и backup identity. Не выдавайте `DefaultAppPool`, `IIS_IUSRS`,
 `Users`, `Authenticated Users` или `Everyone` право записи в `$BackupRoot`.
+Скрипт применяет fail-closed проверку: write/delete ACE разрешены только самой
+backup identity, `BUILTIN\Administrators` и `SYSTEM`; любая другая локальная или
+доменная группа останавливает backup до исправления ACL.
 
 Если старая задача была создана от `SYSTEM`, сначала отключите её:
 

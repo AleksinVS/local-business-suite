@@ -22,13 +22,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 $OwnedBackupNamePattern = '^(local_business_suite-\d{8}-\d{6}\.dump|contracts-\d{8}-\d{6}\.zip)$'
-$ForbiddenWriteSids = @(
-    "S-1-1-0",       # Everyone
-    "S-1-5-11",      # Authenticated Users
-    "S-1-5-32-545",  # BUILTIN\Users
-    "S-1-5-32-568"   # IIS_IUSRS
-)
-
 function Get-NormalizedPath([string]$Path) {
     $full = [System.IO.Path]::GetFullPath($Path)
     $root = [System.IO.Path]::GetPathRoot($full)
@@ -85,15 +78,13 @@ function Assert-PrivateBackupAcl([string]$Path) {
         catch {
             throw "Не удалось проверить SID ACL backup: $($rule.IdentityReference.Value)"
         }
-        if (
-            $ForbiddenWriteSids -contains $sid -and
-            (([int64]$rule.FileSystemRights -band $writeMask) -ne 0)
-        ) {
-            throw "Широкая группа $sid имеет write/delete в BackupStateRoot."
+        $ruleCanWrite = (([int64]$rule.FileSystemRights -band $writeMask) -ne 0)
+        if ($ruleCanWrite -and $AllowedWriteSids -notcontains $sid) {
+            throw "Недоверенный SID $sid имеет write/delete в BackupStateRoot."
         }
         if (
             $sid -eq $currentIdentity.User.Value -and
-            (([int64]$rule.FileSystemRights -band $writeMask) -ne 0)
+            $ruleCanWrite
         ) {
             $backupIdentityCanWrite = $true
         }
@@ -113,6 +104,11 @@ if (-not $currentIdentity.Name.Equals(
 )) {
     throw "Текущая identity '$($currentIdentity.Name)' не совпадает с ожидаемой backup identity."
 }
+$AllowedWriteSids = @(
+    "S-1-5-18",      # SYSTEM: host recovery/administration
+    "S-1-5-32-544",  # BUILTIN\Administrators
+    $currentIdentity.User.Value
+)
 try {
     $applicationAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $ApplicationIdentity
     $applicationSid = $applicationAccount.Translate(
@@ -122,7 +118,9 @@ try {
 catch {
     throw "Не удалось определить SID application identity '$ApplicationIdentity'."
 }
-$ForbiddenWriteSids += $applicationSid
+if ($applicationSid -eq $currentIdentity.User.Value) {
+    throw "Backup identity не должна совпадать с application identity."
+}
 
 $PortalRoot = Get-NormalizedPath $PortalRoot
 $BackupStateRoot = Get-NormalizedPath $BackupStateRoot

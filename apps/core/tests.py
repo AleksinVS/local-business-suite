@@ -1199,6 +1199,10 @@ class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
         self.assertIn("function Assert-TrustedAnchorParentAcl", self.script)
         self.assertIn("DeleteSubdirectoriesAndFiles", self.script)
         self.assertIn("$trustedParentSids -notcontains $sid", self.script)
+        self.assertIn("function Assert-TrustedBackupChildAcl", self.script)
+        self.assertIn("Assert-TrustedBackupChildAcl $BackupDir", self.script)
+        self.assertIn("Assert-TrustedBackupChildAcl $LogDir", self.script)
+        self.assertIn("Assert-TrustedBackupChildAcl $SecretDir", self.script)
         for sid in ("S-1-5-18", "S-1-5-32-544"):
             with self.subTest(sid=sid):
                 self.assertIn(sid, self.script)

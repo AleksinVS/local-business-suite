@@ -101,7 +101,8 @@ python manage.py postgres_migration_validate --strict
 python manage.py memory_reindex --corpus all --backend fulltext
 ```
 
-Команды `postgres_migration_*` должны быть добавлены в процессе реализации.
+Команды `postgres_migration_*` реализованы; этот список остаётся обязательной
+матрицей при переносе или восстановлении следующего хоста.
 
 ## ADR
 

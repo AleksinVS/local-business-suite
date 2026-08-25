@@ -152,6 +152,47 @@ function Assert-TrustedAnchorParentAcl([string]$Path) {
     }
 }
 
+function Assert-TrustedBackupChildAcl([string]$Path) {
+    $acl = Get-Acl -LiteralPath $Path
+    try {
+        $ownerAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $acl.Owner
+        $ownerSid = $ownerAccount.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+    }
+    catch {
+        throw "Не удалось проверить владельца backup-каталога: $Path"
+    }
+    if ($AllowedWriteSids -notcontains $ownerSid) {
+        throw "Недоверенный владелец backup-каталога $Path: $ownerSid"
+    }
+
+    $writeMask = [int64]0
+    @(
+        [System.Security.AccessControl.FileSystemRights]::Write,
+        [System.Security.AccessControl.FileSystemRights]::Modify,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.FileSystemRights]::Delete,
+        [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles,
+        [System.Security.AccessControl.FileSystemRights]::ChangePermissions,
+        [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+    ) | ForEach-Object { $writeMask = $writeMask -bor [int64]$_ }
+    foreach ($rule in $acl.Access) {
+        if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+            continue
+        }
+        $sid = $rule.IdentityReference.Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        if (
+            (([int64]$rule.FileSystemRights -band $writeMask) -ne 0) -and
+            $AllowedWriteSids -notcontains $sid
+        ) {
+            throw "Недоверенный SID $sid имеет write/delete в backup-каталоге $Path."
+        }
+    }
+}
+
 $currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 if ($currentIdentity.User.Value -eq "S-1-5-18") {
     throw "Backup запрещено запускать от SYSTEM. Используйте отдельную backup identity."
@@ -201,12 +242,19 @@ Assert-PrivateBackupAcl $BackupStateRoot
 
 $BackupDir = Join-Path $BackupStateRoot "postgresql"
 $LogDir = Join-Path $BackupStateRoot "logs"
-$SecretFile = Join-Path $BackupStateRoot "secrets\pg_backup_password.txt"
+$SecretDir = Join-Path $BackupStateRoot "secrets"
+$SecretFile = Join-Path $SecretDir "pg_backup_password.txt"
 New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+if (-not (Test-Path -LiteralPath $SecretDir -PathType Container)) {
+    throw "Защищённый каталог secrets должен быть заранее создан администратором."
+}
 Assert-NoReparsePoint $BackupDir
 Assert-NoReparsePoint $LogDir
 Assert-NoReparsePoint $SecretFile
+Assert-TrustedBackupChildAcl $BackupDir
+Assert-TrustedBackupChildAcl $LogDir
+Assert-TrustedBackupChildAcl $SecretDir
 
 $LogFile = Join-Path $LogDir "backup_postgresql.log"
 function Write-Log([string]$Message) {

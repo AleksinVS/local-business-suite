@@ -32,7 +32,9 @@ from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
 from apps.memory.models import MemoryGroupMembershipAudit
 
 from .contract_services import (
+    _assert_deployment_catalog_candidate_delta,
     apply_contract_payload,
+    migrate_role_capability_catalog,
     preview_contract_rollback,
     read_contract_value,
     reconcile_pending_contract_changes,
@@ -54,6 +56,46 @@ from .registry import get_registry
 
 User = get_user_model()
 pytestmark = pytest.mark.integration
+
+
+def _role_catalog_target(payload, code="future_catalog_flag"):
+    target = copy.deepcopy(payload)
+    target["$capabilities"][code] = {
+        "type": "flag",
+        "label": "Future catalog flag",
+        "description": "Deployment-only test capability.",
+        "section": "organization",
+        "risk": "normal",
+    }
+    for role_code, role in target.items():
+        if not role_code.startswith("$"):
+            role[code] = role_code == "admin"
+    return target
+
+
+def _write_role_catalog_sandbox(root, *, runtime_payload, git_payload, candidate_payload=None):
+    root = Path(root)
+    runtime_root = root / "data" / "contracts"
+    git_root = root / "contracts"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    git_root.mkdir(parents=True, exist_ok=True)
+    runtime_path = runtime_root / "role_rules.json"
+    git_path = git_root / "role_rules.json"
+    runtime_path.write_text(json.dumps(runtime_payload, ensure_ascii=False), encoding="utf-8")
+    git_path.write_text(json.dumps(git_payload, ensure_ascii=False), encoding="utf-8")
+    candidate_path = root / "reviewed-role-rules.json"
+    if candidate_payload is not None:
+        candidate_path.write_text(
+            json.dumps(candidate_payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    settings_override = override_settings(
+        BASE_DIR=root,
+        DATA_DIR=root / "data",
+        RUNTIME_CONTRACTS_DIR=runtime_root,
+        LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+    )
+    return settings_override, runtime_path, candidate_path
 
 
 class AccessWorkspaceTests(TestCase):
@@ -1550,10 +1592,12 @@ class SettingsCenterContractTests(TestCase):
                             candidate["manager"]["description"] = "изменение цели"
                             return json.dumps(candidate, ensure_ascii=False)
 
-                        with self.assertRaisesMessage(
-                            ValidationError,
-                            "не может изменять соседние роли или служебные блоки",
-                        ):
+                        expected_message = (
+                            "$capabilities нельзя изменять"
+                            if block == "$capabilities"
+                            else "не может изменять соседние роли или служебные блоки"
+                        )
+                        with self.assertRaisesMessage(ValidationError, expected_message):
                             contract_services._apply_role_definition_payload(
                                 actor=actor,
                                 role_code="manager",
@@ -2973,3 +3017,292 @@ class ProductSettingsAuthorityTests(TestCase):
                 confirmed=True,
                 raw_payload_factory=lambda _rules: "{}",
             )
+
+
+class FrozenRoleCapabilityCatalogTests(TestCase):
+    def setUp(self):
+        self.root = User.objects.create_superuser(username="catalog-deployment-root")
+        self.base = load_json_file("contracts/role_rules.json")
+
+    def test_ordinary_generic_write_rejects_already_drifted_runtime_catalog(self):
+        runtime = copy.deepcopy(self.base)
+        runtime["$capabilities"]["manage_roles"]["label"] = "Runtime drift"
+        candidate = copy.deepcopy(runtime)
+        candidate["manager"]["description"] = "Otherwise valid ordinary change"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=runtime,
+                git_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "Git-default"):
+                apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(candidate, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(runtime),
+                )
+
+            self.assertEqual(load_json_file(runtime_path), runtime)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_ordinary_generic_write_rejects_candidate_catalog_mutation(self):
+        candidate = copy.deepcopy(self.base)
+        candidate["$capabilities"]["manage_roles"]["description"] = "Candidate mutation"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "обычную запись"):
+                apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(candidate, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(self.base),
+                )
+
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_historical_rollback_cannot_restore_capability_metadata(self):
+        historical = copy.deepcopy(self.base)
+        historical["$capabilities"]["manage_roles"]["label"] = "Historical label"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+            )
+            with override:
+                source = SettingsChange.objects.create(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    domain="core",
+                    storage_kind="runtime_contract",
+                    action=SettingsChange.Action.APPLY,
+                    status=SettingsChange.Status.APPLIED,
+                    before_hash=normalized_hash(historical),
+                    after_hash=normalized_hash(self.base),
+                    before_snapshot=historical,
+                    after_snapshot=self.base,
+                    contract_relpath="role_rules.json",
+                )
+                preview = preview_contract_rollback(actor=self.root, change_id=source.pk)
+                with self.assertRaisesMessage(ValidationError, "rollback"):
+                    rollback_contract_change(
+                        actor=self.root,
+                        change_id=source.pk,
+                        confirmed=True,
+                        base_hash=preview["base_hash"],
+                    )
+
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertEqual(SettingsChange.objects.count(), 1)
+
+    def test_constrained_role_save_rejects_git_runtime_catalog_drift(self):
+        from apps.accounts.access_contracts import (
+            role_definition_read_model,
+            save_role_definition_change,
+        )
+        from apps.core.contract_store import _reset_for_tests
+
+        runtime = copy.deepcopy(self.base)
+        runtime["$capabilities"]["manage_roles"]["label"] = "Runtime drift"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=runtime,
+                git_payload=self.base,
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    model = role_definition_read_model("manager")
+                    proposed = copy.deepcopy(model["config"])
+                    proposed["description"] = "Constrained change"
+                    with self.assertRaisesMessage(ValidationError, "Git-default"):
+                        save_role_definition_change(
+                            actor=self.root,
+                            role_code="manager",
+                            proposed_config=proposed,
+                            base_hash=model["base_hash"],
+                        )
+                finally:
+                    _reset_for_tests()
+
+            self.assertEqual(load_json_file(runtime_path), runtime)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_deployment_hash_mismatches_and_noop_leave_runtime_unchanged(self):
+        target = _role_catalog_target(self.base)
+        hashes = {
+            "expected_runtime_catalog_hash": normalized_hash(self.base["$capabilities"]),
+            "expected_git_catalog_hash": normalized_hash(target["$capabilities"]),
+            "expected_runtime_hash": normalized_hash(self.base),
+        }
+        cases = (
+            "expected_runtime_catalog_hash",
+            "expected_git_catalog_hash",
+            "expected_runtime_hash",
+        )
+        for wrong_field in cases:
+            with self.subTest(wrong_field=wrong_field), TemporaryDirectory() as tmpdir:
+                override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                    tmpdir,
+                    runtime_payload=self.base,
+                    git_payload=target,
+                    candidate_payload=target,
+                )
+                wrong = dict(hashes)
+                wrong[wrong_field] = "0" * 64
+                with override, self.assertRaises(ValidationError):
+                    migrate_role_capability_catalog(
+                        actor=self.root,
+                        candidate_path=candidate_path,
+                        reason="Hash mismatch test",
+                        **wrong,
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.base)
+                self.assertFalse(SettingsChange.objects.exists())
+                self.assertFalse((Path(tmpdir) / "data" / "contracts" / "backups").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=self.base,
+                candidate_payload=self.base,
+            )
+            with override, self.assertRaisesMessage(ValidationError, "нет изменений"):
+                migrate_role_capability_catalog(
+                    actor=self.root,
+                    candidate_path=candidate_path,
+                    expected_runtime_catalog_hash=normalized_hash(self.base["$capabilities"]),
+                    expected_git_catalog_hash=normalized_hash(self.base["$capabilities"]),
+                    expected_runtime_hash=normalized_hash(self.base),
+                    reason="No-op test",
+                )
+            self.assertEqual(load_json_file(runtime_path), self.base)
+            self.assertFalse(SettingsChange.objects.exists())
+
+    def test_deployment_candidate_rejects_unrelated_deltas(self):
+        target = _role_catalog_target(self.base)
+
+        def mutate_grant(candidate):
+            candidate["customer"]["create_workorder"] = not candidate["customer"][
+                "create_workorder"
+            ]
+
+        def mutate_role_set(candidate):
+            candidate["extra-role"] = copy.deepcopy(candidate["customer"])
+
+        def mutate_administration(candidate):
+            candidate["$administration"]["role_definition_editor_roles"] = ["manager"]
+
+        def mutate_metadata(candidate):
+            candidate["manager"]["description"] = "Unrelated role metadata"
+
+        for label, mutate in (
+            ("grant", mutate_grant),
+            ("role_set", mutate_role_set),
+            ("administration", mutate_administration),
+            ("role_metadata", mutate_metadata),
+        ):
+            with self.subTest(delta=label), TemporaryDirectory() as tmpdir:
+                candidate = copy.deepcopy(target)
+                mutate(candidate)
+                override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                    tmpdir,
+                    runtime_payload=self.base,
+                    git_payload=target,
+                    candidate_payload=candidate,
+                )
+                with override, self.assertRaises(ValidationError):
+                    migrate_role_capability_catalog(
+                        actor=self.root,
+                        candidate_path=candidate_path,
+                        expected_runtime_catalog_hash=normalized_hash(
+                            self.base["$capabilities"]
+                        ),
+                        expected_git_catalog_hash=normalized_hash(target["$capabilities"]),
+                        expected_runtime_hash=normalized_hash(self.base),
+                        reason=f"Reject unrelated {label}",
+                    )
+                self.assertEqual(load_json_file(runtime_path), self.base)
+                self.assertFalse(SettingsChange.objects.exists())
+
+    def test_delta_validator_allows_only_changed_catalog_role_keys(self):
+        target = _role_catalog_target(self.base)
+        _assert_deployment_catalog_candidate_delta(
+            runtime_payload=self.base,
+            candidate_payload=target,
+        )
+
+        invalid = copy.deepcopy(target)
+        invalid["admin"]["display_name"] = "Changed outside catalog"
+        with self.assertRaises(ValidationError):
+            _assert_deployment_catalog_candidate_delta(
+                runtime_payload=self.base,
+                candidate_payload=invalid,
+            )
+
+    def test_deployment_command_migrates_new_capability_and_preserves_ordinary_writes(self):
+        target = _role_catalog_target(self.base)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, candidate_path = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=self.base,
+                git_payload=target,
+                candidate_payload=target,
+            )
+            output = StringIO()
+            with override:
+                call_command(
+                    "migrate_role_capabilities",
+                    operator_id=self.root.pk,
+                    candidate=candidate_path,
+                    expected_runtime_catalog_hash=normalized_hash(
+                        self.base["$capabilities"]
+                    ),
+                    expected_git_catalog_hash=normalized_hash(target["$capabilities"]),
+                    expected_runtime_hash=normalized_hash(self.base),
+                    reason="Reviewed catalog deployment",
+                    stdout=output,
+                )
+                applied = SettingsChange.objects.get()
+                self.assertEqual(applied.status, SettingsChange.Status.APPLIED)
+                self.assertEqual(applied.actor_id, self.root.pk)
+                self.assertEqual(
+                    applied.validation_result["operation"],
+                    "deployment_role_capability_catalog_migration",
+                )
+                self.assertEqual(
+                    applied.validation_result["reason"],
+                    "Reviewed catalog deployment",
+                )
+                written = load_json_file(runtime_path)
+                self.assertEqual(written, target)
+                backups = list(
+                    (Path(tmpdir) / "data" / "contracts" / "backups").glob(
+                        "role_rules.*.json"
+                    )
+                )
+                self.assertEqual(len(backups), 1)
+                self.assertEqual(load_json_file(backups[0]), self.base)
+                self.assertNotIn("future_catalog_flag", output.getvalue())
+
+                ordinary = copy.deepcopy(written)
+                ordinary["manager"]["description"] = "Ordinary write after migration"
+                second = apply_contract_payload(
+                    actor=self.root,
+                    setting_id="core.contract.role_rules",
+                    raw_payload=json.dumps(ordinary, ensure_ascii=False),
+                    confirmed=True,
+                    base_hash=normalized_hash(written),
+                )
+                self.assertEqual(second.status, SettingsChange.Status.APPLIED)
+                self.assertEqual(load_json_file(runtime_path), ordinary)

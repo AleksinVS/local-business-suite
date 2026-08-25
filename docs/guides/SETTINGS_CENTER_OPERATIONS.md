@@ -2,7 +2,7 @@
 
 Статус: актуальное эксплуатационное руководство.
 
-Дата обновления: 2026-08-17.
+Дата обновления: 2026-08-25.
 
 ## Назначение
 
@@ -56,8 +56,54 @@ audit `SettingsChange`). Против потерянного обновлени�
 
 Store отдает файл как есть, без legacy-нормализации: на старых копиях `role_rules` без
 ключей `view_analytics`/`manage_departments`/`manage_roles` роли не получат этих прав
-(fail-closed), поэтому при обновлении старых установок пересохраните `role_rules` через
-Settings Center — запись допишет недостающие ключи.
+(fail-closed). Новые capability-ключи нельзя дописывать обычным сохранением:
+для них используется deployment-процедура ниже.
+
+### Замороженный `$capabilities`
+
+Обычный Settings Center, rollback и ограниченный редактор роли могут менять
+только определения ролей. Под общей access-блокировкой сервис всегда проверяет:
+
+```text
+hash(data/contracts/role_rules.json.$capabilities)
+  == hash(contracts/role_rules.json.$capabilities)
+candidate.$capabilities == runtime.$capabilities
+```
+
+Несовпадение закрывает любую обычную запись. Не пытайтесь исправить его через raw JSON
+или rollback: это защита от изменения security-semantics во время работы.
+
+Для планового deployment-изменения:
+
+1. В Git обновите `contracts/role_rules.json`, enforcement points и тесты.
+2. Из текущего runtime-контракта подготовьте полный reviewed candidate JSON. В нем можно
+   изменить только catalog metadata и соответствующие значения этих capability в каждой
+   роли. Набор ролей, `$administration`, описания, признаки защиты и значения неизменённых
+   capability должны остать прежними.
+3. Получите три полных SHA-256: текущего runtime catalog, целевого Git catalog и всего
+   текущего runtime-контракта. Хеши вычисляются по нормализованному JSON, как
+   `apps.core.contract_store.normalized_hash`.
+4. Запустите от deployment-оператора:
+
+```bash
+python manage.py migrate_role_capabilities \
+  --operator-id <active-superuser-id> \
+  --candidate <reviewed-full-role-rules.json> \
+  --expected-runtime-catalog-hash <sha256> \
+  --expected-git-catalog-hash <sha256> \
+  --expected-runtime-hash <sha256> \
+  --reason "<change-ticket/review reason>"
+```
+
+Команда повторно загружает active superuser, сверяет все хеши под общей блокировкой,
+повторно валидирует полный candidate, делает копию исходного файла в
+`data/contracts/backups/`, создаёт staged `SettingsChange`, атомарно заменяет runtime-файл и
+проверяет итоговый хеш. No-op и любое несовпадение отклоняются. В stdout выводятся
+только ID аудита, короткие хеши и имя backup; JSON и значения прав не печатаются.
+
+Восстановление backup не выполняется обычным rollback: исторический catalog будет отклонён.
+Для обратного deployment подготовьте обратный Git commit и reviewed candidate из резервной копии,
+затем повторите ту же команду с новыми expected hashes. Не копируйте backup поверх runtime-файла вручную.
 
 ### Дрейф default/runtime
 

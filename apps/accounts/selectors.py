@@ -7,9 +7,10 @@ from django.contrib.auth.models import Permission
 
 from apps.core.contract_store import get_contract
 from apps.workorders.policies import (
-    DEFAULT_BOARD_VIEW_ROLE,
+    LEGACY_DEFAULT_BOARD_VIEW_ROLE,
     default_board_access_applies,
     default_board_view_rules,
+    runtime_viewer_enabled,
 )
 
 
@@ -75,9 +76,9 @@ def selected_role_names_for_user(user) -> list[str]:
 def effective_capabilities_for_roles(role_names) -> dict[str, list[dict]]:
     configs = contract_role_configs()
     canonical_role_names = sorted(set(role_names))
-    if not canonical_role_names:
-        configs[DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
-        canonical_role_names = [DEFAULT_BOARD_VIEW_ROLE]
+    if not canonical_role_names and not runtime_viewer_enabled():
+        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
+        canonical_role_names = [LEGACY_DEFAULT_BOARD_VIEW_ROLE]
     effective: dict[str, list[dict]] = {}
     for role_name in canonical_role_names:
         config = configs.get(role_name)
@@ -120,7 +121,8 @@ def user_access_overview(user) -> dict:
 
 def effective_access_for_user(user) -> dict:
     configs = contract_role_configs()
-    configs[DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
+    if not runtime_viewer_enabled():
+        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
     catalog = capability_catalog()
     role_groups, technical_groups = split_user_groups(user)
     role_names = [group.name for group in role_groups]
@@ -157,10 +159,10 @@ def effective_access_for_user(user) -> dict:
             }
         )
     if default_board_access_applies(user):
-        default_config = configs[DEFAULT_BOARD_VIEW_ROLE]
+        default_config = configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE]
         roles.append(
             {
-                "code": DEFAULT_BOARD_VIEW_ROLE,
+                "code": LEGACY_DEFAULT_BOARD_VIEW_ROLE,
                 "label": default_config["display_name"],
                 "description": default_config["description"],
                 "risk_markers": [],

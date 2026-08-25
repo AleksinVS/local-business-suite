@@ -2571,7 +2571,7 @@ class CapabilityRegistryTests(TestCase):
         )
         for code in waiting_codes:
             legacy["$capabilities"].pop(code)
-            for role in ("customer", "technician", "manager", "admin", "doctor"):
+            for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
                 legacy[role].pop(code)
         legacy["$capabilities"]["view_waiting_list"] = {
             "type": "flag",
@@ -2580,7 +2580,7 @@ class CapabilityRegistryTests(TestCase):
             "label": "Просмотр листа ожидания",
             "description": "Совместимый старый флаг просмотра листа ожидания.",
         }
-        for role in ("customer", "technician", "manager", "admin", "doctor"):
+        for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
             legacy[role]["view_waiting_list"] = role == "doctor"
         for code in (
             "view_scope",
@@ -2619,3 +2619,16 @@ class CapabilityRegistryTests(TestCase):
     can_comment,
     can_create,
     can_edit,
+
+
+@pytest.mark.unit
+class ExplicitViewerPolicyPhaseTests(TestCase):
+    def test_runtime_viewer_presence_disables_legacy_fallback(self):
+        payload = copy.deepcopy(get_contract("role_rules"))
+        payload["viewer"] = copy.deepcopy(
+            json_utils.load_json_file(Path(settings.BASE_DIR) / "contracts" / "role_rules.json")["viewer"]
+        )
+        user = User.objects.create_user(username="runtime-viewer-phase")
+        with _override_contract_file("LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", payload):
+            self.assertFalse(default_board_access_applies(user))
+            self.assertEqual(active_role_rules(user), [])

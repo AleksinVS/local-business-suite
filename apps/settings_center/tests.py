@@ -1260,7 +1260,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-catalog-admin", password="pass")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         sibling_code = next(
             role for role in role_rules if not role.startswith("$") and role != role_code
         )
@@ -1327,7 +1327,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-unknown-admin")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         proposed = {
             code: copy.deepcopy(role_rules[role_code][code])
             for code in role_rules["$capabilities"]
@@ -1362,7 +1362,7 @@ class SettingsCenterRegistryTests(TestCase):
 
         actor = User.objects.create_superuser(username="role-member-stale-root")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         role_group, _ = Group.objects.get_or_create(name=role_code)
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1411,7 +1411,7 @@ class SettingsCenterRegistryTests(TestCase):
         actor = User.objects.create_superuser(username="role-lifecycle-root")
         lifecycle_operator = User.objects.create_superuser(username="role-lifecycle-operator")
         role_rules = load_json_file("contracts/role_rules.json")
-        role_code = next(role for role in role_rules if not role.startswith("$"))
+        role_code = next(role for role in role_rules if not role.startswith("$") and role != "viewer")
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             role_file = root / "role_rules.json"
@@ -1715,7 +1715,7 @@ class SettingsCenterContractTests(TestCase):
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             changed_payload = {**payload}
-            first_role = next(role for role in changed_payload if not role.startswith("$"))
+            first_role = next(role for role in changed_payload if not role.startswith("$") and role != "viewer")
             changed_payload[first_role] = {**changed_payload[first_role], "display_name": "Changed role name"}
 
             with override_settings(
@@ -1743,7 +1743,7 @@ class SettingsCenterContractTests(TestCase):
             role_file = Path(tmpdir) / "role_rules.json"
             payload = load_json_file("contracts/role_rules.json")
             role_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-            first_role = next(role for role in payload if not role.startswith("$"))
+            first_role = next(role for role in payload if not role.startswith("$") and role != "viewer")
 
             with override_settings(
                 LOCAL_BUSINESS_ROLE_RULES_FILE=role_file,
@@ -1842,7 +1842,7 @@ class SettingsContractRecoveryTests(TransactionTestCase):
 
     def _changed(self, label):
         changed = copy.deepcopy(self.payload)
-        first_role = next(role for role in changed if not role.startswith("$"))
+        first_role = next(role for role in changed if not role.startswith("$") and role != "viewer")
         changed[first_role]["display_name"] = label
         return changed
 
@@ -3796,3 +3796,278 @@ class RoleAdministrationMigrationTests(TestCase):
             self.assertEqual(len(backups), 1)
             self.assertEqual(load_json_file(backups[0]), self.runtime)
             self.assertNotIn("role_assignment_allowlist", output.getvalue())
+
+
+class ExplicitViewerMigrationReportTests(TestCase):
+    def test_report_is_explicit_and_read_only(self):
+        target = User.objects.create_user(username="viewer-report-target")
+        before_groups = set(target.groups.values_list("name", flat=True))
+        from .access_migration_services import report_roleless_users
+
+        report = report_roleless_users()
+        row = next(item for item in report["users"] if item["id"] == target.pk)
+        self.assertIsNone(row["choice"])
+        self.assertIn("viewer", row["allowed_choices"])
+        self.assertIn("no_role", row["allowed_choices"])
+        self.assertEqual(set(target.groups.values_list("name", flat=True)), before_groups)
+        self.assertNotIn("viewer", get_contract("role_rules"))
+
+    def test_signed_envelope_tamper_and_private_path_are_rejected(self):
+        from django.core.exceptions import ValidationError
+        from .access_migration_services import (
+            _load_manifest,
+            _operation_envelope,
+            _private_artifact_path,
+            _sign_phase_manifest,
+            _verify_envelope,
+        )
+
+        payload, signed = _operation_envelope(
+            report={"report_hash": "r", "runtime_contract_hash": "x", "git_contract_hash": "g", "viewer_definition": {}, "all_active_users": [], "boards": []},
+            actor=SimpleNamespace(pk=1), reason="test", user_choices={}, board_choices={}
+        )
+        self.assertEqual(_verify_envelope(signed)["operation_id"], payload["operation_id"])
+        with self.assertRaises(ValidationError):
+            _verify_envelope(signed + "tampered")
+        with self.assertRaises(ValidationError):
+            _private_artifact_path("/tmp/not-private.json")
+        unsigned_pending = _sign_phase_manifest(
+            {
+                "schema_version": 1,
+                "operation_id": payload["operation_id"],
+                "envelope": signed,
+                "users": [],
+                "customer_open_boards": [],
+            },
+            "prepare_pending",
+        )
+        unsigned_pending.pop("phase_signature")
+        with self.assertRaisesMessage(ValidationError, "Подпись этапа"):
+            _load_manifest(unsigned_pending)
+        forged_wrapper = {
+            "schema_version": 1,
+            "phase": "prepare_pending",
+            "operation_id": payload["operation_id"],
+            "envelope": signed,
+            "manifest": {
+                "schema_version": 1,
+                "users": [],
+                "customer_open_boards": [],
+            },
+        }
+        with self.assertRaisesMessage(ValidationError, "не подписано"):
+            _load_manifest(forged_wrapper)
+
+    def test_prepare_existing_role_choice_is_inert_and_viewer_audit_is_correlated(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import prepare_explicit_viewer_migration, report_roleless_users
+
+        actor = User.objects.create_superuser(username="viewer-migration-owner")
+        target = User.objects.create_user(username="viewer-migration-target")
+        customer_target = User.objects.create_user(username="viewer-migration-customer-target")
+        Group.objects.get_or_create(name="customer")
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False), encoding="utf-8")
+            with override_settings(DATA_DIR=Path(tmpdir), RUNTIME_CONTRACTS_DIR=Path(tmpdir), LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path):
+                report = report_roleless_users(output_path=False)
+                for row in report["users"]:
+                    row["choice"] = "viewer" if row["id"] == target.pk else "customer" if row["id"] == customer_target.pk else "no_role"
+                for row in report["customer_open_boards"]:
+                    row["add_viewer"] = False
+                operation_path = Path(tmpdir) / "access-migrations" / "operation.json"
+                _reset_for_tests()
+                prepared = prepare_explicit_viewer_migration(
+                    actor=actor, manifest=report, reason="focused test", output_path=operation_path
+                )
+                target.refresh_from_db()
+                customer_target.refresh_from_db()
+                self.assertNotIn("customer", customer_target.groups.values_list("name", flat=True))
+                self.assertTrue(AccessAssignmentAudit.objects.filter(
+                    target_user=target, preview_fingerprint__isnull=False
+                ).exists())
+                self.assertEqual(
+                    AccessAssignmentAudit.objects.filter(target_user=target).values_list("preview_fingerprint", flat=True).count(),
+                    AccessAssignmentAudit.objects.filter(target_user=target).values_list("preview_fingerprint", flat=True).distinct().count(),
+                )
+                tampered = copy.deepcopy(prepared)
+                tampered["added_users"][0]["choice"] = "customer"
+                with self.assertRaises(ValidationError):
+                    __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(
+                        actor=actor, manifest=tampered, reason="focused test"
+                    )
+                cutover = __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(actor=actor, manifest=prepared, reason="focused test")
+                customer_target.refresh_from_db()
+                self.assertIn("customer", customer_target.groups.values_list("name", flat=True))
+                retry = __import__("apps.settings_center.access_migration_services", fromlist=["cutover_explicit_viewer"]).cutover_explicit_viewer(actor=actor, manifest=cutover, reason="focused test")
+                rolled = __import__("apps.settings_center.access_migration_services", fromlist=["rollback_explicit_viewer"]).rollback_explicit_viewer(actor=actor, manifest=retry, reason="focused test")
+                again = __import__("apps.settings_center.access_migration_services", fromlist=["rollback_explicit_viewer"]).rollback_explicit_viewer(actor=actor, manifest=rolled, reason="focused test")
+                self.assertTrue(again["rolled_back"])
+                self.assertTrue(prepared["operation_id"])
+                _reset_for_tests()
+
+    def test_each_migration_phase_recovers_from_audited_partial_state(self):
+        from apps.accounts.services import apply_viewer_migration_role_locked
+        from django.contrib.auth.models import Permission
+        from apps.core.contract_store import _reset_for_tests
+        from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
+        from .access_migration_services import (
+            _persist_phase,
+            cutover_explicit_viewer,
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+            rollback_explicit_viewer,
+        )
+        from .contract_services import rollback_explicit_viewer_contract_locked
+        from .models import SettingsChange
+
+        actor = User.objects.create_superuser(username="viewer-recovery-owner")
+        viewer_target = User.objects.create_user(username="viewer-recovery-target")
+        customer_target = User.objects.create_user(username="viewer-recovery-customer")
+        customer_group, _ = Group.objects.get_or_create(name="customer")
+        board = Board.objects.create(title="Доска восстановления", slug="viewer-recovery")
+        board.allowed_groups.add(customer_group)
+
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                report = report_roleless_users(output_path=False)
+                for row in report["users"]:
+                    row["choice"] = (
+                        "viewer" if row["id"] == viewer_target.pk
+                        else "customer" if row["id"] == customer_target.pk
+                        else "no_role"
+                    )
+                for row in report["customer_open_boards"]:
+                    row["add_viewer"] = row["id"] == board.pk
+                operation_path = Path(tmpdir) / "access-migrations" / "recovery.json"
+                def interrupt_after_prepare_commit(path, phase, manifest):
+                    if phase == "prepared":
+                        raise RuntimeError("simulated crash after prepare commit")
+                    return _persist_phase(path, phase, manifest)
+
+                # Имитируем остановку после commit подготовки, пока на диске
+                # остался только подписанный prepare_pending.
+                with patch(
+                    "apps.settings_center.access_migration_services._persist_phase",
+                    side_effect=interrupt_after_prepare_commit,
+                ), self.assertRaisesRegex(RuntimeError, "simulated crash"):
+                    prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="recovery test",
+                        output_path=operation_path,
+                    )
+                prepared = prepare_explicit_viewer_migration(
+                    actor=actor,
+                    manifest=operation_path,
+                    reason="recovery test",
+                    output_path=operation_path,
+                )
+
+                customer_change = next(
+                    row for row in prepared["added_users"] if row["id"] == customer_target.pk
+                )
+                # Имитируем commit DB-фазы cutover до записи её артефакта.
+                with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+                    with transaction.atomic():
+                        apply_viewer_migration_role_locked(
+                            actor=actor,
+                            target_user=customer_target,
+                            role_name="customer",
+                            operation_id=prepared["operation_id"],
+                            expected_before=customer_change["roles_after"],
+                            expected_after=customer_change["cutover_roles_after"],
+                            reason="recovery test",
+                        )
+                cutover = cutover_explicit_viewer(
+                    actor=actor, manifest=prepared, reason="recovery test"
+                )
+                # Имитируем потерю результата после атомарной замены контракта.
+                viewer_group = Group.objects.get(name="viewer")
+                inactive = User.objects.create_user(username="viewer-recovery-inactive", is_active=False)
+                inactive.groups.add(viewer_group)
+                with self.assertRaisesMessage(ValidationError, "Состав роли"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                inactive.groups.remove(viewer_group)
+                permission = Permission.objects.order_by("pk").first()
+                self.assertIsNotNone(permission)
+                viewer_group.permissions.add(permission)
+                with self.assertRaisesMessage(ValidationError, "Django permissions"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                viewer_group.permissions.remove(permission)
+                profile = GroupProfile.objects.get(group=viewer_group)
+                original_title = profile.title
+                profile.title = "Изменённый профиль"
+                profile.save(update_fields=["title"])
+                with self.assertRaisesMessage(ValidationError, "drifted"):
+                    cutover_explicit_viewer(
+                        actor=actor, manifest=prepared, reason="recovery test"
+                    )
+                profile.title = original_title
+                profile.save(update_fields=["title"])
+                recovered_cutover = cutover_explicit_viewer(
+                    actor=actor, manifest=prepared, reason="recovery test"
+                )
+                self.assertEqual(recovered_cutover["cutover_change_id"], cutover["cutover_change_id"])
+
+                cutover_change = SettingsChange.objects.get(pk=cutover["cutover_change_id"])
+                rollback_fingerprint = normalized_hash({
+                    "operation_id": prepared["operation_id"],
+                    "operation": "rollback",
+                })
+                # Имитируем удаление контракта и частичную очистку БД до записи
+                # финального результата отката.
+                with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+                    rollback_explicit_viewer_contract_locked(
+                        actor=actor,
+                        expected_post_cutover_hash=cutover["post_cutover_contract_hash"],
+                        expected_before=cutover_change.before_snapshot,
+                        cutover_change=cutover_change,
+                        reason="recovery test",
+                        operation_fingerprint=rollback_fingerprint,
+                    )
+                    with transaction.atomic():
+                        apply_viewer_migration_role_locked(
+                            actor=actor,
+                            target_user=customer_target,
+                            role_name="customer",
+                            operation_id=prepared["operation_id"],
+                            expected_before=customer_change["cutover_roles_after"],
+                            expected_after=customer_change["roles_before"],
+                            reason="recovery test",
+                            remove=True,
+                        )
+                rolled_back = rollback_explicit_viewer(
+                    actor=actor, manifest=cutover, reason="recovery test"
+                )
+                self.assertTrue(rolled_back["rolled_back"])
+                viewer_target.refresh_from_db()
+                customer_target.refresh_from_db()
+                self.assertFalse(viewer_target.groups.filter(name="viewer").exists())
+                self.assertFalse(customer_target.groups.filter(name="customer").exists())
+                self.assertFalse(board.allowed_groups.filter(name="viewer").exists())
+                self.assertNotIn("viewer", get_contract("role_rules"))
+                artifact_before = operation_path.read_bytes()
+                with self.assertRaisesMessage(ValidationError, "более поздний этап"):
+                    prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="recovery test",
+                        output_path=operation_path,
+                    )
+                self.assertEqual(operation_path.read_bytes(), artifact_before)
+                _reset_for_tests()

@@ -785,6 +785,12 @@ def _assert_role_definition_target_policy(
     *, actor, role_code, before, after, rules_snapshot
 ):
     """Enforce held-role and protected-before-or-after boundaries."""
+    # ``viewer`` is a migration-owned frozen role.  Its contract value is
+    # intentionally ``protected=false`` so the catalog describes its
+    # least-privilege nature, but ordinary role writers must not edit it after
+    # cutover or turn it into a second privilege-escalation path.
+    if role_code == "viewer":
+        raise PermissionDenied("Роль viewer изменяется только dedicated migration service.")
     if actor.is_superuser:
         return
     held_roles = {

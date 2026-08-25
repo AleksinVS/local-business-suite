@@ -18,6 +18,7 @@ from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_g
 from apps.core.models import Department
 from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES, MEMORY_REVIEW_GROUP_PROFILES
 from apps.workorders.models import Board
+from apps.workorders.policies import default_board_access_applies, default_board_view_rules
 
 
 TABS = (
@@ -197,7 +198,8 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
         sections = set()
         for role_code in role_codes:
             sections.update(section_by_role.get(role_code, ()))
-        if not role_codes and user.is_active:
+        fallback = default_board_access_applies(user)
+        if fallback:
             sections.add(SECTION_LABELS["kanban"])
         if user.is_superuser:
             sections.update(_section_labels(catalog))
@@ -213,14 +215,14 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
                 "ad_identity": identity,
                 "department": user.department.name if user.department else "Без подразделения",
                 "department_full": (department_paths or {}).get(user.department_id, "Без подразделения"),
-                "role_sources": ([{"label": "Базовый просмотр канбана", "code": "default_board_viewer", "read_only": True}] if not role_codes and user.is_active else []),
+                "role_sources": ([{"label": default_board_view_rules().get("display_name", "Базовый просмотр канбана"), "code": "default_board_viewer", "read_only": True}] if fallback else []),
                 "status": {
                     "icon": "●" if user.is_active else "○",
                     "label": "Активен" if user.is_active else "Отключён",
                     "class": "is-active" if user.is_active else "is-inactive",
                 },
-                "roles": role_labels or (["Базовый просмотр канбана"] if not role_codes and user.is_active else []),
-                "roles_text": ", ".join(role_labels or (["Базовый просмотр канбана"] if not role_codes and user.is_active else [])),
+                "roles": role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else []),
+                "roles_text": ", ".join(role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else [])),
                 "role_codes": role_codes,
                 "site_sections": sorted(sections),
                 "site_sections_text": ", ".join(sorted(sections)),

@@ -929,3 +929,67 @@ def update_board_column_command(*, actor, column_id, payload):
         if payload:
             column.save(update_fields=list(payload))
     return column
+
+
+def apply_viewer_migration_board_acl_locked(
+    *, actor, board, operation_id, expected_before, expected_after, reason, remove=False,
+):
+    """Trusted migration-only viewer ACL adapter with deterministic audit."""
+    User = get_user_model()
+    actor = User.objects.filter(pk=getattr(actor, "pk", None), is_active=True, is_superuser=True).first()
+    if actor is None:
+        raise PermissionDenied("Требуется активный суперпользователь.")
+    locked = Board.objects.select_for_update().filter(pk=board.pk).first()
+    if locked is None:
+        raise ValidationError("Доска отсутствует.")
+    before = sorted(locked.allowed_groups.values_list("name", flat=True))
+    fingerprint = hashlib.sha256(
+        f"viewer-migration:{operation_id}:board:{locked.pk}:{'remove' if remove else 'add'}".encode()
+    ).hexdigest()
+    existing = BoardAccessAudit.objects.filter(preview_fingerprint=fingerprint).first()
+    if existing:
+        expected_marker = "explicit_viewer_migration_rollback" if remove else "explicit_viewer_migration"
+        if (
+            existing.board_id != locked.pk
+            or existing.actor_id != actor.pk
+            or existing.source != BoardAccessAudit.Source.SETTINGS_CENTER
+            or existing.reason != reason
+            or existing.groups_before != sorted(expected_before)
+            or existing.groups_after != sorted(expected_after)
+            or existing.groups_added != sorted(set(expected_after) - set(expected_before))
+            or existing.groups_removed != sorted(set(expected_before) - set(expected_after))
+            or existing.risk_markers != [expected_marker]
+            or not existing.risk_confirmed
+            or existing.role_contract_hash != current_contract_hash("role_rules")
+        ):
+            raise ValidationError("Детерминированный board audit не совпадает с повтором.")
+        if before != sorted(expected_after):
+            raise ValidationError("Аудит операции найден, но текущий доступ к доске ему не соответствует.")
+        return existing
+    if before != sorted(expected_before):
+        raise ValidationError("Доступ к доске изменился до операции миграции.")
+    viewer = Group.objects.filter(name="viewer").first()
+    if viewer is None:
+        raise ValidationError("Группа viewer отсутствует.")
+    if remove:
+        locked.allowed_groups.remove(viewer)
+    else:
+        locked.allowed_groups.add(viewer)
+    after = sorted(locked.allowed_groups.values_list("name", flat=True))
+    if after != sorted(expected_after):
+        raise ValidationError("Результат migration ACL не совпал с планом.")
+    marker = "explicit_viewer_migration_rollback" if remove else "explicit_viewer_migration"
+    return BoardAccessAudit.objects.create(
+        board=locked,
+        actor=actor,
+        groups_before=sorted(expected_before),
+        groups_after=sorted(expected_after),
+        groups_added=sorted(set(expected_after) - set(expected_before)),
+        groups_removed=sorted(set(expected_before) - set(expected_after)),
+        risk_markers=[marker],
+        risk_confirmed=True,
+        source=BoardAccessAudit.Source.SETTINGS_CENTER,
+        reason=reason,
+        role_contract_hash=current_contract_hash("role_rules"),
+        preview_fingerprint=fingerprint,
+    )

@@ -418,6 +418,92 @@ def migrate_role_administration_metadata(
         ) from exc
 
 
+def apply_explicit_viewer_contract_cutover_locked(
+    *, actor, expected_runtime_hash: str, viewer_config: dict, reason: str,
+    operation_fingerprint: str | None = None,
+):
+    """Atomically add only the Git-defined ``viewer`` role.
+
+    The caller owns ``access_control_write_lock_path`` and has already
+    validated the migration manifest and database state.  Keeping this small
+    primitive here makes the contract replacement use the same staged
+    ``SettingsChange``/backup/hash protocol as every other runtime contract
+    write without opening the generic role-set writer to callers.
+    """
+    actor = _require_active_superuser(actor)
+    descriptor = get_registry().get("core.contract.role_rules")
+    _resolve_known_pending_changes(setting_id=descriptor.setting_id)
+    before = read_contract_value(descriptor)
+    git_default = _read_git_default_role_rules(descriptor=descriptor)
+    _validate_payload_object(descriptor=descriptor, payload=before)
+    if normalized_hash(before) != str(expected_runtime_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Runtime role contract changed before viewer cutover.")
+    if "viewer" in before:
+        raise ValidationError("Runtime viewer role is already present.")
+    if git_default.get("viewer") != viewer_config:
+        raise ValidationError("Viewer definition does not match the Git-default contract.")
+    if normalized_hash(before.get("$capabilities")) != normalized_hash(git_default.get("$capabilities")):
+        raise ValidationError("Runtime capability catalog differs from Git-default.")
+    after = copy.deepcopy(before)
+    after["viewer"] = copy.deepcopy(git_default["viewer"])
+    _validate_payload_object(descriptor=descriptor, payload=after)
+    backup_path = _write_role_contract_backup(before)
+    return _write_validated_contract_change(
+        actor=actor,
+        descriptor=descriptor,
+        action=SettingsChange.Action.APPLY,
+        before=before,
+        after=after,
+        rollback_of=None,
+        contract_relpath=_contract_relative_path(descriptor),
+        operation_fingerprint=operation_fingerprint,
+        audit_context={
+            "operation": "explicit_viewer_cutover",
+            "reason": str(reason or "").strip(),
+            "backup_file": backup_path.name,
+            "viewer_role_hash": normalized_hash(after["viewer"]),
+        },
+    )
+
+
+def rollback_explicit_viewer_contract_locked(
+    *, actor, expected_post_cutover_hash: str, expected_before: dict,
+    cutover_change: SettingsChange, reason: str,
+    operation_fingerprint: str | None = None,
+):
+    """Atomically remove exactly the migration-added runtime ``viewer`` role."""
+    actor = _require_active_superuser(actor)
+    descriptor = get_registry().get("core.contract.role_rules")
+    _resolve_known_pending_changes(setting_id=descriptor.setting_id)
+    before = read_contract_value(descriptor)
+    if normalized_hash(before) != str(expected_post_cutover_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Runtime contract drifted after viewer cutover; rollback is refused.")
+    if not isinstance(expected_before, dict) or set(before) != set(expected_before) | {"viewer"}:
+        raise ValidationError("Runtime role set drifted after viewer cutover; rollback is refused.")
+    if before.get("viewer") != cutover_change.after_snapshot.get("viewer"):
+        raise ValidationError("Runtime viewer definition drifted after cutover; rollback is refused.")
+    after = copy.deepcopy(expected_before)
+    if normalized_hash(before) == normalized_hash(after) or "viewer" in after:
+        raise ValidationError("Rollback candidate is not the exact pre-cutover contract.")
+    _validate_payload_object(descriptor=descriptor, payload=after)
+    backup_path = _write_role_contract_backup(before)
+    return _write_validated_contract_change(
+        actor=actor,
+        descriptor=descriptor,
+        action=SettingsChange.Action.ROLLBACK,
+        before=before,
+        after=after,
+        rollback_of=cutover_change,
+        contract_relpath=_contract_relative_path(descriptor),
+        operation_fingerprint=operation_fingerprint,
+        audit_context={
+            "operation": "explicit_viewer_rollback",
+            "reason": str(reason or "").strip(),
+            "backup_file": backup_path.name,
+        },
+    )
+
+
 def preview_contract_rollback(*, actor, change_id: int):
     source, descriptor = _rollback_source(actor=actor, change_id=change_id)
     current = read_contract_value(descriptor)

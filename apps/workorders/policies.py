@@ -7,7 +7,11 @@ from .models import WorkOrder, WorkOrderStatus
 ROLE_CUSTOMER = "customer"
 ROLE_TECHNICIAN = "technician"
 ROLE_MANAGER = "manager"
-DEFAULT_BOARD_VIEW_ROLE = "default_board_viewer"
+LEGACY_DEFAULT_BOARD_VIEW_ROLE = "default_board_viewer"
+VIEWER_ROLE = "viewer"
+# Backward-compatible import name for callers that still render the legacy
+# source.  New phase logic must use VIEWER_ROLE and runtime_viewer_enabled.
+DEFAULT_BOARD_VIEW_ROLE = LEGACY_DEFAULT_BOARD_VIEW_ROLE
 DEFAULT_BOARD_VISIBILITY_GROUP = ROLE_CUSTOMER
 
 SCOPE_LABELS = {
@@ -86,6 +90,16 @@ def role_rules():
     return get_contract("role_rules")
 
 
+def runtime_viewer_enabled(rules_payload=None):
+    """The single migration phase predicate: valid runtime viewer presence."""
+    rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    return VIEWER_ROLE in rules and isinstance(rules.get(VIEWER_ROLE), dict)
+
+
+def legacy_default_viewer_enabled(rules_payload=None):
+    return not runtime_viewer_enabled(rules_payload=rules_payload)
+
+
 def workflow_rules():
     return get_contract("workflow_rules")
 
@@ -121,6 +135,10 @@ def default_board_access_applies(user, rules_payload=None):
     if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
         return False
     rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
+    # The runtime contract is the phase marker for the migration.  A prepared
+    # viewer group is deliberately inert while this role is absent.
+    if runtime_viewer_enabled(rules_payload=rules):
+        return False
     explicit_role_names = set(rules) & user_roles(user)
     return not explicit_role_names
 

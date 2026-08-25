@@ -184,6 +184,21 @@ Python-каталог инструментов с JSON, а не default-файл
 
 После изменения memory sources/profiles/routing/ingestion profiles может потребоваться reindex. После изменения role/workflow rules нужно проверить доступы на тестовом пользователе.
 
+## Явная роль viewer: операция миграции
+
+Переход с `default_board_viewer` выполняется только active superuser. Runtime-признак фазы — наличие `viewer` в `data/contracts/role_rules.json`; постоянный флаг или таблица миграции не используются.
+
+```bash
+python manage.py report_roleless_users --output data/access-migrations/roleless-users.json
+python manage.py apply_roleless_user_manifest --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+python manage.py cutover_explicit_viewer --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+python manage.py rollback_explicit_viewer --manifest data/access-migrations/approved.json --actor-id <id> --reason "..."
+```
+
+Manifest обязан содержать ровно один выбор (`viewer`, `customer`, другая существующая роль или `no_role`) для каждого текущего roleless пользователя и отдельный логический выбор ACL для каждой доски, открытой `customer`. Подготовка создаёт инертную группу и аудируемые назначения/ACL под общей блокировкой; до cutover они не дают продуктового доступа. Любой дрейф пользователей, подразделений, технических флагов, групп, ACL или контракта завершает операцию отказом.
+
+Во всех трёх изменяющих командах нужно передавать одну и ту же формулировку `--reason`. Каждая команда атомарно обновляет тот же подписанный файл операции. Если процесс прервался, повторите ту же команду с тем же файлом, суперпользователем и причиной: сервис сверит рабочее состояние с журналами и либо безопасно завершит этап, либо остановится при постороннем изменении. Не редактируйте файл после выполнения команды подготовки.
+
 ## Users And AD Link
 
 Пользователи портала создаются и отключаются локально. AD link хранит metadata:

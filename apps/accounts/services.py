@@ -27,6 +27,7 @@ from .models import AccessAssignmentAudit, ExternalIdentity
 from .selectors import (
     access_assignment_consequences,
     capability_catalog,
+    contract_role_names,
     contract_role_configs,
     role_risk_markers,
     selected_role_names_for_user,
@@ -1912,3 +1913,85 @@ def _require_superuser(actor):
         is_superuser=True,
     ).exists():
         raise PermissionDenied("Требуются права суперпользователя.")
+
+
+def apply_viewer_migration_role_locked(
+    *, actor, target_user, role_name, operation_id, expected_before,
+    expected_after, reason, remove=False,
+):
+    """Trusted migration-only role adapter; caller owns lock/transaction.
+
+    It is intentionally separate from the normal role writer so prepare can
+    stage inert viewer memberships and cutover can apply only signed existing
+    role choices.  Replays resolve the deterministic audit instead of writing
+    a second membership.
+    """
+    actor = get_user_model().objects.filter(
+        pk=getattr(actor, "pk", None), is_active=True, is_superuser=True
+    ).first()
+    if actor is None:
+        raise PermissionDenied("Требуется активный суперпользователь.")
+    target = get_user_model().objects.select_for_update().filter(pk=target_user.pk).first()
+    if target is None or not target.is_active:
+        raise ValidationError("Целевой пользователь отсутствует или отключён.")
+    migration_roles = set(contract_role_names()) | {"viewer"}
+    before = sorted(set(target.groups.values_list("name", flat=True)) & migration_roles)
+    fingerprint = hashlib.sha256(
+        f"viewer-migration:{operation_id}:user:{target.pk}:{role_name}:{'remove' if remove else 'add'}".encode()
+    ).hexdigest()
+    existing = AccessAssignmentAudit.objects.filter(preview_fingerprint=fingerprint).first()
+    if existing:
+        expected_marker = "explicit_viewer_migration_rollback" if remove else "explicit_viewer_migration"
+        expected_flags = {"is_staff": bool(target.is_staff), "is_superuser": bool(target.is_superuser)}
+        if (
+            existing.target_user_id != target.pk
+            or existing.actor_id != actor.pk
+            or existing.source != AccessAssignmentAudit.Source.SETTINGS_CENTER
+            or existing.reason != reason
+            or existing.roles_before != sorted(expected_before)
+            or existing.roles_after != sorted(expected_after)
+            or existing.roles_added != sorted(set(expected_after) - set(expected_before))
+            or existing.roles_removed != sorted(set(expected_before) - set(expected_after))
+            or existing.flags_before != expected_flags
+            or existing.flags_after != expected_flags
+            or existing.flags_changed != []
+            or existing.risk_markers != [expected_marker]
+            or not existing.risk_confirmed
+            or existing.is_break_glass
+            or existing.correlation_id != uuid.UUID(fingerprint[:32])
+        ):
+            raise ValidationError("Детерминированный migration audit не совпадает с повтором.")
+        if before != sorted(expected_after):
+            raise ValidationError("Аудит операции найден, но текущие роли пользователя ему не соответствуют.")
+        return existing
+    if before != sorted(expected_before):
+        raise ValidationError("Роли пользователя изменились до операции миграции.")
+    group = Group.objects.filter(name=role_name).first()
+    if group is None:
+        raise ValidationError(f"Группа роли '{role_name}' не создана.")
+    if remove:
+        target.groups.remove(group)
+    else:
+        target.groups.add(group)
+    after = sorted(set(target.groups.values_list("name", flat=True)) & migration_roles)
+    if after != sorted(expected_after):
+        raise ValidationError("Результат migration membership не совпал с планом.")
+    flags = {"is_staff": bool(target.is_staff), "is_superuser": bool(target.is_superuser)}
+    marker = "explicit_viewer_migration_rollback" if remove else "explicit_viewer_migration"
+    return AccessAssignmentAudit.objects.create(
+        actor=actor,
+        target_user=target,
+        roles_before=sorted(expected_before),
+        roles_after=sorted(expected_after),
+        roles_added=sorted(set(expected_after) - set(expected_before)),
+        roles_removed=sorted(set(expected_before) - set(expected_after)),
+        flags_before=flags,
+        flags_after=flags,
+        flags_changed=[],
+        risk_markers=[marker],
+        risk_confirmed=True,
+        source=AccessAssignmentAudit.Source.SETTINGS_CENTER,
+        reason=reason,
+        correlation_id=uuid.UUID(fingerprint[:32]),
+        preview_fingerprint=fingerprint,
+    )

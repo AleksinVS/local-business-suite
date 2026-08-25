@@ -405,7 +405,6 @@ docs: # Документация проекта
     active: # Активные планы крупных направлений
       access-administration-ux-unification.md: file # Активный план единого UX администрирования доступа и канонических путей изменения
       data-anonymization-privacy-pipeline.md: file # Черновой план системы обезличивания данных и управляемых настроек
-      declarative-access-policy-model.md: file # Активный план упрощения управления ролями по ADR-0043
       design-patterns-hardening-2026-06-01.md: file # Активный план внедрения архитектурных паттернов
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
       kanban-department-filter-ai-sidebar.md: file # Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата
@@ -624,10 +623,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.settings-authority-hardening.md: file # Приёмка полномочий и секретов центра настроек
       TASK_ACCEPTANCE.waiting-list-capability-model.md: file # Приёмка модели прав листа ожидания
       TASK_ACCEPTANCE.workspace-ux-critique-cycle.md: file # Техническая приёмка пакетов 06–08 единого окна доступа
-    declarative-access-policy-model: # Workflow: упрощённое управление ролями для SMB
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Порядок пакетов, ограничения и распределение моделей
-      BLOCK_BRIEF.md: file # Цель, границы, gate и приёмка lean-модели ролей
     design-patterns-hardening-2026-06-01: # Workflow: внедрение архитектурных паттернов 2026-06-01
       task-packets: file
       ARCHITECT_PLAN.json: file # Исполнительный план task packets для внедрения архитектурных паттернов
@@ -720,6 +715,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       context-aware-sidebar-ai-chat: file
       copilotkit-ag-ui-integration: file
       copilotkit-ai-ui-chat-development: file
+      declarative-access-policy-model: file
       default-board-view-and-sso-diagnostics: file
       iis-sso-csrf-race: file
       interface-russification: file

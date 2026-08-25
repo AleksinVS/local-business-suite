@@ -2113,7 +2113,11 @@ class SettingsContractRecoveryTests(TransactionTestCase):
                 env=env,
                 text=True,
                 capture_output=True,
-                timeout=90,
+                # A full isolated schema is intentionally built here so both
+                # writer processes use the same real database. On loaded CI
+                # and development hosts this can exceed 90 seconds even while
+                # migrations are actively progressing.
+                timeout=180,
             )
             self.assertEqual(migrate.returncode, 0, migrate.stderr)
             create_actor = subprocess.run(

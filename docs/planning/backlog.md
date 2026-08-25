@@ -35,26 +35,6 @@ knowledge-файлов и удаления устаревшего индекса
 - ADR: `docs/adr/ADR-0040-unified-access-administration-control-plane.md`;
 - workflow: `workflow/active/access-administration-ux-unification/`.
 
-### Упрощение управления ролями для SMB
-
-ADR-0043 принят 2026-08-25. Целевая модель сохраняет текущий RBAC и доменные
-проверки, но убирает преждевременную метаполитику: две скрытые allowlist
-заменяются одним `manage_roles`, роли делятся только на ordinary/protected с
-сохранением всех текущих critical-границ, `$capabilities` замораживается для
-runtime writer, а скрытый `default_board_viewer` заменяется явной read-only
-ролью `viewer` или другим решением владельца по каждому пользователю.
-
-Работа выполняется в `feature/lean-access-control` пакетами с golden matrix,
-миграционным отчётом пользователей без роли, service/HTTP/e2e-проверками и
-независимым Sol high review до push и слияния.
-
-Контекст:
-
-- ADR: `docs/adr/ADR-0043-declarative-access-policy-catalog.md`;
-- архитектура: `docs/architecture/DECLARATIVE_ACCESS_POLICY_ARCHITECTURE.md`;
-- план: `docs/planning/active/declarative-access-policy-model.md`;
-- workflow: `workflow/active/declarative-access-policy-model/`.
-
 ### Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат
 
 Пакеты 01-04 и уточнения 06-08, 10 выполнены: медизделия стали листьями дерева, добавлены

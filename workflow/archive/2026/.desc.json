@@ -33,5 +33,6 @@
   "test-workflow-simplification-2026-08-06": "Архивный workflow-блок упрощения и ускорения тестового workflow (implemented)",
   "waiting-list-inline-editing": "Архивный workflow-блок встроенного редактирования и атомарного аудита листа ожидания",
   "waiting-list-cards-and-access-flags": "Архивный workflow-блок карточек пациента и технических флагов доступа",
-  "default-board-view-and-sso-diagnostics": "Архивный workflow-блок базового просмотра канбана и диагностики SSO"
+  "default-board-view-and-sso-diagnostics": "Архивный workflow-блок базового просмотра канбана и диагностики SSO",
+  "declarative-access-policy-model": "Архивный workflow-блок упрощённого управления ролями для малого и среднего бизнеса (implemented, 2026-08-25)"
 }

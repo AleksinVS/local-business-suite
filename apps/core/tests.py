@@ -1195,19 +1195,29 @@ class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
         self.assertIn("AreAccessRulesProtected", self.script)
         self.assertIn("-ArgumentList $acl.Owner", self.script)
         self.assertIn("$TrustedOwnerSids -notcontains $ownerSid", self.script)
-        self.assertIn("$AllowedWriteSids -notcontains $sid", self.script)
+        self.assertGreaterEqual(
+            self.script.count("$AllowedWriteSids -notcontains $sid"),
+            2,
+        )
         self.assertIn("function Assert-TrustedAnchorParentAcl", self.script)
         self.assertIn("DeleteSubdirectoriesAndFiles", self.script)
+        self.assertIn("ChangePermissions", self.script)
+        self.assertIn("TakeOwnership", self.script)
         self.assertIn("$trustedParentSids -notcontains $sid", self.script)
         self.assertIn("function Assert-TrustedBackupChildAcl", self.script)
         self.assertIn("Assert-TrustedBackupChildAcl $BackupDir", self.script)
         self.assertIn("Assert-TrustedBackupChildAcl $LogDir", self.script)
         self.assertIn("Assert-TrustedBackupChildAcl $SecretDir", self.script)
+        self.assertIn(
+            "Assert-TrustedBackupChildAcl $SecretFile -RequireBackupRead",
+            self.script,
+        )
         for sid in ("S-1-5-18", "S-1-5-32-544"):
             with self.subTest(sid=sid):
                 self.assertIn(sid, self.script)
 
     def test_rotation_deletes_only_owned_names_and_preserves_unrelated_files(self):
+        self.assertIn("$RetentionDays -lt 1 -or $RetentionDays -gt 3650", self.script)
         self.assertIn("$OwnedBackupNamePattern", self.script)
         self.assertIn("$_.Name -match $OwnedBackupNamePattern", self.script)
         self.assertIn("Remove-Item -LiteralPath $_.FullName", self.script)

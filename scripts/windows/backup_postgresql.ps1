@@ -21,6 +21,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($RetentionDays -lt 1 -or $RetentionDays -gt 3650) {
+    throw "RetentionDays должен быть целым числом от 1 до 3650."
+}
 $OwnedBackupNamePattern = '^(local_business_suite-\d{8}-\d{6}\.dump|contracts-\d{8}-\d{6}\.zip)$'
 function Get-NormalizedPath([string]$Path) {
     $full = [System.IO.Path]::GetFullPath($Path)
@@ -95,8 +98,8 @@ function Assert-PrivateBackupAcl([string]$Path) {
             throw "Не удалось проверить SID ACL backup: $($rule.IdentityReference.Value)"
         }
         $ruleCanWrite = (([int64]$rule.FileSystemRights -band $writeMask) -ne 0)
-        if ($ruleCanWrite -and $AllowedWriteSids -notcontains $sid) {
-            throw "Недоверенный SID $sid имеет write/delete в BackupStateRoot."
+        if ($AllowedWriteSids -notcontains $sid) {
+            throw "Недоверенный SID $sid имеет Allow ACE в BackupStateRoot."
         }
         if (
             $sid -eq $currentIdentity.User.Value -and
@@ -130,7 +133,12 @@ function Assert-TrustedAnchorParentAcl([string]$Path) {
     if ($trustedParentSids -notcontains $ownerSid) {
         throw "Недоверенный владелец родителя BackupStateRoot: $ownerSid"
     }
-    $deleteChild = [int64][System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles
+    $parentControlMask = [int64]0
+    @(
+        [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles,
+        [System.Security.AccessControl.FileSystemRights]::ChangePermissions,
+        [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+    ) | ForEach-Object { $parentControlMask = $parentControlMask -bor [int64]$_ }
     foreach ($rule in $acl.Access) {
         if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
             continue
@@ -144,15 +152,18 @@ function Assert-TrustedAnchorParentAcl([string]$Path) {
             [System.Security.Principal.SecurityIdentifier]
         ).Value
         if (
-            (([int64]$rule.FileSystemRights -band $deleteChild) -ne 0) -and
+            (([int64]$rule.FileSystemRights -band $parentControlMask) -ne 0) -and
             $trustedParentSids -notcontains $sid
         ) {
-            throw "Недоверенный SID $sid может удалить/заменить BackupStateRoot через родителя."
+            throw "Недоверенный SID $sid может изменить ACL/owner или заменить BackupStateRoot через родителя."
         }
     }
 }
 
-function Assert-TrustedBackupChildAcl([string]$Path) {
+function Assert-TrustedBackupChildAcl(
+    [string]$Path,
+    [switch]$RequireBackupRead
+) {
     $acl = Get-Acl -LiteralPath $Path
     try {
         $ownerAccount = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $acl.Owner
@@ -177,6 +188,7 @@ function Assert-TrustedBackupChildAcl([string]$Path) {
         [System.Security.AccessControl.FileSystemRights]::ChangePermissions,
         [System.Security.AccessControl.FileSystemRights]::TakeOwnership
     ) | ForEach-Object { $writeMask = $writeMask -bor [int64]$_ }
+    $backupIdentityCanRead = -not $RequireBackupRead
     foreach ($rule in $acl.Access) {
         if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
             continue
@@ -184,12 +196,19 @@ function Assert-TrustedBackupChildAcl([string]$Path) {
         $sid = $rule.IdentityReference.Translate(
             [System.Security.Principal.SecurityIdentifier]
         ).Value
-        if (
-            (([int64]$rule.FileSystemRights -band $writeMask) -ne 0) -and
-            $AllowedWriteSids -notcontains $sid
-        ) {
-            throw "Недоверенный SID $sid имеет write/delete в backup-каталоге $Path."
+        if ($AllowedWriteSids -notcontains $sid) {
+            throw "Недоверенный SID $sid имеет Allow ACE в backup-объекте $Path."
         }
+        if (
+            $sid -eq $currentIdentity.User.Value -and
+            (([int64]$rule.FileSystemRights -band
+                [int64][System.Security.AccessControl.FileSystemRights]::ReadData) -ne 0)
+        ) {
+            $backupIdentityCanRead = $true
+        }
+    }
+    if (-not $backupIdentityCanRead) {
+        throw "Backup identity не имеет read-доступа к секрету: $Path"
     }
 }
 
@@ -267,6 +286,8 @@ if (-not (Test-Path -LiteralPath $SecretFile -PathType Leaf)) {
     Write-Log "ОШИБКА: нет файла пароля в защищённом backup-каталоге"
     throw "Файл пароля backup не найден."
 }
+Assert-NoReparsePoint $SecretFile
+Assert-TrustedBackupChildAcl $SecretFile -RequireBackupRead
 
 $env:PGPASSWORD = (Get-Content -LiteralPath $SecretFile -Raw).Trim()
 try {

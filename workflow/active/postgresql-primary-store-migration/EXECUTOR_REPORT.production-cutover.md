@@ -34,7 +34,8 @@
 из `docs/deployment/POSTGRESQL_MIGRATION.md`. Обновлённый скрипт fail-closed
 разрешает write ACE только backup identity, Administrators и SYSTEM, проверяет
 trusted owner (`Administrators`/`SYSTEM`), principal/reparse points и не удаляет
-посторонние файлы. Это
+посторонние файлы. Конфиденциальные backup-объекты отклоняют также любые
+посторонние read ACE; файл пароля проверяется отдельно. Это
 обязательное внешнее действие deployment; commit сам не меняет Scheduled Task.
 
 ## Смоук-проверки после cutover (все пройдены)

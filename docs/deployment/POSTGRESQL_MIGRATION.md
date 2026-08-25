@@ -65,6 +65,13 @@ icacls $BackupRoot /inheritance:r /grant:r `
   "NT AUTHORITY\SYSTEM:(OI)(CI)(F)" `
   "${BackupIdentity}:(OI)(CI)(M)"
 icacls $BackupRoot /setowner "BUILTIN\Administrators" /T /C
+$SecretFile = "$BackupRoot\secrets\pg_backup_password.txt"
+New-Item -ItemType File -Path $SecretFile -Force | Out-Null
+icacls $SecretFile /inheritance:r /grant:r `
+  "BUILTIN\Administrators:(F)" `
+  "NT AUTHORITY\SYSTEM:(F)" `
+  "${BackupIdentity}:(R)"
+icacls $SecretFile /setowner "BUILTIN\Administrators"
 icacls "C:\inetpub\portal\data\contracts" /grant `
   "${BackupIdentity}:(OI)(CI)(RX)"
 ```
@@ -72,17 +79,20 @@ icacls "C:\inetpub\portal\data\contracts" /grant `
 Запишите только пароль пользователя PostgreSQL в
 `$BackupRoot\secrets\pg_backup_password.txt` и отдельно ограничьте этот файл
 администраторами и backup identity. Не выдавайте `DefaultAppPool`, `IIS_IUSRS`,
-`Users`, `Authenticated Users` или `Everyone` право записи в `$BackupRoot`.
-Скрипт применяет fail-closed проверку: write/delete ACE разрешены только самой
-backup identity, `BUILTIN\Administrators` и `SYSTEM`; любая другая локальная или
-доменная группа останавливает backup до исправления ACL. Владельцем backup root
+`Users`, `Authenticated Users` или `Everyone` доступ к `$BackupRoot`.
+Скрипт применяет fail-closed проверку: любые Allow ACE на backup anchor,
+дочерних каталогах и файле секрета разрешены только самой backup identity,
+`BUILTIN\Administrators` и `SYSTEM`; любая другая локальная или доменная группа
+останавливает backup до исправления ACL. Владельцем backup root
 должен быть только `BUILTIN\Administrators` или `SYSTEM`: владелец может менять
 DACL даже без отдельной write ACE, поэтому application/backup identity как owner
 не допускаются.
 Якорем безопасности является весь `$BackupRoot`, а не вложенный каталог с
 дампами. Скрипт также проверяет владельца его непосредственного родителя и
 отклоняет любую недоверенную ACE с `DeleteSubdirectoriesAndFiles`, которая могла
-бы удалить или заменить защищённый якорь через parent ACL. Эффективные ACL и
+бы удалить или заменить защищённый якорь через parent ACL, а также
+`ChangePermissions`/`TakeOwnership`, позволяющие сначала переписать parent ACL.
+Эффективные ACL и
 owner каталогов `postgresql`, `logs` и `secrets` проверяются отдельно; это не
 позволяет сохранить небезопасную явную ACE в заранее существующем дочернем
 каталоге.

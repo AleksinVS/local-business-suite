@@ -417,6 +417,7 @@ class AccessWorkspaceTests(TestCase):
             "Память организации",
         } <= site_section_names)
         self.assertFalse(site_section_names & {"Заявки", "Доски", "Система"})
+        self.assertNotIn("Прочие права", site_section_names)
         actor_row = next(row for row in response.context["users"] if row["id"] == actor.pk)
         self.assertIn("Канбан-доска", actor_row["site_sections"])
         self.assertFalse(set(actor_row["site_sections"]) & {"Заявки", "Доски", "Система"})
@@ -3773,9 +3774,9 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
         actor.groups.add(manager)
         original = access_contracts._materialize_role_group
 
-        def collide(role_code, config):
+        def collide(role_code, config, **kwargs):
             Group.objects.create(name=role_code)
-            return original(role_code, config)
+            return original(role_code, config, **kwargs)
 
         with TemporaryDirectory() as tmpdir:
             override, runtime_path, _candidate = _write_role_catalog_sandbox(
@@ -3794,16 +3795,27 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
                             display_name="Гонка",
                             base_hash=normalized_hash(self.base),
                         )
-                    self.assertIn("race_group", load_json_file(runtime_path))
+                    self.assertNotIn("race_group", load_json_file(runtime_path))
                     group = Group.objects.get(name="race_group")
                     self.assertFalse(GroupProfile.objects.filter(group=group).exists())
+                    changes = list(SettingsChange.objects.order_by("pk"))
+                    self.assertEqual(
+                        [change.action for change in changes],
+                        [SettingsChange.Action.APPLY, SettingsChange.Action.ROLLBACK],
+                    )
+                    self.assertEqual(changes[1].rollback_of_id, changes[0].pk)
+                    self.assertEqual(
+                        changes[1].validation_result["operation"],
+                        "post_write_callback_compensation",
+                    )
                     with self.assertRaisesMessage(ValidationError, "технической или AD"):
                         access_contracts.save_role_creation(
                             actor=actor,
                             role_code="race_group",
                             display_name="Гонка",
-                            base_hash=normalized_hash(load_json_file(runtime_path)),
+                            base_hash=normalized_hash(self.base),
                         )
+                    self.assertNotIn("race_group", load_json_file(runtime_path))
                     self.assertFalse(GroupProfile.objects.filter(group=group).exists())
                 finally:
                     _reset_for_tests()
@@ -3851,6 +3863,7 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
                             display_name="Повтор",
                             base_hash=normalized_hash(self.base),
                         )
+                    self.assertNotIn("retry_role", load_json_file(runtime_path))
                     actor.is_active = False
                     actor.save(update_fields=["is_active"])
                     with self.assertRaises(PermissionDenied):
@@ -4029,6 +4042,172 @@ class ExplicitViewerMigrationReportTests(TestCase):
         self.assertIn("no_role", row["allowed_choices"])
         self.assertEqual(set(target.groups.values_list("name", flat=True)), before_groups)
         self.assertNotIn("viewer", get_contract("role_rules"))
+
+    def test_report_uses_exact_board_deltas_for_each_role_choice_and_superuser(self):
+        from .access_migration_services import report_roleless_users
+
+        target = User.objects.create_user(username="viewer-delta-target")
+        root = User.objects.create_superuser(username="viewer-delta-root")
+        customer, _ = Group.objects.get_or_create(name="customer")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        customer_board = Board.objects.create(title="Клиентская доска", slug="viewer-delta-customer")
+        customer_board.allowed_groups.add(customer)
+        technician_board = Board.objects.create(title="Доска техников", slug="viewer-delta-technician")
+        technician_board.allowed_groups.add(technician)
+        shared_board = Board.objects.create(title="Общая доска", slug="viewer-delta-shared")
+        shared_board.allowed_groups.add(customer, technician)
+        private_board = Board.objects.create(title="Закрытая доска", slug="viewer-delta-private")
+        customer_board_ids = sorted(
+            Board.objects.filter(allowed_groups=customer).values_list("pk", flat=True)
+        )
+        technician_board_ids = sorted(
+            Board.objects.filter(allowed_groups=technician).values_list("pk", flat=True)
+        )
+
+        report = report_roleless_users(output_path=False)
+        row = next(item for item in report["users"] if item["id"] == target.pk)
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_before"], customer_board_ids)
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_after"], [])
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_removed"], customer_board_ids)
+        self.assertEqual(row["deltas"]["customer"]["board_ids_added"], [])
+        self.assertEqual(row["deltas"]["customer"]["board_ids_removed"], [])
+        self.assertEqual(row["deltas"]["technician"]["board_ids_after"], technician_board_ids)
+        self.assertEqual(
+            row["deltas"]["technician"]["board_ids_added"],
+            sorted(set(technician_board_ids) - set(customer_board_ids)),
+        )
+        self.assertEqual(
+            row["deltas"]["technician"]["board_ids_removed"],
+            sorted(set(customer_board_ids) - set(technician_board_ids)),
+        )
+        self.assertIsNone(row["deltas"]["viewer"]["board_ids_after"])
+        self.assertTrue(row["deltas"]["viewer"]["requires_board_choices"])
+
+        root_row = next(item for item in report["users"] if item["id"] == root.pk)
+        all_boards = sorted(Board.objects.values_list("pk", flat=True))
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_before"], all_boards)
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_after"], all_boards)
+        self.assertEqual(root_row["deltas"]["no_role"]["board_ids_removed"], [])
+
+    def test_prepare_signs_viewer_delta_after_explicit_board_choices(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import (
+            _verify_envelope,
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+        )
+
+        actor = User.objects.create_superuser(username="viewer-delta-owner")
+        target = User.objects.create_user(username="viewer-delta-viewer")
+        customer, _ = Group.objects.get_or_create(name="customer")
+        board = Board.objects.create(title="Доска выбора viewer", slug="viewer-delta-choice")
+        board.allowed_groups.add(customer)
+        excluded_board = Board.objects.create(
+            title="Исключённая доска viewer",
+            slug="viewer-delta-excluded",
+        )
+        excluded_board.allowed_groups.add(customer)
+        customer_board_ids = sorted(
+            Board.objects.filter(allowed_groups=customer).values_list("pk", flat=True)
+        )
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                try:
+                    report = report_roleless_users(output_path=False)
+                    for row in report["users"]:
+                        row["choice"] = "viewer" if row["id"] == target.pk else "no_role"
+                    for row in report["customer_open_boards"]:
+                        row["add_viewer"] = row["id"] == board.pk
+                    prepared = prepare_explicit_viewer_migration(
+                        actor=actor,
+                        manifest=report,
+                        reason="Проверка точного влияния viewer",
+                        output_path=Path(tmpdir) / "access-migrations" / "delta.operation.json",
+                    )
+                    delta = next(
+                        item for item in prepared["final_access_deltas"]
+                        if item["user_id"] == target.pk
+                    )
+                    self.assertEqual(delta["board_ids_before"], customer_board_ids)
+                    self.assertEqual(delta["board_ids_after"], [board.pk])
+                    self.assertEqual(delta["board_ids_added"], [])
+                    self.assertEqual(
+                        delta["board_ids_removed"],
+                        sorted(set(customer_board_ids) - {board.pk}),
+                    )
+                    self.assertFalse(delta["requires_board_choices"])
+                    self.assertEqual(
+                        _verify_envelope(prepared["envelope"])["final_access_deltas"],
+                        prepared["final_access_deltas"],
+                    )
+                finally:
+                    _reset_for_tests()
+
+    def test_prepare_rejects_non_customer_board_acl_drift(self):
+        from apps.core.contract_store import _reset_for_tests
+        from .access_migration_services import (
+            prepare_explicit_viewer_migration,
+            report_roleless_users,
+        )
+
+        actor = User.objects.create_superuser(username="viewer-drift-owner")
+        User.objects.create_user(username="viewer-drift-target")
+        technician, _ = Group.objects.get_or_create(name="technician")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        board = Board.objects.create(
+            title="Доска с изменяемым ACL",
+            slug="viewer-delta-drift",
+        )
+        board.allowed_groups.add(technician)
+        with TemporaryDirectory() as tmpdir:
+            runtime_path = Path(tmpdir) / "role_rules.json"
+            runtime_path.write_text(
+                json.dumps(
+                    load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE),
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DATA_DIR=Path(tmpdir),
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+            ):
+                _reset_for_tests()
+                try:
+                    report = report_roleless_users(output_path=False)
+                    for row in report["users"]:
+                        row["choice"] = "no_role"
+                    for row in report["customer_open_boards"]:
+                        row["add_viewer"] = False
+                    board.allowed_groups.add(manager)
+
+                    with self.assertRaisesMessage(
+                        ValidationError,
+                        "ACL досок изменились",
+                    ):
+                        prepare_explicit_viewer_migration(
+                            actor=actor,
+                            manifest=report,
+                            reason="Проверка дрейфа полного набора досок",
+                            output_path=(
+                                Path(tmpdir)
+                                / "access-migrations"
+                                / "drift.operation.json"
+                            ),
+                        )
+                finally:
+                    _reset_for_tests()
 
     def test_signed_envelope_tamper_and_private_path_are_rejected(self):
         from django.core.exceptions import ValidationError

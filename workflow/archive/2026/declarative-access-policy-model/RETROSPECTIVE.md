@@ -10,6 +10,9 @@
   audit and server-side authorization.
 - Independent Luna criticism found UI integration and modal-accessibility gaps;
   primary visual review found stacking and alignment issues missed by tests.
+- Independent exact-SHA review found two integration guarantees that unit-level
+  acceptance had not frozen: exact migration impact and atomic role activation
+  across the file/DB boundary. Both now have explicit regression tests.
 - The explicit viewer migration separates safe code rollout from owner decisions
   about real users and boards.
 
@@ -22,6 +25,8 @@
   without introducing a revoke race.
 - The final full suite exposed that a 90-second isolated migration budget was too
   small on a loaded development host; the production behavior itself was sound.
+- A prepared migration being inert is useful: it lets the signed, exact access
+  delta be reviewed before the cutover changes real users or Board ACLs.
 
 ## Follow-up boundaries
 

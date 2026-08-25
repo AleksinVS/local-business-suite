@@ -27,6 +27,7 @@ from apps.core.contract_store import get_contract, normalized_hash
 from apps.core.file_locks import access_control_write_lock_path, exclusive_file_lock
 from apps.core.json_utils import atomic_write_json, load_json_file
 from apps.workorders.models import Board, BoardAccessAudit
+from apps.workorders.selectors import visible_boards_queryset
 from apps.workorders.services import apply_viewer_migration_board_acl_locked
 from apps.accounts.services import apply_viewer_migration_role_locked
 
@@ -145,6 +146,7 @@ def _operation_envelope(*, report, actor, reason, user_choices, board_choices, o
         "reason": reason,
         "user_choices": user_choices,
         "board_choices": board_choices,
+        "final_access_deltas": copy.deepcopy(report.get("final_access_deltas")),
         "all_active_users": report.get("all_active_users"),
         "boards": report.get("boards"),
         "viewer_definition": report.get("viewer_definition"),
@@ -179,6 +181,23 @@ def _validate_envelope_binding(manifest, actor, reason):
     expected_boards = {str(row["id"]): row.get("add_viewer") for row in manifest.get("customer_open_boards", [])}
     if payload.get("user_choices") != expected_users or payload.get("board_choices") != expected_boards:
         raise ValidationError("Owner choices изменены после подписи operation envelope.")
+    if payload.get("final_access_deltas") != manifest.get("final_access_deltas"):
+        raise ValidationError("Итоговое влияние на доступ изменено после подписи.")
+    final_deltas = manifest.get("final_access_deltas")
+    expected_delta_ids = {row.get("id") for row in manifest.get("users", [])}
+    if (
+        not isinstance(final_deltas, list)
+        or {row.get("user_id") for row in final_deltas if isinstance(row, dict)} != expected_delta_ids
+        or any(
+            not isinstance(row, dict)
+            or row.get("board_ids_after") is None
+            or row.get("board_ids_added") is None
+            or row.get("board_ids_removed") is None
+            or row.get("requires_board_choices") is not False
+            for row in final_deltas
+        )
+    ):
+        raise ValidationError("Подписанный итог влияния на доступ неполон.")
     if payload.get("runtime_contract_hash") != manifest.get("runtime_contract_hash") or payload.get("git_contract_hash") != manifest.get("git_contract_hash"):
         raise ValidationError("Contract hashes изменены после подписи.")
     return payload
@@ -300,6 +319,93 @@ def _cohort_fingerprint(users, boards):
     return normalized_hash({"users": users, "boards": boards})
 
 
+def _visible_board_ids(user):
+    """Use the production selector for the pre-cutover authorization snapshot."""
+    return sorted(visible_boards_queryset(user).values_list("pk", flat=True))
+
+
+def _candidate_board_ids(*, user_state, choice, boards, viewer_board_ids=None):
+    all_board_ids = {row["id"] for row in boards}
+    if user_state.get("is_superuser"):
+        return sorted(all_board_ids)
+    if choice == "no_role":
+        return []
+    if choice == VIEWER_ROLE:
+        return None if viewer_board_ids is None else sorted(set(viewer_board_ids))
+    return sorted(row["id"] for row in boards if choice in row.get("groups", []))
+
+
+def _board_access_delta(*, before_ids, after_ids):
+    before = sorted(set(before_ids))
+    if after_ids is None:
+        return {
+            "board_ids_before": before,
+            "board_ids_after": None,
+            "board_ids_added": None,
+            "board_ids_removed": None,
+            "requires_board_choices": True,
+        }
+    after = sorted(set(after_ids))
+    return {
+        "board_ids_before": before,
+        "board_ids_after": after,
+        "board_ids_added": sorted(set(after) - set(before)),
+        "board_ids_removed": sorted(set(before) - set(after)),
+        "requires_board_choices": False,
+    }
+
+
+def _finalize_manifest_access_deltas(manifest):
+    """Derive exact signed before/after Board access from all owner choices.
+
+    ``prepare`` is inert, so the resulting signed artifact can be reviewed
+    before cutover.  No caller-provided delta is trusted.
+    """
+    result = copy.deepcopy(manifest)
+    states = {row["id"]: row for row in result.get("all_active_users", [])}
+    boards = result.get("boards", [])
+    viewer_board_ids = sorted(
+        row["id"]
+        for row in result.get("customer_open_boards", [])
+        if row.get("add_viewer") is True
+    )
+    board_choice_rows = result.get("customer_open_boards", [])
+    if any(type(row.get("add_viewer")) is not bool for row in board_choice_rows):
+        raise ValidationError("Каждая доска требует явного решения по роли viewer.")
+
+    final_rows = []
+    for row in result.get("users", []):
+        user_id = row.get("id")
+        state = states.get(user_id)
+        choice = row.get("choice")
+        if state is None or choice not in set(result.get("role_names", [])) | {VIEWER_ROLE, "no_role"}:
+            raise ValidationError(f"User {user_id} has no exactly-one allowed role choice.")
+        before_ids = (
+            sorted(board["id"] for board in boards)
+            if state.get("is_superuser")
+            else sorted(board["id"] for board in boards if CUSTOMER_ROLE in board.get("groups", []))
+        )
+        after_ids = _candidate_board_ids(
+            user_state=state,
+            choice=choice,
+            boards=boards,
+            viewer_board_ids=viewer_board_ids,
+        )
+        delta = {
+            "user_id": user_id,
+            "choice": choice,
+            **_board_access_delta(before_ids=before_ids, after_ids=after_ids),
+        }
+        row["selected_delta"] = copy.deepcopy(delta)
+        row.setdefault("deltas", {})[choice] = {
+            **row.get("deltas", {}).get(choice, {}),
+            **{key: value for key, value in delta.items() if key not in {"user_id", "choice"}},
+        }
+        final_rows.append(delta)
+    result["final_access_deltas"] = sorted(final_rows, key=lambda item: item["user_id"])
+    return result
+
+
 def _viewer_group_config(contract):
     config = contract.get(VIEWER_ROLE)
     if not isinstance(config, dict):
@@ -344,25 +450,33 @@ def _report_locked():
         phase = "compatibility"
     users = _active_user_states(role_names)
     roleless = [row for row in users if not row["roles"]]
+    roleless_objects = {
+        user.pk: user
+        for user in get_user_model().objects.filter(pk__in=[row["id"] for row in roleless])
+    }
     boards = _board_states(role_names)
     customer_boards = [row for row in boards if CUSTOMER_ROLE in row["groups"]]
     options = sorted(role_names | {VIEWER_ROLE, "no_role"})
-    board_ids_by_group = {
-        role: [row["id"] for row in boards if role in row["groups"]]
-        for role in role_names | {VIEWER_ROLE}
-    }
     user_rows = []
     for row in roleless:
+        before_board_ids = _visible_board_ids(roleless_objects[row["id"]])
         deltas = {}
         for choice in options:
             after = [] if choice == "no_role" else [choice]
+            after_board_ids = _candidate_board_ids(
+                user_state=row,
+                choice=choice,
+                boards=boards,
+                viewer_board_ids=None,
+            )
             deltas[choice] = {
                 "roles_after": after,
                 "technical_flags_unchanged": True,
                 "role_change": {"before": [], "after": after},
-                "board_ids_after": [] if choice == "no_role" else board_ids_by_group.get(choice, []),
-                "board_ids_added": [] if choice == "no_role" else board_ids_by_group.get(choice, []),
-                "board_ids_removed": [],
+                **_board_access_delta(
+                    before_ids=before_board_ids,
+                    after_ids=after_board_ids,
+                ),
                 "viewer_candidate_board_ids": [row["id"] for row in customer_boards],
             }
         user_rows.append({
@@ -485,6 +599,15 @@ def _validate_manifest_against_current(manifest):
     current_users = _base_user_states_ignoring_staged_viewer(role_names)
     current_roleless = [row for row in current_users if not row["roles"]]
     current_boards = _base_board_states_ignoring_staged_viewer(role_names)
+    if (
+        manifest.get("all_active_users") != current_users
+        or manifest.get("boards") != current_boards
+        or manifest.get("cohort_fingerprint")
+        != _cohort_fingerprint(current_users, current_boards)
+    ):
+        raise ValidationError(
+            "Пользователи или ACL досок изменились после формирования отчёта."
+        )
     listed_users = manifest.get("users", [])
     listed_ids = {row.get("id") for row in listed_users if isinstance(row, dict)}
     listed_boards = manifest.get("customer_open_boards", [])
@@ -536,6 +659,7 @@ def prepare_explicit_viewer_migration(*, actor, manifest, reason="", output_path
             _fresh_superuser(actor)
             _validate_prepared_state(manifest)
         return manifest
+    manifest = _finalize_manifest_access_deltas(manifest)
     user_choice_rows = manifest.get("users", [])
     board_choice_rows = manifest.get("customer_open_boards", [])
     user_choices = {str(row["id"]): row.get("choice") for row in user_choice_rows}

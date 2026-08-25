@@ -134,6 +134,8 @@ def default_board_access_applies(user, rules_payload=None):
 
     if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
         return False
+    if getattr(user, "is_superuser", False):
+        return False
     rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
     # The runtime contract is the phase marker for the migration.  A prepared
     # viewer group is deliberately inert while this role is absent.

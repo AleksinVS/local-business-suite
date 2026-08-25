@@ -13,6 +13,7 @@ from apps.workorders.policies import (
 
 
 RISK_LABELS = {"elevated": "повышенный риск", "critical": "критический риск"}
+ROLE_METADATA_FIELDS = {"display_name", "description", "protected"}
 
 
 def contract_role_configs() -> OrderedDict[str, dict]:
@@ -83,7 +84,7 @@ def effective_capabilities_for_roles(role_names) -> dict[str, list[dict]]:
         if not config:
             continue
         for capability, value in config.items():
-            if capability in {"display_name", "description"} or not _is_effective_value(value):
+            if capability in ROLE_METADATA_FIELDS or not _is_effective_value(value):
                 continue
             effective.setdefault(capability, []).append({"role": role_name, "value": value})
     return effective
@@ -138,7 +139,14 @@ def effective_access_for_user(user) -> dict:
         pass
     role_names = [group.name for group in role_groups]
     is_active = bool(getattr(user, "is_active", False))
-    capability_sources = effective_capabilities_for_roles(role_names) if is_active else {}
+    # Enforcement short-circuits to the superuser reserve.  Do not mix the
+    # legacy roleless fallback into that explanation: assigned roles remain
+    # visible as facts below, while effective grants have one truthful source.
+    capability_sources = (
+        effective_capabilities_for_roles(role_names)
+        if is_active and not user.is_superuser
+        else {}
+    )
     if is_active and user.is_superuser:
         for key, metadata in catalog.items():
             capability_type = (metadata or {}).get("type")

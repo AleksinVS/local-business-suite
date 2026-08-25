@@ -34,6 +34,29 @@ SQLite schema was actively migrating. The same scenario reproduced twice; its
 test-only limit was raised to 180 seconds. The focused two-process writer test
 then passed in 76.54 seconds, and the complete full run passed.
 
+The first independent exact-SHA review then found two migration-safety gaps:
+the viewer report did not calculate actual Board additions/removals, and a
+same-name Group race could leave a newly written role contract active after
+materialization failed. The corrections now produce an exact signed access
+delta after all owner choices, and compensate the exact role-contract write
+with an audited rollback before propagating a materialization failure. Explain
+projections and stale planning links identified in the same review were also
+corrected. Targeted regression and final full-suite results for the corrected
+SHA are recorded in the final acceptance report.
+
+Corrected-state verification:
+
+- Settings Center fast suite: 134 passed, 62 subtests passed, 1 slow test
+  deselected.
+- Accounts and workorders fast suite: 184 passed, 20 subtests passed, 5 slow
+  tests deselected.
+- Final corrected `make verify-full`: 901 passed and 172 subtests passed in
+  467.89 s.
+- Post-review focused regression: 5 passed (superuser explain, exact role-choice
+  and viewer Board deltas, full Board-ACL drift rejection, role-creation race
+  compensation).
+- Architecture contracts and JSON workflow plan: valid.
+
 ## Runtime boundary
 
 The Git default contains the frozen least-privilege `viewer` role. The local
@@ -46,4 +69,6 @@ an operator action requiring an owner-approved complete private manifest.
 ADR-0043, policy/architecture documentation, access and Settings Center guides,
 deployment instructions, README, planning, workflow reports, and test policy
 references were checked and updated in the packages that changed them. AGENTS.md
-does not require a change. Structure is regenerated after archiving this block.
+does not require a change. Structure was regenerated after archiving this block.
+The correction added no new structural node, so another structure regeneration
+was not required.

@@ -65,27 +65,27 @@
     "docs/deployment/SETTINGS_CENTER_DEPLOYMENT.md"
   ],
   "role_definition_authority": {
-    "source": "$administration.role_definition_editor_roles",
-    "legacy_compatibility": "Отсутствующее поле временно означает роль admin; malformed или неизвестное значение закрывает доступ.",
+    "status": "superseded_by_ADR-0043",
+    "source": "manage_roles",
+    "legacy_compatibility": "Блок $administration удалён из текущего контракта и не используется как источник полномочий.",
     "product_editors": [
       "active superuser",
-      "active member of a configured role_definition_editor_roles role"
+      "active actor with effective manage_roles=true for ordinary roles"
     ],
     "not_product_authority": [
-      "is_staff without an editor role",
-      "manage_roles without an editor role"
+      "is_staff without manage_roles",
+      "technical or AD group membership without manage_roles"
     ],
     "delegated_editor_limits": [
-      "Не может менять определение любой роли, которой сам обладает.",
-      "Для чужой роли может менять normal и elevated поля с действующим preview/confirmation protocol.",
-      "Critical capability разрешено только монотонно сужать; расширение и смешанное изменение доступны только superuser.",
-      "Создание новой роли и произвольная запись полного role_rules остаются резервным путем active superuser."
+      "Может менять и назначать только обычные роли.",
+      "Защищённые роли, их назначения и создание защищённой роли доступны только active superuser.",
+      "Создание обычной роли доступно manage_roles; self-assignment non-superuser запрещён."
     ],
     "write_protocol": [
-      "Delegated editor записывает только один role_code через ограниченный service, который сам строит полный candidate под файловой блокировкой.",
-      "Общий apply_contract_payload для role_rules доступен только active superuser.",
-      "После блокировки повторно читаются active actor, его эффективные роли, текущий role_rules, base hash, impact/member fingerprint и направление critical-изменения.",
-      "Изменение sibling role, $administration или $capabilities через single-role service запрещено."
+      "Одна команда Сохранить вызывает предметный сервис без пользовательского preview/confirmation шага.",
+      "Под общей блокировкой повторно читаются active actor, target и текущий role_rules; проверяются authority, protected boundary и base hash.",
+      "Каталог $capabilities и соседние роли нельзя изменить через single-role service.",
+      "Запись role_rules атомарна и оставляет SettingsChange audit."
     ]
   },
   "invariants": [

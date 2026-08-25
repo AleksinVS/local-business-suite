@@ -250,7 +250,29 @@ def _apply_contract_payload(
                 audit_context=audit_context,
             )
             if _post_write_callback is not None:
-                _post_write_callback(actor, copy.deepcopy(after), change)
+                try:
+                    _post_write_callback(actor, copy.deepcopy(after), change)
+                except Exception as callback_error:
+                    # The role contract must never become authoritative before
+                    # its same-name Django group has been safely materialized.
+                    # The callback runs under the same access lock, so an exact
+                    # audited compensation can restore the just-read version
+                    # without racing another contract writer.
+                    _write_validated_contract_change(
+                        actor=actor,
+                        descriptor=descriptor,
+                        action=SettingsChange.Action.ROLLBACK,
+                        before=after,
+                        after=before,
+                        rollback_of=change,
+                        contract_relpath=contract_relpath,
+                        audit_context={
+                            "operation": "post_write_callback_compensation",
+                            "compensated_change_id": change.pk,
+                            "callback_error_type": type(callback_error).__name__,
+                        },
+                    )
+                    raise
             return change
     except FileLockTimeoutError as exc:
         raise ValidationError(

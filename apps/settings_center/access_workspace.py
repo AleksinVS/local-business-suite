@@ -248,7 +248,7 @@ def _sections_by_role(role_configs, catalog):
     result = defaultdict(set)
     for role_code, config in role_configs.items():
         for code, value in config.items():
-            if code in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
+            if code in {"display_name", "description", "protected"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(code) or {}
             section = capability_group_code(code, metadata)
@@ -320,7 +320,7 @@ def _section_rows(users, role_configs, catalog):
     sections = defaultdict(set)
     for code, config in role_configs.items():
         for capability, value in config.items():
-            if capability in {"display_name", "description"} or value in (None, False, "", "none", [], {}):
+            if capability in {"display_name", "description", "protected"} or value in (None, False, "", "none", [], {}):
                 continue
             metadata = catalog.get(capability) or {}
             section = capability_group_code(capability, metadata)

@@ -3,7 +3,7 @@
   "title": "Lean role administration for SMB",
   "adr": "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
   "branch": "feature/lean-access-control",
-  "status": "active",
+  "status": "completed",
   "execution_order": [
     "00-baseline-and-golden-matrix",
     "01-freeze-capability-metadata",

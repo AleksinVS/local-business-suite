@@ -628,7 +628,11 @@ def save_role_creation(
         return json.dumps(candidate, ensure_ascii=False)
 
     def post_write_callback(_current_actor, written_rules, _change):
-        _materialize_role_group(role_code, written_rules[role_code])
+        _materialize_role_group(
+            role_code,
+            written_rules[role_code],
+            require_new=True,
+        )
 
     from apps.settings_center.contract_services import _apply_role_definition_payload
 
@@ -713,8 +717,12 @@ def _new_role_config(*, role_code, display_name, description, protected, catalog
 
 
 @transaction.atomic
-def _materialize_role_group(role_code, config):
+def _materialize_role_group(role_code, config, *, require_new=False):
     group, created = Group.objects.get_or_create(name=role_code)
+    if require_new and not created:
+        raise ValidationError(
+            "Группа с кодом роли занята технической или AD-группой (гонка создания)."
+        )
     if not created:
         profile = GroupProfile.objects.select_for_update().filter(group=group).first()
         expected_title = str(config.get("display_name", ""))

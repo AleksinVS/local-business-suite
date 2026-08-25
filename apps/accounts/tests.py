@@ -26,7 +26,12 @@ from .department_policy import (
     ORGANIZATION_ROOT_DEPARTMENT_NAME,
     UNASSIGNED_USER_DEPARTMENT_NAME,
 )
-from .selectors import effective_access_for_user, role_risk_markers, selected_role_names_for_user
+from .selectors import (
+    effective_access_for_user,
+    effective_capabilities_for_roles,
+    role_risk_markers,
+    selected_role_names_for_user,
+)
 from .services import (
     apply_external_identity_change,
     apply_role_assignment,
@@ -1117,6 +1122,18 @@ class AccessAssignmentServiceTests(TestCase):
         access = effective_access_for_user(superuser)
 
         self.assertTrue(access["capabilities"])
+        self.assertEqual(access["roles"], [])
+        self.assertNotIn(
+            "protected",
+            effective_capabilities_for_roles(["admin"]),
+        )
+        self.assertFalse(
+            any(
+                source.get("role") == "default_board_viewer"
+                for capability in access["capabilities"]
+                for source in capability["sources"]
+            )
+        )
         self.assertTrue(
             all(
                 any(source["type"] == "is_superuser" for source in capability["sources"])

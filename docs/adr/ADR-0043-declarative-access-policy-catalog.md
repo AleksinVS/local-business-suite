@@ -7,8 +7,8 @@
   декларативной платформе авторизации
 - Связанные решения: ADR-0002, ADR-0031, ADR-0034, ADR-0038, ADR-0039,
   ADR-0040, ADR-0042
-- План: `docs/planning/active/declarative-access-policy-model.md`
-- Workflow: `workflow/active/declarative-access-policy-model/`
+- Архивный план: `docs/planning/archive/2026/declarative-access-policy-model.md`
+- Архив workflow: `workflow/archive/2026/declarative-access-policy-model/`
 
 ## Контекст
 

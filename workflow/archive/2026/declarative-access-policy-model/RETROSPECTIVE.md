@@ -11,8 +11,9 @@
 - Independent Luna criticism found UI integration and modal-accessibility gaps;
   primary visual review found stacking and alignment issues missed by tests.
 - Independent exact-SHA review found two integration guarantees that unit-level
-  acceptance had not frozen: exact migration impact and atomic role activation
-  across the file/DB boundary. Both now have explicit regression tests.
+  acceptance had not frozen: exact migration impact and fail-closed role
+  activation across the file/DB boundary. Both now have explicit regression
+  tests, including the hard-stop interval before contract activation.
 - The explicit viewer migration separates safe code rollout from owner decisions
   about real users and boards.
 

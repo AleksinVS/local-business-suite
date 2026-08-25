@@ -26,8 +26,8 @@ second exact-SHA review is required before merge.
   after, added and removed sets only after every user and Board choice is
   explicit.
 - A concurrent same-name Group collision cannot leave an active role
-  definition: the exact contract write is reverted through an audited
-  compensation before the error is returned.
+  definition: an empty owned Group is reserved before contract activation;
+  unrelated groups fail before any contract write.
 
 ## Runtime migration decision
 
@@ -47,3 +47,14 @@ After the final full run, the Luna xhigh correction review reported PASS for
 S1/S2 and two S3 cleanup items. The superuser explain source and stale active
 workflow descriptions were corrected; their focused regression set passed
 5 tests and architecture validation passed again.
+
+The subsequent exact-SHA Sol review also passed S1/S2 and identified a residual
+hard-stop interval between contract activation and Group materialization. The
+final ordering now reserves the inert Group first; a dedicated test proves that
+a stop before contract write grants nothing and that an identical retry safely
+completes the role.
+
+After this ordering refinement, the complete role-administration class passed
+11 tests and 17 subtests; the combined Settings Center and accounts regression
+passed 185 tests and 72 subtests. The earlier feature-wide full run remains
+green at 901 tests and 172 subtests.

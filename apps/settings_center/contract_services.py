@@ -90,7 +90,7 @@ def _apply_role_definition_payload(
     operation_fingerprint: str | None = None,
     audit_context: dict | None = None,
     locked_precondition=None,
-    post_write_callback=None,
+    pre_write_callback=None,
 ):
     """Internal transport for the signed single-role writer.
 
@@ -114,7 +114,7 @@ def _apply_role_definition_payload(
         _raw_payload_factory=raw_payload_factory,
         _role_definition_preview_token=preview_token,
         _role_definition_risk_confirmed=bool(risk_confirmed),
-        _post_write_callback=post_write_callback,
+        _pre_write_callback=pre_write_callback,
     )
 
 
@@ -135,7 +135,7 @@ def _apply_contract_payload(
     _raw_payload_factory=None,
     _role_definition_preview_token=None,
     _role_definition_risk_confirmed=False,
-    _post_write_callback=None,
+    _pre_write_callback=None,
 ):
     descriptor = get_registry().get(setting_id)
     actor = _require_contract_editor(
@@ -238,6 +238,12 @@ def _apply_contract_payload(
             if normalized_hash(before) == normalized_hash(after):
                 raise ValidationError("В контракте нет изменений для применения.")
             _validate_cross_contract_candidate(setting_id=setting_id, candidate=after)
+            if _pre_write_callback is not None:
+                # Materialize authority-bearing DB prerequisites before the
+                # contract can classify them as a role.  A hard stop here can
+                # leave only an inert zero-member Group, never an active role
+                # backed by an unrelated technical/AD group.
+                _pre_write_callback(actor, copy.deepcopy(after))
             change = _write_validated_contract_change(
                 actor=actor,
                 descriptor=descriptor,
@@ -249,30 +255,6 @@ def _apply_contract_payload(
                 operation_fingerprint=operation_fingerprint,
                 audit_context=audit_context,
             )
-            if _post_write_callback is not None:
-                try:
-                    _post_write_callback(actor, copy.deepcopy(after), change)
-                except Exception as callback_error:
-                    # The role contract must never become authoritative before
-                    # its same-name Django group has been safely materialized.
-                    # The callback runs under the same access lock, so an exact
-                    # audited compensation can restore the just-read version
-                    # without racing another contract writer.
-                    _write_validated_contract_change(
-                        actor=actor,
-                        descriptor=descriptor,
-                        action=SettingsChange.Action.ROLLBACK,
-                        before=after,
-                        after=before,
-                        rollback_of=change,
-                        contract_relpath=contract_relpath,
-                        audit_context={
-                            "operation": "post_write_callback_compensation",
-                            "compensated_change_id": change.pk,
-                            "callback_error_type": type(callback_error).__name__,
-                        },
-                    )
-                    raise
             return change
     except FileLockTimeoutError as exc:
         raise ValidationError(

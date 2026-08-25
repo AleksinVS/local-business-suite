@@ -538,10 +538,12 @@ def save_role_definition_change(*, actor, role_code, proposed_config, base_hash)
 def save_role_creation(
     *, actor, role_code, display_name, description="", protected=False, base_hash
 ):
-    """Create one least-privilege role, then materialize its Django group.
+    """Create one least-privilege role after reserving its Django group.
 
-    The contract is authoritative and is written first.  If the DB step fails,
-    an identical retry or ``seed_roles`` safely completes materialization.
+    The empty predefined Group is materialized under the access lock before
+    the contract can make its name authoritative. A hard process stop can
+    therefore leave only an inert orphan Group, never an active role backed by
+    an unrelated technical or AD group.
     """
 
     rules = get_contract("role_rules")
@@ -577,7 +579,11 @@ def save_role_creation(
             )
             return None
         raise ValidationError("Роль с таким кодом уже существует.")
-    _assert_new_role_code_available(role_code=role_code, rules_snapshot=rules)
+    _assert_new_role_code_available(
+        role_code=role_code,
+        rules_snapshot=rules,
+        expected_config=after,
+    )
     _assert_role_definition_target_policy(
         actor=actor,
         role_code=role_code,
@@ -612,7 +618,9 @@ def save_role_creation(
         ):
             raise ValidationError("Права администратора изменились после предпросмотра.")
         _assert_new_role_code_available(
-            role_code=role_code, rules_snapshot=current_rules
+            role_code=role_code,
+            rules_snapshot=current_rules,
+            expected_config=after,
         )
         _assert_role_definition_target_policy(
             actor=current_actor,
@@ -627,11 +635,12 @@ def save_role_creation(
         candidate[role_code] = copy.deepcopy(after)
         return json.dumps(candidate, ensure_ascii=False)
 
-    def post_write_callback(_current_actor, written_rules, _change):
+    def pre_write_callback(_current_actor, written_rules):
         _materialize_role_group(
             role_code,
             written_rules[role_code],
             require_new=True,
+            allow_inert_reservation=True,
         )
 
     from apps.settings_center.contract_services import _apply_role_definition_payload
@@ -646,7 +655,7 @@ def save_role_creation(
         operation_fingerprint=hashlib.sha256(preview_token.encode("utf-8")).hexdigest(),
         raw_payload_factory=raw_payload_factory,
         locked_precondition=locked_precondition,
-        post_write_callback=post_write_callback,
+        pre_write_callback=pre_write_callback,
         audit_context={
             "source": "role_definition_creator",
             "role_code": role_code,
@@ -668,14 +677,32 @@ def _normalize_new_role_code(value):
     return code
 
 
-def _assert_new_role_code_available(*, role_code, rules_snapshot):
+def _is_inert_role_group_reservation(group, config):
+    profile = GroupProfile.objects.filter(group=group).first()
+    return bool(
+        profile is not None
+        and profile.is_predefined
+        and profile.title == str(config.get("display_name", ""))
+        and profile.description == str(config.get("description", ""))
+        and not group.user_set.exists()
+        and not group.permissions.exists()
+    )
+
+
+def _assert_new_role_code_available(
+    *, role_code, rules_snapshot, expected_config=None
+):
     if role_code in rules_snapshot:
         raise ValidationError("Роль с таким кодом уже существует.")
     from apps.memory.policies import MEMORY_REVIEW_GROUP_PROFILES
 
     if role_code in MEMORY_REVIEW_GROUP_PROFILES:
         raise ValidationError("Код роли совпадает с технической группой памяти.")
-    if Group.objects.filter(name=role_code).exists():
+    group = Group.objects.filter(name=role_code).first()
+    if group is not None and not (
+        isinstance(expected_config, dict)
+        and _is_inert_role_group_reservation(group, expected_config)
+    ):
         raise ValidationError(
             "Код роли совпадает с существующей технической или AD-группой."
         )
@@ -717,12 +744,23 @@ def _new_role_config(*, role_code, display_name, description, protected, catalog
 
 
 @transaction.atomic
-def _materialize_role_group(role_code, config, *, require_new=False):
+def _materialize_role_group(
+    role_code,
+    config,
+    *,
+    require_new=False,
+    allow_inert_reservation=False,
+):
     group, created = Group.objects.get_or_create(name=role_code)
     if require_new and not created:
-        raise ValidationError(
-            "Группа с кодом роли занята технической или AD-группой (гонка создания)."
-        )
+        group = Group.objects.select_for_update().get(pk=group.pk)
+        if not (
+            allow_inert_reservation
+            and _is_inert_role_group_reservation(group, config)
+        ):
+            raise ValidationError(
+                "Группа с кодом роли занята технической или AD-группой (гонка создания)."
+            )
     if not created:
         profile = GroupProfile.objects.select_for_update().filter(group=group).first()
         expected_title = str(config.get("display_name", ""))
@@ -855,7 +893,11 @@ def _validate_role_definition_transport_request(
         rules_snapshot=before,
     )
     if action == "create":
-        _assert_new_role_code_available(role_code=role_code, rules_snapshot=before)
+        _assert_new_role_code_available(
+            role_code=role_code,
+            rules_snapshot=before,
+            expected_config=current_after,
+        )
         if signed.get("member_fingerprint") != _role_member_fingerprint(role_code):
             raise ValidationError("Состав участников новой роли изменился.")
         return

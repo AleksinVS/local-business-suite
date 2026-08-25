@@ -3798,16 +3798,7 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
                     self.assertNotIn("race_group", load_json_file(runtime_path))
                     group = Group.objects.get(name="race_group")
                     self.assertFalse(GroupProfile.objects.filter(group=group).exists())
-                    changes = list(SettingsChange.objects.order_by("pk"))
-                    self.assertEqual(
-                        [change.action for change in changes],
-                        [SettingsChange.Action.APPLY, SettingsChange.Action.ROLLBACK],
-                    )
-                    self.assertEqual(changes[1].rollback_of_id, changes[0].pk)
-                    self.assertEqual(
-                        changes[1].validation_result["operation"],
-                        "post_write_callback_compensation",
-                    )
+                    self.assertFalse(SettingsChange.objects.exists())
                     with self.assertRaisesMessage(ValidationError, "технической или AD"):
                         access_contracts.save_role_creation(
                             actor=actor,
@@ -3817,6 +3808,53 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
                         )
                     self.assertNotIn("race_group", load_json_file(runtime_path))
                     self.assertFalse(GroupProfile.objects.filter(group=group).exists())
+                finally:
+                    _reset_for_tests()
+
+    def test_hard_stop_before_contract_write_is_inert_and_retryable(self):
+        from apps.accounts import access_contracts
+        from apps.core.contract_store import _reset_for_tests
+
+        actor = User.objects.create_user(username="role-hard-stop-creator")
+        manager, _ = Group.objects.get_or_create(name="manager")
+        actor.groups.add(manager)
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=self.base, git_payload=self.base
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    with patch(
+                        "apps.settings_center.contract_services._write_validated_contract_change",
+                        side_effect=SystemExit("simulated hard stop"),
+                    ), self.assertRaisesRegex(SystemExit, "simulated hard stop"):
+                        access_contracts.save_role_creation(
+                            actor=actor,
+                            role_code="reserved_group",
+                            display_name="Зарезервированная группа",
+                            base_hash=normalized_hash(self.base),
+                        )
+
+                    self.assertNotIn("reserved_group", load_json_file(runtime_path))
+                    group = Group.objects.get(name="reserved_group")
+                    self.assertTrue(group.profile.is_predefined)
+                    self.assertFalse(group.user_set.exists())
+                    self.assertFalse(group.permissions.exists())
+                    self.assertFalse(SettingsChange.objects.exists())
+
+                    change = access_contracts.save_role_creation(
+                        actor=actor,
+                        role_code="reserved_group",
+                        display_name="Зарезервированная группа",
+                        base_hash=normalized_hash(self.base),
+                    )
+                    self.assertEqual(change.status, SettingsChange.Status.APPLIED)
+                    self.assertIn("reserved_group", load_json_file(runtime_path))
+                    self.assertEqual(
+                        Group.objects.filter(name="reserved_group").count(),
+                        1,
+                    )
                 finally:
                     _reset_for_tests()
 

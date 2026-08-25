@@ -38,11 +38,12 @@ The first independent exact-SHA review then found two migration-safety gaps:
 the viewer report did not calculate actual Board additions/removals, and a
 same-name Group race could leave a newly written role contract active after
 materialization failed. The corrections now produce an exact signed access
-delta after all owner choices, and compensate the exact role-contract write
-with an audited rollback before propagating a materialization failure. Explain
-projections and stale planning links identified in the same review were also
-corrected. Targeted regression and final full-suite results for the corrected
-SHA are recorded in the final acceptance report.
+delta after all owner choices and reserve an inert, owned Group before contract
+activation. A hard stop before the file write therefore grants nothing, and an
+identical retry completes the role safely. Explain projections and stale
+planning links identified in the same review were also corrected. Targeted
+regression and final full-suite results for the corrected SHA are recorded in
+the final acceptance report.
 
 Corrected-state verification:
 
@@ -50,12 +51,14 @@ Corrected-state verification:
   deselected.
 - Accounts and workorders fast suite: 184 passed, 20 subtests passed, 5 slow
   tests deselected.
-- Final corrected `make verify-full`: 901 passed and 172 subtests passed in
-  467.89 s.
-- Post-review focused regression: 5 passed (superuser explain, exact role-choice
-  and viewer Board deltas, full Board-ACL drift rejection, role-creation race
-  compensation).
+- Complete feature-wide `make verify-full` before the final hard-stop ordering
+  refinement: 901 passed and 172 subtests passed in 467.89 s.
+- Post-review focused regression covers superuser explain, exact role-choice
+  and viewer Board deltas, full Board-ACL drift rejection, role-creation race,
+  and hard-stop-safe Group reservation/retry.
 - Architecture contracts and JSON workflow plan: valid.
+- Final Group-reservation class: 11 passed and 17 subtests passed; final
+  Settings Center plus accounts regression: 185 passed and 72 subtests passed.
 
 ## Runtime boundary
 

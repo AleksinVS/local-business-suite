@@ -2,9 +2,9 @@
 
 ## Назначение
 
-Runbook описывает исполнительный порядок миграции основного репозитория с текущих SQLite runtime-файлов на одну PostgreSQL database.
+Runbook описывает выполненный переход основного репозитория с SQLite runtime-файлов на одну PostgreSQL database и дальнейшие операции сопровождения. Production cutover выполнен 2026-08-18; фактический отчёт находится в `workflow/active/postgresql-primary-store-migration/EXECUTOR_REPORT.production-cutover.md`.
 
-Документ является целевым: часть команд `postgres_migration_*` должна быть реализована в workflow `workflow/active/postgresql-primary-store-migration/` до production cutover.
+Команды `postgres_migration_*` реализованы. Разделы dry-run/cutover ниже сохраняются как воспроизводимый порядок для нового хоста и аварийного восстановления.
 
 ## Принципы
 
@@ -45,6 +45,48 @@ git status --short > .local/backups/postgresql-migration/git-status-pre-postgres
 - список SQLite-файлов и размер;
 - commit hash основного репозитория;
 - значение `DJANGO_ENV`, database env и deployment profile.
+
+### Безопасная регулярная копия на Windows
+
+`scripts/windows/backup_postgresql.ps1` запрещено запускать от `SYSTEM` или от
+identity IIS Application Pool. Используйте отдельную локальную service account
+или gMSA, которой доступны только `pg_dump`, чтение `data/contracts`, чтение
+защищённого файла пароля и запись в отдельный backup-каталог.
+
+Backup root должен находиться вне `C:\inetpub\portal` и заранее получить закрытый
+ACL. Пример подготовки из PowerShell администратора (подставьте реальную gMSA):
+
+```powershell
+$BackupIdentity = "MSCHER\gmsa_portal_backup$"
+$BackupRoot = "C:\ProgramData\LocalBusinessSuite\backup"
+New-Item -ItemType Directory -Path "$BackupRoot\secrets" -Force | Out-Null
+icacls $BackupRoot /inheritance:r /grant:r `
+  "BUILTIN\Administrators:(OI)(CI)(F)" `
+  "NT AUTHORITY\SYSTEM:(OI)(CI)(F)" `
+  "${BackupIdentity}:(OI)(CI)(M)"
+icacls "C:\inetpub\portal\data\contracts" /grant `
+  "${BackupIdentity}:(OI)(CI)(RX)"
+```
+
+Запишите только пароль пользователя PostgreSQL в
+`$BackupRoot\secrets\pg_backup_password.txt` и отдельно ограничьте этот файл
+администраторами и backup identity. Не выдавайте `DefaultAppPool`, `IIS_IUSRS`,
+`Users`, `Authenticated Users` или `Everyone` право записи в `$BackupRoot`.
+
+Если старая задача была создана от `SYSTEM`, сначала отключите её:
+
+```powershell
+Disable-ScheduledTask -TaskPath "\Portal\" -TaskName "Portal PostgreSQL Backup"
+```
+
+Затем пересоздайте action с параметрами
+`-ExpectedBackupIdentity $BackupIdentity` и
+`-ApplicationIdentity 'IIS APPPOOL\DefaultAppPool'`, а principal — с
+`-UserId $BackupIdentity -LogonType ServiceAccount -RunLevel Limited`. Скрипт
+сам прекращает работу, если identity, ACL, расположение или любой компонент
+пути являются небезопасными. Ротация удаляет только файлы собственных форматов
+`local_business_suite-YYYYMMDD-HHMMSS.dump` и
+`contracts-YYYYMMDD-HHMMSS.zip`; посторонние файлы не затрагиваются.
 
 ## PostgreSQL target
 

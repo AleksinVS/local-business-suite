@@ -1171,6 +1171,40 @@ class WindowsIisFaviconUpdateScriptTests(SimpleTestCase):
 
 
 @pytest.mark.unit
+class WindowsPostgresqlBackupScriptContractTests(SimpleTestCase):
+    """Security contract for the privileged boundary around Windows backup."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        path = Path(settings.BASE_DIR) / "scripts" / "windows" / "backup_postgresql.ps1"
+        cls.script = path.read_text(encoding="utf-8-sig")
+
+    def test_backup_uses_dedicated_identity_and_non_runtime_root(self):
+        self.assertIn("[string]$ExpectedBackupIdentity", self.script)
+        self.assertIn("[string]$ApplicationIdentity", self.script)
+        self.assertIn('S-1-5-18', self.script)
+        self.assertIn('C:\\ProgramData\\LocalBusinessSuite\\backup', self.script)
+        self.assertIn("BackupStateRoot должен находиться вне PortalRoot", self.script)
+        self.assertNotIn('Join-Path $PortalRoot "data\\backups', self.script)
+
+    def test_backup_rejects_reparse_points_and_unsafe_acl(self):
+        self.assertIn("function Assert-NoReparsePoint", self.script)
+        self.assertIn("FileAttributes]::ReparsePoint", self.script)
+        self.assertIn("function Assert-PrivateBackupAcl", self.script)
+        self.assertIn("AreAccessRulesProtected", self.script)
+        for sid in ("S-1-1-0", "S-1-5-11", "S-1-5-32-545", "S-1-5-32-568"):
+            with self.subTest(sid=sid):
+                self.assertIn(sid, self.script)
+
+    def test_rotation_deletes_only_owned_names_and_preserves_unrelated_files(self):
+        self.assertIn("$OwnedBackupNamePattern", self.script)
+        self.assertIn("$_.Name -match $OwnedBackupNamePattern", self.script)
+        self.assertIn("Remove-Item -LiteralPath $_.FullName", self.script)
+        self.assertNotIn("Get-ChildItem $BackupDir", self.script)
+
+
+@pytest.mark.unit
 class PytestMarkerPolicyTests(SimpleTestCase):
     class FakeMarker:
         def __init__(self, name):

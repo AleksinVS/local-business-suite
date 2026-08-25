@@ -65,6 +65,25 @@ class WaitingListModelTests(TestCase):
         self.assertIn("Петрова Анна Сергеевна", str(entry))
         self.assertIn("ИВВИА", str(entry))
 
+    def test_full_ophthalmology_service_catalog_includes_s4(self):
+        self.assertEqual(
+            SERVICE_CHOICES,
+            [
+                ("s1", "Амбул. операция (офт.)"),
+                ("s2", "ИВВИА"),
+                ("s3", "Катаракта"),
+                ("s4", "Глаукома"),
+            ],
+        )
+        entry = WaitingListEntry(
+            patient_name="Тест каталога",
+            patient_dob=date(1990, 1, 1),
+            patient_phone="+7 (900) 000-00-00",
+            service_id="s4",
+        )
+        entry.full_clean()
+        self.assertEqual(entry.get_service_id_display(), "Глаукома")
+
     def test_entry_default_status_is_waiting(self):
         """New entries default to WAITING status."""
         entry = WaitingListEntry.objects.create(

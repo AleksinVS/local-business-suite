@@ -447,6 +447,7 @@ scripts: # Скрипты и инструменты разработки
   utils: # Утилиты локальной проверки
     verify_ui.py: file # Верификация UI через локальный браузерный сценарий
   windows: # Windows-скрипты запуска, IIS-подготовки и автозапуска
+    backup_postgresql.ps1: file # Безопасный pg_dump + zip контрактов под dedicated identity, вне runtime data, с ACL/reparse guards и ограниченной ротацией
     check_agent_runtime_autostart.ps1: file # Диагностика задач планировщика и процессов Agent Runtime
     export_portal.ps1: file # Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост
     iis_web_config.ps1: file # Общие проверки безопасности web.config для Windows/IIS deployment-скриптов
@@ -697,7 +698,9 @@ workflow: # Исполнительные workflow-пакеты для сложн
       task-packets: file
       ARCHITECT_PLAN.json: file # План задач workflow-блока миграции на PostgreSQL
       BLOCK_BRIEF.md: file # Краткое описание целей, границ и приемки миграции на PostgreSQL
+      EXECUTOR_REPORT.dev-cutover.md: file # Отчет проверочного dev-cutover на PostgreSQL
       EXECUTOR_REPORT.postgresql-code-slice.md: file # Отчет реализации кодового среза миграции на PostgreSQL
+      EXECUTOR_REPORT.production-cutover.md: file # Отчет production cutover и обязательного post-cutover backup hardening
       TASK_ACCEPTANCE.postgresql-code-slice.md: file # Приемка кодового среза миграции на PostgreSQL перед dry-run
     project-knowledge-base-mvp: # Workflow: MVP базы проектных знаний для ИИ-агентов (kb) — исполнение спецификации T0–T6
       task-packets: file

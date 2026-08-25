@@ -1,6 +1,8 @@
 # Миграция основного хранилища на PostgreSQL
 
-Статус: active plan; кодовый срез миграции реализован, внешний dry-run/cutover еще не выполнен.
+Статус: production cutover выполнен 2026-08-18 и принят владельцем; active до
+перевода backup Scheduled Task на отдельную identity и решения по архивному
+SQLite runtime.
 
 Связанные материалы:
 
@@ -114,20 +116,20 @@ ADR обязателен и уже создан: `docs/adr/ADR-0029-postgresql-p
 
 ## Порядок Работ
 
-1. Завершить вынос SQLite-варианта в удаленный fork.
-2. Добавить PostgreSQL-инфраструктуру и настройки.
-3. Перевести проект на одну database schema.
-4. Добавить export/import/validate tooling.
-5. Перевести search и очереди на PostgreSQL-путь.
-6. Выполнить dry-run на копии runtime-данных.
-7. Провести cutover и e2e.
-8. Удалить legacy multi-db runtime из `main`.
+1. Выполнено: baseline SQLite опубликован в `origin/sqlite-legacy-2026-06-15`.
+2. Выполнено: PostgreSQL-инфраструктура, единая schema и migration tooling.
+3. Выполнено: search/queue переведены на PostgreSQL и database backend.
+4. Выполнено: два dry-run, production cutover и e2e/smoke-приёмка.
+5. Обязательно после security-review: отключить старую SYSTEM backup task и
+   пересоздать её под отдельной backup identity по deployment-runbook.
+6. Решить судьбу legacy SQLite runtime в `main`, затем архивировать блок.
 
 ## Остаточные Риски
 
-- Удаленный SQLite-fork еще не создан владельцем репозитория; локальная ветка `sqlite-legacy-2026-06-15` уже подготовлена.
-- Export/import tooling проверен локально и требует dry-run на копии реальных runtime SQLite-файлов перед production cutover.
-- PostgreSQL cutover может потребовать downtime, если нет online sync.
-- Rollback после открытия traffic потребует отдельной сверки новых PostgreSQL-записей.
+- Standalone SQLite-репозиторий не создан; baseline-ветка опубликована на remote.
+- Rollback window закрыт после записи production-данных; возврат требует
+  отдельной сверки новых PostgreSQL-записей.
+- Старая SYSTEM backup task небезопасна и должна оставаться отключённой до
+  перевода на dedicated identity и закрытый `ProgramData` backup root.
 - Search ranking изменится после перехода с SQLite FTS на PostgreSQL FTS.
 - SQLite-fork может отстать от security fixes, если не будет явной политики cherry-pick.

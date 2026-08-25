@@ -24,6 +24,17 @@
 4. Регулярный бэкап: `scripts/windows/backup_postgresql.ps1` + Scheduled Task
    `\Portal\Portal PostgreSQL Backup` (ежедневно 02:37, pg_dump -Fc + zip контрактов, ротация 7 дней).
 
+### Security correction после merge-review
+
+Первоначальная задача была создана от `SYSTEM` и писала в изменяемый
+`data\backups`. Независимое ревью признало этот вариант небезопасным из-за
+возможной подмены каталога NTFS junction. До следующего запуска задачу нужно
+отключить и пересоздать под отдельной backup identity с каталогом
+`C:\ProgramData\LocalBusinessSuite\backup`, закрытым ACL и параметрами identity
+из `docs/deployment/POSTGRESQL_MIGRATION.md`. Обновлённый скрипт fail-closed
+проверяет principal, ACL и reparse points и не удаляет посторонние файлы. Это
+обязательное внешнее действие deployment; commit сам не меняет Scheduled Task.
+
 ## Смоук-проверки после cutover (все пройдены)
 
 - `/health/` — 200 (внимание: с завершающим слэшем; `/health` без слэша — 404);
@@ -50,6 +61,8 @@ SQLite-файлы в `data/db` не удалены и остаются архи�
 
 ## Открытые пункты
 
+- Пересоздать backup Scheduled Task по security correction выше; до этого
+  старая SYSTEM-задача должна быть отключена.
 - Решение о закрытии SQLite runtime в `main` (вынос в fork по ADR-0029) — за владельцем;
   архивные файлы в `data/db` пока хранятся.
 - Секреты: `.local/backups/postgresql-migration/generated_secrets.txt` и `cutover_django_secrets.txt`.

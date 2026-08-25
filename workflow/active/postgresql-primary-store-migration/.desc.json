@@ -3,6 +3,8 @@
   "ARCHITECT_PLAN.json": "План задач workflow-блока миграции на PostgreSQL",
   "BLOCK_BRIEF.md": "Краткое описание целей, границ и приемки миграции на PostgreSQL",
   "EXECUTOR_REPORT.postgresql-code-slice.md": "Отчет реализации кодового среза миграции на PostgreSQL",
+  "EXECUTOR_REPORT.dev-cutover.md": "Отчет проверочного dev-cutover на PostgreSQL",
+  "EXECUTOR_REPORT.production-cutover.md": "Отчет production cutover и обязательного post-cutover backup hardening",
   "TASK_ACCEPTANCE.postgresql-code-slice.md": "Приемка кодового среза миграции на PostgreSQL перед dry-run",
   "task-packets": "Исполнительные task packets для миграции на PostgreSQL"
 }

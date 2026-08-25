@@ -13,9 +13,10 @@ class WaitingListStatus(models.TextChoices):
 
 # Bounded service catalog as choices - not a separate relational model
 SERVICE_CHOICES = [
-    ("s1", "КТ головного мозга"),
-    ("s2", "МРТ позвоночника"),
-    ("s3", "Рентген грудной клетки"),
+    ("s1", "Амбул. операция (офт.)"),
+    ("s2", "ИВВИА"),
+    ("s3", "Катаракта"),
+    ("s4", "Глаукома"),
 ]
 
 

@@ -1,5 +1,6 @@
 {
   ".": "Windows-скрипты запуска, IIS-подготовки и автозапуска",
+  "backup_postgresql.ps1": "Ежедневный pg_dump базы портала + zip контрактов с ротацией (Scheduled Task \\Portal\\Portal PostgreSQL Backup)",
   "check_agent_runtime_autostart.ps1": "Диагностика задач планировщика и процессов Agent Runtime",
   "export_portal.ps1": "Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост",
   "import_portal.ps1": "Восстановление Portal из бандла на новом хосте: IIS-фичи, файрвол, код, venv, AppPool+сайт, wfastcgi, scheduled task, health-check",

@@ -63,7 +63,7 @@ class WaitingListModelTests(TestCase):
             service_id="s2",
         )
         self.assertIn("Петрова Анна Сергеевна", str(entry))
-        self.assertIn("МРТ позвоночника", str(entry))
+        self.assertIn("ИВВИА", str(entry))
 
     def test_entry_default_status_is_waiting(self):
         """New entries default to WAITING status."""

@@ -6,7 +6,7 @@
 
 ### Единый UX администрирования доступа
 
-ADR-0040 принят. Пакеты 00a–00d и 01–03 реализованы: канонические preview/apply,
+ADR-0040 принят. Пакеты 00a–00d и 01–03 реализованы: канонические сервисы записи,
 privilege ceiling и self-assignment active superuser, резервный Django Admin,
 staged contract write с межпроцессной блокировкой, доменные Board/memory write,
 каталог и impact-редактор роли, поиск и компактная карточка источников.
@@ -17,6 +17,10 @@ staged contract write с межпроцессной блокировкой, до
 роли и адаптивная browser/e2e-приемка. Текущий срез ожидает проверки владельцем.
 Пакеты 04/05 остаются после неё: общая read-only проекция журнала,
 explain-адаптеры, итоговая usability-проверка и архивирование.
+
+Пакет 20 перевёл обычные продуктовые редакторы пользователя, роли, доски и групп
+на одну команду `Сохранить` по ADR-0042. Отдельные preview/apply-процессы остались
+только у AI `PendingAction`, резервного Django Admin и общих runtime-настроек.
 
 Пакет 19 устранил бесконечное состояние загрузки при сохранении пользователя и
 роли: длительные ingestion/reindex/FileHub worker отделены от access-lock, а
@@ -30,6 +34,26 @@ knowledge-файлов и удаления устаревшего индекса
 - план: `docs/planning/active/access-administration-ux-unification.md`;
 - ADR: `docs/adr/ADR-0040-unified-access-administration-control-plane.md`;
 - workflow: `workflow/active/access-administration-ux-unification/`.
+
+### Упрощение управления ролями для SMB
+
+ADR-0043 принят 2026-08-25. Целевая модель сохраняет текущий RBAC и доменные
+проверки, но убирает преждевременную метаполитику: две скрытые allowlist
+заменяются одним `manage_roles`, роли делятся только на ordinary/protected с
+сохранением всех текущих critical-границ, `$capabilities` замораживается для
+runtime writer, а скрытый `default_board_viewer` заменяется явной read-only
+ролью `viewer` или другим решением владельца по каждому пользователю.
+
+Работа выполняется в `feature/lean-access-control` пакетами с golden matrix,
+миграционным отчётом пользователей без роли, service/HTTP/e2e-проверками и
+независимым Sol high review до push и слияния.
+
+Контекст:
+
+- ADR: `docs/adr/ADR-0043-declarative-access-policy-catalog.md`;
+- архитектура: `docs/architecture/DECLARATIVE_ACCESS_POLICY_ARCHITECTURE.md`;
+- план: `docs/planning/active/declarative-access-policy-model.md`;
+- workflow: `workflow/active/declarative-access-policy-model/`.
 
 ### Канбан: дерево подразделений в фильтре и сворачиваемый ИИ-чат
 

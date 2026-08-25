@@ -1,0 +1,40 @@
+{
+  "block_id": "declarative-access-policy-model",
+  "title": "Lean role administration for SMB",
+  "adr": "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
+  "branch": "feature/lean-access-control",
+  "status": "active",
+  "execution_order": [
+    "00-baseline-and-golden-matrix",
+    "01-freeze-capability-metadata",
+    "02-disable-ai-ad-access-mutations",
+    "03-single-role-administration-authority",
+    "04-explicit-viewer-migration",
+    "05-explain-cleanup",
+    "06-ui-and-e2e-acceptance",
+    "07-final-security-acceptance"
+  ],
+  "constraints": [
+    "Do not introduce a policy compiler, generic authorize API, structured grants, evaluator registry, or presentation contract.",
+    "Keep domain policy, selector, service, ACL, workflow, audit, atomic write, and last-superuser invariants.",
+    "Do not merge fields from different roles when evaluating one action.",
+    "Do not remove default_board_viewer before adding the least-privilege viewer role and applying an owner-approved complete roleless-user manifest.",
+    "Never default a roleless or technical-only user to customer or any other role.",
+    "Do not implement role deletion or same-request signed-plan removal in this block.",
+    "Tasks delegated to subagents must be written in English; user reports remain in Russian.",
+    "Non-mechanical Luna work follows executor -> main tests -> Luna xhigh critic -> correction -> main acceptance.",
+    "A Sol high review is mandatory before the documentation baseline feature push and again after final reports, archive, backlog cleanup, and structure regeneration have been committed into the exact final feature SHA.",
+    "No tracked file may change between final Sol review, feature push, merge to main, verification of the merge commit, and main push."
+  ],
+  "assignment": {
+    "documentation_baseline": "Primary agent, reviewed by Sol high, committed and pushed before package 00",
+    "00-baseline-and-golden-matrix": "Primary agent, reviewed by Sol high",
+    "01-freeze-capability-metadata": "Primary agent or Sol high",
+    "02-disable-ai-ad-access-mutations": "Sol high for authority boundaries; Luna high executor and Luna xhigh critic for adapters/tests",
+    "03-single-role-administration-authority": "Sol high with primary-agent acceptance",
+    "04-explicit-viewer-migration": "Primary agent/Sol high for policy; Luna high executor and Luna xhigh critic for commands/tests",
+    "05-explain-cleanup": "Sol high for enforcement boundary; Luna high executor and Luna xhigh critic for projection cleanup",
+    "06-ui-and-e2e-acceptance": "Luna high executor, Luna xhigh critic, primary-agent visual acceptance",
+    "07-final-security-acceptance": "Primary agent plus independent Sol high review"
+  }
+}

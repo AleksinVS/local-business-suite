@@ -1,0 +1,53 @@
+{
+  "id": "04-explicit-viewer-migration",
+  "goal": "Replace implicit default_board_viewer access with a least-privilege viewer role and an explicit owner-approved migration.",
+  "owner": "primary_agent_and_sol_high",
+  "policy_model": "gpt-5.6-sol",
+  "policy_reasoning": "high",
+  "executor_model": "gpt-5.6-luna",
+  "executor_reasoning": "high",
+  "critic_model": "gpt-5.6-luna",
+  "critic_reasoning": "xhigh",
+  "read_scope": [
+    "contracts/role_rules.json",
+    "apps/accounts/models.py",
+    "apps/accounts/services.py",
+    "apps/accounts/management/commands/seed_roles.py",
+    "apps/workorders/models.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/services.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/core/file_locks.py"
+  ],
+  "write_scope": [
+    "contracts/role_rules.json",
+    "apps/accounts/management/commands/report_roleless_users.py",
+    "apps/accounts/management/commands/apply_roleless_user_manifest.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/access_migration_services.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/workorders/services.py",
+    "apps/workorders/tests.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/tests.py",
+    "apps/accounts/management/commands/access_management_e2e.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "docs/adr/ADR-0039-default-board-view-access.md",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.04-viewer-migration.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.04-viewer-migration.md"
+  ],
+  "runtime_artifacts": [
+    "Owner-approved manifests and reports belong under data/access-migrations/ and must not be committed or contain secrets in workflow reports."
+  ],
+  "acceptance": [
+    "viewer exactly matches the former read-only branch scope and has no write capability.",
+    "The report lists every active roleless user, identifies technical-only users, and shows exact user and board/resource access deltas for each proposed choice.",
+    "The manifest requires an explicit viewer, customer, other-role, or no-role choice for every current roleless user and has no default.",
+    "Apply rechecks the complete roleless set and customer-open board ACL versions under the access lock, then changes user membership and board ACLs in one DB transaction with assignment and BoardAccessAudit records.",
+    "viewer is added without removing customer; conflict aborts the transaction and rollback uses the same canonical service.",
+    "After cutover, no role means no role-derived general access while approved technical authority remains unchanged.",
+    "New users receive no implicit role."
+  ]
+}

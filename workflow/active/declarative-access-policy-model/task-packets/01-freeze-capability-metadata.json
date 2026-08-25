@@ -1,0 +1,37 @@
+{
+  "id": "01-freeze-capability-metadata",
+  "goal": "Freeze runtime capability metadata and provide one audited deployment-only catalog migration path.",
+  "owner": "primary_agent_and_sol_high",
+  "model": "gpt-5.6-sol",
+  "reasoning": "high",
+  "read_scope": [
+    "contracts/role_rules.json",
+    "data/contracts/role_rules.json",
+    "apps/core/contract_store.py",
+    "apps/core/contract_drift.py",
+    "apps/core/file_locks.py",
+    "apps/core/json_utils.py",
+    "apps/settings_center/models.py",
+    "apps/settings_center/registry.py",
+    "apps/settings_center/descriptors.py",
+    "apps/settings_center/services.py",
+    "apps/workorders/contracts.py"
+  ],
+  "write_scope": [
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/management/commands/migrate_role_capabilities.py",
+    "apps/settings_center/tests.py",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/tests.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.01-freeze.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.01-freeze.md"
+  ],
+  "acceptance": [
+    "Every ordinary write under the common lock requires hash(runtime capabilities) == hash(current Git-default capabilities).",
+    "Apply, rollback, generic write, and constrained role Save also reject any candidate-to-runtime capability metadata delta under the same lock.",
+    "The deployment-only command is the only bypass and requires an active-superuser operator plus expected current-runtime and target-Git hashes, validation, backup, and audit record.",
+    "The command is unreachable from Settings Center and fails without changing files on any hash mismatch.",
+    "Ordinary role grant Save remains functional."
+  ]
+}

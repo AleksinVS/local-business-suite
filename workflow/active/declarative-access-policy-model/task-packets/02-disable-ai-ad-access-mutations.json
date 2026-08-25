@@ -1,0 +1,44 @@
+{
+  "id": "02-disable-ai-ad-access-mutations",
+  "goal": "Remove AI and AD access-mutation paths before changing role authority semantics.",
+  "owner": "primary_agent_sol_boundary_luna_adapters",
+  "boundary_model": "gpt-5.6-sol",
+  "boundary_reasoning": "high",
+  "executor_model": "gpt-5.6-luna",
+  "executor_reasoning": "high",
+  "critic_model": "gpt-5.6-luna",
+  "critic_reasoning": "xhigh",
+  "read_scope": [
+    "apps/ai/tooling.py",
+    "apps/ai/services.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "data/contracts/ai/tools.json",
+    "apps/accounts/ldap_backend.py",
+    "apps/accounts/services.py",
+    "apps/settings_center/contract_services.py"
+  ],
+  "write_scope": [
+    "apps/ai/tooling.py",
+    "apps/ai/services.py",
+    "apps/ai/tool_definitions.py",
+    "contracts/ai/tools.json",
+    "apps/ai/tests/test_views.py",
+    "apps/ai/tests/test_semantic_validators.py",
+    "apps/accounts/ldap_backend.py",
+    "apps/accounts/test_ldap_role_sync.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.02-side-paths.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.02-side-paths.md"
+  ],
+  "runtime_operation_scope": [
+    "Migrate data/contracts/ai/tools.json through the reviewed runtime-contract path; never commit the runtime copy."
+  ],
+  "acceptance": [
+    "No AI dispatcher or tool contract can create, edit, assign, or remove roles, technical groups, privileged flags, account activation, department, username, or AD identity.",
+    "access.users.update has no remaining write behavior and is removed from dispatch and tool contracts.",
+    "AI can explain access and open or prefill the human editor.",
+    "AD identity/profile sync continues while role mutation remains fail-closed.",
+    "PendingAction remains unchanged for non-access AI actions."
+  ]
+}

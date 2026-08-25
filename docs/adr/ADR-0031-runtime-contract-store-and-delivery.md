@@ -153,3 +153,12 @@ Accepted (принят 2026-07-05 с уточнениями реализации
 - `docs/adr/ADR-0007-settings-center-and-contextual-help.md` — service layer и audit записи.
 - `docs/adr/ADR-0024-service-extraction-readiness.md` — правила выноса сервисов.
 - `docs/planning/archive/2026/architecture-review-remediation-2026-07-04.md` — план работ.
+
+## Clarification 2026-08-25
+
+Не каждый JSON-артефакт обязан иметь рабочую копию в `data/contracts/` и путь
+записи из Settings Center. Справочник `$capabilities` остаётся частью
+Git-дефолта `role_rules.json`, но runtime writer обязан сохранять его без
+изменений. Runtime store применяется к определениям ролей, их значениям прав и
+разрешённым административным настройкам. Отдельная presentation-проекция и
+новый язык политик не создаются. См. принятый ADR-0043.

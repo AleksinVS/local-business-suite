@@ -1,0 +1,34 @@
+{
+  "id": "05-explain-cleanup",
+  "goal": "Make access explanations show only sources that actual enforcement reads.",
+  "owner": "primary_agent_sol_boundary_luna_adapters",
+  "boundary_model": "gpt-5.6-sol",
+  "boundary_reasoning": "high",
+  "executor_model": "gpt-5.6-luna",
+  "executor_reasoning": "high",
+  "critic_model": "gpt-5.6-luna",
+  "critic_reasoning": "xhigh",
+  "read_scope": [
+    "apps/accounts/selectors.py",
+    "apps/accounts/access_contracts.py",
+    "apps/memory/models.py",
+    "apps/memory/policies.py",
+    "apps/settings_center/access_workspace.py"
+  ],
+  "write_scope": [
+    "apps/accounts/selectors.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/tests.py",
+    "apps/memory/tests/test_review_boundaries.py",
+    "docs/architecture/POLICY_MODEL.md",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/declarative-access-policy-model/EXECUTOR_REPORT.05-explain.md",
+    "workflow/active/declarative-access-policy-model/TASK_ACCEPTANCE.05-explain.md"
+  ],
+  "acceptance": [
+    "Direct Django permissions are absent from product access explanations unless an enforcement policy reads them.",
+    "Role, superuser, technical-group, ACL, and workflow sources remain distinguishable.",
+    "Memory technical-group behavior is unchanged and no group merge occurs."
+  ]
+}

@@ -17,6 +17,7 @@ For a deep dive into specific areas, please refer to the following documents:
 - **[Blueprint](blueprint.md)**: The foundational document describing the architectural vision, principles (Local-first, Server-driven UI, Policy-first), and the overall tech stack.
 - **[Domain Model](DOMAIN_MODEL.md)**: High-level overview of the main business entities and modules.
 - **[Policy Model](POLICY_MODEL.md)**: Detailed description of the role-based access control and declarative policy system.
+- **[Lean Access Policy Architecture](DECLARATIVE_ACCESS_POLICY_ARCHITECTURE.md)**: Accepted SMB-oriented role administration model: one product authority, ordinary/protected roles, explicit assignments, and unchanged domain authorization checks.
 - **[AI UI Protocol Foundation](AI_UI_PROTOCOL_FOUNDATION_PLAN.md)** & **[Native AG-UI Chat Development](NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md)**: Technical design of the AI chat surface, UI protocol/driver matrix, tool gateway and confirmation flows.
 - **[Integrations](INTEGRATIONS.md)**: Strategy for connecting with legacy enterprise systems (Bridges).
 - **[Analytics Model](ANALYTICS_MODEL.md)**: Design of the analytical layer (Parquet + DuckDB + Evidence).
@@ -60,3 +61,13 @@ Significant design choices are documented in the [ADR directory](../adr/):
 - [ADR-0031: Runtime contract store and delivery](../adr/ADR-0031-runtime-contract-store-and-delivery.md)
 - [ADR-0032: Retire legacy AI UI driver](../adr/ADR-0032-retire-legacy-ai-ui-driver.md)
 - [ADR-0033: Native AI UI asset versions and staticfiles sync](../adr/ADR-0033-native-ai-ui-asset-versions-and-staticfiles-sync.md)
+- [ADR-0034: Predefined access groups and capability descriptions](../adr/ADR-0034-predefined-access-groups-and-capability-descriptions.md)
+- [ADR-0035: Mandatory user department](../adr/ADR-0035-mandatory-user-department.md)
+- [ADR-0036: IIS SSO, CSRF and public assets](../adr/ADR-0036-iis-sso-csrf-public-assets.md)
+- [ADR-0037: Kanban department filter and collapsible AI sidebar](../adr/ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md)
+- [ADR-0038: Privileged flags and access assignment](../adr/ADR-0038-privileged-flags-access-assignment.md)
+- [ADR-0039: Default board-view access](../adr/ADR-0039-default-board-view-access.md)
+- [ADR-0040: Unified access administration control plane](../adr/ADR-0040-unified-access-administration-control-plane.md)
+- [ADR-0041: Access and memory lock partition](../adr/ADR-0041-access-and-memory-lock-partition.md)
+- [ADR-0042: Direct-save access administration](../adr/ADR-0042-direct-save-access-administration.md)
+- [ADR-0043: Lean role administration for SMB](../adr/ADR-0043-declarative-access-policy-catalog.md)

@@ -323,11 +323,12 @@ docs: # Документация проекта
     ADR-0036-iis-sso-csrf-public-assets.md: file # ADR: Изоляция автоматических ресурсов браузера от Windows SSO и ротации CSRF
     ADR-0037-kanban-department-filter-and-collapsible-ai-sidebar.md: file # ADR: Дерево подразделений как фильтр канбана и сворачиваемый ИИ-чат
     ADR-0038-privileged-flags-access-assignment.md: file # ADR: Технические флаги в управляемом назначении доступа
-    ADR-0039-default-board-view-access.md: file # Устаревающий ADR: базовый просмотр без роли до миграции ADR-0043
+    ADR-0039-default-board-view-access.md: file # Устаревший ADR: базовый просмотр без роли, заменён ADR-0045
     ADR-0040-unified-access-administration-control-plane.md: file # Принятый ADR: единый контур администрирования доступа и канонические пути изменения
     ADR-0041-access-and-memory-lock-partition.md: file # Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти
     ADR-0042-direct-save-access-administration.md: file # Принятый ADR: прямое сохранение изменений доступа без пользовательского preview
     ADR-0043-declarative-access-policy-catalog.md: file # Принятый ADR: упрощённое управление ролями для малого и среднего бизнеса
+    ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md: file # Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -720,6 +721,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       copilotkit-ai-ui-chat-development: file
       declarative-access-policy-model: file
       default-board-view-and-sso-diagnostics: file
+      fail-closed-new-user-access: file
       iis-sso-csrf-race: file
       interface-russification: file
       mandatory-user-department: file

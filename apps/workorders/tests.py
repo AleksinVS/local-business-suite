@@ -200,7 +200,7 @@ class BoardAdminAccessTests(TestCase):
                 selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
             )
 
-    def test_board_impact_includes_roleless_default_customer_and_rejects_stale_population(self):
+    def test_board_impact_excludes_roleless_user_and_rejects_stale_population(self):
         roleless = User.objects.create_user(username="board-roleless-default")
         preview = preview_board_access(
             actor=self.actor,
@@ -208,7 +208,7 @@ class BoardAdminAccessTests(TestCase):
             selected_group_names=[ROLE_TECHNICIAN],
             reason="Закрыть базовый доступ заказчика",
         )
-        self.assertGreaterEqual(preview["impact"]["active_loss_count"], 1)
+        self.assertFalse(default_board_access_applies(roleless))
 
         late_technician = User.objects.create_user(username="board-late-technician")
         late_technician.groups.add(self.technician_group)
@@ -545,9 +545,9 @@ class WorkOrderRoleMatrixTests(TestCase):
         self.assertTrue(can_view(self.customer, self.workorder))
         self.assertTrue(can_view(self.manager, self.workorder))
 
-    def test_user_without_role_gets_only_default_department_board_view(self):
-        self.assertTrue(default_board_access_applies(self.default_viewer))
-        self.assertTrue(can_view(self.default_viewer, self.workorder))
+    def test_user_without_role_has_no_workorder_access(self):
+        self.assertFalse(default_board_access_applies(self.default_viewer))
+        self.assertFalse(can_view(self.default_viewer, self.workorder))
         self.assertFalse(can_create(self.default_viewer))
         self.assertFalse(can_edit(self.default_viewer, self.workorder))
         self.assertFalse(can_comment(self.default_viewer, self.workorder))
@@ -890,11 +890,10 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:detail", args=[self.workorder.pk]))
         self.assertEqual(response.status_code, 404)
 
-    def test_outsider_does_not_see_board_cards(self):
+    def test_outsider_cannot_open_board(self):
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("workorders:board"))
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, self.workorder.title)
+        self.assertEqual(response.status_code, 403)
 
     def test_selector_board_argument_cannot_bypass_board_acl(self):
         private_group, _ = Group.objects.get_or_create(name="private-selector-board")
@@ -923,14 +922,12 @@ class WorkOrderViewPermissionTests(TestCase):
             .exists()
         )
 
-    def test_default_viewer_can_open_customer_board_but_cannot_write(self):
+    def test_roleless_user_cannot_open_customer_board_or_write(self):
         self.client.force_login(self.default_viewer)
 
         response = self.client.get(reverse("workorders:board"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, self.workorder.title)
-        self.assertNotContains(response, "Создать заявку")
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(
             self.client.get(reverse("workorders:create")).status_code,
             403,
@@ -946,10 +943,10 @@ class WorkOrderViewPermissionTests(TestCase):
                     "board": self.board.pk,
                 },
             ).status_code,
-            403,
+            404,
         )
 
-    def test_default_viewer_cannot_open_board_without_customer_group(self):
+    def test_roleless_user_cannot_open_board_without_customer_group(self):
         private_group, _ = Group.objects.get_or_create(name="private-default-view")
         private_board = Board.objects.create(
             title="Закрытая доска",
@@ -965,9 +962,9 @@ class WorkOrderViewPermissionTests(TestCase):
             )
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
-    def test_explicit_role_replaces_default_board_profile(self):
+    def test_explicit_role_without_workorder_rights_cannot_open_board(self):
         doctor_group, _ = Group.objects.get_or_create(name="doctor")
         explicit_doctor = User.objects.create_user(
             username="explicit-doctor-board",
@@ -979,9 +976,7 @@ class WorkOrderViewPermissionTests(TestCase):
 
         response = self.client.get(reverse("workorders:board"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Нет доступных досок")
-        self.assertNotContains(response, self.workorder.title)
+        self.assertEqual(response.status_code, 403)
 
     def test_board_detail_panel_renders_partial_for_htmx(self):
         self.client.force_login(self.customer)
@@ -2439,7 +2434,7 @@ class CapabilityRegistryTests(TestCase):
         self.assertEqual(rules["waiting_list_transition_from_statuses"], "*")
         self.assertEqual(rules["waiting_list_transition_targets"], "*")
 
-    def test_legacy_superuser_default_and_active_roleless_rules_remain_fail_closed(self):
+    def test_legacy_superuser_and_roleless_rules_remain_fail_closed(self):
         legacy_rules = {
             "legacy": {
                 "view_waiting_list": True,
@@ -2454,9 +2449,7 @@ class CapabilityRegistryTests(TestCase):
 
         self.assertEqual(active_role_rules(root, rules_payload=legacy_rules)[0]["name"], "superuser")
         self.assertTrue(active_role_rules(root, rules_payload=legacy_rules)[0]["view_waiting_list"])
-        default_rules = active_role_rules(roleless, rules_payload=legacy_rules)
-        self.assertEqual(default_rules[0]["name"], "default_board_viewer")
-        self.assertFalse(default_rules[0]["view_waiting_list"])
+        self.assertEqual(active_role_rules(roleless, rules_payload=legacy_rules), [])
         self.assertEqual(active_role_rules(inactive, rules_payload=legacy_rules), [])
 
     def test_inactive_superuser_has_no_capabilities(self):
@@ -2499,6 +2492,16 @@ class CapabilityRegistryTests(TestCase):
         unknown_capability["customer"]["unregistered_access"] = True
         with self.assertRaisesMessage(ValidationError, "неизвестные права"):
             validate_role_rules_payload(unknown_capability)
+
+    def test_role_contract_validates_default_new_user_role(self):
+        valid = copy.deepcopy(self.base_role_rules)
+        valid["$defaults"] = {"new_user_role": "customer"}
+        validate_role_rules_payload(valid)
+
+        invalid = copy.deepcopy(self.base_role_rules)
+        invalid["$defaults"] = {"new_user_role": "missing-role"}
+        with self.assertRaisesMessage(ValidationError, "$defaults.new_user_role"):
+            validate_role_rules_payload(invalid)
 
     def test_waiting_list_capabilities_have_separate_sources_and_doctor_defaults(self):
         from .contracts import capability_values

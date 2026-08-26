@@ -83,6 +83,7 @@ REQUIRED_WORKFLOW_KEYS = {
 # "$capabilities" — справочник прав с понятными названиями и комментариями
 # для нетехнических пользователей (ADR-0034).
 CAPABILITY_METADATA_KEY = "$capabilities"
+DEFAULTS_METADATA_KEY = "$defaults"
 CAPABILITY_TYPES = {"flag", "scope", "targets"}
 CAPABILITY_SECTIONS = {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"}
 CAPABILITY_RISKS = {"normal", "elevated", "critical"}
@@ -205,7 +206,12 @@ def validate_role_rules_payload(payload, workflow_payload=None):
         for key in payload
         if isinstance(key, str)
         and key.startswith("$")
-        and key not in {"$schema", CAPABILITY_METADATA_KEY, "$administration"}
+        and key not in {
+            "$schema",
+            CAPABILITY_METADATA_KEY,
+            DEFAULTS_METADATA_KEY,
+            "$administration",
+        }
     )
     if unknown_service_keys:
         raise ValidationError(
@@ -220,6 +226,26 @@ def validate_role_rules_payload(payload, workflow_payload=None):
     administration = payload.get("$administration", {})
     if not isinstance(administration, dict):
         raise ValidationError("Блок $administration должен быть JSON-объектом.")
+    defaults = payload.get(DEFAULTS_METADATA_KEY, {"new_user_role": None})
+    if not isinstance(defaults, dict):
+        raise ValidationError("Блок $defaults должен быть JSON-объектом.")
+    unknown_default_fields = sorted(set(defaults) - {"new_user_role"})
+    if unknown_default_fields:
+        raise ValidationError(
+            "Блок $defaults содержит неизвестные поля: "
+            + ", ".join(unknown_default_fields)
+            + "."
+        )
+    default_role = defaults.get("new_user_role")
+    if default_role is not None and (
+        not isinstance(default_role, str)
+        or not default_role.strip()
+        or default_role.startswith("$")
+        or not isinstance(payload.get(default_role), dict)
+    ):
+        raise ValidationError(
+            "Поле $defaults.new_user_role должно быть null или кодом существующей роли."
+        )
     capability_metadata = payload.get(CAPABILITY_METADATA_KEY, {})
     legacy_compat = is_legacy_capability_metadata(capability_metadata)
     if capability_metadata:

@@ -46,7 +46,12 @@ from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import board_access_role_names, can_manage_board_access, can_manage_roles
 from apps.workorders.services import save_board_access
 
-from .contract_services import apply_contract_payload, preview_contract_payload, read_contract_value
+from .contract_services import (
+    apply_contract_payload,
+    preview_contract_payload,
+    read_contract_value,
+    save_default_new_user_role,
+)
 from .env_services import create_env_proposal, env_status_rows
 from .forms import (
     AccessExternalIdentityForm,
@@ -63,6 +68,7 @@ from .forms import (
     PortalUserCreateForm,
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
+    DefaultNewUserRoleForm,
     RoleDefinitionForm,
     RoleCreateForm,
     RoleDescriptionForm,
@@ -175,6 +181,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             context["field_form"] = self._build_editor_form(self.request, context)
         context["can_manage_board_access"] = can_manage_board_access(self.request.user)
         context["can_manage_roles"] = can_manage_roles(self.request.user)
+        context["default_new_user_role_form"] = self._default_new_user_role_form()
         return context
 
     def post(self, request, *args, **kwargs):
@@ -182,6 +189,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         state = workspace_context(query_params=self._post_workspace_params(request))
         try:
             action = request.POST.get("action", "save")
+            if action == "save_default_new_user_role":
+                return self._post_default_new_user_role(request)
             if action == "create_role":
                 return self._post_role_create(request)
             selected = state["selected"]
@@ -210,6 +219,49 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             state["editor_error"] = str(exc)
             state["field_form"] = self._build_editor_form(request, state)
             return self._response_for_editor(request, state)
+
+    def _default_new_user_role_form(self, data=None):
+        if not self.request.user.is_active or not self.request.user.is_superuser:
+            return None
+        rules = read_contract_value(get_registry().get("core.contract.role_rules"))
+        defaults = rules.get("$defaults", {})
+        initial_role = defaults.get("new_user_role", "") if isinstance(defaults, dict) else ""
+        return DefaultNewUserRoleForm(
+            data,
+            rules_payload=rules,
+            initial={
+                "role_name": initial_role or "",
+                "base_hash": normalized_hash(rules),
+            },
+        )
+
+    def _post_default_new_user_role(self, request):
+        form = self._default_new_user_role_form(request.POST)
+        if form is None:
+            raise PermissionDenied(
+                "Роль новых пользователей может изменять только активный суперпользователь."
+            )
+        if form.is_valid():
+            try:
+                change = save_default_new_user_role(
+                    actor=request.user,
+                    role_name=form.cleaned_data["role_name"],
+                    reason=form.cleaned_data["reason"],
+                    base_hash=form.cleaned_data["base_hash"],
+                )
+            except (PermissionDenied, ValidationError) as exc:
+                form.add_error(None, exc)
+            else:
+                messages.success(
+                    request,
+                    f"Роль новых пользователей изменена. Аудит #{change.pk}.",
+                )
+                return redirect(f"{reverse('settings_center:access_workspace')}?view=users")
+        state = workspace_context(query_params={"view": "users"})
+        state["default_new_user_role_form"] = form
+        state["can_manage_board_access"] = can_manage_board_access(request.user)
+        state["can_manage_roles"] = can_manage_roles(request.user)
+        return self.render_to_response(state)
 
     @staticmethod
     def _role_contract_hash():

@@ -34,6 +34,13 @@ class MedicalDeviceCrudTests(TestCase):
         response = self.client.get(reverse("inventory:create"))
         self.assertEqual(response.status_code, 403)
 
+    def test_user_without_role_cannot_open_inventory_list(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("inventory:list"))
+
+        self.assertEqual(response.status_code, 403)
+
     def test_manager_can_edit_device(self):
         self.client.force_login(self.manager)
         response = self.client.post(

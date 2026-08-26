@@ -7,6 +7,9 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
 
 from apps.workorders.policies import (
+    can_access_inventory,
+    can_access_workorders,
+    can_create,
     can_manage_departments,
     can_manage_inventory,
 )
@@ -27,22 +30,29 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        visible_devices = visible_devices_queryset(self.request.user)
-        visible_workorders = visible_workorders_queryset(self.request.user)
-        context["device_count"] = visible_devices.count()
-        context["open_workorder_count"] = visible_workorders.exclude(
-            status__in=[WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED]
-        ).count()
-        context["status_counts"] = [
-            {"label": label, "value": visible_workorders.filter(status=status).count()}
-            for status, label in WorkOrderStatus.choices
-        ]
-        context["recent_workorders"] = (
-            visible_workorders.select_related("device", "author", "assignee", "department")
-            .order_by("-created_at")[:8]
-        )
         actor = resolve_active_actor(self.request.user, force_refresh=True)
+        show_inventory = actor is not None and can_access_inventory(actor)
+        show_workorders = actor is not None and can_access_workorders(actor)
+        context["show_inventory"] = show_inventory
+        context["show_workorders"] = show_workorders
+        context["can_create_workorder"] = actor is not None and can_create(actor)
         context["can_manage_inventory"] = actor is not None and can_manage_inventory(actor)
+
+        if show_inventory:
+            context["device_count"] = visible_devices_queryset(actor).count()
+        if show_workorders:
+            visible_workorders = visible_workorders_queryset(actor)
+            context["open_workorder_count"] = visible_workorders.exclude(
+                status__in=[WorkOrderStatus.CLOSED, WorkOrderStatus.CANCELLED]
+            ).count()
+            context["status_counts"] = [
+                {"label": label, "value": visible_workorders.filter(status=status).count()}
+                for status, label in WorkOrderStatus.choices
+            ]
+            context["recent_workorders"] = (
+                visible_workorders.select_related("device", "author", "assignee", "department")
+                .order_by("-created_at")[:8]
+            )
         return context
 
 

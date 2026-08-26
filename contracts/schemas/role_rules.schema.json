@@ -4,6 +4,18 @@
   "type": "object",
   "properties": {
     "$schema": { "type": "string" },
+    "$defaults": {
+      "type": "object",
+      "description": "Политики, применяемые при создании новых пользователей.",
+      "additionalProperties": false,
+      "properties": {
+        "new_user_role": {
+          "type": ["string", "null"],
+          "description": "Код контрактной роли для нового пользователя; null оставляет пользователя без роли."
+        }
+      },
+      "required": ["new_user_role"]
+    },
     "$administration": {
       "type": "object",
       "description": "Deprecated deployment-migration input. Runtime authorization ignores this block.",
@@ -216,6 +228,6 @@
       ]
     }
   },
-  "required": ["$schema", "$capabilities"],
+  "required": ["$schema", "$defaults", "$capabilities"],
   "additionalProperties": false
 }

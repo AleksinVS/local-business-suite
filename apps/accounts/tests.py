@@ -1101,20 +1101,13 @@ class AccessAssignmentServiceTests(TestCase):
         self.assertFalse(access["flags"])
         self.assertFalse(access["superuser_reserve"]["effective"])
 
-    def test_effective_access_explains_default_board_view_for_roleless_user(self):
+    def test_effective_access_for_roleless_user_is_empty(self):
         roleless = get_user_model().objects.create_user(username="access-default-viewer")
 
         access = effective_access_for_user(roleless)
 
-        self.assertEqual(access["roles"][0]["code"], "default_board_viewer")
-        self.assertEqual(access["roles"][0]["source"], "default_policy")
-        view_scope = next(
-            item for item in access["capabilities"] if item["code"] == "view_scope"
-        )
-        self.assertEqual(view_scope["sources"][0]["value"], "department_branch")
-        self.assertFalse(
-            any(item["code"] == "create_workorder" for item in access["capabilities"])
-        )
+        self.assertEqual(access["roles"], [])
+        self.assertEqual(access["capabilities"], [])
 
     def test_superuser_access_explains_capabilities_without_role_groups(self):
         superuser = get_user_model().objects.create_superuser(username="access-root")

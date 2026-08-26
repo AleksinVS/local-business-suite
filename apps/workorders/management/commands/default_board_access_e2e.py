@@ -13,7 +13,7 @@ from ...selectors import visible_boards_queryset
 
 
 class Command(BaseCommand):
-    help = "Проверяет базовый read-only доступ к канбану без сохранения тестовых данных."
+    help = "Проверяет закрытый доступ к канбану без роли без сохранения тестовых данных."
 
     def handle(self, *args, **options):
         User = get_user_model()
@@ -64,9 +64,9 @@ class Command(BaseCommand):
             with override_settings(ALLOWED_HOSTS=["testserver"]):
                 client = Client()
                 client.force_login(viewer)
-                if not visible_boards_queryset(viewer).filter(pk=board.pk).exists():
+                if visible_boards_queryset(viewer).filter(pk=board.pk).exists():
                     raise CommandError(
-                        "Базовый профиль не включил временную доску в доступный набор: "
+                        "Пользователь без роли неожиданно получил временную доску: "
                         f"applies={default_board_access_applies(viewer)}, "
                         f"active={viewer.is_active}, roles={sorted(user_roles(viewer))}, "
                         "board_groups="
@@ -75,19 +75,16 @@ class Command(BaseCommand):
                 response = client.get(
                     reverse("workorders:board_specific", kwargs={"board_slug": board.slug})
                 )
-                body = response.content.decode("utf-8")
-                if response.status_code != 200 or workorder.title not in body:
+                if response.status_code != 403:
                     request_user = getattr(
                         getattr(response, "wsgi_request", None), "user", None
                     )
                     raise CommandError(
-                        "Пользователь без роли не увидел разрешенную заявку: "
+                        "Сервер не закрыл канбан пользователю без роли: "
                         f"HTTP {response.status_code}, request_user="
                         f"{getattr(request_user, 'username', '<нет>')!r}, "
                         f"authenticated={getattr(request_user, 'is_authenticated', False)}."
                     )
-                if "Создать заявку" in body:
-                    raise CommandError("Пользователю без роли показано действие создания.")
                 if client.get(reverse("workorders:create")).status_code != 403:
                     raise CommandError(
                         "Сервер не запретил создание заявки пользователю без роли."

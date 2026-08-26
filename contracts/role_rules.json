@@ -1,5 +1,8 @@
 {
   "$schema": "./schemas/role_rules.schema.json",
+  "$defaults": {
+    "new_user_role": null
+  },
   "$capabilities": {
     "view_scope": {
       "type": "scope",

@@ -14,11 +14,17 @@ from .forms import MedicalDeviceForm
 from .models import MedicalDevice, OperationalStatus
 from .selectors import visible_departments_queryset, visible_devices_queryset
 from .services import archive_device_command, create_device_command, update_device_command
-from apps.workorders.policies import can_manage_inventory
+from apps.workorders.policies import can_access_inventory, can_manage_inventory
 from apps.workorders.selectors import resolve_active_actor
 
 
-class MedicalDeviceListView(LoginRequiredMixin, ListView):
+class InventoryAccessMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_access_inventory(actor)
+
+
+class MedicalDeviceListView(InventoryAccessMixin, ListView):
     model = MedicalDevice
     template_name = "inventory/device_list.html"
     context_object_name = "devices"
@@ -121,7 +127,7 @@ class MedicalDeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
         return redirect(self.get_success_url())
 
 
-class MedicalDeviceDetailView(LoginRequiredMixin, DetailView):
+class MedicalDeviceDetailView(InventoryAccessMixin, DetailView):
     model = MedicalDevice
     template_name = "inventory/device_detail.html"
     context_object_name = "device"

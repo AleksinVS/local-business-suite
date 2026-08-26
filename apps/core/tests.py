@@ -677,6 +677,19 @@ class DepartmentViewTests(TestCase):
         response = self.client.get(reverse("core:dashboard"))
         self.assertContains(response, reverse("settings_center:access_workspace"))
 
+    def test_roleless_user_does_not_see_product_navigation_or_ai_sidebar(self):
+        roleless = User.objects.create_user(username="roleless-navigation", password="pass")
+        self.client.force_login(roleless)
+
+        response = self.client.get(reverse("core:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse("workorders:board"))
+        self.assertNotContains(response, reverse("inventory:list"))
+        self.assertNotContains(response, reverse("ai:chat_index"))
+        self.assertNotContains(response, 'class="sidebar-ai-panel"', html=False)
+        self.assertContains(response, 'id="allowed-navigation-ids"', html=False)
+
     @override_settings(APP_DISPLAY_NAME="БУЗ ВО ВОБ №3")
     def test_custom_app_display_name_is_rendered(self):
         self.client.force_login(self.manager)

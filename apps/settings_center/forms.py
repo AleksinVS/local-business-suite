@@ -221,6 +221,25 @@ class RoleDescriptionForm(forms.Form):
         return proposed
 
 
+class DefaultNewUserRoleForm(forms.Form):
+    role_name = forms.ChoiceField(label="Роль новых пользователей", required=False)
+    reason = forms.CharField(
+        label="Причина изменения",
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+    base_hash = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, rules_payload=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
+        self.fields["role_name"].choices = [("", "Не назначать роль")] + [
+            (code, config.get("display_name", code))
+            for code, config in rules.items()
+            if isinstance(code, str) and not code.startswith("$") and isinstance(config, dict)
+        ]
+
+
 class MemoryGroupMembershipForm(forms.Form):
     group_names = forms.MultipleChoiceField(
         label="Технические группы памяти",

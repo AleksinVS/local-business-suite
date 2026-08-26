@@ -243,11 +243,27 @@ def _changed_component_payloads(target, cleaned_data):
         "domain": cleaned_data["ad_domain"],
         "sync_status": cleaned_data["ad_sync_status"],
     }
-    has_ad_principal = any(ad[name] for name in ("subject_id", "username", "upn"))
-    ad_changed = bool(
-        (identity and any(str(getattr(identity, name, "") or "") != str(value or "") for name, value in ad.items()))
-        or (identity is None and has_ad_principal)
+    has_any_principal = any(
+        str(ad[name] or "").strip() for name in ("subject_id", "username", "upn")
     )
+    # Пустые AD-поля в общей форме означают отсутствие изменения AD-связи.
+    ad_changed = False
+    if has_any_principal:
+        if identity:
+            ad_changed = any(
+                str(getattr(identity, name, "") or "") != str(ad[name] or "")
+                for name in (
+                    "provider",
+                    "subject_id",
+                    "username",
+                    "upn",
+                    "distinguished_name",
+                    "domain",
+                    "sync_status",
+                )
+            )
+        else:
+            ad_changed = True
     role_names = sorted(group.name for group in cleaned_data["roles"])
     roles_changed = (
         role_names != selected_role_names_for_user(target)

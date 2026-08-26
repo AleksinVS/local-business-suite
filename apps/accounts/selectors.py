@@ -4,12 +4,6 @@ import json
 from collections import OrderedDict
 
 from apps.core.contract_store import get_contract
-from apps.workorders.policies import (
-    LEGACY_DEFAULT_BOARD_VIEW_ROLE,
-    default_board_access_applies,
-    default_board_view_rules,
-    runtime_viewer_enabled,
-)
 
 
 RISK_LABELS = {"elevated": "повышенный риск", "critical": "критический риск"}
@@ -27,6 +21,17 @@ def contract_role_configs() -> OrderedDict[str, dict]:
 
 def contract_role_names() -> tuple[str, ...]:
     return tuple(contract_role_configs())
+
+
+def default_new_user_role_name() -> str:
+    """Вернуть настроенную роль новых пользователей или пустое значение."""
+
+    rules = get_contract("role_rules")
+    defaults = rules.get("$defaults", {})
+    role_name = defaults.get("new_user_role") if isinstance(defaults, dict) else None
+    if isinstance(role_name, str) and role_name in contract_role_configs():
+        return role_name
+    return ""
 
 
 def capability_catalog() -> dict[str, dict]:
@@ -75,9 +80,6 @@ def selected_role_names_for_user(user) -> list[str]:
 def effective_capabilities_for_roles(role_names) -> dict[str, list[dict]]:
     configs = contract_role_configs()
     canonical_role_names = sorted(set(role_names))
-    if not canonical_role_names and not runtime_viewer_enabled():
-        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
-        canonical_role_names = [LEGACY_DEFAULT_BOARD_VIEW_ROLE]
     effective: dict[str, list[dict]] = {}
     for role_name in canonical_role_names:
         config = configs.get(role_name)
@@ -124,8 +126,6 @@ def user_access_overview(user) -> dict:
 
 def effective_access_for_user(user) -> dict:
     configs = contract_role_configs()
-    if not runtime_viewer_enabled():
-        configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE] = default_board_view_rules()
     catalog = capability_catalog()
     role_groups, technical_groups = split_user_groups(user)
     memory_group_names = set()
@@ -179,19 +179,6 @@ def effective_access_for_user(user) -> dict:
                 "effective": is_active,
             }
         )
-    if is_active and default_board_access_applies(user):
-        default_config = configs[LEGACY_DEFAULT_BOARD_VIEW_ROLE]
-        roles.append(
-            {
-                "code": LEGACY_DEFAULT_BOARD_VIEW_ROLE,
-                "label": default_config["display_name"],
-                "description": default_config["description"],
-                "risk_markers": [],
-                "source": "default_policy",
-                "effective": True,
-            }
-        )
-
     technical = []
     memory = []
     for group in technical_groups:

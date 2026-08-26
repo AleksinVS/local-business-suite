@@ -6,6 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection
 from django.utils import timezone
@@ -32,6 +33,47 @@ VALIDATORS = runtime_validators()
 def read_contract_value(descriptor):
     path = _contract_path(descriptor)
     return load_json_file(path)
+
+
+def save_default_new_user_role(*, actor, role_name, reason, base_hash):
+    """Атомарно изменить только роль, назначаемую новым пользователям."""
+
+    current_actor = get_user_model().objects.filter(pk=getattr(actor, "pk", None)).first()
+    if not current_actor or not current_actor.is_active or not current_actor.is_superuser:
+        raise PermissionDenied(
+            "Роль новых пользователей может изменять только активный суперпользователь."
+        )
+    role_name = str(role_name or "").strip()
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError("Укажите причину изменения роли новых пользователей.")
+    descriptor = get_registry().get("core.contract.role_rules")
+    before = read_contract_value(descriptor)
+    if normalized_hash(before) != str(base_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    if role_name:
+        if role_name.startswith("$") or not isinstance(before.get(role_name), dict):
+            raise ValidationError("Выбранная роль отсутствует в рабочем контракте.")
+        if not Group.objects.filter(name=role_name).exists():
+            raise ValidationError(
+                f"Группа роли '{role_name}' не создана. Выполните seed_roles."
+            )
+    after = copy.deepcopy(before)
+    after["$defaults"] = {"new_user_role": role_name or None}
+    if after == before:
+        raise ValidationError("Роль новых пользователей не изменилась.")
+    return apply_contract_payload(
+        actor=current_actor,
+        setting_id=descriptor.setting_id,
+        raw_payload=json.dumps(after, ensure_ascii=False),
+        confirmed=True,
+        base_hash=base_hash,
+        audit_context={
+            "operation": "new_user_default_role",
+            "reason": reason,
+            "new_user_role": role_name or None,
+        },
+    )
 
 
 def preview_contract_payload(*, actor, setting_id: str, raw_payload: str):

@@ -320,7 +320,7 @@ def _cohort_fingerprint(users, boards):
 
 
 def _visible_board_ids(user):
-    """Use the production selector for the pre-cutover authorization snapshot."""
+    """Use the production selector for the current fail-closed access snapshot."""
     return sorted(visible_boards_queryset(user).values_list("pk", flat=True))
 
 
@@ -383,7 +383,7 @@ def _finalize_manifest_access_deltas(manifest):
         before_ids = (
             sorted(board["id"] for board in boards)
             if state.get("is_superuser")
-            else sorted(board["id"] for board in boards if CUSTOMER_ROLE in board.get("groups", []))
+            else []
         )
         after_ids = _candidate_board_ids(
             user_state=state,

@@ -29,6 +29,7 @@ from .selectors import (
     capability_catalog,
     contract_role_names,
     contract_role_configs,
+    default_new_user_role_name,
     role_risk_markers,
     selected_role_names_for_user,
 )
@@ -1126,9 +1127,49 @@ def _create_local_user_locked(*, actor, cleaned_data, password, audit_callback=N
     else:
         user.set_unusable_password()
     user.save()
+    _assign_default_role_to_new_user(
+        user=user,
+        actor=locked_actor,
+        source=AccessAssignmentAudit.Source.SETTINGS_CENTER,
+    )
     if audit_callback is not None:
         audit_callback({}, _user_profile_state(user))
     return user
+
+
+def _assign_default_role_to_new_user(*, user, actor, source):
+    """Назначить контрактную роль создания в текущей транзакции и записать аудит."""
+
+    role_name = default_new_user_role_name()
+    if not role_name:
+        return None
+    configs = contract_role_configs()
+    config = configs.get(role_name)
+    if not isinstance(config, dict):
+        raise ValidationError("Настроенная роль новых пользователей отсутствует в контракте.")
+    group = Group.objects.filter(name=role_name).first()
+    if group is None:
+        raise ValidationError(
+            f"Группа роли '{role_name}' не создана. Выполните seed_roles."
+        )
+    user.groups.add(group)
+    flags = _technical_flags_for_user(user)
+    risk_markers = role_risk_markers(role_name, config)
+    return AccessAssignmentAudit.objects.create(
+        actor=actor,
+        target_user=user,
+        roles_before=[],
+        roles_after=[role_name],
+        roles_added=[role_name],
+        roles_removed=[],
+        flags_before=flags,
+        flags_after=flags,
+        flags_changed=[],
+        risk_markers=risk_markers,
+        risk_confirmed=bool(risk_markers),
+        source=source,
+        reason="Автоматическое назначение роли по политике создания пользователя.",
+    )
 
 
 def get_or_create_external_user(*, username, defaults=None, audit_callback=None):
@@ -1156,6 +1197,11 @@ def _get_or_create_external_user_locked(*, username, defaults, audit_callback=No
     user = User(username=username, **{"is_active": True, **defaults})
     user.set_unusable_password()
     user.save()
+    _assign_default_role_to_new_user(
+        user=user,
+        actor=None,
+        source=AccessAssignmentAudit.Source.AD_SYNC,
+    )
     if audit_callback is not None:
         audit_callback({}, _user_profile_state(user))
     return user, True

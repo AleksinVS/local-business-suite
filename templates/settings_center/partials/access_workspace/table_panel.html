@@ -1,6 +1,24 @@
 <div class="access-workspace-grid"{% if selected and selected_panel == "inspector" %} inert{% endif %}>
   <div class="access-table-panel">
     {% if active_tab == "users" %}
+      {% if default_new_user_role_form %}
+        <details class="access-default-role-settings">
+          <summary>Права новых пользователей по умолчанию</summary>
+          <form method="post" class="settings-small-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_default_new_user_role">
+            <input type="hidden" name="view" value="users">
+            {{ default_new_user_role_form.non_field_errors }}
+            {{ default_new_user_role_form.base_hash }}
+            <label>{{ default_new_user_role_form.role_name.label }} {{ default_new_user_role_form.role_name }}</label>
+            {{ default_new_user_role_form.role_name.errors }}
+            <p class="muted">Настройка применяется только при создании новой учётной записи. Вариант «Не назначать роль» закрывает продуктовый доступ до ручного назначения.</p>
+            <label>{{ default_new_user_role_form.reason.label }} {{ default_new_user_role_form.reason }}</label>
+            {{ default_new_user_role_form.reason.errors }}
+            <button type="submit" class="button">Сохранить настройку</button>
+          </form>
+        </details>
+      {% endif %}
       <div class="access-panel-heading"><div><h2>Пользователи</h2><p class="muted">Имя открывает карточку пользователя. Значения открывают редактор поля.</p></div>{% if request.user.is_superuser %}<a class="button" href="{% url 'settings_center:user_create' %}">Создать</a>{% endif %}</div>
       <form method="get" class="access-user-filters" aria-label="Поиск и фильтры пользователей">
         <input type="hidden" name="view" value="users"><label class="access-filter-search"><span>Поиск</span><input type="search" name="q" value="{{ access_filter_state.query }}" placeholder="ФИО, логин, email или AD"></label>

@@ -997,6 +997,178 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(MemoryGroupMembershipAudit.objects.filter(target_user=target).count(), 1)
         self.assertEqual(SettingsChange.objects.filter(actor=actor).count(), 2)
 
+    def test_superuser_configures_default_role_for_local_and_external_users(self):
+        from apps.accounts.services import get_or_create_external_user
+        from apps.core.contract_store import _reset_for_tests
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="default-role-root", password="pass")
+        department = Department.objects.create(name="Default role department")
+        customer, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        payload = load_json_file("contracts/role_rules.json")
+        self.client.force_login(actor)
+
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir,
+                runtime_payload=payload,
+                git_payload=payload,
+            )
+            with override:
+                _reset_for_tests()
+                try:
+                    response = self.client.post(
+                        reverse("settings_center:access_workspace"),
+                        {
+                            "action": "save_default_new_user_role",
+                            "view": "users",
+                            "role_name": ROLE_CUSTOMER,
+                            "reason": "Новая базовая роль сотрудников.",
+                            "base_hash": normalized_hash(payload),
+                        },
+                    )
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(
+                        load_json_file(runtime_path)["$defaults"]["new_user_role"],
+                        ROLE_CUSTOMER,
+                    )
+
+                    response = self.client.post(
+                        reverse("settings_center:user_create"),
+                        {
+                            "username": "default-role-local",
+                            "password": "pass",
+                            "first_name": "",
+                            "last_name": "",
+                            "email": "",
+                            "department": department.pk,
+                            "is_active": "on",
+                        },
+                    )
+                    self.assertEqual(response.status_code, 302)
+                    local_user = User.objects.get(username="default-role-local")
+                    self.assertEqual(
+                        list(local_user.groups.values_list("name", flat=True)),
+                        [ROLE_CUSTOMER],
+                    )
+
+                    external_user, created = get_or_create_external_user(
+                        username="default-role-external",
+                        defaults={"department": department},
+                    )
+                    self.assertTrue(created)
+                    self.assertEqual(
+                        list(external_user.groups.values_list("name", flat=True)),
+                        [ROLE_CUSTOMER],
+                    )
+                    audits = AccessAssignmentAudit.objects.filter(
+                        target_user__in=[local_user, external_user],
+                        roles_added=[ROLE_CUSTOMER],
+                    )
+                    self.assertEqual(audits.count(), 2)
+                    self.assertEqual(
+                        set(audits.values_list("source", flat=True)),
+                        {
+                            AccessAssignmentAudit.Source.SETTINGS_CENTER,
+                            AccessAssignmentAudit.Source.AD_SYNC,
+                        },
+                    )
+                    self.assertTrue(
+                        SettingsChange.objects.filter(
+                            setting_id="core.contract.role_rules",
+                            status=SettingsChange.Status.APPLIED,
+                        ).exists()
+                    )
+                    self.assertTrue(customer.user_set.filter(pk=local_user.pk).exists())
+                finally:
+                    _reset_for_tests()
+
+    def test_user_inspector_bundle_ignores_empty_ad_fields_for_existing_identity(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="bundle-empty-ad-root", password="pass")
+        department = Department.objects.create(name="Bundle empty AD")
+        target = User.objects.create_user(
+            username="bundle-empty-ad-target",
+            department=department,
+        )
+        customer, _ = Group.objects.get_or_create(name=ROLE_CUSTOMER)
+        technician, _ = Group.objects.get_or_create(name=ROLE_TECHNICIAN)
+        target.groups.add(customer)
+        identity = ExternalIdentity.objects.create(
+            user=target,
+            subject_id="S-1-5-21-existing",
+            username="existing-ad-user",
+            upn="existing-ad-user@example.test",
+            distinguished_name="CN=Existing,DC=example,DC=test",
+            domain="example.test",
+        )
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {
+                **self._bundle_payload(
+                    target=target,
+                    role=technician,
+                    memory_group=None,
+                ),
+                "action": "save",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        target.refresh_from_db()
+        identity.refresh_from_db()
+        self.assertEqual(
+            set(target.groups.values_list("name", flat=True)),
+            {ROLE_TECHNICIAN},
+        )
+        self.assertEqual(identity.subject_id, "S-1-5-21-existing")
+        self.assertEqual(identity.username, "existing-ad-user")
+        self.assertEqual(identity.upn, "existing-ad-user@example.test")
+        self.assertEqual(identity.distinguished_name, "CN=Existing,DC=example,DC=test")
+        self.assertEqual(identity.domain, "example.test")
+        self.assertFalse(SettingsChange.objects.filter(actor=actor).exists())
+
+    def test_user_inspector_bundle_updates_existing_identity_with_principal_data(self):
+        from apps.core.models import Department
+
+        actor = User.objects.create_superuser(username="bundle-update-ad-root", password="pass")
+        department = Department.objects.create(name="Bundle update AD")
+        target = User.objects.create_user(
+            username="bundle-update-ad-target",
+            department=department,
+        )
+        identity = ExternalIdentity.objects.create(
+            user=target,
+            subject_id="S-1-5-21-before",
+            username="before-ad-user",
+        )
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {
+                **self._bundle_payload(
+                    target=target,
+                    role=None,
+                    memory_group=None,
+                    ad_subject_id="S-1-5-21-after",
+                    ad_username="after-ad-user",
+                    ad_upn="after-ad-user@example.test",
+                ),
+                "action": "save",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        identity.refresh_from_db()
+        self.assertEqual(identity.subject_id, "S-1-5-21-after")
+        self.assertEqual(identity.username, "after-ad-user")
+        self.assertEqual(identity.upn, "after-ad-user@example.test")
+        self.assertEqual(SettingsChange.objects.filter(actor=actor).count(), 1)
+
     def test_user_inspector_bundle_rolls_back_earlier_components_when_late_save_fails(self):
         from apps.core.models import Department
 
@@ -1156,7 +1328,7 @@ class AccessWorkspaceTests(TestCase):
         row = next(row for row in context["users"] if row["username"] == "workspace-deep-department")
         self.assertEqual(row["department_full"], " / ".join(f"Узел {index}" for index in range(5)))
 
-    def test_workspace_marks_default_board_viewer_as_read_only_source(self):
+    def test_workspace_marks_roleless_user_without_sections(self):
         actor = User.objects.create_superuser(username="workspace-default-root", password="pass")
         target = User.objects.create_user(username="workspace-default-target", is_active=True)
         self.client.force_login(actor)
@@ -1165,9 +1337,9 @@ class AccessWorkspaceTests(TestCase):
 
         row = next(row for row in response.context["users"] if row["id"] == target.pk)
         self.assertEqual(row["role_codes"], [])
-        self.assertEqual(row["roles"], ["Базовый просмотр канбана"])
-        self.assertTrue(row["role_sources"][0]["read_only"])
-        self.assertEqual(row["site_sections"], ["Канбан-доска"])
+        self.assertEqual(row["roles"], [])
+        self.assertEqual(row["role_sources"], [])
+        self.assertEqual(row["site_sections"], [])
 
     def test_profile_editor_saves_directly_and_keeps_inspector_panel(self):
         from apps.core.models import Department
@@ -4104,20 +4276,17 @@ class ExplicitViewerMigrationReportTests(TestCase):
 
         report = report_roleless_users(output_path=False)
         row = next(item for item in report["users"] if item["id"] == target.pk)
-        self.assertEqual(row["deltas"]["no_role"]["board_ids_before"], customer_board_ids)
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_before"], [])
         self.assertEqual(row["deltas"]["no_role"]["board_ids_after"], [])
-        self.assertEqual(row["deltas"]["no_role"]["board_ids_removed"], customer_board_ids)
-        self.assertEqual(row["deltas"]["customer"]["board_ids_added"], [])
+        self.assertEqual(row["deltas"]["no_role"]["board_ids_removed"], [])
+        self.assertEqual(row["deltas"]["customer"]["board_ids_added"], customer_board_ids)
         self.assertEqual(row["deltas"]["customer"]["board_ids_removed"], [])
         self.assertEqual(row["deltas"]["technician"]["board_ids_after"], technician_board_ids)
         self.assertEqual(
             row["deltas"]["technician"]["board_ids_added"],
-            sorted(set(technician_board_ids) - set(customer_board_ids)),
+            technician_board_ids,
         )
-        self.assertEqual(
-            row["deltas"]["technician"]["board_ids_removed"],
-            sorted(set(customer_board_ids) - set(technician_board_ids)),
-        )
+        self.assertEqual(row["deltas"]["technician"]["board_ids_removed"], [])
         self.assertIsNone(row["deltas"]["viewer"]["board_ids_after"])
         self.assertTrue(row["deltas"]["viewer"]["requires_board_choices"])
 
@@ -4176,13 +4345,10 @@ class ExplicitViewerMigrationReportTests(TestCase):
                         item for item in prepared["final_access_deltas"]
                         if item["user_id"] == target.pk
                     )
-                    self.assertEqual(delta["board_ids_before"], customer_board_ids)
+                    self.assertEqual(delta["board_ids_before"], [])
                     self.assertEqual(delta["board_ids_after"], [board.pk])
-                    self.assertEqual(delta["board_ids_added"], [])
-                    self.assertEqual(
-                        delta["board_ids_removed"],
-                        sorted(set(customer_board_ids) - {board.pk}),
-                    )
+                    self.assertEqual(delta["board_ids_added"], [board.pk])
+                    self.assertEqual(delta["board_ids_removed"], [])
                     self.assertFalse(delta["requires_board_choices"])
                     self.assertEqual(
                         _verify_envelope(prepared["envelope"])["final_access_deltas"],

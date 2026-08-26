@@ -7,12 +7,19 @@
     <h1>Операционный центр отдела ТО и ремонтов</h1>
     <p>Каркас уже включает локальную авторизацию, справочник медицинских изделий и общую канбан-доску заявок.</p>
   </div>
+  {% if show_inventory or show_workorders %}
   <div class="metrics">
-    <article class="metric"><span>{{ device_count }}</span><small>медизделий</small></article>
-    <article class="metric"><span>{{ open_workorder_count }}</span><small>открытых заявок</small></article>
+    {% if show_inventory %}
+      <article class="metric"><span>{{ device_count }}</span><small>медизделий</small></article>
+    {% endif %}
+    {% if show_workorders %}
+      <article class="metric"><span>{{ open_workorder_count }}</span><small>открытых заявок</small></article>
+    {% endif %}
   </div>
+  {% endif %}
 </section>
 
+{% if show_workorders %}
 <section class="panel">
   <div class="section-head">
     <h2>Статусы заявок</h2>
@@ -36,7 +43,9 @@
 <section class="panel">
   <div class="section-head">
     <h2>Последние заявки</h2>
-    <a href="{% url 'workorders:create' %}" class="btn btn-primary">Создать заявку</a>
+    {% if can_create_workorder %}
+      <a href="{% url 'workorders:create' %}" class="btn btn-primary">Создать заявку</a>
+    {% endif %}
   </div>
   <div class="table-container">
     <table>
@@ -59,4 +68,11 @@
     </table>
   </div>
 </section>
+{% elif not show_inventory %}
+<section class="panel">
+  <div class="empty-state">
+    Рабочие разделы пока недоступны. Обратитесь к администратору для назначения роли.
+  </div>
+</section>
+{% endif %}
 {% endblock %}

@@ -34,8 +34,12 @@
             </button>
             <div class="all-functions-dropdown" id="all-functions-dropdown" hidden>
               <nav class="all-functions-list" aria-label="Все функции">
-                <div class="all-functions-item"><a href="{% url 'workorders:board' %}"><span class="nav-icon">📋</span><span class="nav-text">Доска</span></a><button type="button" class="favorite-toggle" data-favorite-label="Доска" aria-label="Добавить в избранное: Доска" aria-pressed="false" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button></div>
-                <div class="all-functions-item"><a href="{% url 'inventory:list' %}"><span class="nav-icon">📦</span><span class="nav-text">Медизделия</span></a><button type="button" class="favorite-toggle" data-favorite-label="Медизделия" aria-label="Добавить в избранное: Медизделия" aria-pressed="false" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button></div>
+                {% if show_workorders_nav %}
+                  <div class="all-functions-item"><a href="{% url 'workorders:board' %}"><span class="nav-icon">📋</span><span class="nav-text">Доска</span></a><button type="button" class="favorite-toggle" data-favorite-label="Доска" aria-label="Добавить в избранное: Доска" aria-pressed="false" onclick="toggleFavorite(event, 'board', 'Доска', '📋', '{% url 'workorders:board' %}')">☆</button></div>
+                {% endif %}
+                {% if show_inventory_nav %}
+                  <div class="all-functions-item"><a href="{% url 'inventory:list' %}"><span class="nav-icon">📦</span><span class="nav-text">Медизделия</span></a><button type="button" class="favorite-toggle" data-favorite-label="Медизделия" aria-label="Добавить в избранное: Медизделия" aria-pressed="false" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button></div>
+                {% endif %}
                 {% if show_department_nav %}
                   <div class="all-functions-item"><a href="{% url 'core:department_list' %}"><span class="nav-icon">🏢</span><span class="nav-text">Подразделения</span></a><button type="button" class="favorite-toggle" data-favorite-label="Подразделения" aria-label="Добавить в избранное: Подразделения" aria-pressed="false" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button></div>
                 {% endif %}
@@ -76,7 +80,7 @@
             </div>
           </div>
         </div>
-        <section class="sidebar-ai-panel" aria-label="{% block sidebar_panel_label %}Встроенный ИИ-чат{% endblock %}">
+        {% if show_ai_nav %}<section class="sidebar-ai-panel" aria-label="{% block sidebar_panel_label %}Встроенный ИИ-чат{% endblock %}">
           {% block sidebar_panel %}
             {% if copilotkit_enabled %}
               <div
@@ -102,7 +106,7 @@
               <div class="sidebar-chat-loading">Войдите, чтобы открыть ИИ-чат.</div>
             {% endif %}
           {% endblock %}
-        </section>
+        </section>{% endif %}
       </aside>
 
       <div class="app-main">
@@ -172,6 +176,7 @@
       </div>
     </aside>
 
+    {{ allowed_navigation_ids|json_script:"allowed-navigation-ids" }}
     <script>
       function syncSidebarToggle(toggle) {
         const sidebar = document.getElementById('sidebar');
@@ -213,10 +218,13 @@
       function renderFavorites() {
         const container = document.getElementById('header-favorites');
         if (!container) return;
+        const allowedNavigationIds = new Set(
+          JSON.parse(document.getElementById('allowed-navigation-ids')?.textContent || '[]')
+        );
         const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
         container.replaceChildren();
         favorites.forEach(f => {
-          if (!f || typeof f.url !== 'string' || !f.url.startsWith('/')) return;
+          if (!f || !allowedNavigationIds.has(f.id) || typeof f.url !== 'string' || !f.url.startsWith('/')) return;
           const link = document.createElement('a');
           link.href = f.url;
           link.className = 'favorite-chip';

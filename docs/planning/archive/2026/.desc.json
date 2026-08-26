@@ -36,5 +36,6 @@
   "waiting-list-inline-editing.md": "Архивный план встроенного редактирования и атомарного аудита листа ожидания",
   "waiting-list-cards-and-access-flags.md": "Архивный план карточек пациента и технических флагов доступа",
   "default-board-view-and-sso-diagnostics.md": "Архивный план базового просмотра канбана и диагностики SSO",
-  "declarative-access-policy-model.md": "Архивный план упрощённого управления ролями для малого и среднего бизнеса (implemented, 2026-08-25)"
+  "declarative-access-policy-model.md": "Архивный план упрощённого управления ролями для малого и среднего бизнеса (implemented, 2026-08-25)",
+  "fail-closed-new-user-access.md": "Архивный план закрытого доступа без роли и роли новых пользователей по умолчанию (implemented, 2026-08-26)"
 }

@@ -40,6 +40,7 @@ from .models import (
     WorkOrderStatus,
 )
 from .policies import (
+    can_access_workorders,
     can_comment,
     can_confirm_closure,
     can_create,
@@ -282,8 +283,12 @@ def workorder_detail_page_context(request, workorder):
     }
 
 
-class WorkOrderBoardView(LoginRequiredMixin, TemplateView):
+class WorkOrderBoardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "workorders/board.html"
+
+    def test_func(self):
+        actor = resolve_active_actor(self.request.user, force_refresh=True)
+        return actor is not None and can_access_workorders(actor)
 
     def get(self, request, *args, **kwargs):
         request.session.pop("workorders:view_mode", None)

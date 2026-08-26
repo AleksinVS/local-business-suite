@@ -124,25 +124,13 @@ def active_role_rules(user, rules_payload=None):
     ]
     if explicit_rules:
         return explicit_rules
-    if default_board_access_applies(user, rules_payload=rules):
-        return [{"name": DEFAULT_BOARD_VIEW_ROLE, **default_board_view_rules(rules_payload=rules)}]
     return []
 
 
 def default_board_access_applies(user, rules_payload=None):
-    """Базовый read-only профиль только для активного пользователя без ролей."""
+    """Устаревший совместимый профиль отключён: отсутствие роли закрывает доступ."""
 
-    if not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
-        return False
-    if getattr(user, "is_superuser", False):
-        return False
-    rules = rules_payload if isinstance(rules_payload, dict) else role_rules()
-    # The runtime contract is the phase marker for the migration.  A prepared
-    # viewer group is deliberately inert while this role is absent.
-    if runtime_viewer_enabled(rules_payload=rules):
-        return False
-    explicit_role_names = set(rules) & user_roles(user)
-    return not explicit_role_names
+    return False
 
 
 def _populate_capability_type_defaults(rules, *, rules_payload, superuser):
@@ -272,6 +260,29 @@ def is_technician(user):
 
 def can_manage_inventory(user):
     return has_role_capability(user, "manage_inventory")
+
+
+def can_access_workorders(user):
+    """Показывать канбан только при явном праве чтения или создания заявок."""
+
+    return any(
+        rule.get("view_scope", "none") != "none" or rule.get("create_workorder") is True
+        for rule in active_role_rules(user)
+    )
+
+
+def can_access_inventory(user):
+    """Реестр изделий следует области связанных ресурсов или праву управления."""
+
+    return can_manage_inventory(user) or any(
+        rule.get("view_scope", "none") != "none" for rule in active_role_rules(user)
+    )
+
+
+def has_product_role_access(user):
+    """Есть ли у активного пользователя хотя бы один явный источник продуктовой роли."""
+
+    return bool(active_role_rules(user))
 
 
 def can_manage_board_columns(user):

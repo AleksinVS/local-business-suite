@@ -5,6 +5,7 @@
   "goal": "Implement the native AG-UI-compatible AI chat as the primary UI client while reusing the shared backend protocol foundation.",
   "architecture_sources": [
     "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/adr/ADR-0044-unified-native-ai-chat-execution.md",
     "docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md",
     "docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md",
     "docs/planning/active/native-ag-ui-chat-development.md"
@@ -25,8 +26,10 @@
     "Django remains the owner of sessions, auth, history and audit.",
     "Browser UI commands must only perform safe UI actions and never domain writes.",
     "Do not expose gateway tokens, cookies, raw PII, UNC paths or full DOM in browser state.",
-    "Keep CopilotKit and legacy drivers available.",
+    "Keep the CopilotKit reference driver architecture unchanged and remove obsolete native execution paths only after caller inventory and acceptance.",
     "Native parity work must reuse existing Django session, message, attachment, command and audit models instead of creating parallel storage."
+    ,"Native sidebar and full page must use a session-owned prepared-turn and idempotent run flow."
+    ,"The browser must not be the source of truth for history, session identity, commands, attachments, page context or resumable state."
   ],
   "acceptance": [
     "Native sidebar mounts from /ai/ui/config/ and not CopilotKit config.",
@@ -38,7 +41,9 @@
     "E2E covers the main native AG-UI scenario.",
     "Native sidebar restores recent history on page load.",
     "Native sidebar supports model selection, clear with confirmation, timestamps and full chat entrypoint.",
-    "Native full-page experience supports session list, title edit, delete, Markdown rendering, slash commands and attachments or records any deferred gap explicitly.",
+    "Native full-page experience supports session list, title edit, delete, Markdown rendering, slash commands and attachments.",
+    "A replayed run id does not duplicate messages or domain tool execution.",
+    "The retired Django send/stream and runtime chat endpoints have no callers and are removed.",
     "Native UX parity has dedicated unit and Playwright e2e coverage."
   ],
   "verification_commands": [
@@ -53,9 +58,9 @@
     "git diff --check -- . ':(exclude)BACKLOG.md'"
   ],
   "agui_version_check": {
-    "checked_at": "2026-06-15",
+    "checked_at": "2026-08-26",
     "current": "0.0.55",
-    "latest": "0.0.57",
+    "latest": "0.0.58",
     "decision": "warning_only_no_update_without_owner_approval"
   }
 }

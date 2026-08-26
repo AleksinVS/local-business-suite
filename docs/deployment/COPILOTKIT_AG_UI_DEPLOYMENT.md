@@ -10,6 +10,11 @@ CopilotKit не встраивается в Django-процесс. Для produc
 
 Основной целевой UI проекта - самописный AG-UI-compatible чат. CopilotKit deployment остается отдельным равноправным вариантом и проверочным контуром совместимости, но не должен диктовать несовместимый backend-контракт.
 
+CopilotKit остаётся подписанным reference-клиентом для `/ag-ui`: его
+`forwarded_props` формируются сервером. Dynamic page context из браузера в эти
+свойства не добавляется; до появления подписанного endpoint контекст страницы
+является native-only.
+
 ## Целевые процессы
 
 ```text
@@ -130,6 +135,10 @@ HTML подключает эти файлы с query string версии asset. 
 npm run build:copilotkit
 ```
 
+После сборки проверить deployment copy обычной процедурой
+`python manage.py collectstatic --noinput` и `python manage.py check_staticfiles
+--fail`. Версии пакетов в рамках этой процедуры не изменяются.
+
 Docker-образ `web` собирает этот bundle в отдельной Node-стадии и копирует результат в Python-образ. `static/dist/` не хранится в Git.
 
 После изменения структуры:
@@ -165,7 +174,7 @@ Cookie/session rules:
 2. Перезапустить Django web.
 3. Убрать `/copilotkit` из reverse proxy или остановить `copilot_runtime`.
 4. Проверить текущий AI sidebar.
-5. Проверить, что `agent_runtime` продолжает отвечать `/chat/stream`.
+5. Проверить, что `agent_runtime` продолжает отвечать `/ag-ui`.
 
 ## Проверка перед релизом
 

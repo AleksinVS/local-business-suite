@@ -221,3 +221,675 @@
   font-size: 0.86rem;
   line-height: 1.35;
 }
+
+/* Native full-page surface. The sidebar rules above intentionally remain
+   unchanged; all full-page layout rules are scoped to this mount. */
+.page-container.ai-chat-page-container:has(> .native-ai-full-page-root[data-surface="full_page"]) {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.native-ai-full-page-root[data-surface="full_page"] {
+  --native-ai-page-gutter: clamp(1rem, 3vw, 2.5rem);
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.native-ai-full-page-root [hidden] {
+  display: none !important;
+}
+
+.native-ai-full-page-root button,
+.native-ai-full-page-root input,
+.native-ai-full-page-root select,
+.native-ai-full-page-root textarea {
+  font: inherit;
+}
+
+.native-ai-full-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 1rem var(--native-ai-page-gutter);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.03);
+}
+
+.native-ai-full-page-heading,
+.native-ai-full-page-title-line,
+.native-ai-full-page-title-editor,
+.native-ai-full-page-actions {
+  display: flex;
+  align-items: center;
+}
+
+.native-ai-full-page-heading {
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.native-ai-full-page-back,
+.native-ai-full-page-action,
+.native-ai-full-page-title-edit,
+.native-ai-full-page-title-save,
+.native-ai-full-page-title-cancel,
+.native-ai-full-page-tool,
+.native-ai-full-page-send {
+  min-height: 44px;
+}
+
+.native-ai-full-page-back {
+  display: inline-grid;
+  flex: 0 0 44px;
+  width: 44px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 1.25rem;
+  text-decoration: none;
+}
+
+.native-ai-full-page-back:hover,
+.native-ai-full-page-back:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.native-ai-full-page-avatar {
+  display: inline-grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.native-ai-full-page-title-group {
+  min-width: 0;
+}
+
+.native-ai-full-page-title-line {
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.native-ai-full-page-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-ai-full-page-title-edit,
+.native-ai-full-page-title-save,
+.native-ai-full-page-title-cancel {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.native-ai-full-page-title-edit:hover,
+.native-ai-full-page-title-edit:focus-visible,
+.native-ai-full-page-title-cancel:hover,
+.native-ai-full-page-title-cancel:focus-visible {
+  border-color: var(--border);
+  color: var(--text-main);
+  background: var(--bg-color);
+}
+
+.native-ai-full-page-title-editor {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.native-ai-full-page-title-editor input {
+  width: min(22rem, 50vw);
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-main);
+  background: var(--surface);
+}
+
+.native-ai-full-page-title-editor input:focus {
+  border-color: var(--accent);
+  outline: 3px solid color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.native-ai-full-page-title-save {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.native-ai-full-page-title-save:hover,
+.native-ai-full-page-title-save:focus-visible {
+  background: #0f4f57;
+}
+
+.native-ai-full-page-session-state {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.native-ai-full-page-session-state::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--success);
+  content: "";
+}
+
+.native-ai-full-page-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.native-ai-full-page-model {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.native-ai-full-page-model select {
+  min-width: 10rem;
+  min-height: 44px;
+  padding: 0.45rem 2rem 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-main);
+  background: var(--surface);
+}
+
+.native-ai-full-page-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.native-ai-full-page-action:hover,
+.native-ai-full-page-action:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.native-ai-full-page-delete-form {
+  display: contents;
+}
+
+.native-ai-full-page-delete-form .native-ai-full-page-action:hover,
+.native-ai-full-page-delete-form .native-ai-full-page-action:focus-visible {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.native-ai-full-page-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.native-ai-full-page-status {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 0 var(--native-ai-page-gutter);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.native-ai-full-page-status:not(:empty) {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: #fbfdff;
+}
+
+.native-ai-full-page-status[data-tone="error"] {
+  color: #991b1b;
+  background: var(--danger-bg);
+}
+
+.native-ai-full-page-messages {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 1.25rem var(--native-ai-page-gutter);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.native-ai-full-page-messages > .native-ai-ui-message,
+.native-ai-full-page-messages > [data-native-ai-message],
+.native-ai-full-page-messages > article {
+  width: min(70ch, 85%);
+  max-width: 85%;
+  min-width: 0;
+}
+
+.native-ai-full-page-messages > .native-ai-ui-message.is-user,
+.native-ai-full-page-messages > [data-native-ai-message][data-role="user"] {
+  align-self: flex-end;
+}
+
+.native-ai-full-page-messages > .native-ai-ui-message.is-assistant,
+.native-ai-full-page-messages > .native-ai-ui-message.is-tool,
+.native-ai-full-page-messages > [data-native-ai-message]:not([data-role="user"]),
+.native-ai-full-page-messages > article:not([data-role="user"]) {
+  align-self: flex-start;
+}
+
+.native-ai-full-page-messages .native-ai-ui-bubble,
+.native-ai-full-page-messages [data-native-ai-message-bubble] {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.native-ai-full-page-loading,
+.native-ai-full-page-messages > .sidebar-chat-empty {
+  margin: auto;
+  padding: 1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.native-ai-full-page-drop-zone {
+  position: absolute;
+  inset: 1rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface));
+  color: var(--accent);
+  pointer-events: none;
+  text-align: center;
+}
+
+.native-ai-full-page-drop-zone span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.native-ai-full-page-composer {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.9rem var(--native-ai-page-gutter) calc(0.9rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.native-ai-full-page-attachment-preview {
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+  margin-bottom: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.native-ai-full-page-attachment-note {
+  margin: 0 0 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.native-ai-full-page-attachment-preview .native-ai-ui-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-color);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.native-ai-full-page-attachment-preview .native-ai-ui-attachment img {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.native-ai-full-page-attachment-preview .native-ai-ui-attachment button {
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.native-ai-full-page-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-color);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.native-ai-full-page-form:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.native-ai-full-page-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.native-ai-full-page-tool {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.native-ai-full-page-tool:hover,
+.native-ai-full-page-tool:focus-within,
+.native-ai-full-page-tool:focus-visible {
+  border-color: var(--border);
+  color: var(--accent);
+  background: var(--surface);
+}
+
+.native-ai-full-page-tool input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.native-ai-full-page-command-wrap,
+.native-ai-full-page-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.native-ai-full-page-command-menu,
+.native-ai-full-page-autocomplete {
+  position: absolute;
+  right: auto;
+  bottom: calc(100% + 0.55rem);
+  left: 0;
+  z-index: 10;
+  width: min(30rem, calc(100vw - 2rem));
+  max-width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(17, 24, 39, 0.14);
+}
+
+.native-ai-full-page-command-menu input,
+.native-ai-full-page-autocomplete input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.native-ai-full-page-command-list,
+.native-ai-full-page-autocomplete [data-native-ai-autocomplete-list] {
+  display: grid;
+  gap: 0.2rem;
+  max-height: min(18rem, 40vh);
+  margin-top: 0.5rem;
+  overflow-y: auto;
+}
+
+.native-ai-full-page-input-wrap textarea {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  max-height: min(12rem, 34vh);
+  padding: 0.65rem 0.25rem;
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow-y: auto;
+  color: var(--text-main);
+  background: transparent;
+  line-height: 1.4;
+}
+
+.native-ai-full-page-send {
+  display: inline-grid;
+  width: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--surface);
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.native-ai-full-page-send:hover,
+.native-ai-full-page-send:focus-visible {
+  background: #0f4f57;
+}
+
+.native-ai-full-page-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.native-ai-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 960px) {
+  .native-ai-full-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .native-ai-full-page-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .native-ai-full-page-model {
+    flex: 1 1 15rem;
+  }
+
+  .native-ai-full-page-model select {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .native-ai-full-page-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .native-ai-full-page-heading {
+    width: 100%;
+  }
+
+  .native-ai-full-page-title-edit {
+    margin-left: auto;
+  }
+
+  .native-ai-full-page-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .native-ai-full-page-model {
+    min-width: 0;
+  }
+
+  .native-ai-full-page-model span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .native-ai-full-page-model select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .native-ai-full-page-action {
+    padding-inline: 0.55rem;
+  }
+
+  .native-ai-full-page-messages {
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .native-ai-full-page-messages > .native-ai-ui-message,
+  .native-ai-full-page-messages > [data-native-ai-message],
+  .native-ai-full-page-messages > article {
+    width: 85%;
+    max-width: 85%;
+  }
+
+  .native-ai-full-page-composer {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .native-ai-full-page-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .native-ai-full-page-composer-tools {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .native-ai-full-page-input-wrap {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .native-ai-full-page-send {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .native-ai-full-page-root[data-surface="full_page"] *,
+  .native-ai-full-page-root[data-surface="full_page"] *::before,
+  .native-ai-full-page-root[data-surface="full_page"] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

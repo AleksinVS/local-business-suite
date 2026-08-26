@@ -361,14 +361,28 @@ test.describe("@workorders канбан и фильтр подразделени
   test("не возвращает скрытый фокус после завершения потока", async ({ page }) => {
     test.skip(aiUiDriver !== "native", "Проверка управляемого потока относится к native-драйверу.");
     let releaseResponse: (() => void) | undefined;
+    let preparedRunId = "";
     const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
-    await page.route("**/ai/ui/ag-ui/run/", async (route) => {
+    await page.route("**/ai/chat/*/turn/prepare/", async (route) => {
+      const body = route.request().postData() || "";
+      const runMatch = /name="run_id"[^]*?\r?\n\r?\n([^\r\n]+)/.exec(body);
+      preparedRunId = runMatch ? runMatch[1] : "kanban-focus-run";
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ message_id: "kanban-user", assistant_message_id: "kanban-assistant", run_id: preparedRunId }),
+      });
+    });
+    await page.route("**/ai/chat/*/turn/run/", async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body.threadId).toBeTruthy();
+      expect(body.runId).toBe(preparedRunId);
       await responseGate;
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
         body: [
-          'data: {"type":"RUN_STARTED","threadId":"thread","runId":"run"}',
+          `data: {"type":"RUN_STARTED","threadId":"${body.threadId}","runId":"${body.runId}"}`,
           "",
           'data: {"type":"TEXT_MESSAGE_START","messageId":"msg","role":"assistant"}',
           "",
@@ -376,7 +390,7 @@ test.describe("@workorders канбан и фильтр подразделени
           "",
           'data: {"type":"TEXT_MESSAGE_END","messageId":"msg"}',
           "",
-          'data: {"type":"RUN_FINISHED","threadId":"thread","runId":"run","outcome":{"type":"success"}}',
+          `data: {"type":"RUN_FINISHED","threadId":"${body.threadId}","runId":"${body.runId}","outcome":{"type":"success"}}`,
           "",
           "",
         ].join("\n"),
@@ -389,7 +403,11 @@ test.describe("@workorders канбан и фильтр подразделени
     const launcher = page.locator("[data-workorders-ai-launcher]");
     await launcher.click();
     const input = page.locator("#native-ai-sidebar-root textarea");
-    const requestStarted = page.waitForRequest((request) => request.url().includes("/ai/ui/ag-ui/run/"));
+    const requestStarted = page.waitForRequest((request) => (
+      request.url().includes("/ai/chat/")
+      && request.url().includes("/turn/run/")
+      && request.method() === "POST"
+    ));
     await input.fill("Проверка сворачивания");
     await input.press("Enter");
     await requestStarted;

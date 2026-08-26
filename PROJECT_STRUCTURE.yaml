@@ -31,19 +31,18 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     commands.py: file # Предопределённые slash-команды
     context_processors.py: file # Template flags и базовый route context для встроенного AI-чата без DB-запросов
     contracts.py: file # Валидаторы доменных контрактов ИИ (реестр, инструменты, типы задач, настройки чата, семантические кросс-проверки), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
-    forms.py: file # Формы ввода чата
     media_policies.py: file # Политика защищённой выдачи вложений ИИ-чата (префикс chat_attachments) для media-dispatcher: доступ владельцу по цепочке ChatAttachment->message->session->user
-    models.py: file # Модели: ChatSession, ChatMessage, AIWindowContextSnapshot, PendingAction, AgentActionLog, SlashCommand
+    models.py: file # Модели: ChatSession, ChatMessage, ChatRun, AIWindowContextSnapshot, PendingAction, AgentActionLog, SlashCommand
     page_context.py: file # Валидация, server-side snapshot и resolver безопасного контекста окна для AI-чата
-    runtime_client.py: file # Клиент для связи с agent runtime (HTTP)
-    services.py: file # Сервисы: генерация заголовков, история сессий, операции с нарядами
+    runtime_client.py: file # Клиент канонического AG-UI-потока agent runtime (HTTP/SSE)
+    services.py: file # Сервисы: сессии и история чата, проверка вложений, генерация заголовков и операции с нарядами
     settings_descriptors.py: file # Доменные descriptors Settings Center для AI runtime contracts
     skill_authoring.py: file # Валидация и атомарная запись runtime AI skills
     skills_service.py: file # Сервис каталога AI skills из модульного registry и contract-файлов
     tool_definitions.py: file # Определения инструментов (source of truth)
     tooling.py: file # Движок выполнения инструментов и confirmation flow
     urls.py: file # URL-маршруты AI-чата
-    views.py: file # Представления: чат, стриминг, генерация заголовков, CRUD команд
+    views.py: file # Представления: подготовка и AG-UI-запуск хода чата, управление сессиями, генерация заголовков и CRUD команд
   analytics: # Операционные дашборды внутри Django
     management: # Analytics management command package
       commands: file
@@ -328,6 +327,7 @@ docs: # Документация проекта
     ADR-0041-access-and-memory-lock-partition.md: file # Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти
     ADR-0042-direct-save-access-administration.md: file # Принятый ADR: прямое сохранение изменений доступа без пользовательского preview
     ADR-0043-declarative-access-policy-catalog.md: file # Принятый ADR: упрощённое управление ролями для малого и среднего бизнеса
+    ADR-0044-unified-native-ai-chat-execution.md: file # Принятый ADR: единый путь выполнения бокового и полноэкранного самописного ИИ-чата
     ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md: file # Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
@@ -464,7 +464,7 @@ services: # Автономные сервисы (вне Django)
   agent_runtime: # Сервис AI agent runtime — отдельный ASGI-процесс для выполнения AI-задач
     protocols: # Версионируемые AI UI protocol adapters agent runtime
       __init__.py: file # Инициализация пакета protocol adapters
-    app.py: file # FastAPI/ASGI приложение (эндпоинты /chat, /chat/stream)
+    app.py: file # FastAPI/ASGI приложение (health, health/details, канонический AG-UI /ag-ui и MCP)
     config.py: file # Конфигурация runtime (из переменных окружения); резолвер и источник AI-контрактов (ADR-0031)
     contract_cache.py: file # Кэш JSON-контрактов с инвалидацией по (st_mtime_ns, st_size, st_ino) — перечитывание без перезапуска (ADR-0031)
     gateway_client.py: file # HTTP-клиент для связи с Django tool gateway
@@ -690,10 +690,13 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.documentation.md: file # Отчет исполнения документационного среза native AG-UI чата
       EXECUTOR_REPORT.implementation.md: file # Отчет исполнения первого реализационного среза native AG-UI чата
       EXECUTOR_REPORT.sidebar-parity.md: file # Отчет исполнения sidebar parity native-чата: история, модель, очистка и полный чат
+      EXECUTOR_REPORT.unified-execution.md: file # Отчет исполнения единого prepare/run и полноэкранного native-чата
       EXECUTOR_REPORT.ux-parity-planning.md: file # Отчет подготовки исполнительной документации UX parity native-чата
+      RETROSPECTIVE.md: file # Ретроспектива объединения путей выполнения ИИ-чата
       TASK_ACCEPTANCE.documentation.md: file # Приемка документационного среза native AG-UI чата
       TASK_ACCEPTANCE.implementation.md: file # Приемка первого реализационного среза native AG-UI чата
       TASK_ACCEPTANCE.sidebar-parity.md: file # Приемка sidebar parity native-чата
+      TASK_ACCEPTANCE.unified-execution.md: file # Техническая приемка единого native-контура ИИ-чата
       TASK_ACCEPTANCE.ux-parity-planning.md: file # Приемка исполнительной документации UX parity native-чата
     postgresql-primary-store-migration: # Workflow: миграция основного хранилища на PostgreSQL
       task-packets: file

@@ -44,15 +44,26 @@ class ChatToolMessageVisibilityTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         body = response.content.decode("utf-8")
-        # Tool content must not appear in the user-facing HTML.
+        # The HTML is now a native client shell; messages are loaded from the
+        # owned session config rather than rendered into the document.
         self.assertNotIn(self.TOOL_CONTENT, body)
-        # The old yellow tool badge class is gone.
         self.assertNotIn("bg-amber-100", body)
-        # Tool name must not appear as a visible label either.
         self.assertNotIn("workorders.list", body)
-        # But the user and assistant messages do appear.
-        self.assertIn("Покажи список нарядов", body)
-        self.assertIn("Вот 7 активных нарядов", body)
+
+        config_response = self.client.get(
+            reverse("ai:chat_config", kwargs={"external_id": self.session.external_id})
+        )
+        self.assertEqual(config_response.status_code, 200)
+        visible_messages = config_response.json()["messages"]
+        self.assertEqual(
+            [(message["role"], message["content"]) for message in visible_messages],
+            [
+                (ChatMessage.Role.USER, "Покажи список нарядов"),
+                (ChatMessage.Role.ASSISTANT, "Вот 7 активных нарядов…"),
+            ],
+        )
+        self.assertNotIn(self.TOOL_CONTENT, str(visible_messages))
+        self.assertNotIn(self.TOOL_NAME, str(visible_messages))
         # The TOOL row is still in the DB.
         self.assertEqual(
             ChatMessage.objects.filter(

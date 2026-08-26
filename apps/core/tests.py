@@ -318,15 +318,6 @@ class PerformanceMetricsTests(SimpleTestCase):
                     },
                     path=path,
                 )
-            record_performance_event(
-                {
-                    "route_name": "ai:chat_stream",
-                    "route_pattern": "ai/chat/<int:pk>/stream/",
-                    "duration_ms": 600,
-                    "status_code": 200,
-                },
-                path=path,
-            )
 
             rows = summarize_performance_events(path, group_by="route_name")
 
@@ -334,7 +325,6 @@ class PerformanceMetricsTests(SimpleTestCase):
         self.assertEqual(by_group["workorders:board"]["count"], 5)
         self.assertEqual(by_group["workorders:board"]["p50_ms"], 30)
         self.assertEqual(by_group["workorders:board"]["p95_ms"], 100)
-        self.assertEqual(by_group["ai:chat_stream"]["p50_ms"], 600)
 
     @override_settings(
         LOCAL_BUSINESS_PERFORMANCE_METRICS_ENABLED=True,

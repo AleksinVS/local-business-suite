@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from apps.workorders.models import WorkOrder
 
-from .models import AgentActionLog, ChatMessage, PendingAction
+from .models import AgentActionLog, ChatMessage, ChatRun, ChatSession, PendingAction
 from .page_context import get_bound_page_context_for_actor
 from .services import (
     append_chat_message,
@@ -25,6 +25,7 @@ from .services import (
     update_device_for_actor,
     get_analytics_summary_for_actor,
     get_waiting_list_entry_for_actor,
+    normalize_session_external_id,
 )
 from .tool_definitions import get_tool_registry
 
@@ -257,6 +258,41 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         raise UnknownToolError(tool_code)
 
 
+def _is_native_actor(actor_context, origin_channel=""):
+    return (
+        origin_channel == "native"
+        or actor_context.get("origin_channel") == "native"
+        or actor_context.get("source") == "django-native-ai-ui"
+    )
+
+
+def _lock_native_run_fence(*, actor, session_external_id, request_id):
+    """Lock and validate the active session/run for a native gateway call.
+
+    The caller must be inside ``transaction.atomic()`` when this helper is
+    used immediately before creating a pending action or dispatching a tool.
+    CopilotKit has no ChatRun and intentionally bypasses this native fence.
+    """
+    external_id = normalize_session_external_id(session_external_id)
+    if external_id is None or not request_id:
+        raise PermissionDenied("Контекст native-запуска недействителен.")
+    session = ChatSession.objects.select_for_update().filter(
+        external_id=external_id,
+        user_id=actor.pk,
+        status=ChatSession.Status.ACTIVE,
+    ).first()
+    if session is None:
+        raise PermissionDenied("Сессия native-запуска недоступна.")
+    run = ChatRun.objects.select_for_update().filter(
+        session=session,
+        status=ChatRun.Status.RUNNING,
+        metadata__request_id=str(request_id),
+    ).first()
+    if run is None:
+        raise PermissionDenied("Native-запуск больше не активен.")
+    return session, run
+
+
 def execute_tool(
     *,
     tool_code,
@@ -287,11 +323,22 @@ def execute_tool(
         user_id=actor_context.get("user_id"),
         username=actor_context.get("username"),
     )
-    session = get_or_create_session(
-        user=actor,
-        session_external_id=session_external_id,
-        channel=actor_context.get("channel", "internal"),
-    )
+    native = _is_native_actor(actor_context, origin_channel)
+    if native:
+        # Validate before get_or_create_session: an archived or unknown native
+        # session must never be recreated as a side effect of a tool call.
+        with transaction.atomic():
+            session, _run = _lock_native_run_fence(
+                actor=actor,
+                session_external_id=session_external_id,
+                request_id=request_id,
+            )
+    else:
+        session = get_or_create_session(
+            user=actor,
+            session_external_id=session_external_id,
+            channel=actor_context.get("channel", "internal"),
+        )
 
     # Persist conversation_id in session metadata for traceability.
     if conversation_id and session.metadata.get("conversation_id") != conversation_id:
@@ -350,14 +397,30 @@ def execute_tool(
     )
 
     if requires_confirmation and not confirmed_token:
-        pending = PendingAction.objects.create(
-            tool_code=tool_code,
-            action_kind=tool["mode"],
-            actor=actor,
-            session=session,
-            payload=payload,
-            status=PendingAction.Status.PENDING,
-        )
+        if native:
+            with transaction.atomic():
+                session, _run = _lock_native_run_fence(
+                    actor=actor,
+                    session_external_id=session_external_id,
+                    request_id=request_id,
+                )
+                pending = PendingAction.objects.create(
+                    tool_code=tool_code,
+                    action_kind=tool["mode"],
+                    actor=actor,
+                    session=session,
+                    payload=payload,
+                    status=PendingAction.Status.PENDING,
+                )
+        else:
+            pending = PendingAction.objects.create(
+                tool_code=tool_code,
+                action_kind=tool["mode"],
+                actor=actor,
+                session=session,
+                payload=payload,
+                status=PendingAction.Status.PENDING,
+            )
         record_action(
             actor=actor,
             tool_code=tool_code,
@@ -385,14 +448,33 @@ def execute_tool(
         }
 
     try:
-        result = _dispatch_tool(
-            tool_code=tool_code,
-            actor=actor,
-            session=session,
-            actor_context={**actor_context, **trace_context},
-            payload=payload,
-            user_message=user_message,
-        )
+        if native:
+            # Keep the row lock through the domain dispatch.  An archive or a
+            # failed-run transition therefore cannot pass between the final
+            # fence check and the side effect.
+            with transaction.atomic():
+                session, _run = _lock_native_run_fence(
+                    actor=actor,
+                    session_external_id=session_external_id,
+                    request_id=request_id,
+                )
+                result = _dispatch_tool(
+                    tool_code=tool_code,
+                    actor=actor,
+                    session=session,
+                    actor_context={**actor_context, **trace_context},
+                    payload=payload,
+                    user_message=user_message,
+                )
+        else:
+            result = _dispatch_tool(
+                tool_code=tool_code,
+                actor=actor,
+                session=session,
+                actor_context={**actor_context, **trace_context},
+                payload=payload,
+                user_message=user_message,
+            )
         append_chat_message(
             session=session,
             role=ChatMessage.Role.TOOL,

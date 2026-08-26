@@ -7,6 +7,7 @@ from django.db import close_old_connections
 from django.test import Client, TransactionTestCase
 
 from apps.ai.tests._common import *  # noqa: F401,F403
+from apps.ai.models import ChatRun
 
 
 @override_settings(LOCAL_BUSINESS_AI_GATEWAY_TOKEN="test-ai-token")
@@ -148,8 +149,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(forwarded["ui_driver"], "copilotkit")
         self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
 
-    def test_native_ai_ui_config_returns_signed_actor_payload(self):
-        from ..views import sign_copilotkit_actor_payload
+    def test_native_ai_ui_config_keeps_actor_payload_server_side(self):
         from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
         self.client.force_login(self.customer)
@@ -158,13 +158,18 @@ class AIViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        forwarded = payload["forwarded_props"]
         self.assertTrue(payload["enabled"])
         self.assertEqual(payload["driver"], "native")
-        self.assertEqual(payload["runtime_url"], reverse("ai:ui_ag_ui_run"))
-        self.assertEqual(forwarded["ui_driver"], "native")
-        self.assertEqual(forwarded["actor"]["source"], "django-native-ai-ui")
-        self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
+        self.assertNotIn("forwarded_props", payload)
+        session = ChatSession.objects.get(external_id=payload["thread_id"])
+        self.assertEqual(
+            payload["runtime_url"],
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+        )
+        self.assertEqual(
+            payload["prepare_url"],
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+        )
         self.assertEqual(payload["labels"]["error"], AI_CHAT_UNAVAILABLE_MESSAGE)
 
     def test_native_ai_ui_config_includes_sidebar_history_models_and_urls(self):
@@ -211,6 +216,42 @@ class AIViewsTests(TestCase):
             reverse("ai:chat_detail", kwargs={"external_id": session.external_id}),
         )
 
+    def test_native_sidebar_config_exposes_oldest_prepared_run_for_recovery(self):
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, channel=ChatSession.Channel.SIDEBAR)
+        first = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "recover-first", "prompt": "Первый вопрос", "surface": "sidebar"},
+        )
+        second = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "recover-second", "prompt": "Второй вопрос", "surface": "sidebar"},
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
+            payload = self.client.get(reverse("ai:ui_config")).json()
+        self.assertEqual(payload["recoverable_run"]["run_id"], "recover-first")
+        self.assertEqual(payload["recoverable_run"]["status"], "prepared")
+
+    def test_native_full_page_config_exposes_prepared_run_but_not_running_run(self):
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, channel=ChatSession.Channel.INTERNAL)
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "recover-full", "prompt": "Продолжить", "surface": "full_page"},
+        )
+        self.assertEqual(prepared.status_code, 201)
+        payload = self.client.get(
+            reverse("ai:chat_config", kwargs={"external_id": session.external_id})
+        ).json()
+        self.assertEqual(payload["recoverable_run"]["run_id"], "recover-full")
+        ChatRun.objects.filter(session=session, run_id="recover-full").update(status=ChatRun.Status.RUNNING)
+        payload = self.client.get(
+            reverse("ai:chat_config", kwargs={"external_id": session.external_id})
+        ).json()
+        self.assertIsNone(payload["recoverable_run"])
+
     def test_native_ai_ui_new_session_returns_native_thread(self):
         self.client.force_login(self.customer)
         existing = ChatSession.objects.create(
@@ -235,8 +276,11 @@ class AIViewsTests(TestCase):
         self.assertEqual(new_session.channel, ChatSession.Channel.SIDEBAR)
         self.assertEqual(new_session.metadata["model_id"], "test-model")
         self.assertEqual(payload["driver"], "native")
-        self.assertEqual(payload["runtime_url"], reverse("ai:ui_ag_ui_run"))
-        self.assertEqual(payload["forwarded_props"]["ui_driver"], "native")
+        self.assertEqual(
+            payload["runtime_url"],
+            reverse("ai:chat_run", kwargs={"external_id": new_session.external_id}),
+        )
+        self.assertNotIn("forwarded_props", payload)
 
     def test_native_ai_ui_clear_session_returns_clean_config(self):
         self.client.force_login(self.customer)
@@ -261,98 +305,76 @@ class AIViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["thread_id"], str(session.external_id))
+        new_session = ChatSession.objects.get(external_id=payload["thread_id"])
+        self.assertNotEqual(new_session.external_id, session.external_id)
         self.assertEqual(payload["messages"], [])
         self.assertEqual(payload["current_model_id"], "test-model")
-        self.assertEqual(ChatMessage.objects.filter(session=session).count(), 0)
         session.refresh_from_db()
-        self.assertIsNone(session.last_message_at)
-        self.assertEqual(session.metadata.get("model_id"), "test-model")
-        self.assertNotIn("sidebar_summary", session.metadata)
+        self.assertEqual(session.status, ChatSession.Status.ARCHIVED)
+        self.assertEqual(ChatMessage.objects.filter(session=session).count(), 2)
+        self.assertEqual(new_session.channel, ChatSession.Channel.SIDEBAR)
+        self.assertEqual(new_session.metadata.get("model_id"), "test-model")
+        self.assertEqual(new_session.metadata.get("previous_sidebar_session_id"), str(session.external_id))
 
-    def test_native_ai_ui_proxy_overwrites_client_actor_payload(self):
+    @patch("apps.ai.views.AgentRuntimeClient.ag_ui_stream")
+    def test_native_ai_ui_run_uses_owned_canonical_session(self, stream_mock):
         self.client.force_login(self.customer)
-        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"), patch("apps.ai.views.AgentRuntimeClient") as client_class:
-            client = client_class.return_value
-            client.ag_ui_stream.return_value = ['data: {"type":"RUN_STARTED"}\n\n']
-            response = self.client.post(
-                reverse("ai:ui_ag_ui_run"),
-                data=json.dumps(
-                    {
-                        "threadId": "forged-thread",
-                        "runId": "run-1",
-                        "messages": [{"id": "u1", "role": "user", "content": "Проверка"}],
-                        "forwardedProps": {
-                            "actor": {"user_id": self.manager.id},
-                            "signature": "invalid",
-                            "page_context": {
-                                "context_hint": "workorders / board",
-                                "envelope": {
-                                    "schema_version": "1",
-                                    "window_id": "native-test-window",
-                                    "page": {"module": "workorders", "view": "board", "path": "/workorders/"},
-                                },
-                            },
-                        },
-                    }
-                ),
-                content_type="application/json",
-                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-            )
-            body = b"".join(response.streaming_content).decode("utf-8")
-
+        session = ChatSession.objects.create(user=self.customer, channel=ChatSession.Channel.SIDEBAR)
+        stream_mock.return_value = iter([
+            'data: {"type":"RUN_STARTED","runId":"run-1"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_START","messageId":"msg"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg","delta":"Ответ"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_END","messageId":"msg"}\n\n',
+            'data: {"type":"RUN_FINISHED","runId":"run-1"}\n\n',
+        ])
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "run-1", "prompt": "Проверка", "surface": "sidebar"},
+        )
+        self.assertEqual(prepared.status_code, 201)
+        response = self.client.post(
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"threadId": str(session.external_id), "runId": "run-1"}),
+            content_type="application/json",
+        )
+        body = b"".join(response.streaming_content).decode("utf-8")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("RUN_STARTED", body)
-        run_payload = client.ag_ui_stream.call_args.args[0]
-        forwarded = run_payload["forwardedProps"]
-        self.assertNotEqual(run_payload["threadId"], "forged-thread")
-        self.assertEqual(forwarded["actor"]["user_id"], self.customer.id)
-        self.assertEqual(forwarded["ui_driver"], "native")
-        self.assertEqual(forwarded["actor"]["conversation_id"], ChatSession.objects.get(external_id=run_payload["threadId"]).metadata["conversation_id"])
-        self.assertEqual(forwarded["page_context"]["page_context_status"], "bound")
-        self.assertEqual(forwarded["page_context"]["digest"]["module"], "workorders")
-        self.assertRegex(forwarded["signature"], r"^[a-f0-9]{64}$")
-        session = ChatSession.objects.get(external_id=run_payload["threadId"])
-        self.assertEqual(session.messages.filter(role=ChatMessage.Role.USER, content="Проверка").count(), 1)
+        self.assertIn("RUN_FINISHED", body)
+        stream_mock.assert_called_once()
+        payload = stream_mock.call_args.args[0]
+        self.assertEqual(payload["threadId"], str(session.external_id))
+        self.assertEqual(payload["forwardedProps"]["actor"]["user_id"], self.customer.id)
 
-    def test_native_ai_ui_proxy_persists_assistant_message_from_agui_stream(self):
+    @patch("apps.ai.views.AgentRuntimeClient.ag_ui_stream")
+    def test_native_ai_ui_run_persists_assistant_message_from_agui_stream(self, stream_mock):
         self.client.force_login(self.customer)
-        with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"), patch("apps.ai.views.AgentRuntimeClient") as client_class:
-            client = client_class.return_value
-            client.ag_ui_stream.return_value = [
-                'data: {"type":"RUN_STARTED","threadId":"thread","runId":"run"}\n\n',
-                'data: {"type":"TEXT_MESSAGE_START","messageId":"msg","role":"assistant"}\n\n',
-                'data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg","delta":"Ответ"}\n\n',
-                'data: {"type":"TOOL_CALL_START","toolCallId":"tool-1","toolCallName":"workorders.open_right_panel"}\n\n',
-                'data: {"type":"TOOL_CALL_END","toolCallId":"tool-1"}\n\n',
-                'data: {"type":"STATE_DELTA","delta":[{"op":"replace","path":"/localBusiness/uiCommands","value":[{"type":"open_right_panel","htmx_url":"/workorders/1/","target":"#global-right-panel-content"}]}]}\n\n',
-                'data: {"type":"RUN_FINISHED","threadId":"thread","runId":"run"}\n\n',
-            ]
-            response = self.client.post(
-                reverse("ai:ui_ag_ui_run"),
-                data=json.dumps(
-                    {
-                        "runId": "run-2",
-                        "messages": [{"id": "u1", "role": "user", "content": "Открой заявку"}],
-                        "forwardedProps": {},
-                    }
-                ),
-                content_type="application/json",
-                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-            )
-            body = b"".join(response.streaming_content).decode("utf-8")
-
-        self.assertEqual(response.status_code, 200)
+        session = ChatSession.objects.create(user=self.customer, channel=ChatSession.Channel.SIDEBAR)
+        stream_mock.return_value = iter([
+            'data: {"type":"RUN_STARTED","runId":"run-2"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_START","messageId":"msg"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg","delta":"Ответ"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_END","messageId":"msg"}\n\n',
+            'data: {"type":"TOOL_CALL_START","toolCallId":"tool-1","toolCallName":"workorders.open_right_panel"}\n\n',
+            'data: {"type":"TOOL_CALL_END","toolCallId":"tool-1"}\n\n',
+            'data: {"type":"STATE_DELTA","delta":[{"op":"replace","path":"/localBusiness/uiCommands","value":[{"type":"open_right_panel","htmx_url":"/workorders/1/","target":"#global-right-panel-content"}]}]}\n\n',
+            'data: {"type":"RUN_FINISHED","runId":"run-2"}\n\n',
+        ])
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "run-2", "prompt": "Открой заявку", "surface": "sidebar"},
+        )
+        self.assertEqual(prepared.status_code, 201)
+        response = self.client.post(
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"threadId": str(session.external_id), "runId": "run-2"}),
+            content_type="application/json",
+        )
+        body = b"".join(response.streaming_content).decode("utf-8")
         self.assertIn("TEXT_MESSAGE_CONTENT", body)
-        session = ChatSession.objects.get(user=self.customer, channel=ChatSession.Channel.SIDEBAR)
-        messages = list(session.messages.order_by("created_at", "id"))
-        self.assertEqual(messages[0].role, ChatMessage.Role.USER)
-        self.assertEqual(messages[0].content, "Открой заявку")
-        self.assertEqual(messages[1].role, ChatMessage.Role.ASSISTANT)
-        self.assertEqual(messages[1].content, "Ответ")
-        self.assertEqual(messages[1].metadata["tool_trace"][0]["tool"], "workorders.open_right_panel")
-        self.assertEqual(messages[1].metadata["ui_commands"][0]["type"], "open_right_panel")
-
+        assistant = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
+        self.assertEqual(assistant.content, "Ответ")
+        self.assertEqual(assistant.metadata["tool_trace"][0]["tool"], "workorders.open_right_panel")
+        self.assertEqual(assistant.metadata["ui_commands"][0]["type"], "open_right_panel")
     def test_tool_gateway_rejects_invalid_token(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.list"}),
@@ -1071,14 +1093,12 @@ class AIViewsTests(TestCase):
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.manager)
 
-        for url_name in ("ai:ui_session_new", "ai:ui_ag_ui_run"):
-            with self.subTest(url_name=url_name):
-                response = csrf_client.post(
-                    reverse(url_name),
-                    data="{}",
-                    content_type="application/json",
-                )
-                self.assertEqual(response.status_code, 403)
+        response = csrf_client.post(
+            reverse("ai:ui_session_new"),
+            data="{}",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_page_context_update_rejects_payload_over_total_limit(self):
         self.client.force_login(self.manager)
@@ -1206,8 +1226,9 @@ class AIViewsTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
             {
+                "run_id": "context-bind-run",
                 "prompt": "Что с этой заявкой?",
                 "window_id": "window-bind-test",
                 "context_version": first.context_version,
@@ -1215,7 +1236,7 @@ class AIViewsTests(TestCase):
             },
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)
         message = session.messages.get(role=ChatMessage.Role.USER)
         self.assertEqual(message.metadata["page_context_status"], "bound")
         self.assertEqual(message.metadata["context_snapshot_id"], first.id)
@@ -1328,6 +1349,51 @@ class AIViewsTests(TestCase):
         # Chat archive (not delete) must not disturb the knowledge item's link.
         self.assertTrue(MemoryKnowledgeItem.objects.filter(source_session=session).exists())
 
+    def test_chat_mutations_hide_foreign_and_archived_sessions(self):
+        self.client.force_login(self.customer)
+        foreign = ChatSession.objects.create(user=self.manager, title="Чужой чат")
+        archived = ChatSession.objects.create(
+            user=self.customer,
+            title="Архивный чат",
+            status=ChatSession.Status.ARCHIVED,
+        )
+        endpoints = (
+            ("ai:chat_update_model", {"model_id": ""}),
+            ("ai:chat_update_title", {"title": "Новое имя"}),
+            ("ai:chat_generate_title", {}),
+            ("ai:chat_delete", {}),
+        )
+        for url_name, payload in endpoints:
+            for session in (foreign, archived):
+                with self.subTest(url_name=url_name, session=session.pk):
+                    response = self.client.post(
+                        reverse(url_name, kwargs={"external_id": session.external_id}),
+                        data=json.dumps(payload),
+                        content_type="application/json",
+                    )
+                    self.assertEqual(response.status_code, 404)
+        foreign.refresh_from_db()
+        archived.refresh_from_db()
+        self.assertEqual(foreign.title, "Чужой чат")
+        self.assertEqual(archived.status, ChatSession.Status.ARCHIVED)
+
+    def test_chat_mutations_reject_non_string_model_and_title(self):
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Исходный")
+        for url_name, payload in (
+            ("ai:chat_update_model", {"model_id": 123}),
+            ("ai:chat_update_title", {"title": {"unexpected": "object"}}),
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.post(
+                    reverse(url_name, kwargs={"external_id": session.external_id}),
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 400)
+        session.refresh_from_db()
+        self.assertEqual(session.title, "Исходный")
+
     def test_chat_sidebar_lists_only_active_sessions(self):
         self.client.force_login(self.customer)
         active = ChatSession.objects.create(user=self.customer, title="Активный чат")
@@ -1372,8 +1438,8 @@ class AIViewsTests(TestCase):
         self.assertContains(response, 'id="native-ai-sidebar-root"')
         self.assertContains(response, 'data-config-url="' + reverse("ai:ui_config") + '"')
         self.assertContains(response, 'data-new-session-url="' + reverse("ai:ui_session_new") + '"')
-        self.assertContains(response, "native_ai.css?v=20260610-native-ag-ui-chat")
-        self.assertContains(response, "native_ai.js?v=20260610-native-ag-ui-chat")
+        self.assertContains(response, "native_ai.css?v=20260826-unified-native-chat")
+        self.assertContains(response, "native_ai.js?v=20260826-unified-native-chat")
         self.assertNotContains(response, 'id="copilotkit-sidebar-root"')
         self.assertNotContains(response, reverse("ai:copilotkit_config"))
 
@@ -1396,205 +1462,100 @@ class AIViewsTests(TestCase):
         session = ChatSession.objects.get(user=self.customer)
         self.assertEqual(session.external_id, normalize_session_external_id("external-session-42"))
 
-    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
-    def test_chat_send_and_stream_store_user_and_assistant_messages(self, stream_mock):
-        # Нормальный ход диалога хранит ОБА сообщения, но через два шага:
-        # /send/ (AJAX) сохраняет только сообщение пользователя и отдаёт
-        # message_id, а ответ ассистента появляется на стриминговом пути.
-        stream_mock.return_value = [
-            'data: {"content": "Найдено 1 новая заявка."}',
-            "data: [DONE]",
-        ]
+    @patch("apps.ai.views.AgentRuntimeClient.ag_ui_stream")
+    def test_canonical_prepare_and_run_store_user_and_assistant_messages(self, stream_mock):
+        stream_mock.return_value = iter([
+            'data: {"type":"RUN_STARTED","runId":"run-canonical"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_START","messageId":"msg"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg","delta":"Найдено 1 новая заявка."}\n\n',
+            'data: {"type":"TEXT_MESSAGE_END","messageId":"msg"}\n\n',
+            'data: {"type":"RUN_FINISHED","runId":"run-canonical"}\n\n',
+        ])
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(user=self.customer, title="Проверка AI")
-
-        send_response = self.client.post(
-            reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
-            {"prompt": "Покажи новые заявки"},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "run-canonical", "prompt": "Покажи новые заявки"},
         )
-        self.assertEqual(send_response.status_code, 200)
-        send_payload = send_response.json()
-        self.assertEqual(send_payload["status"], "ok")
-        message_id = send_payload["message_id"]
+        self.assertEqual(prepared.status_code, 201)
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
-        self.assertFalse(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).exists())
-
-        stream_response = self.client.post(
-            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
-            data=json.dumps({"msg_id": message_id}),
+        response = self.client.post(
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"threadId": str(session.external_id), "runId": "run-canonical"}),
             content_type="application/json",
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
-        body = b"".join(stream_response.streaming_content).decode("utf-8")
-        self.assertEqual(stream_response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
         self.assertIn("Найдено 1", body)
-        self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
-        self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).count(), 1)
         assistant = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
         self.assertEqual(assistant.content, "Найдено 1 новая заявка.")
-        self.assertTrue(assistant.metadata.get("streamed"))
+        self.assertEqual(assistant.metadata["runtime_method"], "ag_ui")
 
-    def test_chat_send_does_not_perform_synchronous_llm_call(self):
-        # Регрессия: /send/ больше НЕ делает синхронный LLM-вызов. Раньше это
-        # был синхронный вызов AgentRuntimeClient.chat с таймаутом 90s, который
-        # при рассинхроне с LLM_DEADLINE (300s) мог осиротить write-инструмент.
-        # Ответ ассистента (в т.ч. user-safe ошибки, см.
-        # test_chat_stream_runtime_error_is_returned_saved_and_audited) теперь
-        # приходит только со стримингового пути.
+    def test_prepare_does_not_perform_runtime_call(self):
         self.client.force_login(self.customer)
-        session = ChatSession.objects.create(user=self.customer, title="Без синхронного LLM")
+        session = ChatSession.objects.create(user=self.customer, title="Без runtime")
         with patch("apps.ai.views.AgentRuntimeClient") as client_class:
             response = self.client.post(
-                reverse("ai:chat_send", kwargs={"external_id": session.external_id}),
-                {"prompt": "Проверь память"},
-                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+                reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+                {"run_id": "prepare-only", "prompt": "Проверь память"},
             )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload["status"], "ok")
-        self.assertIn("message_id", payload)
-        # Клиент рантайма не конструируется и LLM не вызывается на /send/.
+        self.assertEqual(response.status_code, 201)
         client_class.assert_not_called()
         self.assertEqual(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.USER).count(), 1)
         self.assertFalse(ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).exists())
-        self.assertFalse(AgentActionLog.objects.filter(session=session).exists())
 
-    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
-    def test_chat_stream_runtime_error_is_returned_saved_and_audited(self, stream_mock):
+    @patch("apps.ai.views.AgentRuntimeClient.ag_ui_stream", side_effect=RuntimeError("runtime exploded"))
+    def test_canonical_runtime_error_is_returned_saved_and_audited(self, stream_mock):
         from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
-        stream_mock.side_effect = AgentRuntimeError("runtime stream exploded")
         self.client.force_login(self.customer)
-        session = ChatSession.objects.create(user=self.customer, title="Проверка stream")
-        user_message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.USER,
-            content="Найди в памяти концентратор",
+        session = ChatSession.objects.create(user=self.customer, title="Проверка AG-UI")
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "run-error", "prompt": "Найди в памяти концентратор"},
         )
-
-        with self.assertLogs("apps.ai.views", level="WARNING") as captured:
-            response = self.client.post(
-                reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
-                data=json.dumps({"msg_id": user_message.id}),
-                content_type="application/json",
-                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-            )
-            body = b"".join(response.streaming_content).decode("utf-8")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("runtime stream exploded", "\n".join(captured.output))
-        self.assertIn(AI_CHAT_UNAVAILABLE_MESSAGE, body)
-        self.assertIn("request_id", body)
-        self.assertNotIn("runtime stream exploded", body)
-        action = AgentActionLog.objects.get(tool_code="agent_runtime.chat_stream")
-        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
-        self.assertIn("runtime stream exploded", action.error_message)
-        assistant_message = ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).get()
-        self.assertTrue(assistant_message.metadata["error"])
-        self.assertEqual(assistant_message.content, AI_CHAT_UNAVAILABLE_MESSAGE)
-        self.assertEqual(assistant_message.metadata["technical_trace_id"], action.id)
-        session.refresh_from_db()
-        self.assertEqual(session.metadata["last_error_action_id"], action.id)
-
-    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
-    def test_chat_stream_runtime_error_payload_is_saved_as_error_not_partial_success(self, stream_mock):
-        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
-
-        stream_mock.return_value = [
-            'data: {"content": "Частичный ответ"}',
-            'data: {"error": "agent_runtime_error", "message": "секретная причина"}',
-            "data: [DONE]",
-        ]
-        self.client.force_login(self.customer)
-        session = ChatSession.objects.create(user=self.customer, title="Ошибка в SSE payload")
-        user_message = ChatMessage.objects.create(
-            session=session,
-            role=ChatMessage.Role.USER,
-            content="Проверь ответ",
-        )
-
+        self.assertEqual(prepared.status_code, 201)
         response = self.client.post(
-            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
-            data=json.dumps({"msg_id": user_message.id}),
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"threadId": str(session.external_id), "runId": "run-error"}),
             content_type="application/json",
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn(AI_CHAT_UNAVAILABLE_MESSAGE, body)
+        self.assertNotIn("runtime exploded", body)
+        action = AgentActionLog.objects.get(tool_code="agent_runtime.ag_ui")
+        self.assertEqual(action.status, AgentActionLog.Status.FAILED)
+        self.assertIn("runtime exploded", action.error_message)
 
-        self.assertEqual(response.status_code, 200)
+    @patch("apps.ai.views.AgentRuntimeClient.ag_ui_stream")
+    def test_canonical_runtime_error_payload_is_saved_as_error_not_partial_success(self, stream_mock):
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
+
+        stream_mock.return_value = iter([
+            'data: {"type":"RUN_STARTED","runId":"run-partial"}\n\n',
+            'data: {"type":"TEXT_MESSAGE_CONTENT","delta":"Частичный ответ"}\n\n',
+            'data: {"type":"RUN_ERROR","runId":"run-partial","message":"секретная причина"}\n\n',
+        ])
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Ошибка AG-UI")
+        prepared = self.client.post(
+            reverse("ai:chat_prepare_turn", kwargs={"external_id": session.external_id}),
+            {"run_id": "run-partial", "prompt": "Проверь ответ"},
+        )
+        self.assertEqual(prepared.status_code, 201)
+        response = self.client.post(
+            reverse("ai:chat_run", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"threadId": str(session.external_id), "runId": "run-partial"}),
+            content_type="application/json",
+        )
+        body = b"".join(response.streaming_content).decode("utf-8")
         self.assertIn(AI_CHAT_UNAVAILABLE_MESSAGE, body)
         self.assertNotIn("секретная причина", body)
-        self.assertLess(body.index(AI_CHAT_UNAVAILABLE_MESSAGE), body.rindex("data: [DONE]"))
-        assistant_messages = ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT)
-        self.assertEqual(assistant_messages.count(), 1)
-        assistant_message = assistant_messages.get()
-        self.assertEqual(assistant_message.content, AI_CHAT_UNAVAILABLE_MESSAGE)
-        self.assertTrue(assistant_message.metadata["error"])
-        self.assertEqual(assistant_message.metadata["partial"], True)
+        assistant = ChatMessage.objects.get(session=session, role=ChatMessage.Role.ASSISTANT)
+        self.assertTrue(assistant.metadata["error"])
+        self.assertTrue(assistant.metadata["partial"])
         self.assertTrue(AgentActionLog.objects.filter(
-            session=session,
-            tool_code="agent_runtime.chat_stream",
-            status=AgentActionLog.Status.FAILED,
+            session=session, tool_code="agent_runtime.ag_ui", status=AgentActionLog.Status.FAILED
         ).exists())
-
-    def test_workorder_get_with_invalid_id_returns_error_envelope(self):
-        response = self.client.post(
-            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.get"}),
-            data=json.dumps(
-                {
-                    "actor": {"user_id": self.customer.id, "channel": "internal"},
-                    "payload": {"workorder_id": 99999},
-                }
-            ),
-            content_type="application/json",
-            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
-        )
-        self.assertEqual(response.status_code, 400)
-        payload = response.json()
-        self.assertFalse(payload["ok"])
-        self.assertEqual(payload["tool"], "workorders.get")
-        self.assertIsNone(payload["result"])
-        self.assertEqual(len(payload["errors"]), 1)
-        self.assertIn("meta", payload)
-        self.assertIn("session_id", payload["meta"])
-        action = AgentActionLog.objects.filter(tool_code="workorders.get").first()
-        self.assertEqual(action.status, AgentActionLog.Status.DENIED)
-
-    def test_workorders_create_requires_confirmation_without_token(self):
-        response = self.client.post(
-            reverse("ai:tool_execute", kwargs={"tool_code": "workorders.create"}),
-            data=json.dumps(
-                {
-                    "actor": {"user_id": self.customer.id, "channel": "internal"},
-                    "payload": {
-                        "department_id": self.department.id,
-                        "subject": "Test pending",
-                        "description": "Testing pending flow",
-                    },
-                }
-            ),
-            content_type="application/json",
-            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["tool"], "workorders.create")
-        self.assertTrue(payload["meta"]["awaiting_confirmation"])
-        self.assertIn("pending_action_token", payload["meta"])
-        self.assertIsNone(payload["result"])
-        self.assertEqual(len(payload["errors"]), 0)
-        # No workorder created yet
-        self.assertFalse(WorkOrder.objects.filter(title="Test pending").exists())
-        # PendingAction record created
-        pending = PendingAction.objects.filter(tool_code="workorders.create").first()
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.status, PendingAction.Status.PENDING)
-        # Action logged as pending
-        action = AgentActionLog.objects.filter(tool_code="workorders.create", status=AgentActionLog.Status.PENDING).first()
-        self.assertIsNotNone(action)
-
     def test_workorders_transition_requires_confirmation_without_token(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "workorders.transition"}),

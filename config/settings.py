@@ -615,11 +615,9 @@ LOCAL_BUSINESS_AGENT_RUNTIME_URL = os.environ.get(
 LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT", "90")
 )
-# Единый источник правды для httpx read-timeout стримингового чата
-# (``runtime_client.chat_stream`` / ``ag_ui_stream``). Чат теперь всегда
-# идёт через стриминг, поэтому gunicorn-воркер удерживается до этого
-# таймаута, и floor GUNICORN_TIMEOUT считается именно от него, а не от
-# синхронного LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT.
+# Единый источник правды для httpx read-timeout канонического AG-UI потока.
+# Gunicorn-воркер удерживается до этого таймаута, а floor GUNICORN_TIMEOUT
+# считается именно от него, а не от синхронного runtime timeout.
 LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT = float(
     os.environ.get("LOCAL_BUSINESS_AI_STREAM_READ_TIMEOUT", "600")
 )

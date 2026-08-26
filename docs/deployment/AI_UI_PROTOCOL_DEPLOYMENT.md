@@ -24,7 +24,9 @@ reverse proxy /copilotkit -> copilot_runtime
 ```text
 Django web
 agent_runtime FastAPI
-browser -> Django /ai/ui/ag-ui/run/ -> agent_runtime /ag-ui
+browser native sidebar/full page -> Django /ai/chat/<session>/turn/prepare/
+                                  -> Django /ai/chat/<session>/turn/run/
+                                  -> agent_runtime /ag-ui
 ```
 
 Copilot Runtime не нужен. Браузер работает same-origin с Django.
@@ -61,6 +63,16 @@ Native:
 ```text
 LOCAL_BUSINESS_AI_UI_DRIVER=native
 ```
+
+Native execution requires `python manage.py migrate` (including `ChatRun`) before
+traffic is enabled. Prepare is a same-origin CSRF-protected multipart request;
+attachments are validated and stored with the user message. Their body is not yet
+analysed by the model: only file name and type metadata are available to the
+current chat flow. Run accepts only the prepared `threadId`/`runId`, checks session
+ownership and channel/surface binding, and is idempotent for completed runs. An
+unavailable model is exposed as a safe user-facing error. Disable reverse-proxy
+buffering for the `text/event-stream` response from
+`/ai/chat/<session>/turn/run/`.
 
 ## Контроль версии AG-UI
 
@@ -100,8 +112,14 @@ CopilotKit:
 Native:
 
 ```text
-/ai/ui/ag-ui/run/ -> Django
+/ai/chat/<session>/turn/prepare/ -> Django
+/ai/chat/<session>/turn/run/     -> Django (SSE)
 ```
+
+The removed legacy `send`, `stream`, `/ai/ui/ag-ui/run/` and runtime `/chat`
+routes are not deployment targets. The deleted `apps/ai/forms.py` and
+`static/src/js/ai_chat.js` must not be restored; the canonical browser flow is
+`prepare` followed by `run`.
 
 Для native отдельный внешний route к `agent_runtime` не нужен.
 
@@ -120,17 +138,21 @@ HTML должен подключать их с version query string. Root servic
 
 - `/ai/ui/config/` доступен authenticated-пользователю;
 - `/ai/ui/session/new/` создает новый sidebar thread;
-- `/ai/ui/ag-ui/run/` stream не буферизуется reverse proxy;
+- `/ai/chat/<session>/turn/run/` stream не буферизуется reverse proxy;
 - user/assistant messages сохраняются в Django `ChatSession`;
 - browser не получает прямой доступ к `agent_runtime`.
+- после изменения native assets выполнить `python manage.py collectstatic --noinput`
+  и проверить согласованность через `python manage.py check_staticfiles --fail`;
+- dynamic page context передаётся только native-клиентом в Django prepare/run;
+  CopilotKit получает только серверно подписанные свойства, без unsigned
+  dynamic `page_context`.
 
 ## Rollback
 
 Драйвер `legacy` выведен из проекта (ADR-0032) и не является допустимым значением для
-`LOCAL_BUSINESS_AI_UI_DRIVER`. Rollback между `native` и `copilotkit` выполняется сменой
-значения переменной и перезапуском Django web. Для CopilotKit можно дополнительно
-остановить `copilot_runtime`. Откат к `legacy`-функциональности возможен только через
-git-историю.
+`LOCAL_BUSINESS_AI_UI_DRIVER`. Rollback выполняется возвратом на предыдущий Git-релиз
+с его миграциями и перезапуском Django web; параллельный legacy endpoint не поддерживается.
+Для CopilotKit можно дополнительно остановить `copilot_runtime`.
 
 ## Проверка перед включением
 

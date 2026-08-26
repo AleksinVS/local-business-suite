@@ -4,9 +4,10 @@ import logging
 import hmac
 import hashlib
 import time
+import re
+from django.db import IntegrityError, transaction
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.cache import cache
@@ -17,13 +18,13 @@ from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpRespon
 from django.views import View
 from django.views.generic import DetailView, RedirectView, TemplateView
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
 from .commands import get_predefined_commands, resolve_command, resolve_custom_command
-from .forms import AIChatInputForm
-from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
+from .models import AgentActionLog, ChatMessage, ChatRun, ChatSession, ChatAttachment, SlashCommand
 from .chat_settings import CHAT_SURFACE_FULL_PAGE, CHAT_SURFACE_SIDEBAR, get_chat_settings
 from .page_context import (
     bind_page_context_to_message,
@@ -35,22 +36,43 @@ from .runtime_client import AgentRuntimeClient, AgentRuntimeError
 from .services import (
     append_chat_message,
     archive_chat_session,
+    CHAT_ATTACHMENT_MAX_COUNT,
     clear_sidebar_session,
-    compact_sidebar_session,
     create_new_sidebar_session,
     generate_session_title,
     get_or_create_sidebar_session,
     normalize_session_external_id,
     serialize_session_history,
+    validate_chat_attachment,
 )
 from .tooling import UnknownToolError, execute_pending_action, execute_tool
 from .ui_runtime.actor import build_actor_payload, sign_actor_payload, signature_payload
-from .ui_runtime.config import build_sidebar_ai_ui_config
+from .ui_runtime.config import build_full_page_ai_ui_config, build_sidebar_ai_ui_config
 from .ui_runtime.drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_ui_driver
 
 logger = logging.getLogger(__name__)
 
 PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
+CHAT_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+CHAT_PARTIAL_CONTENT_MAX_LENGTH = 4096
+CHAT_RUN_MAX_EVENTS = 512
+CHAT_RUN_MAX_EVENT_BYTES = 512 * 1024
+
+_AGUI_PROXY_EVENT_TYPES = {
+    "RUN_STARTED",
+    "RUN_FINISHED",
+    "RUN_ERROR",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "TOOL_CALL_START",
+    "TOOL_CALL_ARGS",
+    "TOOL_CALL_END",
+    "TOOL_CALL_RESULT",
+    "STATE_SNAPSHOT",
+    "STATE_DELTA",
+    "CUSTOM",
+}
 
 
 def classify_chat_runtime_error(exc):
@@ -67,7 +89,7 @@ def classify_chat_runtime_error(exc):
         return "agent_runtime_http_error", "ИИ-сервис вернул ошибку"
     if isinstance(exc, AgentRuntimeError):
         return "agent_runtime_error", "ИИ-сервис вернул ошибку"
-    return "chat_stream_error", "внутренняя ошибка обработки чата"
+    return "agent_runtime_error", "внутренняя ошибка обработки чата"
 
 
 def allow_page_context_update(user_id) -> bool:
@@ -143,7 +165,7 @@ def record_chat_runtime_error(
         conversation_id=conversation_id,
         technical_trace_id=action.id,
     )
-    append_chat_message(
+    assistant = append_chat_message(
         session=session,
         role=ChatMessage.Role.ASSISTANT,
         content=payload["message"],
@@ -154,7 +176,7 @@ def record_chat_runtime_error(
             "request_id": request_id,
             "technical_trace_id": action.id,
             "runtime_method": runtime_method,
-            "streamed": runtime_method == "chat_stream",
+            "streamed": runtime_method == "ag_ui",
             "partial": bool(partial_content),
         },
     )
@@ -170,6 +192,7 @@ def record_chat_runtime_error(
         "last_error_code": error_code,
     }
     session.save(update_fields=["metadata", "updated_at"])
+    payload["assistant_message_id"] = assistant.id
     return payload
 
 
@@ -238,21 +261,6 @@ def validate_gateway_actor(actor_context, session_id=None):
     return None
 
 
-def chat_surface_from_request(request, default=CHAT_SURFACE_FULL_PAGE):
-    surface = request.POST.get("surface") or default
-    return CHAT_SURFACE_SIDEBAR if surface == CHAT_SURFACE_SIDEBAR else CHAT_SURFACE_FULL_PAGE
-
-
-def bind_request_context_to_message(request, user_msg):
-    return bind_page_context_to_message(
-        user=request.user,
-        message=user_msg,
-        window_id=request.POST.get("window_id", ""),
-        context_version=request.POST.get("context_version", ""),
-        context_hint=request.POST.get("context_hint", ""),
-    )
-
-
 def context_trace_metadata(user_msg):
     runtime_context = build_runtime_page_context(user_msg)
     digest = runtime_context.get("digest") or {}
@@ -268,24 +276,6 @@ def context_trace_metadata(user_msg):
         "object_type": digest.get("object_type", ""),
         "object_id_hash": digest.get("object_id_hash", ""),
     }
-
-
-def latest_agui_user_text(messages):
-    if not isinstance(messages, list):
-        return ""
-    for message in reversed(messages):
-        if not isinstance(message, dict) or message.get("role") != "user":
-            continue
-        content = message.get("content", "")
-        if isinstance(content, str):
-            return content.strip()
-        if isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    parts.append(str(item.get("text") or ""))
-            return "".join(parts).strip()
-    return ""
 
 
 def agui_messages_from_history(history):
@@ -382,6 +372,720 @@ def collect_agui_event(event, collector):
             collector["ui_commands"].append(value)
 
 
+def _validate_chat_run_id(value):
+    run_id = str(value or "").strip()
+    if not CHAT_RUN_ID_RE.fullmatch(run_id):
+        raise ValidationError("Некорректный идентификатор запуска.")
+    return run_id
+
+
+def _chat_run_payload(run):
+    return {
+        "status": run.status,
+        "run_id": run.run_id,
+        "message_id": run.user_message_id,
+        "assistant_message_id": run.assistant_message_id,
+        "session_id": str(run.session.external_id),
+    }
+
+
+def _chat_run_fingerprint(prompt, attachments, model_id=""):
+    payload = {
+        "prompt": str(prompt or ""),
+        "model_id": str(model_id or ""),
+        "attachments": [
+            {
+                "name": str(item.get("name") or ""),
+                "size": int(item.get("size") or 0),
+                "content_type": str(item.get("content_type") or ""),
+                "sha256": str(item.get("sha256") or ""),
+            }
+            for item in attachments
+        ],
+    }
+    return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _safe_proxy_event(event, *, thread_id, run_id):
+    """Allow-list and sanitize events crossing the Django SSE proxy."""
+    if not isinstance(event, dict) or event.get("type") not in _AGUI_PROXY_EVENT_TYPES:
+        return None
+    event = dict(event)
+    event_type = event.get("type")
+    if event_type in {"RUN_STARTED", "RUN_FINISHED", "RUN_ERROR"}:
+        event["threadId"] = str(thread_id)
+        event["runId"] = str(run_id)
+    if event_type == "RUN_ERROR":
+        # Upstream technical details are for server logs only.
+        event["message"] = AI_CHAT_UNAVAILABLE_MESSAGE
+        event["code"] = "agent_runtime_error"
+        for key in ("error", "exception", "traceback", "detail"):
+            event.pop(key, None)
+    elif event_type == "TOOL_CALL_ARGS":
+        event["delta"] = json.dumps({"status": "received"}, ensure_ascii=False, separators=(",", ":"))
+    elif event_type == "TOOL_CALL_RESULT":
+        event["content"] = json.dumps({"status": "completed"}, ensure_ascii=False, separators=(",", ":"))
+        event.pop("result", None)
+    elif event_type == "STATE_DELTA":
+        from services.agent_runtime.protocols.common.ui_commands import normalize_ui_commands
+
+        safe_delta = []
+        for operation in event.get("delta") if isinstance(event.get("delta"), list) else []:
+            if not isinstance(operation, dict):
+                continue
+            if operation.get("path") not in {"/localBusiness/uiCommands", "/localBusinessUiCommands"}:
+                continue
+            commands = operation.get("value")
+            if not isinstance(commands, list):
+                continue
+            normalized = normalize_ui_commands(commands)
+            if normalized:
+                safe_delta.append({"op": "replace", "path": operation["path"], "value": normalized})
+        if not safe_delta:
+            return None
+        event["delta"] = safe_delta
+    elif event_type == "CUSTOM":
+        if event.get("name") == "local_business.protocol":
+            value = event.get("value")
+            if not isinstance(value, dict):
+                return None
+        elif event.get("name") == "local_business.ui_command":
+            from services.agent_runtime.protocols.common.ui_commands import normalize_ui_commands
+
+            value = event.get("value")
+            commands = normalize_ui_commands([value]) if isinstance(value, dict) else []
+            if not commands:
+                return None
+            event["value"] = commands[0]
+        else:
+            return None
+    try:
+        serialized_size = len(json.dumps(event, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    except (TypeError, ValueError):
+        return None
+    if serialized_size > CHAT_RUN_MAX_EVENT_BYTES:
+        return None
+    return event
+
+
+def _record_run_event(events, event, *, thread_id, run_id, lifecycle=None):
+    safe_event = _safe_proxy_event(event, thread_id=thread_id, run_id=run_id)
+    if safe_event is None:
+        return None
+    if lifecycle is not None:
+        _validate_agui_event_order(safe_event, lifecycle)
+    if len(events) >= CHAT_RUN_MAX_EVENTS:
+        raise AgentRuntimeError("AG-UI event limit exceeded")
+    current_size = sum(
+        len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        for item in events
+    )
+    event_size = len(json.dumps(safe_event, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if current_size + event_size > CHAT_RUN_MAX_EVENT_BYTES:
+        raise AgentRuntimeError("AG-UI event payload limit exceeded")
+    events.append(safe_event)
+    return safe_event
+
+
+def _validate_agui_event_order(event, lifecycle):
+    """Enforce causal AG-UI lifecycle before forwarding or persisting events."""
+    event_type = event.get("type") if isinstance(event, dict) else ""
+    started = bool(lifecycle.get("started"))
+    terminal = bool(lifecycle.get("terminal"))
+    if event_type == "RUN_STARTED":
+        if started or terminal:
+            raise AgentRuntimeError("AG-UI stream содержит повторный RUN_STARTED")
+        lifecycle["started"] = True
+        return
+    if event_type in {"RUN_FINISHED", "RUN_ERROR"}:
+        if not started or terminal:
+            raise AgentRuntimeError("AG-UI stream нарушает порядок терминального события")
+        lifecycle["terminal"] = True
+        return
+    if event_type in {
+        "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END",
+        "TOOL_CALL_START", "TOOL_CALL_ARGS", "TOOL_CALL_END", "TOOL_CALL_RESULT",
+        "STATE_SNAPSHOT", "STATE_DELTA", "CUSTOM",
+    } and (not started or terminal):
+        raise AgentRuntimeError("AG-UI stream содержит событие до RUN_STARTED")
+
+
+def _sse_event_text(event):
+    return "data: " + json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n\n"
+
+
+def _run_replay_response(run):
+    events = []
+    lifecycle = {"started": False, "terminal": False}
+    for raw_event in (run.metadata or {}).get("events") or []:
+        safe_event = _safe_proxy_event(
+            raw_event,
+            thread_id=run.session.external_id,
+            run_id=run.run_id,
+        )
+        if safe_event is None:
+            continue
+        try:
+            _validate_agui_event_order(safe_event, lifecycle)
+        except AgentRuntimeError:
+            events = []
+            break
+        if len(events) >= CHAT_RUN_MAX_EVENTS:
+            break
+        events.append(safe_event)
+    if not events or not lifecycle["started"] or not lifecycle["terminal"]:
+        event_type = "RUN_ERROR" if run.status == ChatRun.Status.FAILED else "RUN_FINISHED"
+        events = [
+            {"type": "RUN_STARTED", "threadId": str(run.session.external_id), "runId": run.run_id},
+            {"type": event_type, "threadId": str(run.session.external_id), "runId": run.run_id},
+        ]
+
+    def replay():
+        for event in events:
+            if isinstance(event, dict):
+                yield _sse_event_text(event)
+
+    response = StreamingHttpResponse(replay(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+def _prepare_page_context(request, message):
+    envelope_value = request.POST.get("page_context") or request.POST.get("context_envelope") or ""
+    if envelope_value:
+        try:
+            envelope = json.loads(envelope_value) if isinstance(envelope_value, str) else envelope_value
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValidationError("Некорректный контекст страницы.") from exc
+        if not isinstance(envelope, dict):
+            raise ValidationError("Некорректный контекст страницы.")
+        # Browser clients send {envelope, context_version, context_hint}; the
+        # resolver must only see the signed context envelope itself.
+        wrapper = envelope if "envelope" in envelope else None
+        context_hint = request.POST.get("context_hint", "")
+        context_version = request.POST.get("context_version", "")
+        envelope = wrapper.get("envelope") if wrapper is not None else envelope
+        if wrapper is not None:
+            context_hint = wrapper.get("context_hint", context_hint)
+            context_version = wrapper.get("context_version", context_version)
+        if not envelope:
+            bind_page_context_to_message(
+                user=request.user, message=message,
+                window_id="", context_version="", context_hint=context_hint,
+            )
+            return
+        if not isinstance(envelope, dict):
+            raise ValidationError("Некорректный контекст страницы.")
+        result = update_window_context_snapshot(request.user, envelope)
+        bind_page_context_to_message(
+            user=request.user,
+            message=message,
+            window_id=result.snapshot.window_id,
+            context_version=result.snapshot.context_version or context_version,
+            context_hint=context_hint,
+        )
+    else:
+        bind_page_context_to_message(
+            user=request.user,
+            message=message,
+            window_id=request.POST.get("window_id", ""),
+            context_version=request.POST.get("context_version", ""),
+            context_hint=request.POST.get("context_hint", ""),
+        )
+        if message.metadata.get("page_context_status") == "context_stale":
+            raise ValidationError("Контекст страницы устарел.")
+
+
+class AIChatPrepareTurnView(LoginRequiredMixin, View):
+    """Create one immutable prepared user turn, idempotently by run_id."""
+
+    http_method_names = ["post"]
+
+    def post(self, request, external_id):
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
+        try:
+            run_id = _validate_chat_run_id(request.POST.get("run_id"))
+            prompt = str(request.POST.get("prompt", "") or "").strip()
+            requested_surface = request.POST.get("surface") or ""
+            default_surface = CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE
+            surface = requested_surface if requested_surface in {CHAT_SURFACE_SIDEBAR, CHAT_SURFACE_FULL_PAGE} else default_surface
+            max_prompt_chars = int(get_chat_settings(surface).get("max_prompt_chars") or 10000)
+            if len(prompt) > max_prompt_chars:
+                raise ValidationError("Сообщение слишком длинное.")
+
+            # Resolve slash commands on the server. `/commands` is a UI action,
+            # not a model prompt and therefore cannot become a prepared turn.
+            if prompt.startswith("/"):
+                cmd_spec, remainder = resolve_command(prompt)
+                if cmd_spec and cmd_spec.get("handler") == "commands":
+                    raise ValidationError("Команда списка недоступна как сообщение.")
+                if cmd_spec:
+                    template = cmd_spec.get("prompt_template", "")
+                    prompt = template.replace("{input}", remainder) if remainder else template
+                else:
+                    custom = list(SlashCommand.objects.filter(user=request.user))
+                    custom_cmd, remainder = resolve_custom_command(prompt, custom)
+                    if custom_cmd:
+                        prompt = custom_cmd.template.replace("{input}", remainder) if remainder else custom_cmd.template
+            if len(prompt) > max_prompt_chars:
+                raise ValidationError("Раскрытая команда слишком длинная.")
+            uploads = request.FILES.getlist("files")
+            if len(uploads) > CHAT_ATTACHMENT_MAX_COUNT:
+                raise ValidationError("Слишком много вложений.")
+            attachment_meta = [validate_chat_attachment(upload) for upload in uploads]
+            if not prompt:
+                raise ValidationError("Сообщение пустое.")
+        except ValidationError as exc:
+            return JsonResponse({"error": str(exc.messages[0] if hasattr(exc, "messages") else exc)}, status=400)
+
+        try:
+            with transaction.atomic():
+                session = ChatSession.objects.select_for_update().get(pk=session.pk)
+                if session.status != ChatSession.Status.ACTIVE:
+                    return JsonResponse({"error": "Сессия недоступна."}, status=404)
+                existing = ChatRun.objects.select_for_update().filter(session=session, run_id=run_id).first()
+                if existing:
+                    frozen_model_id = (existing.metadata or {}).get("model_id", "")
+                    fingerprint = _chat_run_fingerprint(prompt, attachment_meta, frozen_model_id)
+                    if (existing.metadata or {}).get("request_fingerprint") != fingerprint:
+                        return JsonResponse({"error": "run_id уже использован для другого содержимого."}, status=409)
+                    return JsonResponse(_chat_run_payload(existing))
+                # The selected model belongs to the server-owned session.  A
+                # browser field named model_id is deliberately ignored here.
+                model_id = (session.metadata or {}).get("model_id", "")
+                conversation_id = (session.metadata or {}).get("conversation_id") or str(uuid.uuid4())
+                user_msg = append_chat_message(
+                    session=session,
+                    role=ChatMessage.Role.USER,
+                    content=prompt,
+                    metadata={
+                        "conversation_id": conversation_id,
+                        "run_id": run_id,
+                        "origin_channel": session.channel,
+                        "surface": surface,
+                        "prepared": True,
+                    },
+                )
+                _prepare_page_context(request, user_msg)
+                for upload, metadata in zip(uploads, attachment_meta):
+                    ChatAttachment.objects.create(
+                        message=user_msg,
+                        file=upload,
+                        file_type=metadata["file_type"],
+                        file_name=metadata["name"],
+                        file_size=metadata["size"],
+                    )
+                run = ChatRun.objects.create(
+                    session=session,
+                    run_id=run_id,
+                    user_message=user_msg,
+                    metadata={
+                        "conversation_id": conversation_id,
+                        "surface": surface,
+                        "attachment_count": len(uploads),
+                        "model_id": model_id,
+                        "request_fingerprint": _chat_run_fingerprint(prompt, attachment_meta, model_id),
+                        "attachments": [
+                            {"name": item["name"], "size": item["size"], "content_type": item["content_type"], "sha256": item["sha256"]}
+                            for item in attachment_meta
+                        ],
+                    },
+                )
+        except IntegrityError:
+            run = ChatRun.objects.get(session=session, run_id=run_id)
+            if (run.metadata or {}).get("request_fingerprint") != _chat_run_fingerprint(
+                prompt, attachment_meta, (run.metadata or {}).get("model_id", "")
+            ):
+                return JsonResponse({"error": "run_id уже использован для другого содержимого."}, status=409)
+        except PermissionDenied as exc:
+            return JsonResponse({"error": "Недостаточно прав для контекста страницы."}, status=403)
+        except ValidationError as exc:
+            return JsonResponse({"error": str(exc.messages[0] if hasattr(exc, "messages") else exc)}, status=400)
+        return JsonResponse(_chat_run_payload(run), status=201)
+
+
+class AIChatRunView(LoginRequiredMixin, View):
+    """Run a prepared turn through the canonical AG-UI runtime endpoint."""
+
+    http_method_names = ["post"]
+
+    def post(self, request, external_id):
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+            run_id = _validate_chat_run_id(body.get("runId"))
+        except (json.JSONDecodeError, AttributeError, ValidationError) as exc:
+            message = exc.messages[0] if isinstance(exc, ValidationError) else "Некорректное тело JSON."
+            return JsonResponse({"error": message}, status=400)
+        if str(body.get("threadId") or "") != str(session.external_id):
+            return JsonResponse({"error": "Сессия запуска не совпадает с адресом запроса."}, status=400)
+
+        with transaction.atomic():
+            session = ChatSession.objects.select_for_update().get(pk=session.pk)
+            if session.status != ChatSession.Status.ACTIVE:
+                return JsonResponse({"error": "Сессия недоступна."}, status=404)
+            # Keep FOR UPDATE on ChatRun itself. PostgreSQL rejects row locks
+            # on nullable outer joins, and related messages do not need locks.
+            run = ChatRun.objects.select_for_update().filter(
+                session=session, run_id=run_id
+            ).first()
+            if not run or run.user_message.role != ChatMessage.Role.USER:
+                return JsonResponse({"error": "Подготовленный ход не найден."}, status=404)
+            if run.status in {ChatRun.Status.COMPLETED, ChatRun.Status.FAILED}:
+                return _run_replay_response(run)
+            if run.status == ChatRun.Status.RUNNING:
+                lease_seconds = int(getattr(settings, "LOCAL_BUSINESS_AI_CHAT_RUN_STALE_LEASE_SECONDS", 900))
+                lease_anchor = run.started_at or run.prepared_at
+                if lease_anchor and lease_anchor <= timezone.now() - timezone.timedelta(seconds=lease_seconds):
+                    metadata = dict(run.metadata or {})
+                    metadata.setdefault("request_id", str(uuid.uuid4()))
+                    metadata.setdefault("conversation_id", str(uuid.uuid4()))
+                    run.metadata = metadata
+                    run.save(update_fields=["metadata"])
+                    _finish_chat_run(
+                        run,
+                        [],
+                        {"content": [], "error": {"message": "Истёк срок выполнения запуска."}, "tool_trace": [], "ui_commands": []},
+                        failed=True,
+                        failure_exc=AgentRuntimeError("stale agent runtime lease"),
+                    )
+                    run.refresh_from_db()
+                    return _run_replay_response(run)
+                return JsonResponse({"error": "Запуск уже выполняется."}, status=409)
+            # The session lock serializes admission of all prepared runs.  The
+            # conditional DB constraint is the final guard, while this block
+            # gives stale runs a safe terminal state before a new run starts.
+            lease_seconds = int(getattr(settings, "LOCAL_BUSINESS_AI_CHAT_RUN_STALE_LEASE_SECONDS", 900))
+            stale_before = timezone.now() - timezone.timedelta(seconds=lease_seconds)
+            other_running = list(
+                ChatRun.objects.select_for_update()
+                .filter(session=session, status=ChatRun.Status.RUNNING)
+                .exclude(pk=run.pk)
+                .order_by("started_at", "id")
+            )
+            for other in other_running:
+                lease_anchor = other.started_at or other.prepared_at
+                if not lease_anchor or lease_anchor > stale_before:
+                    return JsonResponse({"error": "Запуск уже выполняется."}, status=409)
+                stale_metadata = dict(other.metadata or {})
+                stale_metadata.setdefault("request_id", str(uuid.uuid4()))
+                stale_metadata.setdefault("conversation_id", str(uuid.uuid4()))
+                other.metadata = stale_metadata
+                other.save(update_fields=["metadata"])
+                _finish_chat_run(
+                    other,
+                    [],
+                    {"content": [], "error": {"message": "Истёк срок выполнения запуска."}, "tool_trace": [], "ui_commands": []},
+                    failed=True,
+                    failure_exc=AgentRuntimeError("stale agent runtime lease"),
+                )
+            run.status = ChatRun.Status.RUNNING
+            run.started_at = timezone.now()
+            metadata = dict(run.metadata or {})
+            metadata["request_id"] = str(uuid.uuid4())
+            run.metadata = metadata
+            run.save(update_fields=["status", "started_at", "metadata"])
+
+        # The model is frozen at prepare time.  Session settings may change
+        # while a prepared turn waits in the client queue.
+        model_id = (run.metadata or {}).get("model_id", "")
+        actor_payload = build_actor_payload(
+            user=request.user,
+            session=session,
+            driver=DRIVER_NATIVE,
+            model_id=model_id,
+            page_context=build_runtime_page_context(run.user_message),
+        )
+        actor_payload["actor"]["conversation_id"] = (run.metadata or {}).get("conversation_id", "")
+        actor_payload["actor"]["request_id"] = (run.metadata or {}).get("request_id", "")
+        actor_payload["actor"]["origin_channel"] = session.channel
+        actor_payload["origin_channel"] = session.channel
+        actor_payload["session_id"] = str(session.external_id)
+        actor_payload["signature"] = sign_actor_payload(actor_payload)
+        runtime_payload = {
+            "threadId": str(session.external_id),
+            "runId": run.run_id,
+            "parentRunId": "",
+            "state": {},
+            "messages": agui_messages_from_history(
+                serialize_session_history(
+                    session,
+                    final_user_message=run.user_message,
+                    surface=(run.metadata or {}).get("surface"),
+                )
+            ),
+            "tools": [],
+            "context": [],
+            "forwardedProps": actor_payload,
+            "resume": [],
+        }
+
+        def stream_generator():
+            events = []
+            collector = {"content": [], "error": None, "ui_commands": [], "tool_trace": [], "tools_by_id": {}}
+            lifecycle = {"started": False, "terminal": False}
+            buffer = ""
+            terminal = None
+            try:
+                for chunk in AgentRuntimeClient().ag_ui_stream(runtime_payload):
+                    parsed, buffer = parse_agui_sse_events(buffer, chunk)
+                    for event in parsed:
+                        event_type = event.get("type")
+                        event = _safe_proxy_event(
+                            event, thread_id=session.external_id, run_id=run.run_id
+                        )
+                        if event is None:
+                            continue
+                        event_type = event.get("type")
+                        if event_type in {"RUN_FINISHED", "RUN_ERROR"}:
+                            # A successful empty terminal is not a valid model
+                            # outcome because attachment bodies are not model input.
+                            if event_type == "RUN_FINISHED" and not "".join(collector.get("content", [])).strip():
+                                event = {
+                                    "type": "RUN_ERROR",
+                                    "threadId": str(session.external_id),
+                                    "runId": run.run_id,
+                                    "message": AI_CHAT_UNAVAILABLE_MESSAGE,
+                                    "code": "empty_assistant_response",
+                                }
+                                event_type = "RUN_ERROR"
+                        event = _record_run_event(
+                            events,
+                            event,
+                            thread_id=session.external_id,
+                            run_id=run.run_id,
+                            lifecycle=lifecycle,
+                        )
+                        if event is None:
+                            continue
+                        collect_agui_event(event, collector)
+                        if event_type in {"RUN_FINISHED", "RUN_ERROR"}:
+                            terminal = event_type
+                            break
+                        yield _sse_event_text(event)
+                    if terminal:
+                        break
+                if not terminal:
+                    parsed, _ = parse_agui_sse_events(buffer, "\n\n")
+                    for event in parsed:
+                        event_type = event.get("type")
+                        event = _safe_proxy_event(
+                            event, thread_id=session.external_id, run_id=run.run_id
+                        )
+                        if event is None:
+                            continue
+                        event_type = event.get("type")
+                        if event_type in {"RUN_FINISHED", "RUN_ERROR"}:
+                            if event_type == "RUN_FINISHED" and not "".join(collector.get("content", [])).strip():
+                                event = {"type": "RUN_ERROR", "threadId": str(session.external_id), "runId": run.run_id, "message": AI_CHAT_UNAVAILABLE_MESSAGE, "code": "empty_assistant_response"}
+                                event_type = "RUN_ERROR"
+                        event = _record_run_event(
+                            events,
+                            event,
+                            thread_id=session.external_id,
+                            run_id=run.run_id,
+                            lifecycle=lifecycle,
+                        )
+                        if event is None:
+                            continue
+                        collect_agui_event(event, collector)
+                        if event_type in {"RUN_FINISHED", "RUN_ERROR"}:
+                            terminal = event_type
+                            break
+                        yield _sse_event_text(event)
+                if terminal not in {"RUN_FINISHED", "RUN_ERROR"}:
+                    raise AgentRuntimeError("AG-UI stream завершён без терминального события")
+            except Exception as exc:
+                logger.warning("Canonical AG-UI run failed: run=%s error_type=%s", run.run_id, exc.__class__.__name__)
+                _finish_chat_run(run, events, collector, failed=True, failure_exc=exc)
+                run.refresh_from_db(fields=["status", "metadata", "assistant_message"])
+                terminal_event = next(
+                    (
+                        event
+                        for event in reversed((run.metadata or {}).get("events") or [])
+                        if isinstance(event, dict) and event.get("type") in {"RUN_FINISHED", "RUN_ERROR"}
+                    ),
+                    None,
+                )
+                if not any(event.get("type") == "RUN_STARTED" for event in events):
+                    started_event = next(
+                        (
+                            event
+                            for event in (run.metadata or {}).get("events") or []
+                            if isinstance(event, dict) and event.get("type") == "RUN_STARTED"
+                        ),
+                        None,
+                    )
+                    if started_event:
+                        yield _sse_event_text(started_event)
+                if terminal_event:
+                    yield _sse_event_text(terminal_event)
+                return
+            except GeneratorExit:
+                # A disconnected client must never make the same run eligible
+                # for execution again. Persist it as a failed, replayable run.
+                _finish_chat_run(run, events, collector, failed=True, failure_exc=AgentRuntimeError("AG-UI client disconnected"))
+                raise
+            _finish_chat_run(run, events, collector, failed=(terminal == "RUN_ERROR"), failure_exc=AgentRuntimeError("AG-UI runtime returned RUN_ERROR") if terminal == "RUN_ERROR" else None)
+            run.refresh_from_db(fields=["status", "metadata", "assistant_message"])
+            terminal_event = next(
+                (
+                    event
+                    for event in reversed((run.metadata or {}).get("events") or [])
+                    if isinstance(event, dict) and event.get("type") in {"RUN_FINISHED", "RUN_ERROR"}
+                ),
+                None,
+            )
+            if terminal_event:
+                yield _sse_event_text(terminal_event)
+
+        response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+def _finish_chat_run(run, events, collector, *, failed, failure_exc=None):
+    with transaction.atomic():
+        # Every native execution path locks ChatSession before ChatRun.  Keep
+        # the same order here to avoid a PostgreSQL deadlock with a concurrent
+        # admission or tool-fence transaction.
+        locked_session = ChatSession.objects.select_for_update().get(pk=run.session_id)
+        current = ChatRun.objects.select_for_update().get(pk=run.pk)
+        current.session = locked_session
+        current.user_message = ChatMessage.objects.get(pk=current.user_message_id)
+        if current.status in {ChatRun.Status.COMPLETED, ChatRun.Status.FAILED}:
+            return
+        # Persist a canonical replay: even if an upstream proxy misbehaves,
+        # there is exactly one terminal event for this run.
+        normalized_events = []
+        terminal_seen = False
+        for event in events:
+            event = _safe_proxy_event(
+                event,
+                thread_id=current.session.external_id,
+                run_id=current.run_id,
+            )
+            if event is None:
+                continue
+            if event.get("type") in {"RUN_FINISHED", "RUN_ERROR"}:
+                if terminal_seen:
+                    break
+                terminal_seen = True
+            if len(normalized_events) >= CHAT_RUN_MAX_EVENTS:
+                failed = True
+                failure_exc = AgentRuntimeError("AG-UI event limit exceeded")
+                break
+            if sum(
+                len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                for item in normalized_events
+            ) + len(json.dumps(event, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > CHAT_RUN_MAX_EVENT_BYTES:
+                failed = True
+                failure_exc = AgentRuntimeError("AG-UI event payload limit exceeded")
+                break
+            normalized_events.append(event)
+        metadata = dict(current.metadata or {})
+        metadata["tool_trace"] = [
+            item for item in collector.get("tool_trace", [])[:CHAT_RUN_MAX_EVENTS]
+            if isinstance(item, dict)
+        ]
+        metadata["ui_commands"] = [
+            item for item in collector.get("ui_commands", [])[:CHAT_RUN_MAX_EVENTS]
+            if isinstance(item, dict)
+        ]
+        content = "".join(collector.get("content", [])).strip()
+        if failed:
+            failure_exc = failure_exc or AgentRuntimeError("AG-UI runtime error")
+            payload = record_chat_runtime_error(
+                session=current.session,
+                actor=current.session.user,
+                user_message=current.user_message,
+                exc=failure_exc,
+                conversation_id=str(metadata.get("conversation_id") or ""),
+                request_id=str(metadata.get("request_id") or ""),
+                origin_channel=current.session.channel,
+                model_id=str(metadata.get("model_id") or ""),
+                runtime_method="ag_ui",
+                partial_content=content[:CHAT_PARTIAL_CONTENT_MAX_LENGTH],
+            )
+            terminal = {
+                "type": "RUN_ERROR",
+                "threadId": str(current.session.external_id),
+                "runId": current.run_id,
+                "message": payload["message"],
+                "code": payload["error_code"],
+                "request_id": payload["request_id"],
+                "conversation_id": payload["conversation_id"],
+                "technical_trace_id": payload.get("technical_trace_id"),
+            }
+            normalized_events = [event for event in normalized_events if event.get("type") not in {"RUN_FINISHED", "RUN_ERROR"}]
+            if not any(event.get("type") == "RUN_STARTED" for event in normalized_events):
+                normalized_events.insert(0, {
+                    "type": "RUN_STARTED",
+                    "threadId": str(current.session.external_id),
+                    "runId": current.run_id,
+                })
+            normalized_events.append(terminal)
+            metadata["events"] = normalized_events
+            current.assistant_message_id = payload.get("assistant_message_id")
+        else:
+            if not content:
+                failed = True
+                failure_exc = AgentRuntimeError("empty assistant response")
+                payload = record_chat_runtime_error(
+                    session=current.session, actor=current.session.user, user_message=current.user_message,
+                    exc=failure_exc, conversation_id=str(metadata.get("conversation_id") or ""),
+                    request_id=str(metadata.get("request_id") or ""), origin_channel=current.session.channel,
+                    model_id=str(metadata.get("model_id") or ""), runtime_method="ag_ui",
+                )
+                normalized_events = [event for event in normalized_events if event.get("type") not in {"RUN_FINISHED", "RUN_ERROR"}]
+                normalized_events.append({"type": "RUN_ERROR", "threadId": str(current.session.external_id), "runId": current.run_id, "message": payload["message"], "code": payload["error_code"], "request_id": payload["request_id"], "conversation_id": payload["conversation_id"], "technical_trace_id": payload.get("technical_trace_id")})
+                metadata["events"] = normalized_events
+                current.assistant_message_id = payload.get("assistant_message_id")
+            else:
+                if not terminal_seen:
+                    normalized_events.append({"type": "RUN_FINISHED", "threadId": str(current.session.external_id), "runId": current.run_id})
+                else:
+                    normalized_events[-1].setdefault("threadId", str(current.session.external_id))
+                    normalized_events[-1].setdefault("runId", current.run_id)
+                metadata["events"] = normalized_events
+                assistant = append_chat_message(
+                    session=current.session,
+                    role=ChatMessage.Role.ASSISTANT,
+                    content=content,
+                    metadata={
+                        "run_id": current.run_id,
+                        "error": False,
+                        "runtime_method": "ag_ui",
+                        "tool_trace": metadata["tool_trace"],
+                        "ui_commands": metadata["ui_commands"],
+                        "conversation_id": str(metadata.get("conversation_id") or ""),
+                        "request_id": str(metadata.get("request_id") or ""),
+                    },
+                )
+                current.assistant_message = assistant
+                session_metadata = dict(current.session.metadata or {})
+                session_metadata["conversation_id"] = str(metadata.get("conversation_id") or "")
+                request_ids = list(session_metadata.get("request_ids", []))
+                request_id = str(metadata.get("request_id") or "")
+                if request_id and request_id not in request_ids:
+                    request_ids.append(request_id)
+                session_metadata["request_ids"] = request_ids
+                current.session.metadata = session_metadata
+                current.session.save(update_fields=["metadata", "updated_at"])
+        current.status = ChatRun.Status.FAILED if failed else ChatRun.Status.COMPLETED
+        current.finished_at = timezone.now()
+        current.metadata = metadata
+        current.save(update_fields=["assistant_message", "status", "finished_at", "metadata"])
+
+
 class AIManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         from .skill_authoring import can_manage_ai_skills
@@ -463,16 +1167,22 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
             user=self.request.user,
             status=ChatSession.Status.ACTIVE,
         ).order_by("-updated_at", "-id")[:20]
-        context["form"] = AIChatInputForm()
         context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
         context["current_model_id"] = self.object.metadata.get("model_id", "")
-        context["predefined_commands"] = get_predefined_commands()
-        context["custom_commands"] = list(
-            SlashCommand.objects.filter(user=self.request.user).values(
-                "id", "name", "shortcut", "description", "template"
-            )
-        )
         return context
+
+
+class AIChatSessionConfigView(LoginRequiredMixin, View):
+    """Return the owned session snapshot consumed by the native full-page mount."""
+
+    http_method_names = ["get"]
+
+    def get(self, request, external_id):
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
+        return JsonResponse(build_full_page_ai_ui_config(user=request.user, session=session))
 
 
 class AIPageContextUpdateView(LoginRequiredMixin, View):
@@ -514,7 +1224,8 @@ class AIUIConfigView(LoginRequiredMixin, View):
             return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
         runtime_url = ""
         if driver == DRIVER_NATIVE:
-            runtime_url = reverse("ai:ui_ag_ui_run")
+            session = get_or_create_sidebar_session(request.user)
+            runtime_url = reverse("ai:chat_run", kwargs={"external_id": session.external_id})
         return JsonResponse(
             build_sidebar_ai_ui_config(
                 user=request.user,
@@ -552,7 +1263,8 @@ class AIUISidebarSessionNewView(LoginRequiredMixin, View):
         create_new_sidebar_session(request.user)
         runtime_url = settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL
         if driver == DRIVER_NATIVE:
-            runtime_url = reverse("ai:ui_ag_ui_run")
+            session = get_or_create_sidebar_session(request.user)
+            runtime_url = reverse("ai:chat_run", kwargs={"external_id": session.external_id})
         return JsonResponse(
             build_sidebar_ai_ui_config(
                 user=request.user,
@@ -572,10 +1284,10 @@ class AIUISidebarSessionClearView(LoginRequiredMixin, View):
             return JsonResponse({"enabled": False, "driver": driver, "error": "AI UI driver отключен."}, status=404)
 
         session = get_or_create_sidebar_session(request.user)
-        clear_sidebar_session(session)
+        session = clear_sidebar_session(session)
         runtime_url = settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL
         if driver == DRIVER_NATIVE:
-            runtime_url = reverse("ai:ui_ag_ui_run")
+            runtime_url = reverse("ai:chat_run", kwargs={"external_id": session.external_id})
         return JsonResponse(
             build_sidebar_ai_ui_config(
                 user=request.user,
@@ -586,493 +1298,62 @@ class AIUISidebarSessionClearView(LoginRequiredMixin, View):
         )
 
 
-class AIUIAGUIRunProxyView(LoginRequiredMixin, View):
-    http_method_names = ["post"]
-
-    def post(self, request):
-        if configured_ai_ui_driver() != DRIVER_NATIVE:
-            return JsonResponse({"error": "Native AI UI отключен."}, status=404)
-        try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-        except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
-
-        session = get_or_create_sidebar_session(request.user)
-        model_id = (session.metadata or {}).get("model_id", "")
-        conversation_id = (session.metadata or {}).get("conversation_id") or str(uuid.uuid4())
-        request_id = str(uuid.uuid4())
-        client_messages = body.get("messages") if isinstance(body.get("messages"), list) else []
-        prompt = latest_agui_user_text(client_messages)
-        chat_settings = get_chat_settings(CHAT_SURFACE_SIDEBAR)
-        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
-        if len(prompt) > max_prompt_chars:
-            prompt = prompt[:max_prompt_chars]
-        forwarded = body.get("forwardedProps") if isinstance(body.get("forwardedProps"), dict) else {}
-        page_context = forwarded.get("page_context") if isinstance(forwarded.get("page_context"), dict) else {}
-        user_msg = None
-        runtime_page_context = {}
-        if prompt:
-            user_msg = append_chat_message(
-                session=session,
-                role=ChatMessage.Role.USER,
-                content=prompt,
-                metadata={
-                    "conversation_id": conversation_id,
-                    "request_id": request_id,
-                    "origin_channel": ChatSession.Channel.SIDEBAR,
-                    "surface": CHAT_SURFACE_SIDEBAR,
-                },
-            )
-            envelope = page_context.get("envelope") if isinstance(page_context.get("envelope"), dict) else {}
-            if envelope:
-                context_result = update_window_context_snapshot(request.user, envelope)
-                bind_page_context_to_message(
-                    user=request.user,
-                    message=user_msg,
-                    window_id=context_result.snapshot.window_id,
-                    context_version=context_result.snapshot.context_version,
-                    context_hint=page_context.get("context_hint", ""),
-                )
-                runtime_page_context = build_runtime_page_context(user_msg)
-
-        actor_payload = build_actor_payload(
-            user=request.user,
-            session=session,
-            driver=DRIVER_NATIVE,
-            model_id=model_id,
-            page_context=runtime_page_context,
-        )
-        actor_payload["actor"]["conversation_id"] = conversation_id
-        actor_payload["actor"]["request_id"] = request_id
-        actor_payload["actor"]["origin_channel"] = DRIVER_NATIVE
-        actor_payload["actor"]["actor_version"] = actor_payload.get("actor_version", "")
-        runtime_messages = agui_messages_from_history(serialize_session_history(session)) if prompt else client_messages
-        run_payload = {
-            "threadId": str(session.external_id),
-            "runId": str(body.get("runId") or f"run_{uuid.uuid4().hex}"),
-            "parentRunId": str(body.get("parentRunId") or ""),
-            "state": body.get("state") if isinstance(body.get("state"), dict) else {},
-            "messages": runtime_messages,
-            "tools": [],
-            "context": body.get("context") if isinstance(body.get("context"), list) else [],
-            "forwardedProps": actor_payload,
-            "resume": body.get("resume") if isinstance(body.get("resume"), list) else [],
-        }
-
-        def stream_generator():
-            collector = {
-                "content": [],
-                "tool_trace": [],
-                "tools_by_id": {},
-                "ui_commands": [],
-                "error": None,
-            }
-            sse_buffer = ""
-            try:
-                for chunk in AgentRuntimeClient().ag_ui_stream(run_payload):
-                    events, sse_buffer = parse_agui_sse_events(sse_buffer, chunk)
-                    for event in events:
-                        collect_agui_event(event, collector)
-                    yield chunk
-                events, sse_buffer = parse_agui_sse_events(sse_buffer, "\n\n")
-                for event in events:
-                    collect_agui_event(event, collector)
-            except Exception as exc:
-                if user_msg:
-                    append_chat_message(
-                        session=session,
-                        role=ChatMessage.Role.ASSISTANT,
-                        content=AI_CHAT_UNAVAILABLE_MESSAGE,
-                        metadata={
-                            "error": True,
-                            "error_code": "agent_runtime_error",
-                            "conversation_id": conversation_id,
-                            "request_id": request_id,
-                            "runtime_method": "ag_ui",
-                            **context_trace_metadata(user_msg),
-                        },
-                    )
-                    session.metadata = {
-                        **(session.metadata or {}),
-                        "conversation_id": conversation_id,
-                        "request_ids": [*(session.metadata or {}).get("request_ids", []), request_id],
-                        "last_error_request_id": request_id,
-                        "last_error_code": "agent_runtime_error",
-                    }
-                    session.save(update_fields=["metadata", "updated_at"])
-                logger.warning(
-                    "Native AI UI AG-UI proxy failed: user_id=%s session=%s error_type=%s",
-                    request.user.id,
-                    session.external_id,
-                    exc.__class__.__name__,
-                )
-                yield "data: " + json.dumps(
-                    {
-                        "type": "RUN_ERROR",
-                        "message": AI_CHAT_UNAVAILABLE_MESSAGE,
-                        "code": "agent_runtime_error",
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ) + "\n\n"
-                return
-
-            content = "".join(collector["content"]).strip()
-            request_ids = list((session.metadata or {}).get("request_ids", []))
-            if request_id not in request_ids:
-                request_ids.append(request_id)
-            if collector["error"]:
-                if user_msg:
-                    append_chat_message(
-                        session=session,
-                        role=ChatMessage.Role.ASSISTANT,
-                        content=collector["error"]["message"],
-                        metadata={
-                            "error": True,
-                            "error_code": collector["error"]["code"],
-                            "conversation_id": conversation_id,
-                            "request_id": request_id,
-                            "runtime_method": "ag_ui",
-                            **context_trace_metadata(user_msg),
-                        },
-                    )
-            elif content and user_msg:
-                seen_commands = set()
-                ui_commands = []
-                for command in collector["ui_commands"]:
-                    key = json.dumps(command, ensure_ascii=False, sort_keys=True)
-                    if key in seen_commands:
-                        continue
-                    seen_commands.add(key)
-                    ui_commands.append(command)
-                append_chat_message(
-                    session=session,
-                    role=ChatMessage.Role.ASSISTANT,
-                    content=content,
-                    metadata={
-                        "tool_trace": collector["tool_trace"],
-                        "ui_commands": ui_commands,
-                        "conversation_id": conversation_id,
-                        "request_id": request_id,
-                        "streamed": True,
-                        "runtime_method": "ag_ui",
-                        **context_trace_metadata(user_msg),
-                    },
-                )
-                compact_sidebar_session(session)
-
-            session.metadata = {
-                **(session.metadata or {}),
-                "conversation_id": conversation_id,
-                "request_ids": request_ids,
-            }
-            if collector["error"]:
-                session.metadata["last_error_request_id"] = request_id
-                session.metadata["last_error_code"] = collector["error"]["code"]
-            session.save(update_fields=["metadata", "updated_at"])
-
-        response = StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
-        response["Cache-Control"] = "no-cache"
-        response["X-Accel-Buffering"] = "no"
-        return response
-
-
-class AIChatMessageCreateView(LoginRequiredMixin, View):
-    def post(self, request, external_id):
-        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-
-        prompt = request.POST.get("prompt", "").strip()
-        model_id = request.POST.get("model_id", "") or session.metadata.get("model_id", "")
-        surface = chat_surface_from_request(request, default=CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE)
-        chat_settings = get_chat_settings(surface)
-        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
-        if len(prompt) > max_prompt_chars:
-            prompt = prompt[:max_prompt_chars]
-        files = request.FILES.getlist("files")
-
-        # --- Slash command resolution ---
-        if prompt.startswith("/"):
-            cmd_spec, remainder = resolve_command(prompt)
-            if cmd_spec:
-                if cmd_spec.get("handler") == "commands":
-                    custom_cmds = list(
-                        SlashCommand.objects.filter(user=request.user).values(
-                            "id", "name", "shortcut", "description", "template"
-                        )
-                    )
-                    predefined_cmds = get_predefined_commands()
-                    return JsonResponse({
-                        "status": "command_list",
-                        "predefined": [
-                            {
-                                "name": c["name"],
-                                "aliases": c.get("aliases", []),
-                                "description": c["description"],
-                            }
-                            for c in predefined_cmds
-                        ],
-                        "custom": custom_cmds,
-                    })
-                template = cmd_spec["prompt_template"]
-                prompt = template.replace("{input}", remainder) if remainder else template
-            else:
-                user_cmds = list(SlashCommand.objects.filter(user=request.user))
-                custom_cmd, remainder = resolve_custom_command(prompt, user_cmds)
-                if custom_cmd:
-                    template = custom_cmd.template
-                    prompt = template.replace("{input}", remainder) if remainder else template
-        # --- End slash command resolution ---
-
-        if not prompt and not files:
-            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-                return JsonResponse({"error": "Пустое сообщение"}, status=400)
-            messages.error(request, "Сообщение пустое.")
-            return redirect("ai:chat_detail", external_id=session.external_id)
-
-        conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
-        request_id = str(uuid.uuid4())
-
-        user_msg = append_chat_message(
-            session=session,
-            role=ChatMessage.Role.USER,
-            content=prompt,
-            metadata={
-                "conversation_id": conversation_id,
-                "request_id": request_id,
-                "origin_channel": session.channel,
-                "surface": surface,
-            },
-        )
-        bind_request_context_to_message(request, user_msg)
-
-        # Handle attachments
-        for f in files:
-            file_type = ChatAttachment.FileType.OTHER
-            content_type = f.content_type or ""
-            if content_type.startswith("image/"):
-                file_type = ChatAttachment.FileType.IMAGE
-            elif content_type.startswith("audio/"):
-                file_type = ChatAttachment.FileType.AUDIO
-            elif "pdf" in content_type or "word" in content_type or "text" in content_type:
-                file_type = ChatAttachment.FileType.DOCUMENT
-
-            ChatAttachment.objects.create(
-                message=user_msg,
-                file=f,
-                file_name=f.name,
-                file_type=file_type,
-                file_size=f.size
-            )
-
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            compact_sidebar_session(session)
-            return JsonResponse({"status": "ok", "message_id": user_msg.id, "model_id": model_id})
-
-        # Чат идёт ТОЛЬКО через стриминговый путь (ai:chat_stream): ответ
-        # ассистента отрисовывает SSE-клиент. Синхронный LLM-вызов удалён —
-        # он держал соединение лишь до LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT
-        # (90s), тогда как agent-runtime работает до LLM_DEADLINE_SECONDS
-        # (300s); из-за этого рассинхрона write-инструмент мог осиротеть уже
-        # после того, как пользователь получил ошибку. Не-AJAX запрос просто
-        # возвращается к детальной странице сессии.
-        return redirect("ai:chat_detail", external_id=session.external_id)
-
-
-class AIChatMessageStreamView(LoginRequiredMixin, View):
-    def post(self, request, external_id):
-        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-        except (json.JSONDecodeError, AttributeError):
-            return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
-        msg_id = body.get("msg_id")
-        prompt = body.get("prompt", "")
-        surface = body.get("surface") or (CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE)
-        surface = CHAT_SURFACE_SIDEBAR if surface == CHAT_SURFACE_SIDEBAR else CHAT_SURFACE_FULL_PAGE
-        chat_settings = get_chat_settings(surface)
-        max_prompt_chars = int(chat_settings.get("max_prompt_chars") or 10000)
-        if len(prompt) > max_prompt_chars:
-            prompt = prompt[:max_prompt_chars]
-        model_id = body.get("model_id", "") or session.metadata.get("model_id", "")
-
-        conversation_id = session.metadata.get("conversation_id") or str(uuid.uuid4())
-        request_id = str(uuid.uuid4())
-
-        # If msg_id is provided, the message was already created by AIChatMessageCreateView
-        if msg_id:
-            user_msg = get_object_or_404(ChatMessage, id=msg_id, session=session)
-            prompt = user_msg.content
-        elif prompt:
-            # Fallback for older clients that don't use the two-step upload process
-            user_msg = append_chat_message(
-                session=session,
-                role=ChatMessage.Role.USER,
-                content=prompt,
-                metadata={
-                    "conversation_id": conversation_id,
-                    "request_id": request_id,
-                    "origin_channel": session.channel,
-                    "surface": surface,
-                },
-            )
-            bind_page_context_to_message(
-                user=request.user,
-                message=user_msg,
-                window_id=body.get("window_id", ""),
-                context_version=body.get("context_version", ""),
-                context_hint=body.get("context_hint", ""),
-            )
-        else:
-            return JsonResponse({"error": "Нужно указать prompt или msg_id."}, status=400)
-
-        def stream_generator():
-            client = AgentRuntimeClient()
-            full_content = []
-            ui_commands = []
-            runtime_payload_error = None
-
-            try:
-                for event in client.chat_stream(
-                    user=request.user,
-                    session_id=session.external_id,
-                    prompt=prompt,
-                    history=serialize_session_history(session),
-                    conversation_id=conversation_id,
-                    request_id=request_id,
-                    origin_channel=session.channel,
-                    model_id=model_id,
-                    page_context=build_runtime_page_context(user_msg)
-                    if chat_settings.get("context_tool_enabled", True)
-                    else {},
-                ):
-                    if event.startswith("data: "):
-                        data_str = event[6:]
-                        if runtime_payload_error and data_str == "[DONE]":
-                            continue
-                        if data_str != "[DONE]":
-                            try:
-                                data_json = json.loads(data_str)
-                                if isinstance(data_json, dict) and data_json.get("error"):
-                                    error_value = data_json.get("error")
-                                    message = data_json.get("message") or error_value
-                                    runtime_payload_error = AgentRuntimeError(
-                                        f"Agent runtime stream error: {message}"
-                                    )
-                                    continue
-                                if runtime_payload_error or not isinstance(data_json, dict):
-                                    continue
-                                if "content" in data_json:
-                                    full_content.append(data_json["content"])
-                                if isinstance(data_json.get("ui_command"), dict):
-                                    ui_commands.append(data_json["ui_command"])
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-                    yield f"{event}\n\n"
-            except Exception as exc:
-                partial_content = "".join(full_content)
-                payload = record_chat_runtime_error(
-                    session=session,
-                    actor=request.user,
-                    user_message=user_msg,
-                    exc=exc,
-                    conversation_id=conversation_id,
-                    request_id=request_id,
-                    origin_channel=session.channel,
-                    model_id=model_id,
-                    runtime_method="chat_stream",
-                    partial_content=partial_content,
-                )
-                logger.warning(
-                    "AI chat stream failed: request_id=%s action_id=%s error_type=%s",
-                    request_id,
-                    payload.get("technical_trace_id"),
-                    exc.__class__.__name__,
-                )
-                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-
-            if runtime_payload_error:
-                partial_content = "".join(full_content)
-                payload = record_chat_runtime_error(
-                    session=session,
-                    actor=request.user,
-                    user_message=user_msg,
-                    exc=runtime_payload_error,
-                    conversation_id=conversation_id,
-                    request_id=request_id,
-                    origin_channel=session.channel,
-                    model_id=model_id,
-                    runtime_method="chat_stream",
-                    partial_content=partial_content,
-                )
-                logger.warning(
-                    "AI chat stream returned runtime error payload: request_id=%s action_id=%s",
-                    request_id,
-                    payload.get("technical_trace_id"),
-                )
-                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-
-            if full_content:
-                append_chat_message(
-                    session=session,
-                    role=ChatMessage.Role.ASSISTANT,
-                    content="".join(full_content),
-                    metadata={
-                        "conversation_id": conversation_id,
-                        "request_id": request_id,
-                        "streamed": True,
-                        "ui_commands": ui_commands,
-                        **context_trace_metadata(user_msg),
-                    },
-                )
-                # Сохраняем trace-контекст на уровне сессии (conversation_id +
-                # накопленные request_ids). Раньше эту аудит-запись вёл
-                # синхронный путь AIChatMessageCreateView; после перехода на
-                # streaming-only чат её ведёт стриминговый путь, чтобы не
-                # терять корреляцию диалога между ходами.
-                session.metadata = {
-                    **session.metadata,
-                    "conversation_id": conversation_id,
-                    "request_ids": [*session.metadata.get("request_ids", []), request_id],
-                }
-                session.save(update_fields=["metadata", "updated_at"])
-                compact_sidebar_session(session)
-
-        return StreamingHttpResponse(stream_generator(), content_type="text/event-stream")
-
-
 class AIChatUpdateModelView(LoginRequiredMixin, View):
     def post(self, request, external_id):
-        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
         try:
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
             return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
+        if not isinstance(body, dict):
+            return JsonResponse({"error": "Тело JSON должно быть объектом."}, status=400)
         model_id = body.get("model_id", "")
+        if not isinstance(model_id, str):
+            return JsonResponse({"error": "model_id должен быть строкой."}, status=400)
         valid_ids = {m["id"] for m in settings.LOCAL_BUSINESS_AI_MODELS}
         if model_id and model_id not in valid_ids:
             return JsonResponse({"error": "Некорректный model_id."}, status=400)
-        session.metadata = {**session.metadata, "model_id": model_id}
-        session.save(update_fields=["metadata", "updated_at"])
-        return JsonResponse({"status": "ok", "model_id": model_id})
+        with transaction.atomic():
+            session = ChatSession.objects.select_for_update().filter(
+                pk=session.pk, status=ChatSession.Status.ACTIVE
+            ).first()
+            if session is None:
+                return JsonResponse({"error": "Сессия недоступна."}, status=404)
+            session.metadata = {**session.metadata, "model_id": model_id}
+            session.save(update_fields=["metadata", "updated_at"])
+            return JsonResponse({"status": "ok", "model_id": model_id})
 
 
 class AIChatUpdateTitleView(LoginRequiredMixin, View):
     def post(self, request, external_id):
-        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
         try:
             body = json.loads(request.body.decode("utf-8"))
         except (json.JSONDecodeError, AttributeError):
             return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
-        title = body.get("title", "").strip()[:50]
+        if not isinstance(body, dict):
+            return JsonResponse({"error": "Тело JSON должно быть объектом."}, status=400)
+        title_value = body.get("title", "")
+        if not isinstance(title_value, str):
+            return JsonResponse({"error": "title должен быть строкой."}, status=400)
+        title = title_value.strip()[:50]
         if not title:
             return JsonResponse({"error": "Заголовок не может быть пустым."}, status=400)
-        session.title = title
-        session.save(update_fields=["title", "updated_at"])
-        return JsonResponse({"status": "ok", "title": session.title})
+        with transaction.atomic():
+            session = ChatSession.objects.select_for_update().filter(
+                pk=session.pk, status=ChatSession.Status.ACTIVE
+            ).first()
+            if session is None:
+                return JsonResponse({"error": "Сессия недоступна."}, status=404)
+            session.title = title
+            session.save(update_fields=["title", "updated_at"])
+            return JsonResponse({"status": "ok", "title": session.title})
 
 
 class AIChatGenerateTitleView(LoginRequiredMixin, View):
@@ -1080,7 +1361,7 @@ class AIChatGenerateTitleView(LoginRequiredMixin, View):
         from .services import DEFAULT_CHAT_TITLE
 
         session = get_object_or_404(
-            ChatSession.objects.filter(user=request.user).prefetch_related("messages"),
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE).prefetch_related("messages"),
             external_id=external_id,
         )
         if session.title and session.title != DEFAULT_CHAT_TITLE:
@@ -1088,17 +1369,34 @@ class AIChatGenerateTitleView(LoginRequiredMixin, View):
 
         new_title = generate_session_title(session)
         if new_title:
-            session.title = new_title
-            session.save(update_fields=["title", "updated_at"])
-            return JsonResponse({"status": "ok", "title": session.title, "generated": True})
+            with transaction.atomic():
+                session = ChatSession.objects.select_for_update().filter(
+                    pk=session.pk, status=ChatSession.Status.ACTIVE
+                ).first()
+                if session is None:
+                    return JsonResponse({"status": "ok", "title": DEFAULT_CHAT_TITLE, "generated": False})
+                if session.title and session.title != DEFAULT_CHAT_TITLE:
+                    return JsonResponse({"status": "ok", "title": session.title, "generated": False})
+                session.title = new_title
+                session.save(update_fields=["title", "updated_at"])
+                return JsonResponse({"status": "ok", "title": session.title, "generated": True})
 
         return JsonResponse({"status": "ok", "title": session.title or DEFAULT_CHAT_TITLE, "generated": False})
 
 
 class AIChatDeleteView(LoginRequiredMixin, View):
     def post(self, request, external_id):
-        session = get_object_or_404(ChatSession.objects.filter(user=request.user), external_id=external_id)
-        archive_chat_session(session, reason="user_deleted")
+        session = get_object_or_404(
+            ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
+            external_id=external_id,
+        )
+        with transaction.atomic():
+            session = ChatSession.objects.select_for_update().filter(
+                pk=session.pk, status=ChatSession.Status.ACTIVE
+            ).first()
+            if session is None:
+                return JsonResponse({"error": "Сессия недоступна."}, status=404)
+            archive_chat_session(session, reason="user_deleted")
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"status": "ok"})
         return redirect("ai:chat_index")
@@ -1144,6 +1442,10 @@ class AIToolExecuteView(View):
             )
         except UnknownToolError:
             return JsonResponse({"error": "Неизвестный инструмент."}, status=404)
+        except PermissionDenied:
+            return JsonResponse({"error": "Контекст запуска недоступен."}, status=403)
+        except ValidationError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
 
         if result.get("ok"):
             return JsonResponse(result, status=200)

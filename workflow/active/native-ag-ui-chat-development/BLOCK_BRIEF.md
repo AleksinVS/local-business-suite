@@ -6,11 +6,17 @@
 
 ## Контекст
 
-ADR-0028 определяет самописный чат как основной целевой UI проекта. CopilotKit остается равноправным драйвером и референсом. Первый native-драйвер уже есть: реализованы новый чат, AG-UI reducer, tool trace, UI-команды, page context bridge, сохранение истории и e2e. Следующая фаза - довести native-чат до функционального соответствия старому Django/HTMX чату.
+ADR-0028 определяет самописный чат как основной целевой UI проекта. ADR-0044
+фиксирует один сценарий выполнения для его бокового и полноэкранного
+представлений. CopilotKit остается замороженным референсным драйвером общего
+`/ag-ui` контракта. Первый native-драйвер уже есть: реализованы новый чат, AG-UI
+reducer, tool trace, UI-команды, page context bridge, сохранение истории и e2e.
+Следующая фаза устраняет старый отдельный `send` + `stream` путь полной страницы.
 
 ## Read scope
 
 - `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- `docs/adr/ADR-0044-unified-native-ai-chat-execution.md`;
 - `docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md`;
 - `docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md`;
 - `apps/ai/`;
@@ -19,7 +25,7 @@ ADR-0028 определяет самописный чат как основно�
 - `static/src/ai_ui/`;
 - `static/src/js/page_context.js`;
 - `static/src/js/right_panel.js`;
-- `static/src/js/ai_chat.js`;
+- удаляемый legacy-клиент `static/src/js/ai_chat.js` — только для инвентаризации перед удалением;
 - `templates/ai/chat_detail.html`;
 - `templates/ai/partials/sidebar_chat.html`;
 - `scripts/e2e/tests/native_ai_ui.spec.ts`.
@@ -33,9 +39,16 @@ ADR-0028 определяет самописный чат как основно�
 - `templates/ai/`;
 - `apps/ai/context_processors.py`;
 - `apps/ai/services.py`;
+- `apps/ai/models.py`;
+- `apps/ai/migrations/`;
 - `apps/ai/views.py`;
 - `apps/ai/urls.py`;
 - `apps/ai/ui_runtime/config.py`;
+- `apps/ai/ui_runtime/actor.py`;
+- `apps/ai/runtime_client.py`;
+- `services/agent_runtime/app.py`;
+- `services/agent_runtime/graph.py`;
+- `services/agent_runtime/tests/`;
 - `static/src/ai_ui/native_ai.js`;
 - `static/src/ai_ui/native_ai.css`;
 - `scripts/e2e/tests/native_ai_ui.spec.ts`;
@@ -47,21 +60,23 @@ ADR-0028 определяет самописный чат как основно�
 ## Non-goals
 
 - Не обновлять AG-UI/CopilotKit зависимости.
-- Не удалять CopilotKit и legacy драйверы.
+- Не менять архитектуру CopilotKit reference-драйвера.
 - Не менять доменные tools/contracts.
 - Не добавлять browser-side write actions.
 - Не публиковать `agent_runtime` напрямую в браузер.
 
 ## Acceptance
 
-- Native UI использует `/ai/ui/config/`.
+- Оба native-представления используют общий session-aware prepare/run контур.
+- Одинаковый `run_id` не создает повторный ход и не повторяет доменный tool.
 - Новый чат создает новый `thread_id`.
 - AG-UI text/tool/state/custom/error events обрабатываются без зависаний.
 - UI-команды открывают правую панель через существующий safe bridge.
 - Page context обновляется реактивно.
 - E2E покрывает streaming, новый чат, tool trace и UI-команды.
 - Native UI достигает parity со старым sidebar по истории, выбору модели, очистке, ссылке на полный чат и статусам.
-- Native full-page mode достигает parity со старой полной страницей по списку сессий, названию, удалению, Markdown, командам и вложениям либо фиксирует явно согласованный non-goal.
+- Native full-page mode достигает parity со старой полной страницей по списку сессий, названию, удалению, Markdown, командам и вложениям.
+- Старые Django `send`/`stream` и runtime `/chat` endpoints удалены после проверки отсутствия вызовов.
 - Документация и структура обновлены.
 
 ## Verification
@@ -80,4 +95,8 @@ git diff --check -- . ':(exclude)BACKLOG.md'
 
 ## AG-UI version note
 
-Проверка 2026-06-15: текущий `@ag-ui/client=0.0.55`, latest npm `0.0.57`; текущий `@copilotkit/runtime=1.59.5`, latest npm `1.60.1`. Версия не обновляется без согласования владельца.
+Проверка 2026-08-26: текущий `@ag-ui/client=0.0.55`, latest npm `0.0.58`;
+текущий CopilotKit `1.59.5`, latest runtime `1.69.0`, latest react-core
+`1.69.2`. Явного объявления о несовместимом изменении wire contract не найдено.
+Версии и `agui_profile` не обновляются без согласования владельца и отдельной
+матрицы совместимости.

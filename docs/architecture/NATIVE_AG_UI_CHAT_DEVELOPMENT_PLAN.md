@@ -2,9 +2,10 @@
 
 ## Статус
 
-Implemented first slice. Документ описывает срез, который переносит полезные решения из CopilotKit reference в основной самописный ИИ-чат.
+Технически выполнено 2026-08-26. Документ фиксирует реализованный единый
+native-контур и остаётся активным до пользовательской приёмки и production smoke.
 
-Дата: 2026-06-10.
+Дата: 2026-06-10. Актуализировано: 2026-08-26.
 
 Целевой режим:
 
@@ -17,13 +18,16 @@ LOCAL_BUSINESS_AI_UI_DRIVER=native
 ## Связанные решения и документы
 
 - `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
+- `docs/adr/ADR-0044-unified-native-ai-chat-execution.md`;
 - `docs/architecture/AI_UI_PROTOCOL_FOUNDATION_PLAN.md`;
 - `docs/architecture/COPILOTKIT_AI_UI_CHAT_DEVELOPMENT_PLAN.md`;
 - `docs/guides/AI_UI_PROTOCOL_OPERATIONS.md`;
 - `docs/deployment/AI_UI_PROTOCOL_DEPLOYMENT.md`;
 - `workflow/active/native-ag-ui-chat-development/`.
 
-Новый ADR не нужен: приоритет самописного чата, равноправие AG-UI клиентов и политика версии уже зафиксированы в ADR-0028.
+ADR-0044 уточняет ADR-0028: боковой и полноэкранный native-интерфейсы
+используют один session-aware prepare/run путь; CopilotKit остается отдельным
+эталонным клиентом общего runtime `/ag-ui`.
 
 ## Методологическая заметка
 
@@ -40,12 +44,12 @@ AG-UI в этом проекте является внешним wire contract �
 LOCAL_BUSINESS_AI_UI_AGUI_PROFILE=ag-ui@0.0.55
 ```
 
-Проверка 2026-06-15 через `npm view` показала:
+Проверка официальных источников 2026-08-26 показала:
 
 ```text
-@ag-ui/client latest=0.0.57
-@copilotkit/react-core latest=1.60.1
-@copilotkit/runtime latest=1.60.1
+@ag-ui/client latest=0.0.58
+@copilotkit/react-core latest=1.69.2
+@copilotkit/runtime latest=1.69.0
 ```
 
 Версия AG-UI не обновляется в этом срезе. Это осознанное предупреждение: требуется отдельное согласование владельца, оценка release notes и e2e matrix перед повышением `agui_profile`.
@@ -89,16 +93,15 @@ LOCAL_BUSINESS_AI_UI_AGUI_PROFILE=ag-ui@0.0.55
 - Не добавлять React/Vue или новый frontend framework.
 - Не переносить доменные write tools в браузер.
 - Не удалять CopilotKit-драйвер.
-- Не удалять legacy HTMX sidebar.
 - Не менять схемы бизнес-контрактов.
 
 ## Архитектурный контур
 
 ```text
-Browser native sidebar
-  -> /ai/ui/config/
-  -> /ai/ui/session/new/
-  -> /ai/ui/ag-ui/run/
+Browser native sidebar | full page
+  -> session-aware config
+  -> multipart prepare turn
+  -> idempotent session run
   -> services.agent_runtime /ag-ui
   -> protocols.agui.v1
   -> LangGraph agent
@@ -109,7 +112,8 @@ Browser native sidebar
 
 - Django UI runtime: driver selection, actor/session payload, signature, config.
 - Native frontend: AG-UI stream parsing, local message/tool UI state, safe UI commands.
-- Django proxy: same-origin auth, actor payload overwrite, AG-UI stream relay.
+- Django proxy: same-origin auth, ownership, prepared turns, replay protection,
+  actor payload overwrite and AG-UI stream relay.
 - Agent runtime: AG-UI event contract, protocol metadata, redaction, UI command normalization.
 
 ## Реализационный срез
@@ -128,13 +132,14 @@ Native UI не должен использовать CopilotKit config endpoint.
 
 ### 2. Thread/run lifecycle
 
-Добавить в native UI:
+Реализовано в native UI:
 
 - кнопку нового чата;
-- обновление `thread_id` и `forwarded_props` после `POST /ai/ui/session/new/`;
+- обновление `thread_id` и адресов prepare/run после `POST /ai/ui/session/new/`;
 - `runId` формата `native_<timestamp>_<random>`;
 - блокировку формы только на время текущего run;
-- сохранение последних сообщений в клиентском state только как отправляемый контекст.
+- серверное построение истории; состояние браузера не является источником
+  контекста модели.
 
 ### 3. AG-UI stream parser и reducers
 
@@ -187,7 +192,8 @@ Native UI должен слушать `ai-context:update` и брать свеж
 - UI-команда из `STATE_DELTA /localBusiness/uiCommands` открывает правую панель один раз.
 - `RUN_ERROR` не оставляет чат в бесконечной загрузке.
 - Unknown event/custom extension не ломает UI.
-- CopilotKit и legacy режимы не меняются.
+- CopilotKit reference-драйвер не меняет архитектуру; legacy-драйвер ранее
+  удалён по ADR-0032.
 - E2E покрывает основной native сценарий.
 
 ## UX parity со старым чатом
@@ -207,11 +213,19 @@ Native sidebar получил:
 - ссылку или кнопку открытия полного чата текущей сессии;
 - сохранение текущих гарантий page context, audit, actor signing и safe UI commands.
 
-### Baseline старой полной страницы
+### Единый путь и полноэкранное представление
 
-Статус: ожидает реализации в task packets `06`, `07`, `08`.
+Статус: выполнено в task packets `06`, `07`, `08`.
 
-Native full-page chat должен получить:
+Общий контур получил:
+
+- строгую проверку владельца активной сессии и совпадения `threadId`;
+- уникальный `(session, run_id)` и воспроизведение сохраненного результата;
+- серверную подготовку пользовательского хода, команд, контекста и вложений;
+- общий decoder/reducer, для которого EOF без terminal event является ошибкой;
+- канонический поток `/ag-ui` без отдельного `/chat/stream`.
+
+Native full-page chat получил:
 
 - список последних `ChatSession` текущего пользователя;
 - создание новой сессии;
@@ -220,7 +234,8 @@ Native full-page chat должен получить:
 - безопасное Markdown-отображение ответов;
 - меню и autocomplete slash-команд;
 - вложения через существующий `ChatAttachment` контур;
-- e2e на reload, session switch, delete, command и attachment сценарии.
+- e2e на конфигурацию и сессии, безопасный поток, команды, вложения, Markdown и
+  разблокировку после ошибки.
 
 ### Исполнительные task packets
 
@@ -237,7 +252,11 @@ workflow/active/native-ag-ui-chat-development/task-packets/
 - Не обновлять AG-UI/CopilotKit версии без согласования владельца.
 - Не добавлять browser-side write tools.
 - Не создавать параллельное хранилище истории, команд или вложений.
-- Не удалять legacy режим до приемки native parity и rollback smoke.
+- Не менять CopilotKit reference-путь и версии без отдельного решения.
+- Старые native execution endpoints удалены после проверки отсутствия вызовов;
+  откат не выполняется простым возвратом предыдущей Git-версии: старая схема и
+  старый код не сохраняют данные и совместимость `ChatRun`. Нужен
+  forward-compatible rollback либо backup/restore с явным планом миграции.
 - Не тянуть CopilotKit Runtime в production-путь `native`.
 
 ## Проверки
@@ -256,7 +275,8 @@ git diff --check -- . ':(exclude)BACKLOG.md'
 
 ## Риски
 
-- `@ag-ui/client` уже имеет новую версию `0.0.57`. В этом срезе риск принят как предупреждение без обновления.
+- `@ag-ui/client` уже имеет новую версию `0.0.58`, а CopilotKit — ветку
+  `1.69.x`. В этом срезе риск принят как предупреждение без обновления.
 - Native UI может начать дублировать Copilot Runtime. Смягчение: оставить его тонким AG-UI клиентом.
 - Browser state может раскрыть лишнее. Смягчение: использовать существующий sanitized page context и server-side redaction.
 - PWA cache может удерживать старый JS. Смягчение: добавить version query для native asset.

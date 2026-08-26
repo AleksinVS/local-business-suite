@@ -54,7 +54,9 @@ LOCAL_BUSINESS_AI_UI_DRIVER=legacy
   `9fdce3fb`).
 - `/ai/ui/config/` возвращает JSON с `enabled:true`, `runtime_url`,
   `messages`, `models`, `urls`, `protocol`. Проверил `apps/ai/ui_runtime/config.py`.
-- `/ai/ui/ag-ui/run/` — стримит AG-UI события. `apps/ai/views.py:AIUIAGUIRunProxyView`.
+- Native execution uses `POST /ai/chat/<session>/turn/prepare/` followed by
+  `POST /ai/chat/<session>/turn/run/`; Django records `ChatRun` and proxies the
+  SSE stream to `services/agent_runtime /ag-ui`.
 
 ## 2. Архитектурные правки
 
@@ -131,8 +133,8 @@ check:
     mtime+size.
   - `AssetVersionFunctionsTests` — smoke-тесты четырёх публичных
     функций.
-  - `SidebarAiChatDispatcherTests` — dispatcher трёх драйверов
-    (legacy / native / copilotkit).
+  - `SidebarAiChatDispatcherTests` — dispatcher двух драйверов
+    (native / copilotkit).
 - `apps/core/tests.py:CheckStaticfilesCommandTests` — пять тестов:
   согласованные пары, отсутствие копии с `--fail`/`без --fail`,
   расхождение размеров, legacy-артефакты с `--ignore`/без,
@@ -160,18 +162,35 @@ Makefile                                                                     | e
 templates/base.html                                                          | edited
 ```
 
-Никаких изменений:
+Текущий execution-контур:
 
-- `apps/ai/views.py` — `AIUIConfigView`/`AIUISidebar*View`/`AIUIAGUIRunProxyView`
-  не трогали: они уже корректны.
-- `apps/ai/ui_runtime/*` — не трогали: `drivers.py`, `config.py`,
-  `actor.py` оставлены в покое.
-- `static/src/ai_ui/native_ai.js`, `native_ai.css` — не правили:
-  код уже рабочий, мы только добавили ошибки и сам драйвер.
+- `apps/ai/views.py` — `AIUIConfigView`/`AIUISidebar*View` и новый
+  `AIChatPrepareTurnView`/`AIChatRunView` образуют единый execution-контур.
+- `apps/ai/ui_runtime/config.py` — единый top-level `prepare_url`/`runtime_url`
+  для sidebar и full page.
+- `static/src/ai_ui/native_ai.js`, `native_ai.css` — канонический native-клиент,
+  безопасный Markdown и блокировка mutating controls во время run.
 - `.env`, `.env.example` — `.env` локально правится руками (см. п. 4),
   `.env.example` не трогали.
 
-## 4. Переключение `.env`
+## 4. Выпуск и эксплуатация native execution
+
+Перед первым выпуском примените миграцию: `python manage.py migrate`.
+Браузер отправляет prepare multipart-запрос с same-origin credentials и CSRF;
+вложения проверяются на сервере и привязываются к сообщению. Их содержимое пока
+не анализируется моделью: доступны только имя и тип файла. Run принимает
+только `threadId` и подготовленный `runId`; Django проверяет владельца сессии,
+реальный `session_channel` и соответствие `threadId`. Поле `surface`
+валидируется как выбранный браузером профиль интерфейса (`sidebar` или
+`full_page`): оно определяет только заранее ограниченные сервером размеры
+сообщения и глубину истории, но не предоставляет права и не участвует в
+проверке владельца сессии.
+Повтор `(session, run_id)` идемпотентен, а недоступная модель возвращает единый
+безопасный текст без раскрытия внутренней ошибки. Reverse proxy обязан отключать
+буферизацию для `text/event-stream` (`/ai/chat/<session>/turn/run/`), иначе UI не
+получит события по мере выполнения.
+
+## 5. Переключение `.env`
 
 Файл `.env` gitignored. В нём уже есть комментарий
 «На проде временно legacy» (строка 31). Меняем строку 32:
@@ -207,7 +226,7 @@ Django читает `.env` при старте процесса — после �
    «NativeAi init failed: <сообщение>». Скопировать стек и приложить
    в issue.
 
-## 5. Smoke-check (что я прогнал)
+## 6. Smoke-check (что я прогнал)
 
 ```text
 $ python manage.py check
@@ -224,28 +243,34 @@ OK
 Полная сюита `apps.ai` и `apps.core` запущена с `--keepdb`,
 завершение плановое (фоновая задача).
 
-## 6. Откат
+## 7. Откат
 
-Если что-то пошло не так, откат тривиален:
+Возврат только к предыдущему коду с последующим применением старых миграций
+не является безопасным откатом: старый код и старая схема не знают `ChatRun`
+и могут привести к потере или несовместимой интерпретации этих данных.
+Безопасные варианты — forward-compatible код и схема, либо заранее подготовленный
+backup/restore и явный план миграции/удаления `ChatRun`. Перед откатом нужно
+зафиксировать резервную копию базы, проверить совместимость схемы и только затем
+перезапустить сервис. Параллельный legacy endpoint не является аварийным режимом.
 
-```diff
-- LOCAL_BUSINESS_AI_UI_DRIVER=native
-+ LOCAL_BUSINESS_AI_UI_DRIVER=legacy
-```
+Версия драйвера выбирается предыдущим Git-релизом; значение `legacy` в текущем
+релизе не используется.
+Откат миграции `0014_chatrun` удаляет таблицу `ChatRun` и её данные, поэтому
+без проверенной резервной копии выполнять его нельзя. Если предыдущий код
+совместим с расширенной схемой, предпочтительно оставить миграцию применённой;
+иначе нужен согласованный план восстановления всей базы на одну точку времени.
 
-После рецикла пула — тот же `legacy`-контур, что работал раньше.
-Изменения в коде (ADR, тесты, Makefile, контекст-процессор, команда
-`check_staticfiles`) обратимы точечно через `git revert` —
-никаких миграций, никаких schema-changes. Никакие runtime-данные
-не затронуты.
+Dynamic page context остаётся native-only: native передаёт его в Django prepare/run,
+где он включается в серверно подписанный payload. CopilotKit получает только
+серверно подписанные свойства; unsigned dynamic `page_context` не пересылается.
 
-## 7. Что вынесено за рамки этой работы
+## 8. Что вынесено за рамки этой работы
 
 - Перевод конфигурации панели на WebSocket — отдельная задача в backlog.
 - Полноценный bundler для native_ai.js (esbuild) — требует отдельного
   ADR про введение Node-toolchain в CI.
-- e2e-проверка чата (Playwright) — отдельная задача, чтобы не
-  тащить Selenium/Playwright в основную сюиту зелёных тестов.
+- e2e-проверка чата выполняется через `scripts/e2e/tests/native_ai_ui.spec.ts`;
+  временные логи и артефакты Playwright хранятся только в `.local/`.
 - Финальная уборка legacy-файлов в `staticfiles/src/` (`*.bak`,
   `test_marker.txt`, hashed manifest-копии при обычном
   `collectstatic`) — намеренно оставлены как видимая «грязь»,

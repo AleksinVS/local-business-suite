@@ -166,132 +166,6 @@ def _history_to_messages(history):
     return messages
 
 
-def run_agent(
-    *,
-    actor: dict,
-    session_id: str,
-    prompt: str,
-    history,
-    conversation_id: str = "",
-    request_id: str = "",
-    origin_channel: str = "",
-    actor_version: str = "",
-    model_id: str = "",
-):
-    """
-    Run the LangGraph agent for a single user prompt.
-    """
-    settings = load_runtime_settings()
-    resolved = resolve_model(model_id)
-
-    if not conversation_id:
-        conversation_id = str(uuid.uuid4())
-    if not request_id:
-        request_id = str(uuid.uuid4())
-    if not origin_channel:
-        origin_channel = actor.get("channel", "internal")
-
-    gateway_client = DjangoGatewayClient(
-        base_url=settings.django_gateway_url,
-        token=settings.django_gateway_token,
-    )
-
-    # 1. Fetch skills catalog
-    skills_catalog = gateway_client.get_skills_catalog().get("skills", [])
-    
-    tools = build_tools(
-        actor=actor,
-        session_id=session_id,
-        gateway_client=gateway_client,
-        conversation_id=conversation_id,
-        request_id=request_id,
-        origin_channel=origin_channel,
-        actor_version=actor_version,
-    )
-    tools_by_name = {tool.name: tool for tool in tools}
-    init_kwargs = {"temperature": 0, "timeout": 300}
-    if resolved.provider:
-        init_kwargs["model_provider"] = resolved.provider
-    if resolved.api_key:
-        init_kwargs["api_key"] = resolved.api_key
-    if resolved.base_url:
-        init_kwargs["base_url"] = resolved.base_url
-    model = init_chat_model(resolved.model, **init_kwargs)
-    model_with_tools = model.bind_tools(tools)
-
-    # Dynamic state for instructions
-    current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
-    tool_trace = []
-    ui_commands = []
-
-    @task
-    def call_llm(messages):
-        return _invoke_chat_model_with_deadline(
-            model_with_tools.invoke,
-            [SystemMessage(content=current_instructions["body"])] + messages,
-        )
-
-    @task
-    def call_tool(tool_call):
-        tool_name = tool_call["name"]
-        tool_call_id = tool_call.get("id", str(uuid.uuid4()))
-        try:
-            tool = tools_by_name[tool_name]
-            result = tool.invoke(tool_call)
-        except Exception as exc:
-            logger.error("Tool %s failed: %s", tool_name, exc)
-            return ToolMessage(content=f"Error: {exc}", tool_call_id=tool_call_id)
-
-        # Handle skill activation specially
-        if tool_name == "activate_skill" and isinstance(result, dict) and result.get("ok"):
-            current_instructions["body"] = build_system_prompt(
-                skills_catalog=skills_catalog,
-                active_skill_content=result.get("instructions", "")
-            )
-
-        slot_values = tool_call.get("args", {})
-        resolution = resolve_task_type_for_tool(tool_name, slot_values)
-
-        trace_entry = {
-            "tool": tool_name,
-            "args": slot_values,
-            "conversation_id": conversation_id,
-            "request_id": request_id,
-            "origin_channel": origin_channel,
-            "actor_version": actor_version,
-        }
-        if resolution:
-            trace_entry.update(resolution.to_trace_dict())
-        tool_trace.append(trace_entry)
-        ui_command = _extract_ui_command(result)
-        if ui_command:
-            ui_commands.append(ui_command)
-        return result
-
-    @entrypoint()
-    def agent(messages):
-        model_response = call_llm(messages).result()
-        while True:
-            if not model_response.tool_calls:
-                break
-            tool_results = [call_tool(tool_call).result() for tool_call in model_response.tool_calls]
-            messages = add_messages(messages, [model_response, *tool_results])
-            model_response = call_llm(messages).result()
-        return add_messages(messages, [model_response])
-
-    history_messages = _history_to_messages(history)
-    history_messages.append(HumanMessage(content=prompt))
-    result_messages = agent.invoke(history_messages)
-    assistant_message = result_messages[-1].content if result_messages else ""
-    return {
-        "assistant_message": assistant_message,
-        "tool_trace": tool_trace,
-        "ui_commands": ui_commands,
-        "conversation_id": conversation_id,
-        "request_id": request_id,
-    }
-
-
 def stream_agent(
     *,
     actor: dict,
@@ -381,6 +255,7 @@ def stream_agent(
 
         trace_entry = {
             "tool": tool_name,
+            "tool_call_id": tool_call_id,
             "args": slot_values,
             "conversation_id": conversation_id,
             "request_id": request_id,
@@ -413,12 +288,11 @@ def stream_agent(
     ai_yielded = 0
     last_yield_at = time.monotonic()
     # Hard wall-clock deadline over the whole streaming session.
-    # ``agent.stream`` may stop yielding chunks while LangGraph is
-    # blocked internally between LLM cycles — without a deadline the
-    # SSE consumer in ``app.py:stream_generator`` sits idle and the
-    # user sees no progress. When the deadline fires we dump every
-    # thread's stack and raise, which ``app.py:chat_stream`` translates
-    # into a single ``agent_runtime_error`` SSE event.
+    # ``agent.stream`` may stop yielding chunks while LangGraph is blocked
+    # internally between LLM cycles — without a deadline the AG-UI event
+    # generator sits idle and the user sees no progress. When the deadline
+    # fires we dump every thread's stack and raise; the AG-UI endpoint
+    # translates it into a safe terminal error.
     deadline = AGENT_DEADLINE_SECONDS
     try:
         for chunk in agent.stream(history_messages, stream_mode="messages"):
@@ -438,9 +312,36 @@ def stream_agent(
                 if ai_yielded <= history_ai_count:
                     continue
                 last_yield_at = now
-                yield msg.content
+                content = msg.content
+                if isinstance(content, list):
+                    # Providers may return multimodal content blocks. The
+                    # browser protocol carries text deltas only.
+                    parts = []
+                    for block in content:
+                        if isinstance(block, str):
+                            parts.append(block)
+                        elif isinstance(block, dict):
+                            value = block.get("text") or block.get("content")
+                            if isinstance(value, str):
+                                parts.append(value)
+                    content = "".join(parts)
+                if content:
+                    yield str(content)
     except concurrent.futures.TimeoutError:  # pragma: no cover - safety net
         _dump_all_thread_stacks(f"agent stream exceeded {deadline}s deadline")
         raise RuntimeError(f"agent stream exceeded {deadline}s deadline")
+    # Keep the browser trace compact: never expose tool arguments or tool
+    # results. The full trace remains available to the server-side audit path.
+    if tool_trace:
+        yield {
+            "tool_trace": [
+                {
+                    "tool": str(item.get("tool") or "tool"),
+                    "tool_call_id": str(item.get("tool_call_id") or ""),
+                    "status": "completed",
+                }
+                for item in tool_trace
+            ]
+        }
     for command in ui_commands:
         yield {"ui_command": command}

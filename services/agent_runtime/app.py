@@ -6,7 +6,7 @@ import hmac
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
 from .protocols.agui.v1 import (
@@ -17,15 +17,20 @@ from .protocols.agui.v1 import (
     run_finished_event,
     run_started_event,
     sse_event,
-    text_message_events,
     tool_trace_events,
     ui_command_events,
 )
+from .protocols.agui.events import (
+    EVENT_TEXT_MESSAGE_CONTENT,
+    EVENT_TEXT_MESSAGE_END,
+    EVENT_TEXT_MESSAGE_START,
+    event,
+)
 from .config import describe_contract_sources, get_available_models, is_model_configured, load_runtime_settings
-from .graph import run_agent, stream_agent
+from .graph import stream_agent
 from .mcp_server import build_mcp_server
 from .protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
-from .schemas import AGUIActorPayload, AGUIRunAgentInput, ChatRequest, ChatResponse
+from .schemas import AGUIActorPayload, AGUIRunAgentInput
 
 
 mcp_server = build_mcp_server()
@@ -112,6 +117,7 @@ def _agui_signature_payload(payload: AGUIActorPayload) -> str:
         "origin_channel": payload.origin_channel,
         "session_id": payload.session_id,
         "ui_driver": payload.ui_driver,
+        "page_context": payload.page_context or {},
     }
     return json.dumps(signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -135,25 +141,6 @@ def _agui_signature_is_valid(payload: AGUIActorPayload) -> bool:
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, payload.signature)
-
-
-def _safe_chat_log_context(payload: ChatRequest, actor_context) -> dict:
-    return {
-        "session_id": payload.session_id,
-        "conversation_id": actor_context.conversation_id,
-        "request_id": actor_context.request_id,
-        "origin_channel": actor_context.origin_channel,
-        "model_id": payload.model_id,
-        "prompt_sha256": _prompt_hash(payload.prompt),
-        "prompt_length": len(payload.prompt or ""),
-        "history_count": len(payload.history or []),
-        "actor_user_id": actor_context.user_id,
-        "actor_channel": actor_context.channel,
-        "actor_source": actor_context.source,
-        "actor_is_superuser": actor_context.is_superuser,
-        "actor_roles_count": len(actor_context.roles or []),
-        "page_context_present": bool(actor_context.page_context),
-    }
 
 
 @asynccontextmanager
@@ -204,7 +191,7 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
         )
 
         async def invalid_actor_events():
-            yield sse_event(run_error_event("Контекст исполнителя AG-UI недействителен.", code="invalid_actor"))
+            yield sse_event(run_error_event("Контекст исполнителя AG-UI недействителен.", code="invalid_actor", run_input=run_input))
 
         return StreamingResponse(invalid_actor_events(), media_type="text/event-stream")
 
@@ -217,9 +204,36 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
         )
 
         async def invalid_signature_events():
-            yield sse_event(run_error_event("Подпись контекста исполнителя AG-UI недействительна.", code="invalid_actor_signature"))
+            yield sse_event(run_error_event("Подпись контекста исполнителя AG-UI недействительна.", code="invalid_actor_signature", run_input=run_input))
 
         return StreamingResponse(invalid_signature_events(), media_type="text/event-stream")
+
+    if actor_payload.session_id and actor_payload.session_id != run_input.threadId:
+        logger.warning(
+            "AG-UI request rejected: signed session does not match thread: session_id=%s thread_id=%s",
+            actor_payload.session_id,
+            run_input.threadId,
+        )
+
+        async def mismatched_session_events():
+            yield sse_event(run_error_event("Сессия запуска недействительна.", code="session_thread_mismatch", run_input=run_input))
+
+        return StreamingResponse(mismatched_session_events(), media_type="text/event-stream")
+
+    # CopilotKit does not receive server-built native page context.  Reject a
+    # stale/forged client extension before RUN_STARTED rather than accepting
+    # unsigned context as part of a valid CopilotKit request.
+    if actor_payload.ui_driver == "copilotkit" and actor_payload.page_context:
+        async def invalid_copilot_context_events():
+            yield sse_event(
+                run_error_event(
+                    "Контекст страницы недействителен.",
+                    code="invalid_page_context",
+                    run_input=run_input,
+                )
+            )
+
+        return StreamingResponse(invalid_copilot_context_events(), media_type="text/event-stream")
 
     actor_context = actor_payload.actor.ensure_trace_context()
     actor = actor_context.model_dump()
@@ -260,10 +274,17 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                     run_error_event(
                         AI_CHAT_UNAVAILABLE_MESSAGE,
                         code="service_not_configured",
+                        run_input=run_input,
                     )
                 )
                 return
-            result = run_agent(
+            # The AG-UI endpoint uses the streaming graph directly. Do not
+            # accumulate a second result here: incremental
+            # text and compact traces are emitted as the graph yields them.
+            yield sse_event(event(EVENT_TEXT_MESSAGE_START, messageId=message_id, role="assistant"))
+            tool_trace = []
+            ui_commands = []
+            for chunk in stream_agent(
                 actor=actor,
                 session_id=actor_payload.session_id or run_input.threadId,
                 prompt=prompt,
@@ -273,13 +294,19 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 origin_channel=actor_payload.origin_channel,
                 actor_version=actor_payload.actor_version,
                 model_id=actor_payload.model_id,
-            )
-            for event in text_message_events([result.get("assistant_message", "")], message_id=message_id):
-                yield sse_event(event)
-            for event in tool_trace_events(result.get("tool_trace", []), parent_message_id=message_id):
-                yield sse_event(event)
-            for event in ui_command_events(result.get("ui_commands", [])):
-                yield sse_event(event)
+            ):
+                if isinstance(chunk, str):
+                    yield sse_event(event(EVENT_TEXT_MESSAGE_CONTENT, messageId=message_id, delta=chunk))
+                elif isinstance(chunk, dict):
+                    if isinstance(chunk.get("tool_trace"), list):
+                        tool_trace.extend(item for item in chunk["tool_trace"] if isinstance(item, dict))
+                    if isinstance(chunk.get("ui_command"), dict):
+                        ui_commands.append(chunk["ui_command"])
+            yield sse_event(event(EVENT_TEXT_MESSAGE_END, messageId=message_id))
+            for trace_event in tool_trace_events(tool_trace, parent_message_id=message_id):
+                yield sse_event(trace_event)
+            for ui_event in ui_command_events(ui_commands, run_id=run_input.runId):
+                yield sse_event(ui_event)
             yield sse_event(
                 run_finished_event(
                     run_input,
@@ -297,101 +324,6 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 exc.__class__.__name__,
                 exc_info=True,
             )
-            yield sse_event(run_error_event(AI_CHAT_UNAVAILABLE_MESSAGE))
+            yield sse_event(run_error_event(AI_CHAT_UNAVAILABLE_MESSAGE, run_input=run_input))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@app.post("/chat/stream")
-async def chat_stream(payload: ChatRequest):
-    logger = logging.getLogger(__name__)
-    actor_context = payload.actor.ensure_trace_context()
-    log_context = _safe_chat_log_context(payload, actor_context)
-    logger.info("Agent runtime stream request: %s", log_context)
-    
-    if not _model_is_configured(payload.model_id):
-        raise HTTPException(status_code=503, detail=AI_CHAT_UNAVAILABLE_MESSAGE)
-
-    async def event_generator():
-        try:
-            for chunk in stream_agent(
-                actor=actor_context.model_dump(),
-                session_id=payload.session_id,
-                prompt=payload.prompt,
-                history=payload.history,
-                conversation_id=actor_context.conversation_id,
-                request_id=actor_context.request_id,
-                origin_channel=actor_context.origin_channel,
-                actor_version=actor_context.actor_version,
-                model_id=payload.model_id,
-            ):
-                if isinstance(chunk, dict):
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                else:
-                    yield f"data: {json.dumps({'content': chunk})}\n\n"
-            
-            yield "data: [DONE]\n\n"
-        except Exception as exc:
-            logger.error(
-                "Agent runtime stream failed: request_id=%s conversation_id=%s error_type=%s",
-                actor_context.request_id,
-                actor_context.conversation_id,
-                exc.__class__.__name__,
-                exc_info=True,
-            )
-            yield "data: " + json.dumps(
-                {
-                    "error": "agent_runtime_error",
-                    "message": AI_CHAT_UNAVAILABLE_MESSAGE,
-                    "request_id": actor_context.request_id,
-                    "conversation_id": actor_context.conversation_id,
-                }
-            ) + "\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-@app.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest):
-    logger = logging.getLogger(__name__)
-    actor_context = payload.actor.ensure_trace_context()
-    log_context = _safe_chat_log_context(payload, actor_context)
-    logger.info("Agent runtime chat request: %s", log_context)
-
-    if not _model_is_configured(payload.model_id):
-        raise HTTPException(status_code=503, detail=AI_CHAT_UNAVAILABLE_MESSAGE)
-    try:
-        result = run_agent(
-            actor=actor_context.model_dump(),
-            session_id=payload.session_id,
-            prompt=payload.prompt,
-            history=payload.history,
-            conversation_id=actor_context.conversation_id,
-            request_id=actor_context.request_id,
-            origin_channel=actor_context.origin_channel,
-            actor_version=actor_context.actor_version,
-            model_id=payload.model_id,
-        )
-    except Exception as exc:
-        logger.error(
-            "Agent runtime chat failed: request_id=%s conversation_id=%s error_type=%s",
-            actor_context.request_id,
-            actor_context.conversation_id,
-            exc.__class__.__name__,
-        )
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "agent_runtime_error",
-                "request_id": actor_context.request_id,
-                "conversation_id": actor_context.conversation_id,
-            },
-        ) from exc
-    return ChatResponse(
-        session_id=payload.session_id,
-        assistant_message=result["assistant_message"],
-        tool_trace=result["tool_trace"],
-        ui_commands=result.get("ui_commands", []),
-        conversation_id=actor_context.conversation_id,
-        request_id=actor_context.request_id,
-    )

@@ -73,5 +73,21 @@ def run_finished_event(run_input, *, result: dict[str, Any] | None = None) -> di
     )
 
 
-def run_error_event(message: str, *, code: str = "agent_runtime_error") -> dict[str, Any]:
-    return event(EVENT_RUN_ERROR, message=message, code=code)
+def run_error_event(
+    message: str,
+    *,
+    code: str = "agent_runtime_error",
+    run_input=None,
+    thread_id: str = "",
+    run_id: str = "",
+) -> dict[str, Any]:
+    """Build a terminal error with the identifiers required for replay."""
+    if run_input is not None:
+        thread_id = str(getattr(run_input, "threadId", "") or thread_id)
+        run_id = str(getattr(run_input, "runId", "") or run_id)
+    payload = {"message": message, "code": code}
+    if thread_id:
+        payload["threadId"] = thread_id
+    if run_id:
+        payload["runId"] = run_id
+    return event(EVENT_RUN_ERROR, **payload)

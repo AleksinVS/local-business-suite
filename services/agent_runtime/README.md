@@ -72,7 +72,7 @@ Endpoints:
 
 - `GET /health`
 - `GET /health/details` — includes the resolved contract sources/paths
-- `POST /chat`
+- `POST /ag-ui` — canonical AG-UI stream for Django and CopilotKit clients
 - `MCP /mcp`
 
 MCP resources:
@@ -81,7 +81,16 @@ MCP resources:
 - `local-business://tools/{tool_code}`
 - `local-business://modules/{source_code}/capabilities`
 
-MCP is an external facade. The sidebar chat still uses Django views, agent runtime and Django AI gateway directly.
+MCP is an external facade. Django is the system of record for chat sessions,
+messages and runs; native browser clients use Django's session-specific
+prepare/run endpoints, while CopilotKit's Node runtime calls `/ag-ui` directly.
+
+The former `/chat` and `/chat/stream` runtime endpoints are removed. Native
+browser execution is `POST /ai/chat/<session>/turn/prepare/` followed by
+`POST /ai/chat/<session>/turn/run/`; deploy the Django `ChatRun` migration before
+enabling traffic. After changing native static assets, run
+`python manage.py collectstatic --noinput` and
+`python manage.py check_staticfiles --fail`.
 
 For `z.ai` coding endpoint, set:
 

@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -109,6 +110,52 @@ class ChatMessage(models.Model):
         ]
         verbose_name = "Сообщение ИИ-чата"
         verbose_name_plural = "Сообщения ИИ-чата"
+
+
+class ChatRun(models.Model):
+    """Идемпотентная запись подготовленного и выполненного хода чата."""
+
+    class Status(models.TextChoices):
+        PREPARED = "prepared", "Подготовлен"
+        RUNNING = "running", "Выполняется"
+        COMPLETED = "completed", "Завершён"
+        FAILED = "failed", "Ошибка"
+
+    session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name="runs")
+    run_id = models.CharField(max_length=128)
+    user_message = models.OneToOneField(
+        ChatMessage, on_delete=models.PROTECT, related_name="prepared_run"
+    )
+    assistant_message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="completed_runs",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PREPARED)
+    metadata = models.JSONField(default=dict, blank=True)
+    prepared_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["session", "run_id"], name="uniq_ai_chat_run_session_id"),
+            models.UniqueConstraint(
+                fields=["session"],
+                condition=Q(status="running"),
+                name="uniq_ai_chat_run_running_session",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["session", "status"], name="ai_chatrun_session_9e39b1_idx"),
+            models.Index(fields=["run_id"], name="ai_chatrun_run_id_6bb9c0_idx"),
+        ]
+        ordering = ["-prepared_at", "-id"]
+
+    def __str__(self):
+        return f"{self.session_id}:{self.run_id}"
 
 
 class PendingAction(models.Model):

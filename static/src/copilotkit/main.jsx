@@ -18,29 +18,8 @@ function runtimeCredentials(runtimeUrl) {
   }
 }
 
-function currentPageContext() {
-  if (!window.LocalBusinessPageContext || typeof window.LocalBusinessPageContext.getCurrent !== "function") {
-    return {};
-  }
-  const current = window.LocalBusinessPageContext.getCurrent();
-  return current && current.envelope ? current : {};
-}
-
 function csrfToken() {
   return window.__pageContextConfig?.csrfToken || "";
-}
-
-function usePageContextSnapshot() {
-  const [snapshot, setSnapshot] = useState(() => currentPageContext());
-
-  useEffect(() => {
-    const refresh = () => setSnapshot(currentPageContext());
-    window.addEventListener("ai-context:update", refresh);
-    refresh();
-    return () => window.removeEventListener("ai-context:update", refresh);
-  }, []);
-
-  return snapshot;
 }
 
 function normalizeRightPanelCommand(command) {
@@ -102,7 +81,6 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
   const [config, setConfig] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const pageContext = usePageContextSnapshot();
 
   const loadConfig = useMemo(() => {
     return () => fetch(configUrl, {
@@ -164,13 +142,7 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
       .finally(() => setBusy(false));
   }
 
-  const properties = useMemo(() => {
-    if (!config) return {};
-    return {
-      ...(config.forwarded_props || {}),
-      page_context: pageContext,
-    };
-  }, [config, pageContext]);
+  const properties = useMemo(() => config?.forwarded_props || {}, [config]);
 
   function handleRuntimeError() {
     setError(AI_CHAT_UNAVAILABLE_MESSAGE);

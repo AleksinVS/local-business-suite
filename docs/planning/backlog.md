@@ -84,27 +84,6 @@ SQLite baseline-ветка `sqlite-legacy-2026-06-15` опубликована �
 - после backup-hardening и решения по SQLite перенести planning/workflow в архив
   и удалить этот блок из active backlog.
 
-### Разработка самописного AG-UI ИИ-чата
-
-Первый срез основного самописного ИИ-чата в режиме `LOCAL_BUSINESS_AI_UI_DRIVER=native` реализован. Перенесены полезные решения из CopilotKit reference: новый чат, AG-UI stream reducer, tool trace, UI-команды, page context bridge, сохранение истории, ошибки и e2e. Task packet `05-sidebar-history-model-and-clear-parity` выполнен: боковая панель восстанавливает историю, показывает времена сообщений, поддерживает выбор модели, очистку и переход в полный чат.
-
-Контекст:
-- основной целевой UI: самописный AG-UI-compatible чат;
-- архитектурное решение находится в `docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md`;
-- проектный план находится в `docs/architecture/NATIVE_AG_UI_CHAT_DEVELOPMENT_PLAN.md`;
-- активный план находится в `docs/planning/active/native-ag-ui-chat-development.md`;
-- workflow package находится в `workflow/active/native-ag-ui-chat-development/`.
-
-Решение владельца (2026-07-07): самописный `native`-чат утверждён как **канонический** ИИ-UI. Драйвер `copilotkit` заморожен как референс (код остаётся, активная разработка не ведётся); блоки `ai-ui-protocol-foundation`, `copilotkit-ai-ui-chat-development`, `copilotkit-ag-ui-integration` и устаревший HTMX-чат `context-aware-sidebar-ai-chat` перенесены в архив. Весь чат переведён на единый стриминговый путь — цепочка таймаутов п.05 (sync 90s против LLM-deadline 300s) устранена.
-
-Оставшееся действие:
-- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/06-native-full-page-session-management.json`;
-- реализовать `workflow/active/native-ag-ui-chat-development/task-packets/07-native-rich-input-markdown-commands-attachments.json`;
-- выполнить `workflow/active/native-ag-ui-chat-development/task-packets/08-native-ux-parity-e2e-acceptance.json`;
-- отдельно согласовать, обновлять ли `@ag-ui/client` с `0.0.55` до `0.0.57`;
-- проверить `copilotkit`, `native` smoke перед слиянием (драйвер `legacy` выведен, ADR-0032);
-- после приемки владельцем перенести planning/workflow в архив и удалить этот блок из active backlog.
-
 ### Knowledge-driven business analytics
 
 MVP vertical slice реализован: контракты аналитики, контрольные модели, fixture-first IMAP/email ingestion, общий extraction packet, дедупликация, пересчет метрик, reflection-кандидаты и AI diagnostics routing. В active backlog остается production hardening и подключение реальных источников.

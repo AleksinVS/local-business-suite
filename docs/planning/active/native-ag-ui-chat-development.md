@@ -2,7 +2,10 @@
 
 ## Статус
 
-Implemented first slice. Реализовано в ветке `feature/copilotkit-ag-ui-integration` как срез основного самописного ИИ-чата поверх AG-UI.
+Технически выполнено 2026-08-26. Пакеты 01–08 реализованы; единый native-контур
+прошёл целевые, профильные и браузерные проверки. До архивирования остаются
+пользовательская приёмка и production smoke потоковой передачи через целевой
+reverse proxy.
 
 ## Цель
 
@@ -16,26 +19,30 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 
 ## Контекст
 
-В ADR-0028 зафиксировано, что основной целевой ИИ-чат проекта - самописный AG-UI-compatible UI. CopilotKit остается равноправным драйвером и референсом.
+В ADR-0028 зафиксировано, что основной целевой ИИ-чат проекта — самописный
+AG-UI-compatible UI. ADR-0044 фиксирует единый путь выполнения для его бокового
+и полноэкранного представлений. CopilotKit остается замороженным референсным
+драйвером общего `/ag-ui` контракта.
 
-Проверка версий 2026-06-15:
+Проверка версий 2026-08-26:
 
 - в проекте `@ag-ui/client=0.0.55`;
-- latest npm `@ag-ui/client=0.0.57`;
+- latest npm `@ag-ui/client=0.0.58`;
 - в проекте `@copilotkit/runtime=1.59.5`;
-- latest npm `@copilotkit/runtime=1.60.1`.
+- latest npm `@copilotkit/runtime=1.69.0`, `react-core=1.69.2`.
 
 Обновление версии AG-UI не входит в scope и требует отдельного согласования.
 
 ## Write scope
 
 - `templates/base.html`;
-- `apps/ai/context_processors.py`;
-- `apps/ai/ui_runtime/config.py`;
+- `apps/ai/models.py`, `views.py`, `services.py`, `tooling.py`, `ui_runtime/`;
+- `services/agent_runtime/` и его протоколы;
 - `static/src/ai_ui/native_ai.js`;
 - `static/src/ai_ui/native_ai.css`;
+- `templates/ai/chat_detail.html`;
 - `scripts/e2e/tests/native_ai_ui.spec.ts`;
-- `apps/ai/tests.py`;
+- `apps/ai/tests/` и `services/agent_runtime/tests/`;
 - `docs/architecture/`;
 - `docs/planning/active/`;
 - `docs/guides/`;
@@ -48,8 +55,9 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 - Не обновлять AG-UI/CopilotKit зависимости.
 - Не менять wire contract несовместимо.
 - Не добавлять browser-side write tools.
-- Не удалять CopilotKit/legacy драйверы.
-- Не менять доменные модели и contracts.
+- Не менять CopilotKit reference-драйвер.
+- Не менять доменные модели вне необходимого `apps.ai.ChatRun` и не менять
+  contracts.
 
 ## План
 
@@ -91,22 +99,27 @@ Implemented first slice. Реализовано в ветке `feature/copilotki
 
 ### 6. Тесты и приемка
 
-Статус: выполнено для unit/e2e. Ожидает пользовательскую приемку.
+Статус: технически выполнено. Ожидает пользовательскую приёмку и production
+smoke на целевом reverse proxy.
 
 Добавить/обновить unit и e2e проверки. Зафиксировать результаты в workflow.
 
-### 7. UX parity со старым чатом
+### 7. Единый путь выполнения и UX parity полной страницы
 
-Статус: sidebar parity выполнен, full-page/rich input parity ожидают реализации.
+Статус: выполнено.
 
 Цель - довести `native` до возможностей старого Django/HTMX чата, не возвращая старую архитектуру и не делая CopilotKit обязательной зависимостью.
 
 Работа разбита на task packets:
 
 - `05-sidebar-history-model-and-clear-parity` - выполнено: история после reload, выбор модели, очистка с подтверждением, timestamps, ссылка на полный чат;
-- `06-native-full-page-session-management` - полноценная native-страница чата, список сессий, переключение, переименование и удаление;
-- `07-native-rich-input-markdown-commands-attachments` - Markdown, slash-команды, меню команд, autocomplete и вложения;
-- `08-native-ux-parity-e2e-acceptance` - e2e matrix, rollback smoke и финальная приемка.
+- `06-native-full-page-session-management` — выполнено: общий prepare/run,
+  защита от повтора, список сессий, переименование и удаление;
+- `07-native-rich-input-markdown-commands-attachments` — выполнено: безопасный
+  Markdown, команды, автодополнение, проверяемые вложения и явное ограничение
+  анализа только метаданными;
+- `08-native-ux-parity-e2e-acceptance` — технически выполнено: unit/integration,
+  4 browser e2e и визуальная проверка широкого/узкого интерфейса.
 
 Parity baseline:
 
@@ -117,7 +130,7 @@ Parity baseline:
 | Очистка sidebar-чата | Same-origin endpoint с подтверждением в UI |
 | Переход в полный чат | Кнопка/ссылка на native full-page chat текущей сессии |
 | Список сессий полной страницы | Native full-page session list с правами текущего пользователя |
-| Переименование/удаление чата | Переиспользовать существующие Django views/services или нейтральные endpoints |
+| Переименование/удаление чата | Переиспользовать существующие Django views/services |
 | Markdown assistant messages | Безопасный rendering без XSS и без внешнего CDN в production |
 | Slash-команды | Передавать predefined/custom commands в native config |
 | Вложения | Переиспользовать `ChatAttachment`, текущие upload limits и Django auth |
@@ -148,10 +161,10 @@ CopilotKit-драйвера использовать один безопасны
 - `RUN_ERROR` показывает ошибку и разблокирует форму.
 - Отсутствующая или недоступная модель показывает единую заглушку во всех трех UI-путях.
 - Unknown AG-UI event игнорируется.
-- UX parity task packets существуют и готовы к реализации.
+- UX parity task packets реализованы и приняты техническими проверками.
 - Документация и структура актуальны.
 
-## Результат первого среза
+## Результат
 
 Реализовано:
 
@@ -162,15 +175,20 @@ CopilotKit-драйвера использовать один безопасны
 - сохранение native user/assistant/error messages в Django history;
 - подмешивание Django `ChatSession` history в следующий AG-UI run;
 - e2e для нового чата, tool trace, UI-команды, `RUN_ERROR`.
+- единый session-aware multipart prepare + AG-UI run для sidebar/full page;
+- `ChatRun` с идемпотентностью, воспроизведением результата и фиксацией модели;
+- серверная история точного хода без смешивания параллельно подготовленных
+  сообщений;
+- полноэкранная оболочка с сессиями, названием, удалением, Markdown, командами и
+  вложениями;
+- старые Django `send`/`stream`, runtime `/chat`/`chat/stream` и старый клиент
+  удалены после инвентаризации вызовов.
 
-Осталось после приемки:
+Остаётся вне реализованного блока:
 
-- реализовать `06-native-full-page-session-management`;
-- реализовать `07-native-rich-input-markdown-commands-attachments`;
-- выполнить `08-native-ux-parity-e2e-acceptance`;
-- решить, обновлять ли `@ag-ui/client` с `0.0.55` на `0.0.57`;
+- отдельно согласовать обновление `@ag-ui/client` с `0.0.55` до `0.0.58`;
 - выполнить production smoke на целевом reverse proxy/SSE timeout;
-- после приемки перенести план и workflow в архив.
+- после пользовательской приёмки перенести план и workflow в архив.
 
 ## Проверки
 

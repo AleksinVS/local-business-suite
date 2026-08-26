@@ -2,7 +2,7 @@
 
 ## Что это
 
-Native AI UI — это один из трёх UI-драйверов бокового ИИ-чата портала.
+Native AI UI — это самописный UI-драйвер бокового и полноэкранного ИИ-чата портала.
 Драйвер отвечает за:
 
 - разметку и поведение панели чата (sidebar, правый drawer,
@@ -11,7 +11,8 @@ Native AI UI — это один из трёх UI-драйверов боков�
   run) для отрисовки;
 - сетевой транспорт к серверу: `GET /ai/ui/config/` (инициализация),
   `POST /ai/ui/session/new/`, `POST /ai/ui/session/clear/`,
-  `POST /ai/ui/ag-ui/run/` (стрим AG-UI событий);
+  `POST /ai/chat/<session>/turn/prepare/` и
+  `POST /ai/chat/<session>/turn/run/` (стрим AG-UI событий);
 - безопасное исполнение `ui.open_right_panel` через общий
   `LocalBusinessRightPanel` — без прямого доступа из фронтенда к
   доменной логике.
@@ -22,6 +23,25 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
 драйвер CopilotKit. ADR-0027 и ADR-0028 фиксируют, что Native остаётся
 основным целевым клиентом; CopilotKit подключён как эталон и
 источник проверенных UX/runtime-паттернов.
+
+В протоколе не смешиваются три значения: `session_channel` описывает назначение
+сессии (`sidebar` или `internal`), `presentation_surface` — место отображения
+(`sidebar` или `full_page`), а `ui_driver` — реализацию клиента (`native` или
+`copilotkit`). Native sidebar и full page проходят общий Django-контур:
+
+```text
+browser native -> /ai/chat/<session>/turn/prepare/
+              -> /ai/chat/<session>/turn/run/
+              -> agent-runtime /ag-ui
+CopilotKit Node runtime ---------------------> agent-runtime /ag-ui
+```
+
+CopilotKit не вызывает native Django endpoints; Django остаётся источником истины
+для native истории, прав, аудита и `ChatRun`.
+
+Динамический page context — native-only: native передаёт его в Django prepare/run,
+где он включается в серверно подписанный payload. CopilotKit получает только
+подписанные сервером свойства, без unsigned dynamic `page_context`.
 
 ## Цели
 
@@ -45,17 +65,18 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
 - Клиентский JS `static/src/ai_ui/native_ai.js` (AG-UI клиент,
   обёртка над `fetch`/`ReadableStream`).
 - Контекст-процессор `apps/ai/context_processors.py` — вычисление
-  asset-версий, dispatch трёх веток (legacy/native/copilotkit).
+  asset-версий и выбор native/copilotkit.
 - Серверные эндпоинты `apps/ai/views.py:AIUIConfigView`,
   `AIUISidebarSessionNewView`, `AIUISidebarSessionClearView`,
-  `AIUIAGUIRunProxyView`.
+  `AIChatPrepareTurnView`, `AIChatRunView`.
 - Управляющая команда `manage.py check_staticfiles` — сверка
   `static/src/` ↔ `staticfiles/`.
 
 ### Вне scope
 
 - Изменения серверного контура AG-UI (`services/agent_runtime/`).
-- Замена legacy и copilotkit-веток: они остаются как есть.
+- Замена CopilotKit-ветки: она остаётся отдельным Node-драйвером общего
+  `agent-runtime /ag-ui` контракта.
 - Визуальные правки общего header/sidebar — только класс
   `.sidebar-ai-panel` и его дети.
 
@@ -94,7 +115,7 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
   серверный контур (`apps/ai/ui_runtime/*`), но визуально они
   независимы.
 - Не добавляем третий «runtime»-флаг: в проекте два runtime (Agent
-  Runtime и CopilotKit Runtime) и три UI-драйвера — больше не нужно.
+  Runtime и CopilotKit Runtime) и два UI-драйвера — больше не нужно.
 
 ## Архитектурные решения
 
@@ -120,7 +141,8 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
 | Сервер | `apps/ai/views.py:AIUIConfigView` | `/ai/ui/config/` для клиента. |
 | Сервер | `apps/ai/views.py:AIUISidebarSessionNewView` | `/ai/ui/session/new/`. |
 | Сервер | `apps/ai/views.py:AIUISidebarSessionClearView` | `/ai/ui/session/clear/`. |
-| Сервер | `apps/ai/views.py:AIUIAGUIRunProxyView` | `/ai/ui/ag-ui/run/` (SSE через AG-UI). |
+| Сервер | `apps/ai/views.py:AIChatPrepareTurnView` | `/ai/chat/<session>/turn/prepare/`: проверка сообщения и вложений, запись `ChatRun`. |
+| Сервер | `apps/ai/views.py:AIChatRunView` | `/ai/chat/<session>/turn/run/`: SSE через `services/agent_runtime /ag-ui`. |
 | Клиент | `static/src/ai_ui/native_ai.js` | IIFE-клиент: история, форма, стрим. |
 | Стили | `static/src/ai_ui/native_ai.css` | UI токены панели. |
 | Инструменты | `apps/core/management/commands/check_staticfiles.py` | Сверка `static/src/` ↔ `staticfiles/`. |
@@ -146,7 +168,7 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
   должна вернуть `0`, иначе CI красный.
 - **Cache-bust**: query string `?v=...` для JS и CSS обновляется
   автоматически при изменении файла, не требует ручного bump'а.
-- **Совместимость**: переключение между native / legacy / copilotkit
+- **Совместимость**: переключение между native / copilotkit
   делается только через `LOCAL_BUSINESS_AI_UI_DRIVER` в `.env` —
   никаких пересборок, никаких ручных правок в шаблоне.
 - **Ошибки**: ошибки инициализации клиента (404 на статику, пустой
@@ -157,9 +179,12 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
 
 - Все запросы идут с `credentials: "same-origin"` и CSRF-токеном
   (`csrftoken` cookie). Серверные эндпоинты — за `LoginRequiredMixin`.
-- Streaming-точка `/ai/ui/ag-ui/run/` принимает только
-  `forwardedProps` с HMAC-подписью от Agent Runtime; client-side
-  подделать payload нельзя.
+- Подготовка хода принимает multipart с CSRF и вложениями; запуск принимает
+  только `threadId` и `runId`, проверенные сервером и связанные с владельцем
+  сессии. Native browser config не содержит `forwarded_props`; сервер формирует и
+  подписывает actor payload только внутри Django proxy перед вызовом `/ag-ui`.
+- Пара `(session, run_id)` идемпотентна: повтор завершённого запуска возвращает
+  сохранённый результат и не повторяет вызов модели или инструмента.
 - Команды `ui.*` ограничены whitelist'ом: `open_right_panel` — единственная
   разрешённая; всё прочее игнорируется (`executeUiCommand`).
 - В `native_ai.js` весь пользовательский ввод показывается через
@@ -203,8 +228,11 @@ Native UI построен как явный peer-клиент AG-UI: он ис�
    - в DOM появляется `<div class="native-ai-ui">` (не остаётся
      «Загрузка чата...»);
    - отправка тестового сообщения рисует ответ стримом.
-6. Переключение `.env` обратно на `legacy` — должно остаться
-   работоспособным без правок кода.
+6. Rollback не сводится к возврату старого кода и старых миграций: они не
+   сохраняют гарантии и совместимость `ChatRun`. Допустим только
+   forward-compatible rollback либо заранее проверенный backup/restore с явным
+   планом миграции данных. `presentation_surface` валидируется, но выбирается
+   браузером и не даёт прав доступа.
 
 ## Открытые вопросы и отложенные идеи
 

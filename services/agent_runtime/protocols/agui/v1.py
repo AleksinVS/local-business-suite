@@ -1,3 +1,4 @@
+import hashlib
 import json
 import uuid
 from collections.abc import Iterable
@@ -88,10 +89,19 @@ def tool_trace_events(
         )
 
 
-def ui_command_events(ui_commands: list[dict[str, Any]]) -> Iterable[dict[str, Any]]:
+def ui_command_events(
+    ui_commands: list[dict[str, Any]],
+    *,
+    run_id: str = "",
+) -> Iterable[dict[str, Any]]:
     safe_commands = normalize_ui_commands(ui_commands)
     if not safe_commands:
         return
+    for index, command in enumerate(safe_commands):
+        identity = json.dumps(command, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        command["command_id"] = hashlib.sha256(
+            f"{run_id}:{index}:{identity}".encode("utf-8")
+        ).hexdigest()[:24]
     yield event(
         EVENT_STATE_DELTA,
         delta=[

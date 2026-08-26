@@ -643,71 +643,14 @@ class TestRuntimeMemoryTool(unittest.TestCase):
 class TestRuntimeSafeLogging(unittest.TestCase):
     """Проверяет, что runtime-логи получают только технический контекст."""
 
-    def test_safe_chat_log_context_excludes_raw_prompt_and_actor_details(self):
-        from services.agent_runtime.app import _safe_chat_log_context
-        from services.agent_runtime.schemas import ActorContext, ChatRequest, HistoryMessage
+    def test_agui_prompt_hash_excludes_raw_prompt(self):
+        from services.agent_runtime.app import _prompt_hash
 
-        payload = ChatRequest(
-            session_id="session-safe-log",
-            prompt="Секретный пользовательский prompt",
-            history=[HistoryMessage(role="user", content="old message")],
-            model_id="test-model",
-            actor=ActorContext(
-                user_id=17,
-                username="doctor-secret",
-                roles=["role-secret"],
-                channel="sidebar",
-                source="django-chat",
-                page_context={"context_hint": "secret-page-context"},
-            ),
-        )
-        actor_context = payload.actor.ensure_trace_context()
-
-        log_context = _safe_chat_log_context(payload, actor_context)
-        serialized = json.dumps(log_context, ensure_ascii=False)
-
-        self.assertEqual(log_context["prompt_length"], len(payload.prompt))
-        self.assertEqual(len(log_context["prompt_sha256"]), 64)
-        self.assertEqual(log_context["history_count"], 1)
-        self.assertEqual(log_context["actor_user_id"], 17)
-        self.assertEqual(log_context["actor_roles_count"], 1)
-        self.assertTrue(log_context["page_context_present"])
-        self.assertNotIn(payload.prompt, serialized)
-        self.assertNotIn("doctor-secret", serialized)
-        self.assertNotIn("role-secret", serialized)
-        self.assertNotIn("secret-page-context", serialized)
-
-    def test_chat_error_log_excludes_exception_text(self):
-        from fastapi import HTTPException
-        from services.agent_runtime.app import chat
-        from services.agent_runtime.schemas import ActorContext, ChatRequest
-
-        payload = ChatRequest(
-            session_id="session-error-log",
-            prompt="Секретный пользовательский prompt",
-            model_id="",
-            actor=ActorContext(
-                user_id=17,
-                username="doctor-secret",
-                roles=["role-secret"],
-                channel="sidebar",
-            ),
-        )
-
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
-            "services.agent_runtime.app.run_agent",
-            side_effect=RuntimeError("leaked prompt text"),
-        ), self.assertLogs("services.agent_runtime.app", level="ERROR") as captured:
-            with self.assertRaises(HTTPException) as raised:
-                chat(payload)
-
-        log_output = "\n".join(captured.output)
-        self.assertIn("error_type=RuntimeError", log_output)
-        self.assertNotIn("leaked prompt text", log_output)
-        self.assertNotIn(payload.prompt, log_output)
-        self.assertEqual(raised.exception.detail["error"], "agent_runtime_error")
-        self.assertNotIn("leaked prompt text", json.dumps(raised.exception.detail))
-
+        prompt = "Секретный пользовательский prompt"
+        digest = _prompt_hash(prompt)
+        self.assertEqual(len(digest), 64)
+        self.assertNotEqual(digest, prompt)
+        self.assertNotIn(prompt, json.dumps({"prompt_sha256": digest}, ensure_ascii=False))
 
 class TestAGUIAdapter(unittest.TestCase):
     """Verify AG-UI event mapping for CopilotKit-compatible clients."""
@@ -799,7 +742,8 @@ class TestAGUIAdapter(unittest.TestCase):
                         "htmx_url": "/workorders/42/",
                         "unsafe": "ignored",
                     }
-                ]
+                ],
+                run_id="run-ui-command",
             )
         )
 
@@ -809,7 +753,29 @@ class TestAGUIAdapter(unittest.TestCase):
         self.assertNotIn("unsafe", events[0]["delta"][0]["value"][0])
         self.assertEqual(events[0]["delta"][0]["value"][0]["version"], "1.0")
         self.assertEqual(events[0]["delta"][0]["value"][0]["htmx_url"], "/workorders/42/")
+        command_id = events[0]["delta"][0]["value"][0]["command_id"]
+        self.assertRegex(command_id, r"^[a-f0-9]{24}$")
+        self.assertEqual(events[1]["value"]["command_id"], command_id)
         self.assertEqual(events[1]["name"], "local_business.ui_command")
+
+    def test_ui_command_normalization_preserves_runtime_ids_without_collapsing(self):
+        from services.agent_runtime.protocols.common.ui_commands import normalize_ui_commands
+
+        base = {
+            "type": "open_right_panel",
+            "source_code": "workorders",
+            "object_type": "workorder",
+            "object_id": 42,
+            "htmx_url": "/workorders/42/",
+        }
+        commands = normalize_ui_commands([
+            {**base, "command_id": "runtime-a"},
+            {**base, "command_id": "runtime-b"},
+        ])
+        self.assertEqual([item["command_id"] for item in commands], ["runtime-a", "runtime-b"])
+        self.assertEqual(normalize_ui_commands([{**base, "command_id": "bad id"}]), [])
+        # A legacy browser `id` field is not a runtime command identity.
+        self.assertNotIn("command_id", normalize_ui_commands([{**base, "id": "browser-id"}])[0])
 
     def test_ui_command_rejects_external_urls_and_clamps_mode(self):
         from services.agent_runtime.ag_ui_adapter import ui_command_events
@@ -925,22 +891,22 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
             os.environ,
             {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
         ), patch(
-            "services.agent_runtime.app.run_agent",
-            return_value={
-                "assistant_message": "Открываю заявку.",
-                "tool_trace": [{"tool": "ui.open_right_panel", "args": {"object_id": "42"}}],
-                "ui_commands": [
-                    {
+            "services.agent_runtime.app.stream_agent",
+            return_value=iter([
+                "Открываю заявку.",
+                {
+                    "tool_trace": [{"tool": "ui.open_right_panel", "args": {"object_id": "42"}}],
+                    "ui_command": {
                         "type": "open_right_panel",
                         "source_code": "workorders",
                         "object_type": "workorder",
                         "object_id": "42",
                         "mode": "view",
                         "htmx_url": "/workorders/42/",
-                    }
-                ],
-            },
-        ) as run_agent_mock:
+                    },
+                },
+            ]),
+        ) as stream_agent_mock:
             response = asyncio.run(ag_ui_run(run_input))
             events = asyncio.run(self._collect_events(response))
 
@@ -953,9 +919,9 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         self.assertIn("TOOL_CALL_START", [event["type"] for event in events])
         self.assertIn("STATE_DELTA", [event["type"] for event in events])
         self.assertEqual(events[-1]["type"], "RUN_FINISHED")
-        run_agent_mock.assert_called_once()
-        self.assertEqual(run_agent_mock.call_args.kwargs["prompt"], "Открой заявку 42")
-        self.assertEqual(run_agent_mock.call_args.kwargs["session_id"], "sidebar-session")
+        stream_agent_mock.assert_called_once()
+        self.assertEqual(stream_agent_mock.call_args.kwargs["prompt"], "Открой заявку 42")
+        self.assertEqual(stream_agent_mock.call_args.kwargs["session_id"], "sidebar-session")
 
     def test_ag_ui_run_rejects_missing_actor_signature(self):
         from services.agent_runtime.app import ag_ui_run
@@ -982,13 +948,95 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         with patch.dict(
             os.environ,
             {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
-        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+        ), patch("services.agent_runtime.app.stream_agent") as stream_agent_mock:
             response = asyncio.run(ag_ui_run(run_input))
             events = asyncio.run(self._collect_events(response))
 
         self.assertEqual(events[0]["type"], "RUN_ERROR")
         self.assertEqual(events[0]["code"], "invalid_actor_signature")
-        run_agent_mock.assert_not_called()
+        stream_agent_mock.assert_not_called()
+
+    def test_ag_ui_signature_binds_page_context_and_rejects_tampering(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        forwarded = self._signed_forwarded_props(
+            {
+                "session_id": "native-session",
+                "model_id": "",
+                "origin_channel": "native",
+                "ui_driver": "native",
+                "actor_version": "local-business-ai-ui-v1",
+                "page_context": {"window_id": "window-1", "context_hash": "hash-1"},
+                "actor": {
+                    "user_id": 17,
+                    "username": "doctor",
+                    "roles": ["engineer"],
+                    "is_superuser": False,
+                    "channel": "internal",
+                    "source": "django-native-ai-ui",
+                    "origin_channel": "native",
+                    "actor_version": "local-business-ai-ui-v1",
+                },
+            }
+        )
+        forwarded["page_context"] = {"window_id": "tampered"}
+        run_input = AGUIRunAgentInput(
+            threadId="native-session",
+            runId="run-context-tamper",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка"}],
+            forwardedProps=forwarded,
+        )
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.stream_agent") as stream_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual([event["type"] for event in events], ["RUN_ERROR"])
+        self.assertEqual(events[0]["code"], "invalid_actor_signature")
+        stream_agent_mock.assert_not_called()
+
+    def test_copilotkit_page_context_is_rejected_before_run_started(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-copilot-context",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка"}],
+            forwardedProps=self._signed_forwarded_props(
+                {
+                    "session_id": "sidebar-session",
+                    "model_id": "",
+                    "origin_channel": "copilotkit",
+                    "ui_driver": "copilotkit",
+                    "page_context": {"window_id": "old-client"},
+                    "actor_version": "copilotkit-ag-ui-v1",
+                    "actor": {
+                        "user_id": 17,
+                        "username": "doctor",
+                        "roles": [],
+                        "is_superuser": False,
+                        "channel": "sidebar",
+                        "source": "django-copilotkit",
+                        "origin_channel": "copilotkit",
+                        "actor_version": "copilotkit-ag-ui-v1",
+                    },
+                }
+            ),
+        )
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch("services.agent_runtime.app.stream_agent") as stream_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual([event["type"] for event in events], ["RUN_ERROR"])
+        self.assertEqual(events[0]["code"], "invalid_page_context")
+        stream_agent_mock.assert_not_called()
 
     def test_ag_ui_run_rejects_expired_actor_signature(self):
         # Корректно подписанный, но просроченный по TTL actor-токен должен
@@ -1031,13 +1079,13 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         with patch.dict(
             os.environ,
             {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
-        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+        ), patch("services.agent_runtime.app.stream_agent") as stream_agent_mock:
             response = asyncio.run(ag_ui_run(run_input))
             events = asyncio.run(self._collect_events(response))
 
         self.assertEqual(events[0]["type"], "RUN_ERROR")
         self.assertEqual(events[0]["code"], "invalid_actor_signature")
-        run_agent_mock.assert_not_called()
+        stream_agent_mock.assert_not_called()
 
     def test_ag_ui_run_returns_run_error_when_llm_key_is_missing(self):
         from services.agent_runtime.app import ag_ui_run
@@ -1072,7 +1120,7 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         with patch.dict(
             os.environ,
             {"OPENAI_API_KEY": "", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
-        ), patch("services.agent_runtime.app.run_agent") as run_agent_mock:
+        ), patch("services.agent_runtime.app.stream_agent") as stream_agent_mock:
             response = asyncio.run(ag_ui_run(run_input))
             events = asyncio.run(self._collect_events(response))
 
@@ -1080,7 +1128,7 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         self.assertEqual(events[1]["name"], "local_business.protocol")
         self.assertEqual(events[2]["code"], "service_not_configured")
         self.assertEqual(events[2]["message"], AI_CHAT_UNAVAILABLE_MESSAGE)
-        run_agent_mock.assert_not_called()
+        stream_agent_mock.assert_not_called()
 
     def test_ag_ui_run_hides_unavailable_model_error_behind_safe_placeholder(self):
         from services.agent_runtime.app import ag_ui_run
@@ -1116,16 +1164,16 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
             os.environ,
             {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
         ), patch(
-            "services.agent_runtime.app.run_agent",
+            "services.agent_runtime.app.stream_agent",
             side_effect=RuntimeError("provider leaked technical model error"),
-        ) as run_agent_mock:
+        ) as stream_agent_mock:
             response = asyncio.run(ag_ui_run(run_input))
             events = asyncio.run(self._collect_events(response))
 
         self.assertEqual(events[-1]["type"], "RUN_ERROR")
         self.assertEqual(events[-1]["message"], AI_CHAT_UNAVAILABLE_MESSAGE)
         self.assertNotIn("provider leaked", json.dumps(events, ensure_ascii=False))
-        run_agent_mock.assert_called_once()
+        stream_agent_mock.assert_called_once()
 
 
 class TestMCPResources(unittest.TestCase):

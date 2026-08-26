@@ -215,9 +215,9 @@ AI chat must fail visibly and audibly in production: the UI should never leave t
 
 When Django cannot get a response from `agent-runtime`, the chat surface:
 
-- shows a safe Russian message with the failure reason category and `request_id`;
+- shows the standard safe Russian unavailable message without upstream technical text;
 - stores the same user-facing message in `ChatMessage` with `metadata.error=true`;
-- stores technical diagnostics in `AgentActionLog` with `tool_code=agent_runtime.chat` or `agent_runtime.chat_stream`;
+- stores technical diagnostics in `AgentActionLog` with `tool_code=agent_runtime.ag_ui`;
 - stores prompt hash and prompt length, not raw prompt text, in the technical action payload;
 - updates `ChatSession.metadata.last_error_request_id`, `last_error_action_id`, and `last_error_code`.
 
@@ -234,7 +234,8 @@ action = AgentActionLog.objects.filter(status="failed", tool_code__startswith="a
 print(action.id, action.request_payload.get("request_id"), action.error_message)
 ```
 
-The `request_id` shown to the user should match `AgentActionLog.request_payload["request_id"]`. Raw runtime exception text should be visible only in `AgentActionLog.error_message` and server logs, not in the user-facing chat bubble.
+Raw runtime exception text and request identifiers remain in `AgentActionLog.error_message`,
+the technical action payload and server logs, not in the user-facing chat bubble.
 
 ## HTTP-only trusted network profile
 

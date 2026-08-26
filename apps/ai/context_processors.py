@@ -19,7 +19,7 @@ _NATIVE_CSS_RELPATH = "src/ai_ui/native_ai.css"
 _COPILOTKIT_JS_RELPATH = "dist/copilotkit/copilotkit-island.js"
 _COPILOTKIT_CSS_RELPATH = "dist/copilotkit/copilotkit-island.css"
 
-_NATIVE_FALLBACK_VERSION = "20260610-native-ag-ui-chat"
+_NATIVE_FALLBACK_VERSION = "20260826-unified-native-chat"
 _COPILOTKIT_FALLBACK_VERSION = "20260610-copilotkit-page"
 
 

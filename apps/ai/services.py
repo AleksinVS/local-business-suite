@@ -2,10 +2,12 @@ import logging
 import os
 import re
 import uuid
+import hashlib
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from apps.workorders.models import WorkOrder, WorkOrderPriority
@@ -39,6 +41,70 @@ logger = logging.getLogger(__name__)
 AI_SESSION_NAMESPACE = uuid.UUID("4cf98619-f5ff-4f02-9d68-b9240c5778c8")
 
 DEFAULT_CHAT_TITLE = "Новый чат"
+
+# This policy is shared by the native transport and the browser configuration.
+# Keeping it here prevents the UI advisory and server enforcement from drifting.
+CHAT_ATTACHMENT_MAX_COUNT = 10
+CHAT_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
+CHAT_ATTACHMENT_MIME_TYPES = {
+    "image/png": ("image", {".png"}),
+    "image/jpeg": ("image", {".jpg", ".jpeg"}),
+    "image/gif": ("image", {".gif"}),
+    "audio/mpeg": ("audio", {".mp3"}),
+    "audio/wav": ("audio", {".wav"}),
+    "audio/ogg": ("audio", {".ogg", ".oga"}),
+    "application/pdf": ("document", {".pdf"}),
+    "text/plain": ("document", {".txt", ".text", ".log"}),
+    "text/csv": ("document", {".csv"}),
+    "application/json": ("document", {".json"}),
+    "application/msword": ("document", {".doc"}),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("document", {".docx"}),
+    "application/vnd.ms-excel": ("document", {".xls"}),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ("document", {".xlsx"}),
+    "application/vnd.ms-powerpoint": ("document", {".ppt"}),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ("document", {".pptx"}),
+}
+
+
+def validate_chat_attachment(upload):
+    """Validate an upload and return non-sensitive metadata for a run fingerprint."""
+    content_type = str(getattr(upload, "content_type", "") or "").lower().split(";", 1)[0]
+    policy = CHAT_ATTACHMENT_MIME_TYPES.get(content_type)
+    if not policy:
+        raise ValidationError("Тип вложения не поддерживается.")
+    size = int(getattr(upload, "size", 0) or 0)
+    if size > CHAT_ATTACHMENT_MAX_SIZE:
+        raise ValidationError("Вложение слишком большое.")
+    name = str(getattr(upload, "name", "") or "attachment")
+    extension = os.path.splitext(name)[1].lower()
+    if extension not in policy[1]:
+        raise ValidationError("Расширение вложения не соответствует его типу.")
+    try:
+        upload.seek(0)
+        digest = hashlib.sha256()
+        header = b""
+        for chunk in upload.chunks():
+            if len(header) < 16:
+                header += chunk[: 16 - len(header)]
+            digest.update(chunk)
+        upload.seek(0)
+    except (AttributeError, OSError) as exc:
+        raise ValidationError("Вложение недоступно для проверки.") from exc
+    if content_type == "application/pdf" and not header.startswith(b"%PDF-"):
+        raise ValidationError("Содержимое PDF не прошло проверку.")
+    if content_type == "image/png" and not header.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValidationError("Содержимое PNG не прошло проверку.")
+    if content_type == "image/jpeg" and not header.startswith(b"\xff\xd8\xff"):
+        raise ValidationError("Содержимое JPEG не прошло проверку.")
+    if content_type == "image/gif" and not header.startswith((b"GIF87a", b"GIF89a")):
+        raise ValidationError("Содержимое GIF не прошло проверку.")
+    return {
+        "file_type": policy[0],
+        "content_type": content_type,
+        "name": name[:255],
+        "size": size,
+        "sha256": digest.hexdigest(),
+    }
 
 
 def generate_session_title(session):
@@ -205,15 +271,24 @@ def create_new_sidebar_session(user):
 def clear_sidebar_session(session):
     if session.channel != ChatSession.Channel.SIDEBAR:
         raise ValidationError("Очистка доступна только для бокового чата.")
-    session.messages.all().delete()
-    session.metadata = {
-        key: value
-        for key, value in (session.metadata or {}).items()
-        if key != "sidebar_summary"
-    }
-    session.last_message_at = None
-    session.save(update_fields=["metadata", "last_message_at", "updated_at"])
-    return session
+    # ChatRun.user_message is PROTECT: clearing by deleting messages would
+    # either fail or destroy the immutable run/audit history. Archive the old
+    # thread and return a new active one instead.
+    with transaction.atomic():
+        locked = ChatSession.objects.select_for_update().get(pk=session.pk)
+        if locked.status != ChatSession.Status.ACTIVE:
+            return get_or_create_sidebar_session(locked.user)
+        previous_metadata = locked.metadata or {}
+        metadata = {"surface": CHAT_SURFACE_SIDEBAR, "previous_sidebar_session_id": str(locked.external_id)}
+        if previous_metadata.get("model_id"):
+            metadata["model_id"] = previous_metadata["model_id"]
+        archive_chat_session(locked, reason="sidebar_cleared")
+        return ChatSession.objects.create(
+            user=locked.user,
+            channel=ChatSession.Channel.SIDEBAR,
+            title="Боковой чат",
+            metadata=metadata,
+        )
 
 
 def archive_chat_session(session, *, reason="user_deleted"):
@@ -241,13 +316,35 @@ def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     return message
 
 
-def serialize_session_history(session):
+def serialize_session_history(session, *, final_user_message=None, surface=None):
+    """Build bounded, server-owned history for one runtime turn.
+
+    Prepared/running user turns are intentionally excluded.  A run receives
+    its own prepared message as the final item, so an out-of-order request
+    cannot accidentally execute a newer turn from the same session.
+    """
     history = []
     messages_qs = session.messages.prefetch_related("attachments").order_by("created_at", "id")
-    if session.channel == ChatSession.Channel.SIDEBAR:
+    final_message_id = getattr(final_user_message, "pk", None)
+    unresolved_ids = set(
+        session.runs.filter(
+            status__in=("prepared", "running"),
+        ).values_list("user_message_id", flat=True)
+    )
+    if final_message_id:
+        unresolved_ids.discard(final_message_id)
+    if unresolved_ids:
+        messages_qs = messages_qs.exclude(pk__in=unresolved_ids)
+
+    effective_surface = surface or (
+        CHAT_SURFACE_SIDEBAR
+        if session.channel == ChatSession.Channel.SIDEBAR
+        else CHAT_SURFACE_FULL_PAGE
+    )
+    recent_limit = get_recent_message_limit(effective_surface)
+    messages = list(messages_qs)
+    if effective_surface == CHAT_SURFACE_SIDEBAR:
         settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
-        recent_limit = get_recent_message_limit(CHAT_SURFACE_SIDEBAR)
-        messages = list(messages_qs)
         sidebar_summary = (session.metadata or {}).get("sidebar_summary") or {}
         if settings_payload.get("summary_enabled", True) and sidebar_summary.get("text"):
             history.append(
@@ -257,8 +354,12 @@ def serialize_session_history(session):
                     "tool_name": "",
                 }
             )
-        messages_qs = messages[-recent_limit:]
-    for message in messages_qs:
+    # Keep the configured recent-message bound on both native surfaces.
+    messages = messages[-recent_limit:]
+    if final_user_message is not None:
+        messages = [message for message in messages if message.pk != final_message_id]
+        messages.append(final_user_message)
+    for message in messages:
         content = message.content
         attachments = list(message.attachments.all())
         if attachments:

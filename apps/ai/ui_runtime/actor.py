@@ -50,6 +50,10 @@ def signature_payload(payload: dict[str, Any]) -> str:
         "origin_channel": payload.get("origin_channel", ""),
         "session_id": payload.get("session_id", ""),
         "ui_driver": payload.get("ui_driver", ""),
+        # Page context is server-resolved input and must be covered by the
+        # same HMAC as identity/session fields.  Otherwise a native client
+        # could append unsigned context after Django signed the actor.
+        "page_context": payload.get("page_context") or {},
     }
     return json.dumps(signed_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -82,7 +86,9 @@ def build_actor_payload(
             "username": user.username,
             "roles": list(user.groups.values_list("name", flat=True)),
             "is_superuser": user.is_superuser,
-            "channel": ChatSession.Channel.SIDEBAR,
+            # Channel is a session property, not a presentation-surface hint.
+            # Full-page native clients may execute an internal-channel session.
+            "channel": session.channel,
             "source": actor_source_for_driver(driver),
             "origin_channel": driver,
             "actor_version": actor_version,

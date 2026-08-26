@@ -43,5 +43,6 @@
   "ADR-0041-access-and-memory-lock-partition.md": "Принятый ADR: разделение коротких блокировок доступа и длительного жизненного цикла памяти",
   "ADR-0042-direct-save-access-administration.md": "Принятый ADR: прямое сохранение изменений доступа без пользовательского preview",
   "ADR-0043-declarative-access-policy-catalog.md": "Принятый ADR: упрощённое управление ролями для малого и среднего бизнеса",
+  "ADR-0044-unified-native-ai-chat-execution.md": "Принятый ADR: единый путь выполнения бокового и полноэкранного самописного ИИ-чата",
   "ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md": "Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию"
 }

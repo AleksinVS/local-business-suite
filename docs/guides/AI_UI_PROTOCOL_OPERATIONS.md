@@ -20,7 +20,8 @@ LOCAL_BUSINESS_AI_UI_DRIVER=native
 Поведение:
 
 - `copilotkit` - React island + Copilot Runtime `/copilotkit`;
-- `native` - основной самописный sidebar + Django proxy `/ai/ui/ag-ui/run/`.
+- `native` - основной самописный sidebar/full page через Django session-specific
+  prepare/run и далее `agent-runtime /ag-ui`.
 
 Если `LOCAL_BUSINESS_AI_UI_DRIVER` не задан, активен `native`.
 
@@ -51,7 +52,13 @@ rg -n "LOCAL_BUSINESS_AI_UI_AGUI_PROFILE|ag-ui@" config docs package.json packag
 Native UI работает без Copilot Runtime:
 
 ```text
-browser native sidebar -> Django /ai/ui/ag-ui/run/ -> agent_runtime /ag-ui
+browser native sidebar/full page -> Django /ai/chat/<session>/turn/prepare/
+                                -> Django /ai/chat/<session>/turn/run/
+                                -> agent_runtime /ag-ui
+CopilotKit Node runtime ---------------------------------> agent_runtime /ag-ui
+
+`session_channel`, `presentation_surface` и `ui_driver` — отдельные поля
+протокола; CopilotKit не вызывает native Django prepare/run endpoints.
 ```
 
 Поддерживаемое поведение:
@@ -67,8 +74,22 @@ browser native sidebar -> Django /ai/ui/ag-ui/run/ -> agent_runtime /ag-ui
 - compact tool trace из `TOOL_CALL_*` без raw sensitive payload;
 - выполнение `STATE_DELTA /localBusiness/uiCommands` и `CUSTOM local_business.ui_command`;
 - дедупликация UI-команд на клиенте;
-- page context bridge через `LocalBusinessPageContext`;
+- page context bridge через `LocalBusinessPageContext` только для native: Django
+  включает его в подписанный execution payload. CopilotKit не получает dynamic
+  unsigned `page_context`, пока не появится отдельный подписанный endpoint;
 - сохранение user/assistant сообщений в Django `ChatSession`.
+
+Перед выпуском применить `python manage.py migrate` для `ChatRun`. Prepare —
+same-origin multipart с CSRF, проверкой владельца сессии и вложений; run получает
+только подготовленные `threadId`/`runId`. `session_channel`,
+`presentation_surface` и `ui_driver` проверяются отдельно. Повтор завершённого
+`(session, run_id)` идемпотентен; недоступная модель возвращает безопасное
+сообщение. Для SSE run reverse proxy должен отключать буферизацию.
+
+Старые `send`/`stream`, `/ai/ui/ag-ui/run/`, runtime `/chat` и удалённые
+`apps/ai/forms.py`/`static/src/js/ai_chat.js` не являются частью текущего
+контура. После изменения native JS/CSS выполнить `python manage.py collectstatic
+--noinput`, затем `python manage.py check_staticfiles --fail`.
 
 Native assets подключаются с version query string:
 
@@ -148,7 +169,9 @@ E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep "native ch
 пакета `09-legacy-ai-ui-driver-removal`).
 
 Для CopilotKit можно остановить `copilot_runtime` и снять `/copilotkit` с reverse proxy,
-а деплой переключить на `LOCAL_BUSINESS_AI_UI_DRIVER=native`.
+а деплой переключить на `LOCAL_BUSINESS_AI_UI_DRIVER=native`. Для native rollback
+используется предыдущий Git-релиз с его миграциями; параллельный legacy endpoint
+не поддерживается.
 
 ## Безопасность
 

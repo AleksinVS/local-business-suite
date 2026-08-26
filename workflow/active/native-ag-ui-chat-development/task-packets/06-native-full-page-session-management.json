@@ -1,16 +1,20 @@
 {
   "task_id": "06-native-full-page-session-management",
-  "title": "Native full-page chat parity: sessions, titles and deletion",
+  "title": "Unified native execution: owned sessions, prepared turns and full-page shell",
   "type": "implementation",
-  "objective": "Сделать основной вход /ai/chat/ в native-режиме полноценной страницей чата с возможностями старой полной страницы.",
+  "objective": "Создать безопасный единый prepare/run путь для двух native-представлений и перевести /ai/chat/ на полноэкранную оболочку общего AG-UI клиента.",
   "read_scope": [
     "templates/ai/chat_detail.html",
-    "static/src/js/ai_chat.js",
     "static/src/ai_ui/native_ai.js",
     "static/src/ai_ui/native_ai.css",
     "apps/ai/views.py",
     "apps/ai/urls.py",
     "apps/ai/services.py",
+    "apps/ai/models.py",
+    "apps/ai/ui_runtime/actor.py",
+    "apps/ai/runtime_client.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/graph.py",
     "apps/ai/tests.py"
   ],
   "write_scope": [
@@ -19,34 +23,49 @@
     "static/src/ai_ui/native_ai.css",
     "apps/ai/views.py",
     "apps/ai/urls.py",
+    "apps/ai/models.py",
+    "apps/ai/migrations/",
+    "apps/ai/ui_runtime/actor.py",
+    "apps/ai/runtime_client.py",
+    "services/agent_runtime/app.py",
+    "services/agent_runtime/graph.py",
+    "services/agent_runtime/tests/",
     "apps/ai/ui_runtime/config.py",
     "apps/ai/tests.py",
     "scripts/e2e/tests/native_ai_ui.spec.ts"
   ],
   "instructions": [
-    "Спроектировать native full-page режим как переиспользование того же runtime/config, что и sidebar, без отдельного несовместимого протокола.",
+    "Реализовать уникальную запись запуска по паре session/run_id и повтор завершенного результата без повторного вызова агента.",
+    "Добавить session-aware prepare/run endpoints: сессия определяется по URL, принадлежит request.user, активна, а threadId совпадает с external_id.",
+    "Разделить session_channel, presentation_surface и ui_driver; actor channel брать из реальной сессии.",
+    "Историю строить на сервере, не принимать browser messages/state/context/resume как источник истины.",
+    "Перевести agent-runtime /ag-ui на причинный поток событий с ровно одним RUN_FINISHED или RUN_ERROR.",
+    "Выделить общий AG-UI decoder/reducer, не зависящий от разметки боковой панели, и считать EOF без terminal event ошибкой.",
+    "Спроектировать native full-page режим как вторую оболочку того же runtime/config/reducer, что и sidebar.",
     "В режиме LOCAL_BUSINESS_AI_UI_DRIVER=native основной вход /ai/chat/ должен вести на native full-page чат или явно согласованный transitional route.",
     "Отобразить список последних ChatSession пользователя: title, updated_at, active state, переход к сессии.",
     "Поддержать создание новой сессии, выбор существующей сессии, удаление с подтверждением и редактирование названия.",
-    "При переключении сессии обновлять thread_id, forwarded_props, историю и model_id без смешивания сообщений разных сессий.",
-    "Сохранить доступ к legacy full-page при LOCAL_BUSINESS_AI_UI_DRIVER=legacy для rollback.",
+    "При переключении сессии обновлять thread_id, адреса prepare/run, историю и model_id без смешивания сообщений разных сессий; native actor payload строить только на сервере.",
     "Не дублировать бизнес-логику старой страницы; общие операции должны жить в Django views/services."
   ],
   "acceptance": [
     "В native-режиме пользователь видит список своих чатов и может открыть любой свой чат.",
     "Пользователь не видит и не может открыть/удалить чужие ChatSession.",
+    "Подмена threadId, архивная сессия и повтор выполняющегося run отклоняются безопасно.",
+    "Повтор завершенного run возвращает один сохраненный результат без повторного tool-вызова.",
     "Создание, переименование и удаление чата работают без потери audit/history semantics.",
     "Перезагрузка полной страницы восстанавливает выбранную сессию и историю.",
-    "Sidebar и full-page используют совместимые config/session payload и один backend-контур."
+    "Sidebar и full-page используют один config/prepare/run contract, AG-UI reducer и backend-контур."
   ],
   "verification": [
-    ".venv/bin/python manage.py test apps.ai.tests",
+    "make verify-fast TEST_SCOPE=apps.ai.tests",
+    ".venv/bin/python -m unittest services.agent_runtime.tests -v",
     "node --check static/src/ai_ui/native_ai.js",
     "E2E_AI_UI_DRIVER=native npm run test:e2e -- --project=chromium --grep \"native full-page chat\"",
     "git diff --check -- . ':(exclude)BACKLOG.md'"
   ],
   "non_goals": [
-    "Не удалять старую полную страницу до приемки и rollback-проверки.",
+    "Не менять CopilotKit Node runtime и закрепленные версии протокола.",
     "Не добавлять новый frontend framework.",
     "Не менять policy model и права доступа."
   ]

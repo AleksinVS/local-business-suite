@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var AI_CHAT_UNAVAILABLE_MESSAGE = "В данный момент, ИИ-чат недоступен, обратитесь к администратору портала";
+
   function escapeHtml(value) {
     var div = document.createElement("div");
     div.appendChild(document.createTextNode(String(value || "")));
@@ -496,13 +498,13 @@
           });
           self.setStatus("");
         } else if (!result.hadError && !result.text) {
-          self.showRunError(assistantNode, "ИИ-сервис не вернул ответ.");
+          self.showRunError(assistantNode, AI_CHAT_UNAVAILABLE_MESSAGE);
         }
         self.finishRun();
       })
       .catch(function () {
         assistantNode.classList.remove("is-pending");
-        self.showRunError(assistantNode, self.label("error", "Не удалось получить ответ от ИИ-сервиса."));
+        self.showRunError(assistantNode, self.label("error", AI_CHAT_UNAVAILABLE_MESSAGE));
         self.finishRun();
       });
   };
@@ -568,7 +570,7 @@
       case "RUN_ERROR":
         result.hadError = true;
         this.runHadError = true;
-        this.showRunError(assistantNode, event.message || "ИИ-сервис вернул ошибку.");
+        this.showRunError(assistantNode, AI_CHAT_UNAVAILABLE_MESSAGE);
         return;
       case "TEXT_MESSAGE_START":
         this.startAssistantMessage(event.messageId || assistantId, assistantNode);
@@ -632,10 +634,11 @@
   };
 
   NativeAiSidebar.prototype.showRunError = function (assistantNode, message) {
+    this.runHadError = true;
     assistantNode.classList.remove("is-pending");
     assistantNode.classList.add("is-error");
-    assistantNode.querySelector(".native-ai-ui-bubble").textContent = message || "ИИ-сервис вернул ошибку.";
-    this.setStatus(message || "ИИ-сервис вернул ошибку.", "error");
+    assistantNode.querySelector(".native-ai-ui-bubble").textContent = message || AI_CHAT_UNAVAILABLE_MESSAGE;
+    this.setStatus(message || AI_CHAT_UNAVAILABLE_MESSAGE, "error");
   };
 
   NativeAiSidebar.prototype.startToolTrace = function (event) {
@@ -737,14 +740,12 @@
         try {
           new NativeAiSidebar(root, config);
         } catch (err) {
-          root.innerHTML = '<div class="native-ai-ui-error">NativeAi init failed: '
-            + escapeHtml(String(err && err.message || err)) + "</div>";
+          root.innerHTML = '<div class="native-ai-ui-error">' + escapeHtml(AI_CHAT_UNAVAILABLE_MESSAGE) + '</div>';
           if (window.console && console.error) console.error("NativeAiSidebar init failed", err);
         }
       })
       .catch(function (err) {
-        root.innerHTML = '<div class="native-ai-ui-error">ИИ-чат недоступен: '
-          + escapeHtml(String(err && err.message || err)) + "</div>";
+        root.innerHTML = '<div class="native-ai-ui-error">' + escapeHtml(AI_CHAT_UNAVAILABLE_MESSAGE) + '</div>';
       });
   }
 

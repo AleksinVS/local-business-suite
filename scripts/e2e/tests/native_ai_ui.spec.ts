@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
 const aiUiDriver = process.env.E2E_AI_UI_DRIVER || "native";
+const unavailableMessage = "В данный момент, ИИ-чат недоступен, обратитесь к администратору портала";
 
 async function login(page) {
   await page.goto("/accounts/login/");
@@ -156,7 +157,11 @@ test.describe("@ai native AG-UI-compatible sidebar", () => {
   });
 
   test("shows RUN_ERROR without leaving the form locked", async ({ page }) => {
+    let releaseRunResponse: (() => void) | undefined;
     await page.route("**/ai/ui/ag-ui/run/", async (route) => {
+      await new Promise<void>((resolve) => {
+        releaseRunResponse = resolve;
+      });
       await route.fulfill({
         status: 200,
         contentType: "text/event-stream",
@@ -177,10 +182,20 @@ test.describe("@ai native AG-UI-compatible sidebar", () => {
     const root = page.locator("#native-ai-sidebar-root");
     await expect(root).toBeVisible();
     const input = root.locator("textarea");
+    await page.evaluate(() => {
+      (window as any).__nativeAiLastRunError = null;
+      document.addEventListener("workorders:ai-run-finished", (event) => {
+        (window as any).__nativeAiLastRunError = (event as CustomEvent).detail?.error;
+      }, { once: true });
+    });
     await input.fill("Проверка ошибки");
     await input.press("Enter");
+    await expect.poll(() => Boolean(releaseRunResponse)).toBe(true);
+    await root.getByRole("button", { name: "Свернуть ИИ-чат" }).click();
+    releaseRunResponse?.();
 
-    await expect(root.locator(".native-ai-ui-message.is-assistant.is-error .native-ai-ui-bubble").last()).toHaveText("LLM не настроен");
+    await expect(root.locator(".native-ai-ui-message.is-assistant.is-error .native-ai-ui-bubble").last()).toHaveText(unavailableMessage);
     await expect(input).toBeEnabled();
+    await expect.poll(() => page.evaluate(() => (window as any).__nativeAiLastRunError)).toBe(true);
   });
 });

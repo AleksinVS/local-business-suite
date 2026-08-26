@@ -202,6 +202,26 @@ def resolve_model(model_id: str = "") -> ResolvedModel:
     )
 
 
+def is_model_configured(model_id: str = "") -> bool:
+    """Проверяет наличие выбранной модели и требуемого ею ключа провайдера."""
+    models = load_models_config()
+    selected = None
+    if model_id:
+        selected = next((model for model in models if model.id == model_id), None)
+        if selected is None:
+            return False
+    else:
+        selected = next((model for model in models if model.is_default), None)
+
+    if selected is not None:
+        if not selected.model:
+            return False
+        return not selected.api_key_env or bool(os.environ.get(selected.api_key_env, ""))
+
+    settings = load_runtime_settings()
+    return bool(settings.model and os.environ.get("OPENAI_API_KEY", ""))
+
+
 def get_available_models() -> list[dict]:
     """Return model list safe for API exposure (no secrets)."""
     models = load_models_config()

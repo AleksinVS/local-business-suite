@@ -19,6 +19,54 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
+class TestModelConfiguration(unittest.TestCase):
+    def test_selected_model_uses_its_own_provider_key(self):
+        from services.agent_runtime.config import ModelConfig, is_model_configured
+
+        model = ModelConfig(
+            id="openrouter-model",
+            name="OpenRouter model",
+            model="openai:test-model",
+            api_key_env="OPENROUTER_API_KEY",
+        )
+        with patch("services.agent_runtime.config.load_models_config", return_value=[model]), patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "", "OPENROUTER_API_KEY": "provider-key"},
+        ):
+            self.assertTrue(is_model_configured("openrouter-model"))
+
+    def test_unknown_selected_model_is_not_silently_replaced_by_default(self):
+        from services.agent_runtime.config import ModelConfig, is_model_configured
+
+        default = ModelConfig(
+            id="default-model",
+            name="Default model",
+            model="openai:default-model",
+            api_key_env="OPENAI_API_KEY",
+            is_default=True,
+        )
+        with patch("services.agent_runtime.config.load_models_config", return_value=[default]), patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "provider-key"},
+        ):
+            self.assertFalse(is_model_configured("missing-model"))
+
+    def test_explicit_keyless_local_model_is_allowed(self):
+        from services.agent_runtime.config import ModelConfig, is_model_configured
+
+        model = ModelConfig(
+            id="local-model",
+            name="Local model",
+            model="ollama:local-model",
+            api_key_env="",
+        )
+        with patch("services.agent_runtime.config.load_models_config", return_value=[model]), patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": ""},
+        ):
+            self.assertTrue(is_model_configured("local-model"))
+
+
 class TestNormalizeStatus(unittest.TestCase):
     """Tests for normalize_status()."""
 
@@ -637,7 +685,7 @@ class TestRuntimeSafeLogging(unittest.TestCase):
         payload = ChatRequest(
             session_id="session-error-log",
             prompt="Секретный пользовательский prompt",
-            model_id="test-model",
+            model_id="",
             actor=ActorContext(
                 user_id=17,
                 username="doctor-secret",
@@ -856,7 +904,7 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
             forwardedProps=self._signed_forwarded_props(
                 {
                     "session_id": "sidebar-session",
-                    "model_id": "test-model",
+                    "model_id": "",
                     "origin_channel": "copilotkit",
                     "actor_version": "copilotkit-ag-ui-v1",
                     "actor": {
@@ -993,6 +1041,7 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
 
     def test_ag_ui_run_returns_run_error_when_llm_key_is_missing(self):
         from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
         from services.agent_runtime.schemas import AGUIRunAgentInput
 
         run_input = AGUIRunAgentInput(
@@ -1002,7 +1051,7 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
             forwardedProps=self._signed_forwarded_props(
                 {
                     "session_id": "sidebar-session",
-                    "model_id": "test-model",
+                    "model_id": "",
                     "origin_channel": "copilotkit",
                     "ui_driver": "copilotkit",
                     "actor_version": "copilotkit-ag-ui-v1",
@@ -1030,7 +1079,53 @@ class TestAGUIRuntimeEndpoint(unittest.TestCase):
         self.assertEqual([event["type"] for event in events], ["RUN_STARTED", "CUSTOM", "RUN_ERROR"])
         self.assertEqual(events[1]["name"], "local_business.protocol")
         self.assertEqual(events[2]["code"], "service_not_configured")
+        self.assertEqual(events[2]["message"], AI_CHAT_UNAVAILABLE_MESSAGE)
         run_agent_mock.assert_not_called()
+
+    def test_ag_ui_run_hides_unavailable_model_error_behind_safe_placeholder(self):
+        from services.agent_runtime.app import ag_ui_run
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
+        from services.agent_runtime.schemas import AGUIRunAgentInput
+
+        run_input = AGUIRunAgentInput(
+            threadId="sidebar-session",
+            runId="run-model-unavailable",
+            messages=[{"id": "u1", "role": "user", "content": "Проверка модели"}],
+            forwardedProps=self._signed_forwarded_props(
+                {
+                    "session_id": "sidebar-session",
+                    "model_id": "",
+                    "origin_channel": "native",
+                    "ui_driver": "native",
+                    "actor_version": "local-business-ai-ui-v1",
+                    "actor": {
+                        "user_id": 17,
+                        "username": "doctor",
+                        "roles": ["engineer"],
+                        "is_superuser": False,
+                        "channel": "sidebar",
+                        "source": "django-native-ai-ui",
+                        "origin_channel": "native",
+                        "actor_version": "local-business-ai-ui-v1",
+                    },
+                },
+            ),
+        )
+
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "test-key", "LOCAL_BUSINESS_AI_GATEWAY_TOKEN": "test-gateway-token"},
+        ), patch(
+            "services.agent_runtime.app.run_agent",
+            side_effect=RuntimeError("provider leaked technical model error"),
+        ) as run_agent_mock:
+            response = asyncio.run(ag_ui_run(run_input))
+            events = asyncio.run(self._collect_events(response))
+
+        self.assertEqual(events[-1]["type"], "RUN_ERROR")
+        self.assertEqual(events[-1]["message"], AI_CHAT_UNAVAILABLE_MESSAGE)
+        self.assertNotIn("provider leaked", json.dumps(events, ensure_ascii=False))
+        run_agent_mock.assert_called_once()
 
 
 class TestMCPResources(unittest.TestCase):

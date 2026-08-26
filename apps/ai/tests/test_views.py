@@ -150,6 +150,7 @@ class AIViewsTests(TestCase):
 
     def test_native_ai_ui_config_returns_signed_actor_payload(self):
         from ..views import sign_copilotkit_actor_payload
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
         self.client.force_login(self.customer)
         with self.settings(LOCAL_BUSINESS_AI_UI_DRIVER="native"):
@@ -164,6 +165,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(forwarded["ui_driver"], "native")
         self.assertEqual(forwarded["actor"]["source"], "django-native-ai-ui")
         self.assertEqual(forwarded["signature"], sign_copilotkit_actor_payload(forwarded))
+        self.assertEqual(payload["labels"]["error"], AI_CHAT_UNAVAILABLE_MESSAGE)
 
     def test_native_ai_ui_config_includes_sidebar_history_models_and_urls(self):
         self.client.force_login(self.customer)
@@ -1460,6 +1462,8 @@ class AIViewsTests(TestCase):
 
     @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
     def test_chat_stream_runtime_error_is_returned_saved_and_audited(self, stream_mock):
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
+
         stream_mock.side_effect = AgentRuntimeError("runtime stream exploded")
         self.client.force_login(self.customer)
         session = ChatSession.objects.create(user=self.customer, title="Проверка stream")
@@ -1480,7 +1484,7 @@ class AIViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("runtime stream exploded", "\n".join(captured.output))
-        self.assertIn("Не удалось получить ответ от ИИ-сервиса", body)
+        self.assertIn(AI_CHAT_UNAVAILABLE_MESSAGE, body)
         self.assertIn("request_id", body)
         self.assertNotIn("runtime stream exploded", body)
         action = AgentActionLog.objects.get(tool_code="agent_runtime.chat_stream")
@@ -1488,9 +1492,51 @@ class AIViewsTests(TestCase):
         self.assertIn("runtime stream exploded", action.error_message)
         assistant_message = ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT).get()
         self.assertTrue(assistant_message.metadata["error"])
+        self.assertEqual(assistant_message.content, AI_CHAT_UNAVAILABLE_MESSAGE)
         self.assertEqual(assistant_message.metadata["technical_trace_id"], action.id)
         session.refresh_from_db()
         self.assertEqual(session.metadata["last_error_action_id"], action.id)
+
+    @patch("apps.ai.views.AgentRuntimeClient.chat_stream")
+    def test_chat_stream_runtime_error_payload_is_saved_as_error_not_partial_success(self, stream_mock):
+        from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
+
+        stream_mock.return_value = [
+            'data: {"content": "Частичный ответ"}',
+            'data: {"error": "agent_runtime_error", "message": "секретная причина"}',
+            "data: [DONE]",
+        ]
+        self.client.force_login(self.customer)
+        session = ChatSession.objects.create(user=self.customer, title="Ошибка в SSE payload")
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content="Проверь ответ",
+        )
+
+        response = self.client.post(
+            reverse("ai:chat_stream", kwargs={"external_id": session.external_id}),
+            data=json.dumps({"msg_id": user_message.id}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        body = b"".join(response.streaming_content).decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(AI_CHAT_UNAVAILABLE_MESSAGE, body)
+        self.assertNotIn("секретная причина", body)
+        self.assertLess(body.index(AI_CHAT_UNAVAILABLE_MESSAGE), body.rindex("data: [DONE]"))
+        assistant_messages = ChatMessage.objects.filter(session=session, role=ChatMessage.Role.ASSISTANT)
+        self.assertEqual(assistant_messages.count(), 1)
+        assistant_message = assistant_messages.get()
+        self.assertEqual(assistant_message.content, AI_CHAT_UNAVAILABLE_MESSAGE)
+        self.assertTrue(assistant_message.metadata["error"])
+        self.assertEqual(assistant_message.metadata["partial"], True)
+        self.assertTrue(AgentActionLog.objects.filter(
+            session=session,
+            tool_code="agent_runtime.chat_stream",
+            status=AgentActionLog.Status.FAILED,
+        ).exists())
 
     def test_workorder_get_with_invalid_id_returns_error_envelope(self):
         response = self.client.post(

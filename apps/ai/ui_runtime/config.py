@@ -7,6 +7,7 @@ from django.utils.timezone import localtime
 from apps.ai.chat_settings import CHAT_SURFACE_SIDEBAR, get_recent_message_limit
 from apps.ai.models import ChatMessage
 from apps.ai.services import get_or_create_sidebar_session
+from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
 from .actor import build_actor_payload
 from .drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_ui_driver
@@ -24,7 +25,7 @@ DEFAULT_LABELS = {
     "tool": "Инструмент",
     "tool_running": "Выполняется",
     "tool_done": "Готово",
-    "error": "Не удалось получить ответ от ИИ-сервиса.",
+    "error": AI_CHAT_UNAVAILABLE_MESSAGE,
     "clear_chat": "Очистить чат",
     "full_chat": "Открыть полный чат",
     "model": "Модель",

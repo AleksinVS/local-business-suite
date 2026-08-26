@@ -19,6 +19,8 @@ from django.views.generic import DetailView, RedirectView, TemplateView
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 
+from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
+
 from .commands import get_predefined_commands, resolve_command, resolve_custom_command
 from .forms import AIChatInputForm
 from .models import AgentActionLog, ChatMessage, ChatSession, ChatAttachment, SlashCommand
@@ -48,10 +50,6 @@ from .ui_runtime.drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_
 
 logger = logging.getLogger(__name__)
 
-CHAT_RUNTIME_ERROR_MESSAGE = (
-    "Не удалось получить ответ от ИИ-сервиса. Причина: {reason}. "
-    "Технический идентификатор: {request_id}."
-)
 PAGE_CONTEXT_RATE_LIMIT_PER_MINUTE = 120
 
 
@@ -85,12 +83,11 @@ def allow_page_context_update(user_id) -> bool:
 
 
 def build_chat_error_payload(*, exc, request_id, conversation_id, technical_trace_id=None):
-    error_code, reason = classify_chat_runtime_error(exc)
-    message = CHAT_RUNTIME_ERROR_MESSAGE.format(reason=reason, request_id=request_id)
+    error_code, _reason = classify_chat_runtime_error(exc)
     payload = {
         "error": True,
         "error_code": error_code,
-        "message": message,
+        "message": AI_CHAT_UNAVAILABLE_MESSAGE,
         "request_id": request_id,
         "conversation_id": conversation_id,
     }
@@ -338,7 +335,7 @@ def collect_agui_event(event, collector):
         return
     if event_type == "RUN_ERROR":
         collector["error"] = {
-            "message": str(event.get("message") or "ИИ-сервис вернул ошибку."),
+            "message": AI_CHAT_UNAVAILABLE_MESSAGE,
             "code": str(event.get("code") or "agent_runtime_error"),
         }
         return
@@ -685,7 +682,7 @@ class AIUIAGUIRunProxyView(LoginRequiredMixin, View):
                     append_chat_message(
                         session=session,
                         role=ChatMessage.Role.ASSISTANT,
-                        content="ИИ-сервис вернул ошибку.",
+                        content=AI_CHAT_UNAVAILABLE_MESSAGE,
                         metadata={
                             "error": True,
                             "error_code": "agent_runtime_error",
@@ -712,7 +709,7 @@ class AIUIAGUIRunProxyView(LoginRequiredMixin, View):
                 yield "data: " + json.dumps(
                     {
                         "type": "RUN_ERROR",
-                        "message": "ИИ-сервис вернул ошибку.",
+                        "message": AI_CHAT_UNAVAILABLE_MESSAGE,
                         "code": "agent_runtime_error",
                     },
                     ensure_ascii=False,
@@ -932,6 +929,7 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
             client = AgentRuntimeClient()
             full_content = []
             ui_commands = []
+            runtime_payload_error = None
 
             try:
                 for event in client.chat_stream(
@@ -947,19 +945,29 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     if chat_settings.get("context_tool_enabled", True)
                     else {},
                 ):
-                    yield f"{event}\n\n"
-
                     if event.startswith("data: "):
                         data_str = event[6:]
+                        if runtime_payload_error and data_str == "[DONE]":
+                            continue
                         if data_str != "[DONE]":
                             try:
                                 data_json = json.loads(data_str)
+                                if isinstance(data_json, dict) and data_json.get("error"):
+                                    error_value = data_json.get("error")
+                                    message = data_json.get("message") or error_value
+                                    runtime_payload_error = AgentRuntimeError(
+                                        f"Agent runtime stream error: {message}"
+                                    )
+                                    continue
+                                if runtime_payload_error or not isinstance(data_json, dict):
+                                    continue
                                 if "content" in data_json:
                                     full_content.append(data_json["content"])
                                 if isinstance(data_json.get("ui_command"), dict):
                                     ui_commands.append(data_json["ui_command"])
                             except (json.JSONDecodeError, TypeError):
                                 pass
+                    yield f"{event}\n\n"
             except Exception as exc:
                 partial_content = "".join(full_content)
                 payload = record_chat_runtime_error(
@@ -979,6 +987,29 @@ class AIChatMessageStreamView(LoginRequiredMixin, View):
                     request_id,
                     payload.get("technical_trace_id"),
                     exc.__class__.__name__,
+                )
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            if runtime_payload_error:
+                partial_content = "".join(full_content)
+                payload = record_chat_runtime_error(
+                    session=session,
+                    actor=request.user,
+                    user_message=user_msg,
+                    exc=runtime_payload_error,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                    origin_channel=session.channel,
+                    model_id=model_id,
+                    runtime_method="chat_stream",
+                    partial_content=partial_content,
+                )
+                logger.warning(
+                    "AI chat stream returned runtime error payload: request_id=%s action_id=%s",
+                    request_id,
+                    payload.get("technical_trace_id"),
                 )
                 yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"

@@ -2,6 +2,8 @@
 (function() {
   'use strict';
 
+  var AI_CHAT_UNAVAILABLE_MESSAGE = 'В данный момент, ИИ-чат недоступен, обратитесь к администратору портала';
+
   var config = window.__chatConfig;
   if (!config) return;
 
@@ -569,7 +571,7 @@
                   }
                   executeUiCommands(data);
                   if (data.error) {
-                    finishWithError(data.message || data.error || 'ИИ-сервис вернул ошибку.', data);
+                    finishWithError(AI_CHAT_UNAVAILABLE_MESSAGE, data);
                   }
                 } catch (err) {
                   // Ignore non-JSON lines
@@ -579,21 +581,20 @@
             }).catch(function(err) {
               if (err.name !== 'AbortError') console.error('Stream read error:', err);
               if (err.name === 'AbortError') return;
-          finishWithError('Соединение с ИИ-сервисом было прервано.', {});
+              finishWithError(AI_CHAT_UNAVAILABLE_MESSAGE, {});
             });
           }
           read();
         }).catch(function(err) {
           if (err.name !== 'AbortError') console.error('Fetch error:', err);
           if (err.name === 'AbortError') return;
-          finishWithError('Не удалось получить ответ от ИИ-сервиса. Причина: ошибка соединения с сервером чата.', {});
+          finishWithError(AI_CHAT_UNAVAILABLE_MESSAGE, {});
         });
 
       function finishWithError(message, payload) {
-        var details = payload && payload.request_id ? '<div class="mt-1 text-xs text-red-500">ID: ' + escapeHtml(payload.request_id) + '</div>' : '';
         accumulatedContent = "";
         assistantContentDiv.innerHTML = '<div class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">'
-          + escapeHtml(message) + details + '</div>';
+          + escapeHtml(message) + '</div>';
         try { controller.abort(); } catch (err) {}
         finishStream({ hasError: true });
       }

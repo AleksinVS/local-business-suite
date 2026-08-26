@@ -5,6 +5,8 @@ import "@copilotkit/react-core/v2/styles.css";
 
 import "./copilotkit.css";
 
+const AI_CHAT_UNAVAILABLE_MESSAGE = "В данный момент, ИИ-чат недоступен, обратитесь к администратору портала";
+
 function runtimeCredentials(runtimeUrl) {
   if (!runtimeUrl || runtimeUrl.startsWith("/")) return "include";
   try {
@@ -117,7 +119,7 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
         setConfig(payload);
       })
       .catch((fetchError) => {
-        setError(fetchError.message || "CopilotKit недоступен.");
+        setError(AI_CHAT_UNAVAILABLE_MESSAGE);
       });
   }, [configUrl]);
 
@@ -170,6 +172,10 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
     };
   }, [config, pageContext]);
 
+  function handleRuntimeError() {
+    setError(AI_CHAT_UNAVAILABLE_MESSAGE);
+  }
+
   if (error) return <div className="copilotkit-error">{error}</div>;
   if (!config) return <div className="sidebar-chat-loading">Загрузка чата...</div>;
 
@@ -212,6 +218,7 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
         properties={properties}
         credentials={runtimeCredentials(runtimeUrl)}
         showDevConsole={false}
+        onError={handleRuntimeError}
       >
         <CommandBridge agentId={agentId} />
         <CopilotChat
@@ -220,6 +227,7 @@ function CopilotKitIsland({ configUrl, newSessionUrl, fallbackRuntimeUrl, fallba
             initial: labels.initial || "Опишите задачу.",
             placeholder: labels.placeholder || "Сообщение...",
           }}
+          onError={handleRuntimeError}
         />
       </CopilotKit>
     </div>

@@ -21,9 +21,10 @@ from .protocols.agui.v1 import (
     tool_trace_events,
     ui_command_events,
 )
-from .config import describe_contract_sources, load_runtime_settings, get_available_models
+from .config import describe_contract_sources, get_available_models, is_model_configured, load_runtime_settings
 from .graph import run_agent, stream_agent
 from .mcp_server import build_mcp_server
+from .protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 from .schemas import AGUIActorPayload, AGUIRunAgentInput, ChatRequest, ChatResponse
 
 
@@ -76,6 +77,20 @@ def _prompt_hash(prompt: str) -> str:
     if not prompt:
         return ""
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def _model_is_configured(model_id: str = "") -> bool:
+    """Проверяет, что выбранная модель и ее ключ доступны agent runtime."""
+    try:
+        return is_model_configured(model_id)
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "Agent runtime model configuration could not be resolved: model_id=%s error_type=%s",
+            model_id,
+            exc.__class__.__name__,
+            exc_info=True,
+        )
+        return False
 
 
 def _agui_signature_payload(payload: AGUIActorPayload) -> str:
@@ -240,10 +255,10 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                     driver=actor_payload.ui_driver or actor_payload.origin_channel
                 )
             )
-            if not os.environ.get("OPENAI_API_KEY"):
+            if not _model_is_configured(actor_payload.model_id):
                 yield sse_event(
                     run_error_event(
-                        "ИИ-сервис не настроен: отсутствует ключ LLM-провайдера.",
+                        AI_CHAT_UNAVAILABLE_MESSAGE,
                         code="service_not_configured",
                     )
                 )
@@ -282,18 +297,7 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 exc.__class__.__name__,
                 exc_info=True,
             )
-            # If upstream is rate-limited by OpenRouter, surface the reset
-            # timestamp in the user-visible message so the user knows it
-            # is a quota issue, not a connection error.
-            msg = "ИИ-сервис вернул ошибку."
-            exc_str = str(exc).lower()
-            if "rate limit" in exc_str and "free-models-per-day" in exc_str:
-                msg = (
-                    "Дневной лимит OpenRouter на бесплатные модели "
-                    "исчерпан. Сброс завтра в 16:00 UTC, либо пополните "
-                    "аккаунт на 10 кредитов."
-                )
-            yield sse_event(run_error_event(msg))
+            yield sse_event(run_error_event(AI_CHAT_UNAVAILABLE_MESSAGE))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -305,8 +309,8 @@ async def chat_stream(payload: ChatRequest):
     log_context = _safe_chat_log_context(payload, actor_context)
     logger.info("Agent runtime stream request: %s", log_context)
     
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
+    if not _model_is_configured(payload.model_id):
+        raise HTTPException(status_code=503, detail=AI_CHAT_UNAVAILABLE_MESSAGE)
 
     async def event_generator():
         try:
@@ -335,21 +339,10 @@ async def chat_stream(payload: ChatRequest):
                 exc.__class__.__name__,
                 exc_info=True,
             )
-            # Detect OpenRouter daily-quota exhaustion and surface a
-            # user-friendly hint instead of the generic error.
-            error_code = "agent_runtime_error"
-            error_message = "ИИ-сервис вернул ошибку."
-            if "rate limit" in str(exc).lower() and "free-models-per-day" in str(exc).lower():
-                error_code = "rate_limit_exceeded"
-                error_message = (
-                    "Дневной лимит OpenRouter на бесплатные модели "
-                    "исчерпан. Сброс 1 июля в 16:00 UTC, либо пополните "
-                    "аккаунт на 10 кредитов."
-                )
             yield "data: " + json.dumps(
                 {
-                    "error": error_code,
-                    "message": error_message,
+                    "error": "agent_runtime_error",
+                    "message": AI_CHAT_UNAVAILABLE_MESSAGE,
                     "request_id": actor_context.request_id,
                     "conversation_id": actor_context.conversation_id,
                 }
@@ -365,8 +358,8 @@ def chat(payload: ChatRequest):
     log_context = _safe_chat_log_context(payload, actor_context)
     logger.info("Agent runtime chat request: %s", log_context)
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
+    if not _model_is_configured(payload.model_id):
+        raise HTTPException(status_code=503, detail=AI_CHAT_UNAVAILABLE_MESSAGE)
     try:
         result = run_agent(
             actor=actor_context.model_dump(),

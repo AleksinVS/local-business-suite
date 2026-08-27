@@ -26,6 +26,7 @@
           <span class="cito-indicator">CITO!</span>
         {% endif %}
       </td>
+      <td title="{{ entry.comment }}">{{ entry.comment|default:"—"|truncatechars:80 }}</td>
       <td>
         <span class="badge" data-status="{{ entry.status }}">{{ entry.get_status_display }}</span>
       </td>
@@ -33,7 +34,7 @@
     {% endfor %}
   {% else %}
     <tr>
-      <td colspan="6" class="empty-state">Ничего не найдено</td>
+      <td colspan="7" class="empty-state">Ничего не найдено</td>
     </tr>
   {% endif %}
 </tbody>

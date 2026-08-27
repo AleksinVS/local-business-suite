@@ -752,6 +752,7 @@ class WaitingListRouteTests(TestCase):
             patient_dob="15.04.1985",
             patient_phone="+7 (903) 123-45-67",
             service_id="s1",
+            comment="Комментарий в списке",
         )
 
     def test_dashboard_requires_login(self):
@@ -763,6 +764,8 @@ class WaitingListRouteTests(TestCase):
         response = self.client.get(reverse("waiting_list:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "page-container--flush-toolbar")
+        self.assertContains(response, "Комментарий")
+        self.assertContains(response, "Комментарий в списке")
 
     def test_dashboard_forbidden_without_doctor_role(self):
         non_doctor = User.objects.create_user(username="nondoctor", password="pass")

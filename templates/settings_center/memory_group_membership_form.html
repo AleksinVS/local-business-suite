@@ -10,10 +10,10 @@
       <h1>Технические группы: {{ target_user.username }}</h1>
       <p class="description">Эти назначения управляют обслуживанием памяти ИИ. Обычные роли доступа здесь не изменяются.</p>
     </div>
-    <a class="button-link" href="{% url 'settings_center:user_edit' target_user.pk %}">К карточке доступа</a>
+    <a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=users&amp;object={{ target_user.pk }}&amp;field=memory-groups&amp;panel=inspector">К карточке доступа</a>
   </div>
 
-  <div class="flash warning"><strong>Повышенный риск.</strong> Укажите служебную причину и проверьте изменения до применения.</div>
+  <div class="flash warning"><strong>Повышенный риск.</strong> Проверьте изменения до применения. При необходимости добавьте комментарий для журнала.</div>
 
   <form method="post" class="settings-form memory-membership-form">
     {% csrf_token %}
@@ -36,7 +36,7 @@
   <h2>Последние изменения</h2>
   <ul>
     {% for item in history %}
-      <li>{{ item.created_at }} · {{ item.actor }} · + {{ item.groups_added|join:", "|default:"—" }} / − {{ item.groups_removed|join:", "|default:"—" }} · {{ item.reason }}</li>
+      <li>{{ item.created_at }} · {{ item.actor }} · + {{ item.groups_added|join:", "|default:"—" }} / − {{ item.groups_removed|join:", "|default:"—" }}{% if item.reason %} · комментарий: {{ item.reason }}{% endif %}</li>
     {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
   </ul>
 </section>

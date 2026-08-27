@@ -85,6 +85,7 @@ from .services import (
     _create_workorder_unchecked,
     initialize_board_access_for_bootstrap,
     preview_board_access,
+    _board_access_user_ids,
     _transition_workorder_unchecked,
 )
 from .contracts import validate_role_rules_payload
@@ -152,7 +153,6 @@ class BoardAdminAccessTests(TestCase):
             actor=self.actor,
             board=self.board,
             selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
-            reason="Добавить техников",
         )
         board, audit = apply_board_access(
             actor=self.actor,
@@ -160,12 +160,16 @@ class BoardAdminAccessTests(TestCase):
             selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
             preview_token=preview["preview_token"],
             risk_confirmed=True,
-            reason="Добавить техников",
         )
 
         self.assertEqual(audit.groups_added, [ROLE_TECHNICIAN])
         self.assertEqual(audit.source, BoardAccessAudit.Source.SETTINGS_CENTER)
+        self.assertEqual(audit.reason, "")
         self.assertTrue(visible_boards_queryset(technician).filter(pk=board.pk).exists())
+
+    def test_roleless_user_is_not_counted_in_customer_board_access_impact(self):
+        roleless = User.objects.create_user(username="roleless-board-user", password="pass")
+        self.assertNotIn(roleless.pk, _board_access_user_ids([ROLE_CUSTOMER]))
 
     def test_removal_requires_confirmation_and_unknown_group_is_rejected(self):
         self.board.allowed_groups.add(self.technician_group)
@@ -192,12 +196,13 @@ class BoardAdminAccessTests(TestCase):
                 reason="Проверка неизвестной группы",
             )
 
-    def test_board_access_change_requires_reason(self):
-        with self.assertRaisesMessage(ValidationError, "укажите причину"):
+    def test_board_access_break_glass_requires_reason(self):
+        with self.assertRaisesMessage(ValidationError, "резервного изменения"):
             preview_board_access(
                 actor=self.actor,
                 board=self.board,
                 selected_group_names=[ROLE_CUSTOMER, ROLE_TECHNICIAN],
+                source=BoardAccessAudit.Source.DJANGO_ADMIN_BREAK_GLASS,
             )
 
     def test_board_impact_excludes_roleless_user_and_rejects_stale_population(self):

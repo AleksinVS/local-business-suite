@@ -14,6 +14,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from apps.accounts.selectors import selected_role_names_for_user
+from apps.accounts.models import ExternalIdentity
 from apps.accounts.services import (
     _apply_external_identity_change_locked,
     _apply_role_assignment_locked,
@@ -49,7 +50,7 @@ def preview_user_access_bundle(*, actor, target_user, cleaned_data):
         raise ValidationError(
             "Собственные роли суперпользователя сохраняются отдельно от других полей карточки."
         )
-    reason = cleaned_data["reason"]
+    reason = str(cleaned_data.get("reason", "") or "").strip()
     component_previews = {}
     if "memory" in payloads:
         component_previews["memory"] = preview_memory_group_membership(
@@ -131,7 +132,7 @@ def apply_user_access_bundle(
     tokens = signed.get("tokens")
     if not isinstance(tokens, dict) or sorted(tokens) != expected_components:
         raise ValidationError("Предпросмотр карточки имеет неверный формат.")
-    reason = cleaned_data["reason"]
+    reason = str(cleaned_data.get("reason", "") or "").strip()
     results = {}
     try:
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
@@ -233,7 +234,9 @@ def _changed_component_payloads(target, cleaned_data):
         for name, value in profile.items()
         if name != "password"
     )
-    identity = target.external_identities.order_by("pk").first()
+    identity = target.external_identities.filter(
+        provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY
+    ).order_by("pk").first()
     ad = {
         "provider": cleaned_data["ad_provider"],
         "subject_id": cleaned_data["ad_subject_id"],

@@ -665,6 +665,124 @@ def save_role_creation(
     return change
 
 
+def save_role_copy(
+    *, actor, source_role_code, target_role_code, display_name, description="", base_hash
+):
+    """Create a flat copy of one role definition, without assignments."""
+    rules = get_contract("role_rules")
+    actor = _require_role_definition_editor(actor, rules_snapshot=rules)
+    if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    source_role_code = str(source_role_code or "").strip()
+    source = rules.get(source_role_code)
+    if source_role_code.startswith("$") or not isinstance(source, dict):
+        raise ValidationError("Исходная роль не найдена.")
+    target_role_code = _normalize_new_role_code(target_role_code)
+    catalog = rules.get("$capabilities", {})
+    if not isinstance(catalog, dict):
+        raise ValidationError("Справочник прав роли некорректен.")
+    copied = copy.deepcopy(source)
+    copied["display_name"] = str(display_name or "").strip()
+    copied["description"] = str(description or "").strip()
+    if not copied["display_name"]:
+        raise ValidationError("Название роли не может быть пустым.")
+    _assert_new_role_code_available(
+        role_code=target_role_code, rules_snapshot=rules, expected_config=copied
+    )
+    if not actor.is_superuser and role_is_protected(source, catalog=catalog):
+        raise PermissionDenied(
+            "Защищённую роль может копировать только активный суперпользователь."
+        )
+    _assert_role_definition_target_policy(
+        actor=actor,
+        role_code=target_role_code,
+        before=None,
+        after=copied,
+        rules_snapshot=rules,
+    )
+    source_hash = normalized_hash(source)
+    signed_payload = {
+        "action": "copy",
+        "actor_id": actor.pk,
+        "actor_state": _role_editor_actor_state(actor, rules_snapshot=rules),
+        "role_code": target_role_code,
+        "source_role_code": source_role_code,
+        "source_role_hash": source_hash,
+        "base_hash": normalized_hash(rules),
+        "after": copied,
+        "member_fingerprint": _role_member_fingerprint(target_role_code),
+        "nonce": str(uuid.uuid4()),
+    }
+    preview_token = signing.dumps(
+        signed_payload, salt=ROLE_DEFINITION_PREVIEW_SALT, compress=True
+    )
+
+    def locked_precondition(current_actor, current_rules):
+        if normalized_hash(current_rules) != signed_payload["base_hash"]:
+            raise ValidationError("Контракт ролей изменился после предпросмотра.")
+        current_actor = _require_role_definition_editor(
+            current_actor, rules_snapshot=current_rules
+        )
+        if signed_payload["actor_state"] != _role_editor_actor_state(
+            current_actor, rules_snapshot=current_rules
+        ):
+            raise ValidationError("Права администратора изменились после предпросмотра.")
+        current_source = current_rules.get(source_role_code)
+        if not isinstance(current_source, dict) or normalized_hash(current_source) != source_hash:
+            raise ValidationError("Исходная роль изменилась после предпросмотра.")
+        _assert_new_role_code_available(
+            role_code=target_role_code,
+            rules_snapshot=current_rules,
+            expected_config=copied,
+        )
+        current_catalog = current_rules.get("$capabilities", {})
+        if not current_actor.is_superuser and role_is_protected(current_source, catalog=current_catalog):
+            raise PermissionDenied(
+                "Защищённую роль может копировать только активный суперпользователь."
+            )
+        _assert_role_definition_target_policy(
+            actor=current_actor,
+            role_code=target_role_code,
+            before=None,
+            after=copied,
+            rules_snapshot=current_rules,
+        )
+
+    def raw_payload_factory(current_rules):
+        candidate = copy.deepcopy(current_rules)
+        candidate[target_role_code] = copy.deepcopy(copied)
+        return json.dumps(candidate, ensure_ascii=False)
+
+    def pre_write_callback(_current_actor, written_rules):
+        _materialize_role_group(
+            target_role_code,
+            written_rules[target_role_code],
+            require_new=True,
+            allow_inert_reservation=True,
+        )
+
+    from apps.settings_center.contract_services import _apply_role_definition_payload
+
+    return _apply_role_definition_payload(
+        actor=actor,
+        role_code=target_role_code,
+        confirmed=True,
+        base_hash=signed_payload["base_hash"],
+        preview_token=preview_token,
+        risk_confirmed=True,
+        operation_fingerprint=hashlib.sha256(preview_token.encode("utf-8")).hexdigest(),
+        raw_payload_factory=raw_payload_factory,
+        locked_precondition=locked_precondition,
+        pre_write_callback=pre_write_callback,
+        audit_context={
+            "source": "role_definition_copy",
+            "source_role_code": source_role_code,
+            "target_role_code": target_role_code,
+            "source_role_hash": source_hash,
+        },
+    )
+
+
 def _normalize_new_role_code(value):
     code = str(value or "").strip()
     if not ROLE_CODE_PATTERN.fullmatch(code):
@@ -874,7 +992,7 @@ def _validate_role_definition_transport_request(
     action = signed.get("action", "edit")
     current_before = before.get(role_code)
     current_after = after.get(role_code)
-    if action == "create":
+    if action in {"create", "copy"}:
         if current_before is not None or not isinstance(current_after, dict):
             raise ValidationError("Новая роль уже существует или стала некорректной.")
     elif not isinstance(current_before, dict) or not isinstance(current_after, dict):
@@ -892,7 +1010,12 @@ def _validate_role_definition_transport_request(
         after=current_after,
         rules_snapshot=before,
     )
-    if action == "create":
+    if action == "copy":
+        source_role_code = signed.get("source_role_code")
+        source = before.get(source_role_code)
+        if not isinstance(source, dict) or signed.get("source_role_hash") != normalized_hash(source):
+            raise ValidationError("Исходная роль изменилась после предпросмотра.")
+    if action in {"create", "copy"}:
         _assert_new_role_code_available(
             role_code=role_code,
             rules_snapshot=before,

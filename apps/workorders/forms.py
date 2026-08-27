@@ -30,11 +30,11 @@ class BoardAccessForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
     )
     reason = forms.CharField(
-        label="Причина",
-        required=True,
+        label="Комментарий (необязательно)",
+        required=False,
         max_length=1000,
         widget=forms.Textarea(attrs={"rows": 3}),
-        help_text="Обязательно: причина сохраняется в журнале изменения доступа.",
+        help_text="Если нужен дополнительный контекст, комментарий сохранится в журнале.",
     )
     preview_token = forms.CharField(widget=forms.HiddenInput, required=False)
     risk_confirmed = forms.BooleanField(
@@ -61,6 +61,8 @@ class BoardAccessForm(forms.Form):
             choices.append((role_name, f"{label} ({role_name})"))
         self.fields["group_names"].choices = choices
         if source == "django_admin_break_glass":
+            self.fields["reason"].label = "Причина резервного изменения"
+            self.fields["reason"].required = True
             self.fields["reason"].help_text = "Обязательно для резервного изменения."
 
 

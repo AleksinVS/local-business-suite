@@ -12,13 +12,14 @@ from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db.models import Prefetch
 
-from apps.accounts.selectors import capability_catalog, contract_role_configs, role_risk_markers, split_user_groups
+from apps.accounts.models import ExternalIdentity
+from apps.accounts.selectors import ad_identity_read_model, capability_catalog, contract_role_configs, role_risk_markers, split_user_groups
 from apps.accounts.access_contracts import CAPABILITY_GROUP_LABELS, capability_group_code, role_is_protected
 from apps.core.models import Department
 from apps.memory.policies import MEMORY_REVIEW_GROUP_CAPABILITIES, MEMORY_REVIEW_GROUP_PROFILES
 from apps.workorders.models import Board
-from apps.workorders.policies import default_board_access_applies, default_board_view_rules
 
 
 TABS = (
@@ -102,6 +103,8 @@ def workspace_context(*, query_params=None):
     if field not in FIELD_CODES.get(tab, ()):
         field = "profile" if tab == "users" else "definition" if tab == "roles" else ""
     creating_role = query_params.get("create") == "role" and tab == "roles"
+    copy_source = query_params.get("copy", "") if tab == "roles" else ""
+    copying_role = bool(copy_source and any(row["code"] == copy_source for row in role_rows))
     return {
         "tabs": [{"code": code, "label": label, "active": code == tab} for code, label in TABS],
         "active_tab": tab,
@@ -118,7 +121,7 @@ def workspace_context(*, query_params=None):
         "selected_panel": (
             "field"
             if selected and query_params.get("panel") == "field"
-            else ("inspector" if selected or creating_role else "")
+            else ("inspector" if selected or creating_role or copying_role else "")
         ),
         "standalone_target": _standalone_target(selected),
         "access_filter_state": filter_state,
@@ -127,6 +130,8 @@ def workspace_context(*, query_params=None):
         "department_filter_options": filter_options,
         "filter_query": urlencode({key: query_params.get(key) for key in ("q", "role", "department", "attention") if query_params.get(key)}),
         "creating_role": creating_role,
+        "copy_source": copy_source,
+        "copying_role": copying_role,
     }
 
 
@@ -134,7 +139,16 @@ def _user_queryset():
     return (
         get_user_model()
         .objects.select_related("department", "department__parent")
-        .prefetch_related("groups__profile", "external_identities")
+        .prefetch_related(
+            "groups__profile",
+            Prefetch(
+                "external_identities",
+                queryset=ExternalIdentity.objects.filter(
+                    provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY
+                ).order_by("pk"),
+                to_attr="ad_identities",
+            ),
+        )
         .order_by("username", "pk")
     )
 
@@ -196,19 +210,13 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
             for group in technical_groups
             if group.name in memory_names
         ]
-        identities = list(user.external_identities.all())
-        identity = identities[0] if identities else None
-        ad_label = ""
-        if identity:
-            ad_label = identity.upn or identity.username or identity.subject_id or identity.domain
+        ad = ad_identity_read_model(user)
         sections = set()
         for role_code in role_codes if user.is_active else ():
             sections.update(section_by_role.get(role_code, ()))
-        fallback = default_board_access_applies(user)
-        if fallback:
-            sections.add(SECTION_LABELS["kanban"])
         if user.is_active and user.is_superuser:
             sections.update(_section_labels(catalog))
+        effective = bool(user.is_active and (sections or user.is_superuser))
         rows.append(
             {
                 "kind": "user",
@@ -217,21 +225,26 @@ def build_user_rows(users, *, role_configs=None, catalog=None, department_paths=
                 "name": user.get_full_name() or user.username,
                 "username": user.username,
                 "email": user.email,
-                "ad": ad_label or "Не привязан",
-                "ad_identity": identity,
+                "ad": ad["display_principal"],
+                "ad_presentation": ad["presentation_label"],
+                "ad_status": ad["status_label"],
+                "ad_status_code": ad["status_code"],
+                "ad_is_linked": ad["is_linked"],
+                "ad_is_complete": ad["is_complete"],
+                "ad_identity": ad["identity"],
                 "department": user.department.name if user.department else "Без подразделения",
                 "department_full": (department_paths or {}).get(user.department_id, "Без подразделения"),
-                "role_sources": ([{"label": default_board_view_rules().get("display_name", "Базовый просмотр канбана"), "code": "default_board_viewer", "read_only": True}] if fallback else []),
+                "role_sources": [],
                 "status": {
                     "icon": "●" if user.is_active else "○",
                     "label": "Активен" if user.is_active else "Отключён",
                     "class": "is-active" if user.is_active else "is-inactive",
                 },
-                "roles": role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else []),
-                "roles_text": ", ".join(role_labels or ([default_board_view_rules().get("display_name", "Базовый просмотр канбана")] if fallback else [])),
-                "roles_effective": bool(user.is_active),
+                "roles": role_labels,
+                "roles_text": ", ".join(role_labels),
+                "roles_effective": effective,
                 "role_codes": role_codes,
-                "effective": bool(user.is_active),
+                "effective": effective,
                 "site_sections": sorted(sections),
                 "site_sections_text": ", ".join(sorted(sections)),
                 "technical_groups": technical,

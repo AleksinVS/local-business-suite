@@ -10,7 +10,7 @@
       <h1>{% if portal_user %}Карточка доступа: {{ portal_user.username }}{% elif profile_user %}Учётная запись: {{ profile_user.username }}{% else %}Новый пользователь{% endif %}</h1>
     </div>
     <div class="header-actions">
-      <a class="button-link" href="{% url 'settings_center:user_list' %}">К списку</a>
+      <a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=users">К списку</a>
       {% if portal_user and request.user.is_superuser %}<a class="button-link" href="{% url 'settings_center:user_profile_edit' portal_user.pk %}">Учётная запись</a>{% endif %}
       {% if portal_user and request.user.is_superuser %}<a class="button-link" href="{% url 'settings_center:memory_group_membership' portal_user.pk %}">Группы памяти</a>{% endif %}
     </div>
@@ -130,7 +130,7 @@
       <summary>Последние изменения доступа</summary>
       <ul>
         {% for audit in access_audits %}
-          <li>#{{ audit.pk }}, {{ audit.created_at }}: роли {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}{% if audit.flags_changed %}; флаги: {% for change in audit.flags_changed %}{{ change.label }} ({% if change.before %}вкл.{% else %}выкл.{% endif %} → {% if change.after %}вкл.{% else %}выкл.{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}; источник: {{ audit.get_source_display }}; администратор ID {{ audit.actor_id }}{% if audit.reason %}; причина: {{ audit.reason }}{% endif %}</li>
+          <li>#{{ audit.pk }}, {{ audit.created_at }}: роли {{ audit.roles_before|join:", " }} → {{ audit.roles_after|join:", " }}{% if audit.flags_changed %}; флаги: {% for change in audit.flags_changed %}{{ change.label }} ({% if change.before %}вкл.{% else %}выкл.{% endif %} → {% if change.after %}вкл.{% else %}выкл.{% endif %}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}; источник: {{ audit.get_source_display }}; администратор ID {{ audit.actor_id }}{% if audit.reason %}; комментарий: {{ audit.reason }}{% endif %}</li>
         {% empty %}<li class="muted">Изменений пока нет.</li>{% endfor %}
       </ul>
     </details>

@@ -1,0 +1,28 @@
+{
+  "task_id": "21-ad-identity-and-canonical-user-navigation",
+  "goal": "Устранить разные определения AD-связи и вторую пользовательскую витрину доступа.",
+  "owner": "gpt-5.6-luna/high under main-agent review",
+  "write_scope": [
+    "apps/accounts/selectors.py",
+    "apps/accounts/services.py",
+    "apps/accounts/ldap_backup.py",
+    "apps/accounts/tests.py",
+    "apps/settings_center/access_workspace.py",
+    "apps/settings_center/access_filters.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/**"
+  ],
+  "acceptance": [
+    "Один read model различает локальную, полную и неполную AD-связь и показывает sync-status.",
+    "Все AD-запросы ограничены provider=active_directory.",
+    "Automatic sync без SID/login/UPN не создаёт и не очищает identity.",
+    "/settings/users/ сохраняет совместимость redirect-ом в /settings/access/?view=users.",
+    "Пользователь без роли не отображается как имеющий базовый профиль.",
+    "Attention-фильтр находит incomplete/failed/stale AD и поиск учитывает DN."
+  ],
+  "tests": [
+    "make verify-fast TEST_SCOPE=apps/accounts/tests.py",
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py"
+  ]
+}

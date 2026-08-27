@@ -27,6 +27,7 @@ from .department_policy import (
     UNASSIGNED_USER_DEPARTMENT_NAME,
 )
 from .selectors import (
+    ad_identity_read_model,
     effective_access_for_user,
     effective_capabilities_for_roles,
     role_risk_markers,
@@ -129,6 +130,52 @@ class LDAPAuthConfigTests(TestCase):
         self.assertEqual(identity.sync_status, ExternalIdentity.SyncStatus.VERIFIED)
         self.assertNotIn("unicodePwd", identity.attributes)
         self.assertEqual(scope_tokens_for_principal(sid="S-1-5-21-linked"), {f"user:{user.id}"})
+
+    def test_ad_read_model_distinguishes_local_and_incomplete_links(self):
+        local = get_user_model().objects.create_user(username="local-read-model")
+        self.assertFalse(ad_identity_read_model(local)["is_linked"])
+        self.assertEqual(ad_identity_read_model(local)["presentation_label"], "Локальная учётная запись")
+        ExternalIdentity.objects.create(
+            user=local,
+            provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            distinguished_name="CN=Local,DC=example,DC=test",
+        )
+        model = ad_identity_read_model(local)
+        self.assertTrue(model["is_linked"])
+        self.assertFalse(model["is_complete"])
+        self.assertEqual(model["status_code"], "incomplete")
+        self.assertEqual(model["status_label"], "Неполная AD-связь")
+        self.assertNotIn("Проверено", model["presentation_label"])
+        self.assertIn("Неполная AD-связь", model["presentation_label"])
+
+    def test_automatic_sync_with_empty_principal_does_not_create_identity(self):
+        user = get_user_model().objects.create_user(username="ad-profile-only")
+        self.assertIsNone(
+            upsert_ad_identity_from_attributes(
+                user=user,
+                attributes={"displayName": "Только профиль"},
+                audit_callback=record_external_directory_sync_audit,
+            )
+        )
+        self.assertFalse(ExternalIdentity.objects.filter(user=user).exists())
+
+    def test_automatic_sync_with_empty_principal_preserves_existing_identity(self):
+        user = get_user_model().objects.create_user(username="ad-existing")
+        identity = ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            subject_id="S-1-5-21-known",
+            username="known",
+            upn="known@example.test",
+        )
+        upsert_ad_identity_from_attributes(
+            user=user,
+            attributes={"displayName": "Профиль"},
+            audit_callback=record_external_directory_sync_audit,
+        )
+        identity.refresh_from_db()
+        self.assertEqual(identity.subject_id, "S-1-5-21-known")
+        self.assertEqual(identity.upn, "known@example.test")
 
     @override_settings(ACCOUNTS_AD_LINK_ENABLED=True, ACCOUNTS_AD_LINK_MODE="manual")
     def test_manual_ad_sync_updates_profile_without_overwriting_identity(self):
@@ -752,7 +799,7 @@ class AccessAssignmentServiceTests(TestCase):
             reason="Восстановление доступа после отказа продуктовой страницы",
         )
 
-        with self.assertRaisesMessage(ValidationError, "причина изменились"):
+        with self.assertRaisesMessage(ValidationError, "комментарий изменились"):
             apply_role_assignment(
                 actor=root,
                 target_user=self.target,

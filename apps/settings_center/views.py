@@ -20,12 +20,12 @@ from apps.accounts.access_contracts import (
     role_catalog_rows,
     role_definition_read_model,
     save_role_creation,
+    save_role_copy,
     save_role_definition_change,
 )
 from apps.accounts.selectors import (
     effective_access_for_user,
     split_user_groups,
-    user_access_overview,
 )
 from apps.accounts.services import (
     create_local_user,
@@ -71,6 +71,7 @@ from .forms import (
     DefaultNewUserRoleForm,
     RoleDefinitionForm,
     RoleCreateForm,
+    RoleCopyForm,
     RoleDescriptionForm,
 )
 from .help_services import answer_help_question, initial_help_text
@@ -172,10 +173,15 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(workspace_context(query_params=self.request.GET))
+        context["global_panel"] = self._hx_target(self.request) == "#global-right-panel-content"
         if context.get("creating_role"):
             context["field_form"] = RoleCreateForm(
                 actor=self.request.user,
                 initial={"base_hash": self._role_contract_hash()},
+            )
+        elif context.get("copying_role"):
+            context["field_form"] = RoleCopyForm(
+                role_read_model=role_definition_read_model(context["copy_source"]),
             )
         else:
             context["field_form"] = self._build_editor_form(self.request, context)
@@ -193,6 +199,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 return self._post_default_new_user_role(request)
             if action == "create_role":
                 return self._post_role_create(request)
+            if action == "copy_role":
+                return self._post_role_copy(request)
             selected = state["selected"]
             if not selected:
                 raise ValidationError("Выберите объект доступа.")
@@ -304,6 +312,50 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         if target == "#global-right-panel-content":
             state["global_panel"] = True
         return self._render_hx_panel(state, target, applied=True)
+
+    def _post_role_copy(self, request):
+        source_code = request.POST.get("source_role_code", "")
+        try:
+            source_model = role_definition_read_model(source_code)
+        except ValidationError as exc:
+            source_model = {"code": source_code, "label": source_code, "description": "", "base_hash": request.POST.get("base_hash", "")}
+            form = RoleCopyForm(request.POST, role_read_model=source_model)
+            form.add_error(None, exc)
+        else:
+            form = RoleCopyForm(request.POST, role_read_model=source_model)
+        global_panel = self._hx_target(request) == "#global-right-panel-content"
+        if form.is_valid():
+            try:
+                change = save_role_copy(
+                    actor=request.user,
+                    source_role_code=form.cleaned_data["source_role_code"],
+                    target_role_code=form.cleaned_data["code"],
+                    display_name=form.cleaned_data["display_name"],
+                    description=form.cleaned_data["description"],
+                    base_hash=form.cleaned_data["base_hash"],
+                )
+            except (PermissionDenied, ValidationError) as exc:
+                form.add_error(None, exc)
+            else:
+                role_code = form.cleaned_data["code"]
+                messages.success(request, f"Роль скопирована. Аудит #{change.pk}.")
+                if not self._is_htmx(request):
+                    return redirect(self._workspace_url("roles", role_code, "definition", request=request))
+                params = self._post_workspace_params(request)
+                params.update({"view": "roles", "object": role_code, "field": "definition", "panel": "inspector", "copy": ""})
+                state = workspace_context(query_params=params)
+                state["field_form"] = self._build_editor_form(request, state, use_post=False)
+                state["inline_messages"] = list(get_messages(request))
+                state["refresh_table"] = True
+                target = self._hx_target(request)
+                if not target:
+                    return HttpResponseBadRequest("Unknown HTMX target.")
+                if target == "#global-right-panel-content":
+                    state["global_panel"] = True
+                return self._render_hx_panel(state, target, applied=True)
+        state = workspace_context(query_params=self._post_workspace_params(request))
+        state.update({"copying_role": True, "copy_source": source_code, "selected_panel": "inspector", "field_form": form, "global_panel": global_panel})
+        return self._response_for_editor(request, state)
 
     def _post_user_bundle(self, request, selected):
         user = selected["user"]
@@ -599,6 +651,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             if value:
                 params[name] = value
         params["create"] = request.POST.get("create", "")
+        params["copy"] = request.POST.get("copy", "")
         return params
 
     @staticmethod
@@ -1093,47 +1146,17 @@ class HelpAskView(SettingsManagementMixin, View):
         )
 
 
-class UserListView(UserManagementMixin, ListView):
-    model = get_user_model()
-    template_name = "settings_center/user_list.html"
-    context_object_name = "portal_users"
-    paginate_by = 50
+class UserListView(UserManagementMixin, View):
+    """Compatibility route; the workspace is the only user list surface."""
 
-    def get_queryset(self):
-        from .access_filters import filter_user_queryset
+    def get(self, request, *args, **kwargs):
+        from urllib.parse import urlencode
 
-        queryset = self.model.objects.select_related("department__parent").prefetch_related(
-            "groups__profile", "external_identities"
-        ).order_by("username")
-        queryset, self.access_filter_state = filter_user_queryset(queryset, self.request.GET)
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        from .access_filters import ATTENTION_VALUE, user_filter_options
-
-        context = super().get_context_data(**kwargs)
-        for portal_user in context["portal_users"]:
-            role_groups, technical_groups = split_user_groups(portal_user)
-            portal_user.access_overview = user_access_overview(portal_user)
-            portal_user.access_overview["roles"] = [
-                getattr(getattr(group, "profile", None), "title", "") or group.name
-                for group in role_groups
-            ]
-            portal_user.access_overview["has_technical_groups"] = bool(technical_groups)
-        filter_options = user_filter_options()
-        query_params = self.request.GET.copy()
-        query_params.pop("page", None)
-        context.update(
-            {
-                "access_filter_state": self.access_filter_state,
-                "attention_value": ATTENTION_VALUE,
-                "role_filter_options": filter_options["roles"],
-                "department_filter_options": filter_options["departments"],
-                "pagination_query": query_params.urlencode(),
-                "can_manage_board_access": can_manage_board_access(self.request.user),
-            }
-        )
-        return context
+        params = {"view": "users"}
+        for name in ("q", "role", "department", "attention"):
+            if request.GET.get(name):
+                params[name] = request.GET.get(name)
+        return redirect(f"{reverse('settings_center:access_workspace')}?{urlencode(params)}")
 
 
 class MemoryGroupMembershipView(SuperuserUserManagementMixin, TemplateView):
@@ -1201,7 +1224,7 @@ class UserCreateView(SuperuserUserManagementMixin, CreateView):
     template_name = "settings_center/user_form.html"
 
     def get_success_url(self):
-        return f"{reverse('settings_center:user_edit', kwargs={'pk': self.object.pk})}?focus=assign#assign"
+        return f"{reverse('settings_center:access_workspace')}?view=users&object={self.object.pk}&field=roles&panel=inspector"
 
     def form_valid(self, form):
         descriptor = get_registry().get("accounts.users.local_management")
@@ -1283,7 +1306,7 @@ class UserProfileUpdateView(SuperuserUserManagementMixin, UpdateView):
     form_class = PortalUserProfileUpdateForm
     template_name = "settings_center/user_form.html"
     context_object_name = "profile_user"
-    success_url = reverse_lazy("settings_center:user_list")
+    success_url = reverse_lazy("settings_center:access_workspace")
 
     def form_valid(self, form):
         password_changed = bool(form.cleaned_data.get("password"))
@@ -1338,9 +1361,9 @@ class UserDisableView(SuperuserUserManagementMixin, View):
             )
         except ValidationError as exc:
             messages.error(request, str(exc))
-            return redirect("settings_center:user_list")
+            return redirect(f"{reverse('settings_center:access_workspace')}?view=users")
         messages.success(request, "Пользователь отключен.")
-        return redirect("settings_center:user_list")
+        return redirect(f"{reverse('settings_center:access_workspace')}?view=users")
 
 
 class UserADLinkView(SuperuserUserManagementMixin, FormView):
@@ -1352,11 +1375,14 @@ class UserADLinkView(SuperuserUserManagementMixin, FormView):
             return super().dispatch(request, *args, **kwargs)
         User = get_user_model()
         self.portal_user = get_object_or_404(User, pk=kwargs["pk"])
-        self.identity = ExternalIdentity.objects.filter(user=self.portal_user).first()
+        self.identity = ExternalIdentity.objects.filter(
+            user=self.portal_user,
+            provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+        ).order_by("pk").first()
         return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
-        return reverse("settings_center:user_list")
+        return f"{reverse('settings_center:access_workspace')}?view=users&object={self.portal_user.pk}&field=ad&panel=inspector"
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()

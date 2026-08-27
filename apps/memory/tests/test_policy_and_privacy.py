@@ -74,13 +74,11 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
             actor=actor,
             target_user=target,
             selected_group_names=["memory_auditor"],
-            reason="Передача обязанностей ревью.",
         )
         target, audit = apply_memory_group_membership(
             actor=actor,
             target_user=target,
             selected_group_names=["memory_auditor"],
-            reason="Передача обязанностей ревью.",
             preview_token=preview["preview_token"],
             confirmed=True,
         )
@@ -91,6 +89,7 @@ class MemoryPolicyAndAuditTests(MemoryModelFactoryMixin, TestCase):
         )
         self.assertEqual(audit.groups_added, ["memory_auditor"])
         self.assertEqual(audit.groups_removed, ["memory_observer"])
+        self.assertEqual(audit.reason, "")
         self.assertEqual(MemoryGroupMembershipAudit.objects.count(), 1)
 
     def test_memory_group_membership_rejects_non_superuser_and_stale_target(self):

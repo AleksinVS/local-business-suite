@@ -37,7 +37,7 @@ def memory_group_choices():
     ]
 
 
-def preview_memory_group_membership(*, actor, target_user, selected_group_names, reason):
+def preview_memory_group_membership(*, actor, target_user, selected_group_names, reason=""):
     actor = _current_memory_group_editor(actor)
     target = get_user_model().objects.get(pk=target_user.pk)
     after = _validate_memory_groups(selected_group_names)
@@ -67,7 +67,7 @@ def preview_memory_group_membership(*, actor, target_user, selected_group_names,
 
 
 def apply_memory_group_membership(
-    *, actor, target_user, selected_group_names, reason, preview_token, confirmed
+    *, actor, target_user, selected_group_names, reason="", preview_token, confirmed
 ):
     try:
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
@@ -84,7 +84,7 @@ def apply_memory_group_membership(
 
 
 def save_memory_group_membership(
-    *, actor, target_user, selected_group_names, reason
+    *, actor, target_user, selected_group_names, reason=""
 ):
     """Атомарно сохранить технические группы одной web-командой."""
 
@@ -179,10 +179,8 @@ def _validate_memory_groups(group_names):
 
 def _validate_reason(reason):
     reason = str(reason or "").strip()
-    if not reason:
-        raise ValidationError("Укажите причину изменения технических полномочий памяти.")
     if len(reason) > 1000:
-        raise ValidationError("Причина не должна превышать 1000 символов.")
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     return reason
 
 

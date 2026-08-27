@@ -1,0 +1,18 @@
+{
+  "task_id": "24-luna-xhigh-critique-and-acceptance",
+  "goal": "Независимо проверить UX, безопасность и полноту реализации, затем исправить подтверждённые дефекты.",
+  "owner": "Luna xhigh critic -> Luna high correction -> main-agent acceptance",
+  "read_scope": [
+    "apps/accounts/**",
+    "apps/settings_center/**",
+    "apps/workorders/services.py",
+    "templates/settings_center/**",
+    "docs/adr/ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md"
+  ],
+  "acceptance": [
+    "Критик не меняет код и выдаёт severity/file:line/сценарий.",
+    "Подтверждённые дефекты исправляет Luna high в явном write scope.",
+    "Основной агент воспроизводит существенные замечания и запускает unit/integration/contracts/e2e.",
+    "Итоговые executor/acceptance reports добавлены в workflow."
+  ]
+}

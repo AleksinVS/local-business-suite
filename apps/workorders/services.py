@@ -16,7 +16,6 @@ from apps.core.file_locks import (
     access_control_write_lock_path,
     exclusive_file_lock,
 )
-from apps.accounts.selectors import contract_role_names
 from apps.core.models import Department
 from apps.inventory.models import MedicalDevice
 
@@ -84,8 +83,6 @@ def preview_board_access(
         removed=removed,
         source=source,
     )
-    if risk_markers and not reason:
-        raise ValidationError("Для изменения доступа к доске укажите причину.")
     impact = _board_access_impact(before=before, after=after)
     population_fingerprint = _board_access_population_fingerprint(before=before, after=after)
     role_contract_hash = current_contract_hash("role_rules")
@@ -205,7 +202,7 @@ def _apply_board_access_locked(
         reason=reason,
     )
     if signed_preview.get("source") != source or signed_preview.get("reason") != reason:
-        raise ValidationError("Источник или причина изменились после предпросмотра.")
+        raise ValidationError("Источник или комментарий изменились после предпросмотра.")
     role_contract_hash = current_contract_hash("role_rules")
     _require_role_contract_healthy()
     if signed_preview.get("role_contract_hash") != role_contract_hash:
@@ -384,7 +381,7 @@ def _validate_board_access_context(*, actor, source, reason):
         raise ValidationError("Неизвестный источник изменения доступа к доске.")
     reason = str(reason or "").strip()
     if len(reason) > 1000:
-        raise ValidationError("Причина не должна превышать 1000 символов.")
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     if source == BoardAccessAudit.Source.DJANGO_ADMIN_BREAK_GLASS:
         if not actor.is_active or not actor.is_superuser:
             raise PermissionDenied("Резервное изменение доступно только активному суперпользователю.")
@@ -473,15 +470,6 @@ def _board_access_user_ids(group_names):
         .values_list("pk", flat=True)
         .distinct()
     )
-    # Пользователь без предметной роли использует базовый профиль customer.
-    if "customer" in group_names:
-        fallback_ids = (
-            user_model.objects.filter(is_active=True, is_superuser=False)
-            .exclude(groups__name__in=contract_role_names())
-            .values_list("pk", flat=True)
-            .distinct()
-        )
-        user_ids.update(fallback_ids)
     return user_ids
 
 

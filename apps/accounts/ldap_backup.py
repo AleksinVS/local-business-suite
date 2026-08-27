@@ -216,19 +216,19 @@ class _ConnectionContext:
 
 def sync_user_from_ad(user, attributes, group_role_map):
     from django.conf import settings
-    from apps.core.models import Department
-    from apps.accounts.services import upsert_ad_identity_from_attributes
+    from apps.accounts.services import sync_external_user_from_attributes
+    from apps.accounts.ldap_backend import record_external_directory_sync_audit
 
-    # Sync email
+    profile_updates = {}
     email = attributes.get("mail")
     email_domain = getattr(settings, "AD_EMAIL_DOMAIN_OVERRIDE", None)
 
     if email:
-        user.email = email
+        profile_updates["email"] = email
     elif email_domain:
         sam_account_name = attributes.get("sAMAccountName", "")
         if sam_account_name:
-            user.email = f"{sam_account_name}{email_domain}"
+            profile_updates["email"] = f"{sam_account_name}{email_domain}"
 
     # Sync organizational structure (OU and Department)
     # Host-specific OU synchronization belongs in a deployment silo.
@@ -258,18 +258,26 @@ def sync_user_from_ad(user, attributes, group_role_map):
     surname = attributes.get("sn", "")
 
     if given_name or surname:
-        user.first_name = given_name
-        user.last_name = surname
+        profile_updates["first_name"] = given_name
+        profile_updates["last_name"] = surname
     elif display_name:
-        user.first_name = display_name
+        profile_updates["first_name"] = display_name
 
-    user.save()
-    upsert_ad_identity_from_attributes(
+    synced_user = sync_external_user_from_attributes(
         user=user,
+        profile_updates=profile_updates,
         attributes=attributes,
         domain=getattr(settings, "AD_LDAP_DOMAIN", ""),
+        sync_identity=bool(
+            getattr(settings, "ACCOUNTS_AD_LINK_ENABLED", True)
+            and getattr(settings, "ACCOUNTS_AD_LINK_MODE", "manual") == "automatic"
+        ),
+        audit_callback=record_external_directory_sync_audit,
     )
-    sync_user_groups(user, attributes.get("memberOf", []), group_role_map)
+    if not synced_user.is_active:
+        return synced_user
+    sync_user_groups(synced_user, attributes.get("memberOf", []), group_role_map)
+    return synced_user
 
 
 def _extract_ou_from_dn(dn):

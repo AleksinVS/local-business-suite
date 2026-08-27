@@ -34,15 +34,21 @@ def filter_user_queryset(queryset, params):
 
     if state.query:
         for term in state.query.split():
+            ad_identity_match = Q(
+                external_identities__provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY
+            ) & (
+                Q(external_identities__username__icontains=term)
+                | Q(external_identities__upn__icontains=term)
+                | Q(external_identities__domain__icontains=term)
+                | Q(external_identities__subject_id__icontains=term)
+                | Q(external_identities__distinguished_name__icontains=term)
+            )
             queryset = queryset.filter(
                 Q(username__icontains=term)
                 | Q(first_name__icontains=term)
                 | Q(last_name__icontains=term)
                 | Q(email__icontains=term)
-                | Q(external_identities__username__icontains=term)
-                | Q(external_identities__upn__icontains=term)
-                | Q(external_identities__domain__icontains=term)
-                | Q(external_identities__subject_id__icontains=term)
+                | ad_identity_match
             )
 
     if state.role and state.role in role_configs:
@@ -111,10 +117,19 @@ def _attention_query() -> Q:
         unassigned_department
         | Q(_has_contract_role=False)
         | Q(is_active=False, _has_any_group=True)
-        | Q(external_identities__sync_status__in=(
-            ExternalIdentity.SyncStatus.FAILED,
-            ExternalIdentity.SyncStatus.STALE,
-        ))
+        | Q(
+            external_identities__provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            external_identities__sync_status__in=(
+                ExternalIdentity.SyncStatus.FAILED,
+                ExternalIdentity.SyncStatus.STALE,
+            ),
+        )
+        | Q(
+            external_identities__provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            external_identities__subject_id="",
+            external_identities__username="",
+            external_identities__upn="",
+        )
         | Q(is_staff=True)
         | Q(is_superuser=True)
     )

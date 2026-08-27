@@ -10,7 +10,7 @@
       <h1>Роли доступа</h1>
       <p class="description">Откройте одну роль, проверьте влияние и примените точечное изменение.</p>
     </div>
-    <a class="button-link" href="{% url 'settings_center:user_list' %}">К сотрудникам</a>
+    <a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=users">К сотрудникам</a>
   </div>
 
   <div class="table-container access-table-scroll" tabindex="0" role="region" aria-label="Каталог ролей доступа">
@@ -28,7 +28,7 @@
               {% else %}Обычный{% endif %}
             </td>
             <td>{{ role.member_count }}</td>
-            <td><a class="button-link" href="{% url 'settings_center:role_definition' role.code %}">Открыть</a></td>
+            <td>{% if not role.protected or request.user.is_superuser %}<a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=roles&amp;copy={{ role.code }}&amp;panel=inspector">Копировать</a> {% endif %}<a class="button-link" href="{% url 'settings_center:role_definition' role.code %}">Открыть</a></td>
           </tr>
         {% endfor %}
       </tbody>

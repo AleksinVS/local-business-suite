@@ -4,10 +4,74 @@ import json
 from collections import OrderedDict
 
 from apps.core.contract_store import get_contract
+from .models import ExternalIdentity
 
 
 RISK_LABELS = {"elevated": "повышенный риск", "critical": "критический риск"}
 ROLE_METADATA_FIELDS = {"display_name", "description", "protected"}
+
+
+def ad_identity_read_model(user):
+    """Return one deterministic, provider-scoped AD presentation model.
+
+    The model is intentionally shared by the workspace and standalone views:
+    an existing row with no principal is an incomplete link, not a local user.
+    """
+    identities = getattr(user, "ad_identities", None)
+    if identities is None:
+        prefetched = getattr(user, "_prefetched_objects_cache", {}).get("external_identities")
+        if prefetched is not None:
+            identities = [
+                identity for identity in prefetched
+                if identity.provider == ExternalIdentity.Provider.ACTIVE_DIRECTORY
+            ]
+        else:
+            identities = ExternalIdentity.objects.filter(
+                user=user,
+                provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+            ).order_by("pk")
+    identity = sorted(list(identities), key=lambda item: item.pk)[0] if identities else None
+    if identity is None:
+        return {
+            "identity": None,
+            "is_linked": False,
+            "is_complete": False,
+            "display_principal": "",
+            "status_code": "not_linked",
+            "status_label": "Не привязана",
+            "presentation_label": "Локальная учётная запись",
+        }
+    values = {
+        key: str(getattr(identity, key, "") or "").strip()
+        for key in ("subject_id", "username", "upn", "domain", "distinguished_name")
+    }
+    principal = next(
+        (values[key] for key in ("upn", "username", "subject_id", "domain", "distinguished_name") if values[key]),
+        "",
+    )
+    is_complete = any(values[key] for key in ("subject_id", "username", "upn"))
+    raw_status_code = str(getattr(identity, "sync_status", "") or "unknown")
+    raw_status_label = identity.get_sync_status_display() if hasattr(identity, "get_sync_status_display") else raw_status_code
+    display_principal = principal or "Неполная AD-связь"
+    status_code = raw_status_code if is_complete else "incomplete"
+    status_label = raw_status_label if is_complete else "Неполная AD-связь"
+    incomplete_suffix = f" · {principal}" if principal else ""
+    presentation_label = (
+        f"AD: {display_principal} · {status_label}"
+        if is_complete
+        else f"AD: Неполная AD-связь{incomplete_suffix}"
+    )
+    return {
+        "identity": identity,
+        "is_linked": True,
+        "is_complete": is_complete,
+        "display_principal": display_principal,
+        "status_code": status_code,
+        "status_label": status_label,
+        "raw_status_code": raw_status_code,
+        "raw_status_label": raw_status_label,
+        "presentation_label": presentation_label,
+    }
 
 
 def contract_role_configs() -> OrderedDict[str, dict]:

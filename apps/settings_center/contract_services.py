@@ -35,7 +35,7 @@ def read_contract_value(descriptor):
     return load_json_file(path)
 
 
-def save_default_new_user_role(*, actor, role_name, reason, base_hash):
+def save_default_new_user_role(*, actor, role_name, base_hash, reason=""):
     """Атомарно изменить только роль, назначаемую новым пользователям."""
 
     current_actor = get_user_model().objects.filter(pk=getattr(actor, "pk", None)).first()
@@ -45,8 +45,8 @@ def save_default_new_user_role(*, actor, role_name, reason, base_hash):
         )
     role_name = str(role_name or "").strip()
     reason = str(reason or "").strip()
-    if not reason:
-        raise ValidationError("Укажите причину изменения роли новых пользователей.")
+    if len(reason) > 1000:
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     descriptor = get_registry().get("core.contract.role_rules")
     before = read_contract_value(descriptor)
     if normalized_hash(before) != str(base_hash or "").removeprefix("sha256:"):

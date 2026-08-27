@@ -37,5 +37,11 @@
   "TASK_ACCEPTANCE.access-save-liveness.md": "Приёмка разделения блокировок и защиты HTMX от бесконечной загрузки",
   "EXECUTOR_REPORT.20-direct-save-access-administration.md": "Отчёт реализации одного Save в продуктовых редакторах доступа",
   "TASK_ACCEPTANCE.20-direct-save-access-administration.md": "Техническая и визуальная приёмка прямого сохранения доступа",
+  "EXECUTOR_REPORT.21-23-ad-role-copy-hierarchy.md": "Отчёт единого AD-состояния, копирования роли и архитектуры иерархии",
+  "TASK_ACCEPTANCE.21-24-ad-role-copy.md": "Приёмка пакетов 21–24 после Luna xhigh-критики и исправлений",
+  "task-packets/21-ad-identity-and-canonical-user-navigation.json": "Пакет единого AD-состояния и канонической навигации пользователей",
+  "task-packets/22-flat-role-copy.json": "Пакет безопасного копирования плоской роли",
+  "task-packets/23-role-hierarchy-architecture.json": "Архитектурный пакет ограниченной аддитивной иерархии ролей",
+  "task-packets/24-luna-xhigh-critique-and-acceptance.json": "Пакет независимой Luna xhigh-критики, исправлений и приёмки",
   "RETROSPECTIVE.md": "Ретроспектива пакетов безопасности и предметных границ 14–18"
 }

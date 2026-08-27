@@ -11,7 +11,6 @@
   "memory_group_membership_form.html": "Экспертный superuser-only preview/apply технических групп памяти с причиной и историей",
   "env_status.html": "Статус bootstrap .env настроек",
   "env_proposal.html": "Форма создания .env proposal в data/",
-  "user_list.html": "Совместимый standalone-список пользователей портала",
   "access_workspace.html": "Каноническое единое окно с six access tabs, таблицами и master-detail инспектором",
   "user_form.html": "Создание пользователя, отдельное изменение учётной записи и карточка доступа",
   "ad_link_form.html": "Форма явной привязки локального пользователя к AD identity",

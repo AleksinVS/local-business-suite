@@ -26,7 +26,11 @@
     "17-administration-and-memory-boundaries",
     "18-security-e2e-docs-acceptance",
     "19-access-save-liveness",
-    "20-direct-save-access-administration"
+    "20-direct-save-access-administration",
+    "21-ad-identity-and-canonical-user-navigation",
+    "22-flat-role-copy",
+    "23-role-hierarchy-architecture",
+    "24-luna-xhigh-critique-and-acceptance"
   ],
   "constraints": [
     "Серверная policy, а не видимость элемента UI, определяет доступ.",
@@ -62,6 +66,10 @@
     "17-administration-and-memory-boundaries": "основной агент/Sol high из-за settings, privilege ceiling и memory scopes; Luna только по точным пакетам",
     "18-security-e2e-docs-acceptance": "основной агент принимает; Luna выполняет браузерную и ролевую матрицу; независимый Sol high review обязателен",
     "19-access-save-liveness": "основной агент/Sol high контролирует lock и timeout; Luna проверяет HTMX/браузерную отзывчивость",
-    "20-direct-save-access-administration": "основной агент контролирует границы доменных save-сервисов; Luna обновляет product web views/forms/templates/JS и узкие Django/Playwright проверки; Admin, AI и generic runtime settings остаются вне миграции"
+    "20-direct-save-access-administration": "основной агент контролирует границы доменных save-сервисов; Luna обновляет product web views/forms/templates/JS и узкие Django/Playwright проверки; Admin, AI и generic runtime settings остаются вне миграции",
+    "21-ad-identity-and-canonical-user-navigation": "gpt-5.6-luna/high реализует единый read model, redirect-совместимость и тесты; основной агент проверяет identity ownership и автоматическую синхронизацию",
+    "22-flat-role-copy": "gpt-5.6-luna/high реализует форму, сервис, UI и тесты по архитектуре основного агента/Sol high; security-приемка остаётся у основного агента",
+    "23-role-hierarchy-architecture": "основной агент и gpt-5.6-sol/high; только ADR/план, runtime-код не меняется",
+    "24-luna-xhigh-critique-and-acceptance": "gpt-5.6-luna/xhigh выполняет независимую UX/security-критику без write scope, затем gpt-5.6-luna/high исправляет подтверждённые дефекты; финальная приемка и e2e у основного агента"
   }
 }

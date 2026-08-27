@@ -13,7 +13,8 @@
       <p class="access-role-protection-note"><strong>{% if role.protected %}Защищённая роль{% else %}Обычная роль{% endif %}</strong>{% if role.protected %}: изменение и назначение доступны только активному суперпользователю.{% else %}: назначение выполняется через предметный сервис доступа.{% endif %}</p>
       <p class="muted">Назначено сотрудникам: {{ role.member_count }}</p>
     </div>
-    <a class="button-link" href="{% url 'settings_center:user_list' %}?role={{ role.code }}">Сотрудники этой роли</a>
+    <a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=roles&amp;copy={{ role.code }}&amp;panel=inspector">Копировать роль</a>
+    <a class="button-link" href="{% url 'settings_center:access_workspace' %}?view=users&amp;role={{ role.code }}">Сотрудники этой роли</a>
   </div>
 
   <form method="post" class="role-definition-form" data-role-definition-form data-access-dirty="false">
@@ -26,7 +27,7 @@
         <div class="role-capability-meta">
           <div class="access-form-field">{{ form.display_name.label_tag }}{{ form.display_name }}{{ form.display_name.errors }}</div>
           <div class="access-form-field role-description-compact">{{ form.description.label_tag }}{{ form.description }}{{ form.description.errors }}</div>
-          <a class="access-inspector-field-link" href="{% url 'settings_center:user_list' %}?role={{ role.code }}">Сотрудники этой роли: {{ role.member_count }}</a>
+          <a class="access-inspector-field-link" href="{% url 'settings_center:access_workspace' %}?view=users&amp;role={{ role.code }}">Сотрудники этой роли: {{ role.member_count }}</a>
         </div>
         <div class="role-capability-tablist" aria-label="Группы прав роли" role="tablist">
           {% for group in form.capability_groups %}<button type="button" class="role-capability-tab" id="standalone-role-tab-{{ group.code }}" role="tab" data-role-editor-tab="{{ group.code }}" aria-selected="{% if form.active_group.value == group.code %}true{% else %}false{% endif %}" aria-controls="standalone-role-panel-{{ group.code }}">{{ group.label }}</button>{% endfor %}

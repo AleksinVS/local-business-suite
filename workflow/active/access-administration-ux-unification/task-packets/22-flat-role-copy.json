@@ -1,0 +1,25 @@
+{
+  "task_id": "22-flat-role-copy",
+  "goal": "Добавить безопасное копирование плоской роли в каноническом workspace.",
+  "owner": "gpt-5.6-luna/high after main/Sol architecture",
+  "write_scope": [
+    "apps/accounts/access_contracts.py",
+    "apps/settings_center/forms.py",
+    "apps/settings_center/views.py",
+    "apps/settings_center/tests.py",
+    "templates/settings_center/partials/access_workspace/**",
+    "apps/settings_center/management/commands/access_administration_e2e.py"
+  ],
+  "acceptance": [
+    "Копируются все значения возможностей и метаданные в новый независимый role code.",
+    "Пользователи, Board ACL и другие назначения не копируются.",
+    "Операция повторно проверяет actor/source/target/hash под существующим lock.",
+    "Защищённую копию может создать только active superuser.",
+    "Создаются отдельные Group/GroupProfile и SettingsChange с source_role/target_role.",
+    "После успеха workspace открывает редактор новой роли."
+  ],
+  "tests": [
+    "make verify-fast TEST_SCOPE=apps/settings_center/tests.py",
+    "python manage.py access_administration_e2e"
+  ]
+}

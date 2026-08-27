@@ -1,4 +1,4 @@
-<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="#access-inspector-host" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
+<form class="access-context-form access-user-bundle-form" method="post" action="{% url 'settings_center:access_workspace' %}" hx-post="{% url 'settings_center:access_workspace' %}" hx-target="{% if global_panel %}#global-right-panel-content{% else %}#access-inspector-host{% endif %}" hx-swap="innerHTML" hx-request='{"timeout":15000}' hx-sync="this:drop" hx-disabled-elt="find button[type='submit']" data-access-bundle-form data-access-dirty="{% if field_form.errors or editor_error %}true{% else %}false{% endif %}">
   {% csrf_token %}
   <input type="hidden" name="view" value="users">
   <input type="hidden" name="object" value="{{ selected.object }}">
@@ -20,7 +20,7 @@
       {% endif %}{% endfor %}
       <dl class="access-user-editor-links">
         <dt>Подразделение</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="department">{{ selected.department|default:'Не указано' }}</button></dd>
-        <dt>AD</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="ad">{{ selected.ad|default:'Не связана' }}</button></dd>
+        <dt>AD</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="ad">{{ selected.ad_presentation }}</button></dd>
         <dt>Роли</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="roles">{{ selected.roles|join:', '|default:'Нет явных ролей' }}</button></dd>
         <dt>Группы памяти</dt><dd><button type="button" class="access-inspector-field-link" data-editor-target="memory-groups">{% for group in selected.memory_groups %}{{ group.label }}{% if not forloop.last %}, {% endif %}{% empty %}Нет групп{% endfor %}</button></dd>
         <dt>Разделы сайта</dt><dd class="muted">{% for section in selected.site_sections %}{{ section }}{% if not forloop.last %}, {% endif %}{% empty %}Нет разделов{% endfor %}</dd>

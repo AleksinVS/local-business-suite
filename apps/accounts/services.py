@@ -447,7 +447,7 @@ def _apply_role_membership_change_locked(
     if signed.get("member_ids_after") != selected_ids:
         raise ValidationError("Состав роли изменён после предпросмотра.")
     if signed.get("reason") != reason:
-        raise ValidationError("Причина изменена после предпросмотра.")
+        raise ValidationError("Комментарий изменён после предпросмотра.")
 
     User = get_user_model()
     locked_actor = User.objects.select_for_update().get(pk=actor.pk)
@@ -675,7 +675,7 @@ def _apply_user_profile_change_locked(
     if signed.get("proposed_hash") != _private_state_hash("user-profile-after", proposed):
         raise ValidationError("Данные пользователя изменились после предпросмотра.")
     if signed.get("reason_hash") != _private_state_hash("user-profile-reason", reason):
-        raise ValidationError("Причина изменена после предпросмотра.")
+        raise ValidationError("Комментарий изменён после предпросмотра.")
 
     def locked_precondition(locked_actor, locked_user, _before_access):
         if signed.get("actor_state") != _actor_access_state(locked_actor):
@@ -704,6 +704,8 @@ def preview_external_identity_change(*, actor, target_user, cleaned_data, reason
     _require_superuser(current_actor)
     target = get_user_model().objects.get(pk=target_user.pk)
     proposed = _normalized_external_identity_change(cleaned_data)
+    if proposed.get("provider") != ExternalIdentity.Provider.ACTIVE_DIRECTORY:
+        raise ValidationError("Поддерживается только связь с Active Directory.")
     reason = _normalize_account_data_reason(reason)
     identity = ExternalIdentity.objects.filter(
         user=target,
@@ -795,7 +797,7 @@ def _apply_external_identity_change_locked(
     ):
         raise ValidationError("Данные связи с AD изменились после предпросмотра.")
     if signed.get("reason_hash") != _private_state_hash("external-identity-reason", reason):
-        raise ValidationError("Причина изменена после предпросмотра.")
+        raise ValidationError("Комментарий изменён после предпросмотра.")
 
     def locked_precondition(locked_actor, locked_user, identity):
         if signed.get("actor_state") != _actor_access_state(locked_actor):
@@ -844,7 +846,7 @@ def _apply_role_assignment_locked(
         reason=reason,
     )
     if signed_preview.get("source") != source or signed_preview.get("reason") != reason:
-        raise ValidationError("Источник или причина изменились после предпросмотра.")
+        raise ValidationError("Источник или комментарий изменились после предпросмотра.")
     if signed_preview.get("is_break_glass") is not is_break_glass:
         raise ValidationError("Контекст резервного изменения не совпадает с предпросмотром.")
     if signed_preview.get("actor_state") != _actor_access_state(locked_actor):
@@ -980,7 +982,7 @@ def _validate_assignment_context(*, actor, source, reason):
         raise ValidationError("Неизвестный источник изменения доступа.")
     normalized_reason = str(reason or "").strip()
     if len(normalized_reason) > 1000:
-        raise ValidationError("Причина изменения доступа не должна превышать 1000 символов.")
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     is_break_glass = source == AccessAssignmentAudit.Source.DJANGO_ADMIN_BREAK_GLASS
     if source in {AccessAssignmentAudit.Source.AI, AccessAssignmentAudit.Source.AD_SYNC}:
         raise PermissionDenied(
@@ -1420,6 +1422,8 @@ def _link_ad_identity_locked(
         else User.objects.select_for_update().get(pk=user.pk)
     )
     provider = cleaned_data.get("provider") or ExternalIdentity.Provider.ACTIVE_DIRECTORY
+    if provider != ExternalIdentity.Provider.ACTIVE_DIRECTORY:
+        raise ValidationError("Поддерживается только связь с Active Directory.")
     subject_id = cleaned_data.get("subject_id", "")
     username = cleaned_data.get("username", "")
     domain = cleaned_data.get("domain", "")
@@ -1644,24 +1648,32 @@ def _sync_external_user_from_attributes_locked(
             .first()
         )
         identity_before = _external_identity_state(identity)
-        if identity is None:
-            identity = ExternalIdentity(
-                user=locked_user,
-                provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
-            )
-        identity.subject_id = str(safe_attributes.get("objectSid", ""))
-        identity.username = str(safe_attributes.get("sAMAccountName", ""))
-        identity.upn = str(safe_attributes.get("userPrincipalName", ""))
-        identity.domain = domain
-        identity.attributes = safe_attributes
-        identity.sync_status = ExternalIdentity.SyncStatus.VERIFIED
-        identity.last_synced_at = timezone.now()
-        identity.last_error = ""
-        identity.save()
-        identity_after = _external_identity_state(identity)
+        principal_values = (
+            str(safe_attributes.get("objectSid", "") or "").strip(),
+            str(safe_attributes.get("sAMAccountName", "") or "").strip(),
+            str(safe_attributes.get("userPrincipalName", "") or "").strip(),
+        )
+        # AD profile sync is allowed to succeed without a principal.  In that
+        # case never create a phantom identity and never erase a known link.
+        if any(principal_values):
+            if identity is None:
+                identity = ExternalIdentity(
+                    user=locked_user,
+                    provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
+                )
+            identity.subject_id, identity.username, identity.upn = principal_values
+            identity.domain = domain
+            identity.attributes = safe_attributes
+            identity.sync_status = ExternalIdentity.SyncStatus.VERIFIED
+            identity.last_synced_at = timezone.now()
+            identity.last_error = ""
+            identity.save()
+            identity_after = _external_identity_state(identity)
+        else:
+            identity_after = identity_before
 
     profile_after = _user_profile_state(locked_user)
-    if profile_before != profile_after or identity_before != identity_after:
+    if (profile_before != profile_after or identity_before != identity_after) and audit_callback is not None:
         audit_callback(profile_before, profile_after, identity_before, identity_after)
     return locked_user
 
@@ -1676,10 +1688,10 @@ def upsert_ad_identity_from_attributes(*, user, attributes, domain="", audit_cal
         sync_identity=True,
         audit_callback=audit_callback,
     )
-    return ExternalIdentity.objects.get(
+    return ExternalIdentity.objects.filter(
         user=synced_user,
         provider=ExternalIdentity.Provider.ACTIVE_DIRECTORY,
-    )
+    ).order_by("pk").first()
 
 
 def refresh_external_user_authentication_state(user):
@@ -1797,7 +1809,7 @@ def _validate_membership_user_ids(values):
 def _normalize_membership_reason(reason):
     normalized = str(reason or "").strip()
     if len(normalized) > 1000:
-        raise ValidationError("Причина изменения доступа не должна превышать 1000 символов.")
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     return normalized
 
 
@@ -1813,10 +1825,8 @@ def _selected_role_names_from_loaded_user(user, configs=None):
 
 def _normalize_account_data_reason(reason):
     normalized = str(reason or "").strip()
-    if not normalized:
-        raise ValidationError("Укажите причину изменения.")
     if len(normalized) > 1000:
-        raise ValidationError("Причина изменения не должна превышать 1000 символов.")
+        raise ValidationError("Комментарий не должен превышать 1000 символов.")
     return normalized
 
 

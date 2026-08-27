@@ -187,11 +187,11 @@ Manual checks:
 - disabled local user cannot authenticate or restore a session through LDAP;
 - superuser can open the reserve Django Admin assignment page, preview a role
   change and cancel without writing;
-- superuser can preview/apply Board roles in `/settings/boards/`; техническая
-  группа отклоняется, любой diff требует причину и подтверждение, резервный
-  Admin-маршрут использует тот же сервис;
-- superuser может отдельно изменить технические группы памяти с причиной,
-  предпросмотром и доменным аудитом;
+- superuser может изменить Board roles в продуктовом Settings Center без
+  обязательного комментария; техническая группа отклоняется, а резервный
+  Admin-маршрут требует причину и использует тот же сервис;
+- superuser может отдельно изменить технические группы памяти с необязательным
+  комментарием и доменным аудитом;
 - `/settings/access/roles/` показывает каталог, а изменение одной роли сначала
   показывает серверный diff и число затронутых сотрудников;
 - manager с `manage_roles` может создавать/редактировать/назначать обычные роли,

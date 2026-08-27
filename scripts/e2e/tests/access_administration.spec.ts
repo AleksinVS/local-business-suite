@@ -115,7 +115,7 @@ test("@smoke access workspace exposes the six access cuts and master-detail pane
   const firstMemoryGroup = memoryForm.locator('input[name="group_names"]').first();
   if (await firstMemoryGroup.isChecked()) await firstMemoryGroup.uncheck();
   else await firstMemoryGroup.check();
-  await memoryForm.getByLabel("Причина").fill("Сквозная проверка назначения группы памяти.");
+  await expect(memoryForm.getByLabel("Комментарий (необязательно)")).toBeVisible();
   await memoryForm.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByRole("heading", { name: /Группы памяти пользователя/ })).toBeVisible();
   await expect(page.locator("#access-field-sidebar-host .flash[role='status'][tabindex='-1']")).toBeFocused();
@@ -176,7 +176,7 @@ test("@smoke composite user draft saves profile and role together and can be rev
   await expect(role).toBeVisible();
   const roleValue = await role.getAttribute("value");
   await role.check();
-  await form.getByLabel("Причина всех изменений").fill("Сквозная проверка единого сохранения карточки.");
+  await expect(form.getByLabel("Комментарий (необязательно)")).toBeVisible();
   await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
   await expectAccessRequestIdle(page);
@@ -188,7 +188,6 @@ test("@smoke composite user draft saves profile and role together and can be rev
   await form.locator('input[name="first_name"]').fill(originalFirstName);
   await form.locator("[data-editor-tab='roles']").click();
   await form.locator(`input[name="roles"][value="${roleValue}"]`).uncheck();
-  await form.getByLabel("Причина всех изменений").fill("Возврат данных после сквозной проверки.");
   await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Карточка пользователя сохранена/)).toBeVisible();
   await expectAccessRequestIdle(page);
@@ -479,7 +478,7 @@ test("@smoke role sidebar adds a user through one save", async ({ page }) => {
   const targetMembership = roleForm.getByLabel(targetUsername || "", { exact: true });
   if (await targetMembership.isChecked()) await targetMembership.uncheck();
   else await targetMembership.check();
-  await roleForm.getByLabel("Причина изменения состава").fill("Сквозная проверка состава роли.");
+  await expect(roleForm.getByLabel("Комментарий (необязательно)")).toBeVisible();
   await roleForm.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByText(/Состав роли изменён/)).toBeVisible();
 });
@@ -614,14 +613,13 @@ test("@smoke server-owned access editor works from a non-workspace page with tab
   const changedEmail = `global-e2e-${Date.now()}@example.invalid`;
   const navigationCount = await page.evaluate(() => performance.getEntriesByType("navigation").length);
   await form.locator('input[name="email"]').fill(changedEmail);
-  await form.getByLabel("Причина всех изменений").fill("Сквозная проверка сохранения в глобальной панели.");
+  await expect(form.getByLabel("Комментарий (необязательно)")).toBeVisible();
   await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.locator("#global-right-panel").getByText(/Карточка пользователя сохранена/)).toBeVisible();
   form = page.locator("#global-right-panel [data-access-bundle-form]");
   await expect(form.locator('input[name="email"]')).toHaveValue(changedEmail);
   expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(navigationCount);
   await form.locator('input[name="email"]').fill(originalEmail);
-  await form.getByLabel("Причина всех изменений").fill("Возврат данных после проверки глобальной панели.");
   await form.getByRole("button", { name: "Сохранить" }).click();
   form = page.locator("#global-right-panel [data-access-bundle-form]");
   await expect(form.locator('input[name="email"]')).toHaveValue(originalEmail);

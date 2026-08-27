@@ -1,6 +1,9 @@
 <div class="drawer-content access-global-inspector" data-access-global-editor>
   {% include "settings_center/partials/access_workspace/inline_messages.html" %}
-  {% if creating_role %}
+  {% if copying_role %}
+    <div class="access-panel-title"><div><span class="eyebrow">Роль</span><h2>Копировать роль</h2><p class="muted">Источник: {{ copy_source }}</p></div><button type="button" class="access-panel-close" onclick="closeGlobalRightPanel()" aria-label="Закрыть редактор">×</button></div>
+    {% include "settings_center/partials/access_workspace/role_copy_editor.html" %}
+  {% elif creating_role %}
     <div class="access-panel-title"><div><span class="eyebrow">Роль</span><h2>Создать роль</h2><p class="muted">Новая обычная роль</p></div><button type="button" class="access-panel-close" onclick="closeGlobalRightPanel()" aria-label="Закрыть редактор">×</button></div>
     {% include "settings_center/partials/access_workspace/role_create_editor.html" %}
   {% elif selected %}
@@ -8,6 +11,7 @@
     {% if selected.kind == "user" %}
       {% include "settings_center/partials/access_workspace/user_bundle_editor.html" %}
     {% elif selected.kind == "role" and selected_field == "definition" and field_form %}
+      {% if not selected.protected or request.user.is_superuser %}<p><a class="button-link" href="?view=roles&amp;copy={{ selected.code|urlencode }}&amp;panel=inspector" hx-get="?view=roles&amp;copy={{ selected.code|urlencode }}&amp;panel=inspector" hx-target="#global-right-panel-content" hx-swap="innerHTML" hx-push-url="true">Копировать роль</a></p>{% else %}<p class="muted">Копирование защищённой роли доступно только активному суперпользователю.</p>{% endif %}
       {% include "settings_center/partials/access_workspace/role_definition_editor.html" %}
     {% elif selected.kind == "role" and selected_field == "users" and field_form %}
       <h3>Назначение роли</h3>

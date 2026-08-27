@@ -201,6 +201,31 @@ class RoleCreateForm(forms.Form):
             self.fields.pop("protected")
 
 
+class RoleCopyForm(forms.Form):
+    code = forms.RegexField(
+        label="Код новой роли",
+        regex=r"^[a-z][a-z0-9_]{1,62}$",
+        max_length=63,
+    )
+    display_name = forms.CharField(label="Название новой роли", max_length=150)
+    description = forms.CharField(
+        label="Описание новой роли",
+        max_length=1000,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    source_role_code = forms.CharField(widget=forms.HiddenInput)
+    base_hash = forms.CharField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, role_read_model=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.role_read_model = role_read_model or {}
+        self.fields["source_role_code"].initial = self.role_read_model.get("code", "")
+        self.fields["base_hash"].initial = self.role_read_model.get("base_hash", "")
+        self.fields["display_name"].initial = self.role_read_model.get("label", "")
+        self.fields["description"].initial = self.role_read_model.get("description", "")
+
+
 class RoleDescriptionForm(forms.Form):
     description = forms.CharField(
         label="Описание роли",
@@ -224,9 +249,10 @@ class RoleDescriptionForm(forms.Form):
 class DefaultNewUserRoleForm(forms.Form):
     role_name = forms.ChoiceField(label="Роль новых пользователей", required=False)
     reason = forms.CharField(
-        label="Причина изменения",
+        label="Комментарий (необязательно)",
         max_length=1000,
-        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "id": "id_default_new_user_role_comment"}),
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
 
@@ -247,8 +273,9 @@ class MemoryGroupMembershipForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
     )
     reason = forms.CharField(
-        label="Причина",
+        label="Комментарий (необязательно)",
         max_length=1000,
+        required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
 
@@ -320,8 +347,9 @@ class PortalUserProfileUpdateForm(PortalUserCreateForm):
 
 class AccessUserProfileForm(PortalUserProfileUpdateForm):
     reason = forms.CharField(
-        label="Причина изменения",
+        label="Комментарий (необязательно)",
         max_length=1000,
+        required=False,
         widget=forms.Textarea(attrs={"rows": 2}),
     )
 
@@ -345,7 +373,7 @@ class PortalUserUpdateForm(forms.Form):
         help_text="Разрешает вход в раздел администрирования Django при наличии нужных прав.",
     )
     reason = forms.CharField(
-        label="Причина изменения доступа",
+        label="Комментарий (необязательно)",
         max_length=1000,
         required=False,
         widget=forms.Textarea(attrs={"rows": 2}),
@@ -428,7 +456,9 @@ class AccessUserStatusForm(forms.Form):
     """Small context editor; lifecycle rules remain in ``update_local_user``."""
 
     is_active = forms.BooleanField(label="Активная учетная запись", required=False)
-    reason = forms.CharField(label="Причина", max_length=1000)
+    reason = forms.CharField(
+        label="Комментарий (необязательно)", max_length=1000, required=False
+    )
 
 
 class AccessUserDepartmentForm(forms.Form):
@@ -437,13 +467,16 @@ class AccessUserDepartmentForm(forms.Form):
         queryset=available_user_departments(),
         required=True,
     )
-    reason = forms.CharField(label="Причина", max_length=1000)
+    reason = forms.CharField(
+        label="Комментарий (необязательно)", max_length=1000, required=False
+    )
 
 
 class AccessExternalIdentityForm(ExternalIdentityForm):
     reason = forms.CharField(
-        label="Причина изменения",
+        label="Комментарий (необязательно)",
         max_length=1000,
+        required=False,
         widget=forms.Textarea(attrs={"rows": 2}),
     )
 
@@ -489,9 +522,10 @@ class AccessUserBundleForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
     )
     reason = forms.CharField(
-        label="Причина всех изменений",
+        label="Комментарий (необязательно)",
         max_length=1000,
-        widget=forms.Textarea(attrs={"rows": 2}),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "id": "id_access_bundle_comment"}),
     )
     active_editor = forms.CharField(widget=forms.HiddenInput, required=False)
 
@@ -585,7 +619,9 @@ class AccessRoleMembershipForm(forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple,
     )
-    reason = forms.CharField(label="Причина изменения состава", max_length=1000)
+    reason = forms.CharField(
+        label="Комментарий (необязательно)", max_length=1000, required=False
+    )
 
     def __init__(self, *args, role_name=None, **kwargs):
         super().__init__(*args, **kwargs)

@@ -246,7 +246,7 @@ Django Group допускается отдельным ADR только при �
 - ACL и workflow могут только сузить доступ роли;
 - last-superuser guards;
 - active superuser не меняет security semantics через runtime writer;
-- аудит actor/source/before/after/reason;
+- аудит actor/source/before/after и необязательного `reason`/комментария;
 - технические memory-группы отделены от должностных ролей.
 
 Явно одобренная доменная техническая группа может дать только свою специальную

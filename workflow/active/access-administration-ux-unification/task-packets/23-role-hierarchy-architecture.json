@@ -1,0 +1,19 @@
+{
+  "task_id": "23-role-hierarchy-architecture",
+  "goal": "Предложить архитектуру расширения ролей без изменения runtime-поведения.",
+  "owner": "main agent + gpt-5.6-sol/high",
+  "write_scope": [
+    "docs/adr/ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md",
+    "docs/planning/active/access-administration-ux-unification.md",
+    "workflow/active/access-administration-ux-unification/**"
+  ],
+  "non_goals": [
+    "Не добавлять extends в рабочий контракт.",
+    "Не менять policies, ACL или memory tokens под неподтверждённую модель."
+  ],
+  "acceptance": [
+    "Сравнены single parent, DAG, snapshot copy и capability composition.",
+    "Зафиксированы циклы, глубина, protected inheritance, whole-rule semantics, аудит и миграция.",
+    "Есть явная рекомендация и плюсы/минусы для проекта."
+  ]
+}

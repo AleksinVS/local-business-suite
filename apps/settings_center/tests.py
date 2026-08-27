@@ -30,6 +30,7 @@ from apps.core.json_utils import load_json_file
 from apps.core.right_panels import build_right_panel_descriptor
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
+from apps.workorders.forms import BoardAccessForm
 from apps.memory.models import MemoryGroupMembershipAudit
 
 from .contract_services import (
@@ -44,7 +45,14 @@ from .contract_services import (
 )
 from .env_services import create_env_proposal, env_status_rows
 from .forms import (
+    AccessExternalIdentityForm,
+    AccessRoleMembershipForm,
+    AccessUserBundleForm,
+    AccessUserDepartmentForm,
     AccessUserProfileForm,
+    AccessUserStatusForm,
+    DefaultNewUserRoleForm,
+    MemoryGroupMembershipForm,
     PortalUserCreateForm,
     PortalUserProfileUpdateForm,
     PortalUserUpdateForm,
@@ -59,6 +67,35 @@ from .registry import get_registry
 
 User = get_user_model()
 pytestmark = pytest.mark.integration
+
+
+class AccessCommentPolicyTests(TestCase):
+    def test_comment_is_optional_in_ordinary_access_forms(self):
+        actor = User.objects.create_superuser(username="comment-policy-root")
+        target = User.objects.create_user(username="comment-policy-target")
+        forms = [
+            DefaultNewUserRoleForm(rules_payload={}),
+            MemoryGroupMembershipForm(),
+            AccessUserProfileForm(),
+            PortalUserUpdateForm(portal_user=target, actor=actor),
+            AccessUserStatusForm(),
+            AccessUserDepartmentForm(),
+            AccessExternalIdentityForm(),
+            AccessUserBundleForm(portal_user=target, actor=actor),
+            AccessRoleMembershipForm(role_name=ROLE_CUSTOMER),
+            BoardAccessForm(),
+        ]
+
+        for form in forms:
+            with self.subTest(form=form.__class__.__name__):
+                self.assertFalse(form.fields["reason"].required)
+                self.assertIn("Комментарий", form.fields["reason"].label)
+
+    def test_board_break_glass_still_requires_operational_reason(self):
+        form = BoardAccessForm(source=BoardAccessAudit.Source.DJANGO_ADMIN_BREAK_GLASS)
+
+        self.assertTrue(form.fields["reason"].required)
+        self.assertIn("Причина резервного изменения", form.fields["reason"].label)
 
 
 class AccessEditorRightPanelTests(TestCase):
@@ -198,6 +235,12 @@ class AccessWorkspaceTests(TestCase):
         self.assertNotContains(response, "<!doctype html>", html=False)
         self.assertContains(response, "access-global-inspector")
         self.assertContains(response, "access-user-bundle-form")
+        self.assertContains(
+            response,
+            'hx-target="#global-right-panel-content"',
+            html=False,
+        )
+        self.assertContains(response, 'id="id_access_bundle_comment"', html=False)
 
     def test_roles_cut_explains_protection_and_offers_workspace_creation(self):
         actor = User.objects.create_superuser(username="workspace-role-root", password="pass")
@@ -242,6 +285,61 @@ class AccessWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "role-create-editor")
         self.assertContains(response, 'class="drawer drawer-large access-inspector active"', html=False)
+
+    def test_role_copy_editor_is_rendered_for_contract_role(self):
+        actor = User.objects.create_superuser(username="workspace-role-copy-root", password="pass")
+        self.client.force_login(actor)
+        response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "roles", "copy": "technician", "panel": "inspector"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "role-copy-editor")
+        self.assertContains(response, "Участники, доступ к доскам и другие назначения не копируются.")
+
+    def test_role_copy_service_is_flat_and_audited_in_sandbox(self):
+        from apps.accounts.access_contracts import save_role_copy
+
+        actor = User.objects.create_superuser(username="role-copy-service-root", password="pass")
+        base = load_json_file("contracts/role_rules.json")
+        target_code = "copied_technician"
+        with TemporaryDirectory() as tmpdir:
+            override, runtime_path, _candidate = _write_role_catalog_sandbox(
+                tmpdir, runtime_payload=base, git_payload=base
+            )
+            with override:
+                from apps.core.contract_store import _reset_for_tests
+                _reset_for_tests()
+                try:
+                    change = save_role_copy(
+                        actor=actor,
+                        source_role_code="technician",
+                        target_role_code=target_code,
+                        display_name="Скопированный техник",
+                        description="Копия без назначений",
+                        base_hash=normalized_hash(base),
+                    )
+                    expected = copy.deepcopy(base["technician"])
+                    expected.update({"display_name": "Скопированный техник", "description": "Копия без назначений"})
+                    self.assertEqual(load_json_file(runtime_path)[target_code], expected)
+                    self.assertTrue(GroupProfile.objects.filter(group__name=target_code, is_predefined=True).exists())
+                    self.assertFalse(Group.objects.get(name=target_code).user_set.exists())
+                    audit = SettingsChange.objects.get(pk=change.pk)
+                    self.assertEqual(audit.validation_result["source"], "role_definition_copy")
+                    self.assertEqual(audit.validation_result["source_role_code"], "technician")
+                    self.assertEqual(audit.validation_result["target_role_code"], target_code)
+                    self.assertEqual(audit.validation_result["source_role_hash"], normalized_hash(base["technician"]))
+                    with self.assertRaises(ValidationError):
+                        save_role_copy(
+                            actor=actor,
+                            source_role_code="technician",
+                            target_role_code="copied_again",
+                            display_name="Повтор",
+                            description="",
+                            base_hash="stale",
+                        )
+                finally:
+                    _reset_for_tests()
 
     def test_global_role_create_errors_keep_retry_target(self):
         actor = User.objects.create_user(username="workspace-role-retry")
@@ -980,6 +1078,7 @@ class AccessWorkspaceTests(TestCase):
             department=next_department.pk,
             ad_username="bundle-ad-user",
             ad_upn="bundle-ad-user@example.test",
+            reason="",
         )
 
         apply_response = self.client.post(url, {**payload, "action": "save"})
@@ -1023,7 +1122,6 @@ class AccessWorkspaceTests(TestCase):
                             "action": "save_default_new_user_role",
                             "view": "users",
                             "role_name": ROLE_CUSTOMER,
-                            "reason": "Новая базовая роль сотрудников.",
                             "base_hash": normalized_hash(payload),
                         },
                     )
@@ -2773,11 +2871,10 @@ class SettingsCenterUserViewsTests(TestCase):
         self.assertFalse(user.groups.exists())
         self.assertEqual(
             response["Location"],
-            f"{reverse('settings_center:user_edit', kwargs={'pk': user.pk})}?focus=assign#assign",
+            f"{reverse('settings_center:access_workspace')}?view=users&object={user.pk}&field=roles&panel=inspector",
         )
         assignment_page = self.client.get(response["Location"])
-        self.assertContains(assignment_page, 'id="assign"', html=False)
-        self.assertContains(assignment_page, "Теперь назначьте ему роль")
+        self.assertContains(assignment_page, 'class="access-context-form access-user-bundle-form"', html=False)
 
         response = self.client.post(
             reverse("settings_center:user_ad_link", kwargs={"pk": user.pk}),
@@ -2918,7 +3015,7 @@ class SettingsCenterUserViewsTests(TestCase):
             self.assertNotIn(raw_value, serialized_ad)
         self.assertIn("key_version", serialized_ad)
 
-    def test_user_list_searches_and_filters_on_the_server(self):
+    def test_user_list_redirects_filters_to_canonical_workspace(self):
         from apps.core.models import Department
 
         manager_group, _ = Group.objects.get_or_create(name="manager")
@@ -2944,7 +3041,17 @@ class SettingsCenterUserViewsTests(TestCase):
             subject_id="S-1-5-21-filter-target",
             username="ad-filter-target",
             upn="ad-filter-target@example.test",
+            distinguished_name="CN=Ирина,OU=Фильтруемое,DC=example,DC=test",
             domain="EXAMPLE",
+        )
+        foreign_identity_user = User.objects.create_user(
+            username="unrelated-external-provider",
+            department=department,
+        )
+        ExternalIdentity.objects.create(
+            user=foreign_identity_user,
+            provider="oidc",
+            distinguished_name="CN=ForeignProviderOnly,DC=example,DC=test",
         )
         inactive_target = User.objects.create_user(
             username="access-filter-inactive",
@@ -2953,29 +3060,36 @@ class SettingsCenterUserViewsTests(TestCase):
         )
         inactive_target.groups.add(customer_group)
         self.client.force_login(actor)
-        url = reverse("settings_center:user_list")
-
-        for query in ("Ирина", "access-filter-target", "filter-target@example.test", "ad-filter-target"):
+        for query in ("Ирина", "access-filter-target", "filter-target@example.test", "ad-filter-target", "CN=Ирина"):
             with self.subTest(query=query):
-                response = self.client.get(url, {"q": query})
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(
-                    [user.pk for user in response.context["portal_users"]], [target.pk]
+                response = self.client.get(
+                    reverse("settings_center:user_list"), {"q": query}, follow=True
                 )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([row["id"] for row in response.context["users"]], [target.pk])
+        foreign_response = self.client.get(
+            reverse("settings_center:access_workspace"),
+            {"view": "users", "q": "ForeignProviderOnly"},
+        )
+        self.assertNotIn(
+            foreign_identity_user.pk,
+            [row["id"] for row in foreign_response.context["users"]],
+        )
+        role_response = self.client.get(
+            reverse("settings_center:access_workspace"), {"view": "users", "role": "customer"}
+        )
+        self.assertIn(target.pk, [row["id"] for row in role_response.context["users"]])
+        department_response = self.client.get(
+            reverse("settings_center:access_workspace"), {"view": "users", "department": department.pk}
+        )
+        self.assertIn(target.pk, [row["id"] for row in department_response.context["users"]])
+        attention_response = self.client.get(
+            reverse("settings_center:access_workspace"), {"view": "users", "attention": "attention"}
+        )
+        self.assertIn(inactive_target.pk, [row["id"] for row in attention_response.context["users"]])
+        self.assertNotIn(target.pk, [row["id"] for row in attention_response.context["users"]])
 
-        role_response = self.client.get(url, {"role": "customer"})
-        self.assertIn(target.pk, [user.pk for user in role_response.context["portal_users"]])
-        self.assertNotIn(actor.pk, [user.pk for user in role_response.context["portal_users"]])
-
-        department_response = self.client.get(url, {"department": department.pk})
-        self.assertIn(target.pk, [user.pk for user in department_response.context["portal_users"]])
-        self.assertNotIn(actor.pk, [user.pk for user in department_response.context["portal_users"]])
-
-        attention_response = self.client.get(url, {"attention": "attention"})
-        self.assertIn(inactive_target.pk, [user.pk for user in attention_response.context["portal_users"]])
-        self.assertNotIn(target.pk, [user.pk for user in attention_response.context["portal_users"]])
-
-    def test_user_list_keeps_filters_when_paginating_and_has_one_access_entrypoint(self):
+    def test_user_list_compatibility_route_preserves_supported_filters(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
         actor = User.objects.create_user(username="access-pagination-manager")
         actor.groups.add(manager_group)
@@ -2984,12 +3098,8 @@ class SettingsCenterUserViewsTests(TestCase):
         self.client.force_login(actor)
 
         response = self.client.get(reverse("settings_center:user_list"), {"q": "access-page-"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["is_paginated"])
-        self.assertContains(response, "?q=access-page-&amp;page=2", html=False)
-        self.assertContains(response, '<span class="nav-text">Доступ</span>', html=False)
-        self.assertNotContains(response, '<span class="nav-text">Роли доступа</span>', html=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/settings/access/?view=users&q=access-page-")
 
     def test_manage_roles_user_can_open_list_and_access_card_but_regular_user_cannot(self):
         manager_group, _ = Group.objects.get_or_create(name="manager")
@@ -3011,8 +3121,8 @@ class SettingsCenterUserViewsTests(TestCase):
 
         self.client.force_login(manager)
         user_list_response = self.client.get(reverse("settings_center:user_list"))
-        self.assertEqual(user_list_response.status_code, 200)
-        self.assertContains(user_list_response, "Доступ сотрудников")
+        self.assertEqual(user_list_response.status_code, 302)
+        self.assertIn("/settings/access/", user_list_response["Location"])
         response = self.client.get(reverse("settings_center:user_edit", kwargs={"pk": target.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Итоговый доступ и источники")
@@ -3204,7 +3314,6 @@ class SettingsCenterUserViewsTests(TestCase):
             {
                 "action": "save",
                 "group_names": [observer.name],
-                "reason": "Назначение наблюдателя памяти.",
             },
         )
 
@@ -3213,7 +3322,8 @@ class SettingsCenterUserViewsTests(TestCase):
             set(target.groups.values_list("name", flat=True)),
             {"customer", "memory_observer"},
         )
-        self.assertEqual(MemoryGroupMembershipAudit.objects.filter(target_user=target).count(), 1)
+        audit = MemoryGroupMembershipAudit.objects.get(target_user=target)
+        self.assertEqual(audit.reason, "")
 
 
 class SettingsCenterGroupProfileTests(TestCase):

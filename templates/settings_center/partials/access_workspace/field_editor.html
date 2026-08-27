@@ -10,7 +10,7 @@
   {% if access_filter_state.attention %}<input type="hidden" name="filter_attention" value="{{ attention_value }}">{% endif %}
   {{ field_form.non_field_errors }}
   {% if field_form.base_hash %}{{ field_form.base_hash }}{% endif %}
-  {% if selected.kind == "user" and selected_field == "memory-groups" %}<h3>Группы памяти пользователя {{ selected.name }}</h3><p class="access-readonly-explanation">Это технические полномочия памяти, а не роли и не разделы сайта. Изменение выполняется только через сервис памяти с причиной и подтверждением.</p>{% endif %}
+  {% if selected.kind == "user" and selected_field == "memory-groups" %}<h3>Группы памяти пользователя {{ selected.name }}</h3><p class="access-readonly-explanation">Это технические полномочия памяти, а не роли и не разделы сайта. Изменение выполняется через сервис памяти с предметным аудитом и серверной проверкой.</p>{% endif %}
   {% for field in field_form.visible_fields %}
     <div class="access-form-field{% if field.errors %} has-error{% endif %}">
       {{ field.label_tag }}

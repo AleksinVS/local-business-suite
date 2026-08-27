@@ -74,25 +74,26 @@ class Command(BaseCommand):
             )
         user_model = get_user_model()
         names = {
-            "actor": "__access_admin_e2e_root__",
-            "member": "__access_admin_e2e_member__",
-            "control": "__access_admin_e2e_control__",
+            "actor": "e2e_access_admin_root",
+            "member": "e2e_access_admin_member",
+            "control": "e2e_access_admin_control",
         }
         if user_model.objects.filter(username__in=names.values()).exists():
             raise CommandError("Тестовые логины уже заняты; существующие данные не изменены.")
 
         role_rules = load_json_file("contracts/role_rules.json")
         source_role_code = "technician"
-        role_code = "__access_admin_e2e_technician__"
+        role_code = "e2e_access_technician"
+        copy_role_code = "e2e_access_technician_copy"
         source_control_role_code = "manager"
-        control_role_code = "__access_admin_e2e_manager__"
+        control_role_code = "e2e_access_manager"
         source_role = role_rules.get(source_role_code)
         source_control_role = role_rules.get(source_control_role_code)
         if not isinstance(source_role, dict) or source_role.get("view_scope") != "assigned_or_unassigned_or_authored":
             raise CommandError("E2E ожидает исходную ограниченную область technician.view_scope.")
         if not isinstance(source_control_role, dict):
             raise CommandError("E2E ожидает исходную контрактную роль manager.")
-        temporary_role_codes = (role_code, control_role_code)
+        temporary_role_codes = (role_code, control_role_code, copy_role_code)
         if any(
             code in role_rules or Group.objects.filter(name=code).exists()
             for code in temporary_role_codes
@@ -122,10 +123,10 @@ class Command(BaseCommand):
                 Group.objects.get(name=role_code),
                 Group.objects.get(name=control_role_code),
             )
-            department = Department.objects.create(name="__access-admin-e2e-department__")
+            department = Department.objects.create(name="e2e-access-admin-department")
             board = Board.objects.create(
                 title="Сквозная проверка доступа",
-                slug="__access-admin-e2e-board__",
+                slug="e2e-access-admin-board",
             )
             board.allowed_groups.add(
                 Group.objects.get(name="customer"),
@@ -206,6 +207,31 @@ class Command(BaseCommand):
                     if client.post(role_url, role_post).status_code != 302:
                         raise CommandError("Изменение одной роли не сохранилось через HTTP.")
 
+                    copy_query = {"view": "roles", "copy": source_role_code, "panel": "inspector"}
+                    copy_page = client.get(role_url, copy_query)
+                    copy_context = self._response_context(copy_page, label="форма копирования роли")
+                    copy_form = copy_context["field_form"]
+                    copy_post = {
+                        "action": "copy_role",
+                        **copy_query,
+                        "source_role_code": source_role_code,
+                        "code": copy_role_code,
+                        "display_name": "Копия technician",
+                        "description": "E2E копия без назначений",
+                        "base_hash": copy_form["base_hash"].value(),
+                    }
+                    if client.post(role_url, copy_post).status_code != 302:
+                        raise CommandError("Копирование роли не сохранилось через HTTP.")
+                    created_group_names.append(copy_role_code)
+                    expected_copy = copy.deepcopy(source_role)
+                    expected_copy.update({"display_name": "Копия technician", "description": "E2E копия без назначений"})
+                    if load_json_file(role_file).get(copy_role_code) != expected_copy:
+                        raise CommandError("Определение копии не совпадает с источником.")
+                    if Group.objects.get(name=copy_role_code).user_set.exists():
+                        raise CommandError("Копия роли неожиданно получила участников.")
+                    if board.allowed_groups.filter(name=copy_role_code).exists():
+                        raise CommandError("Копия роли неожиданно получила ACL доски.")
+
                     client.force_login(member)
                     if client.get(detail_url).status_code != 200:
                         raise CommandError("Расширенная область technician не сработала через HTTP.")
@@ -225,7 +251,6 @@ class Command(BaseCommand):
                         "action": "save",
                         **board_query,
                         "group_names": [role_code, control_role_code],
-                        "reason": "Сквозная проверка доступа к доске.",
                     }
                     if client.post(board_url, board_data).status_code != 302:
                         raise CommandError("Доступ к доске не сохранился через HTTP.")
@@ -241,7 +266,6 @@ class Command(BaseCommand):
                         "action": "save",
                         **memory_query,
                         "group_names": ["memory_observer"],
-                        "reason": "Сквозная проверка экспертного назначения.",
                     }
                     if client.post(memory_url, memory_data).status_code != 302:
                         raise CommandError("Техническая группа памяти не сохранилась через HTTP.")

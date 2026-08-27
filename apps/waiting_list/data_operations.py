@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import StringIO
@@ -224,9 +223,6 @@ def _parse_row(raw_row: dict[str, str], *, source_line: int) -> WaitingListImpor
         raise WaitingListImportError("ФИО обязательно (минимум 2 символа)")
 
     phone = _text(raw_row.get("Телефон"))
-    phone_digits = re.sub(r"\D", "", phone)
-    if len(phone_digits) != 11 or not phone_digits.startswith(("7", "8")):
-        raise WaitingListImportError(f"некорректный телефон {phone!r}")
 
     service_raw = _text(raw_row.get("Услуга"))
     service_id = _SERVICE_BY_INPUT.get(service_raw.casefold())

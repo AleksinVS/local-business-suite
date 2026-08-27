@@ -105,7 +105,9 @@ class WaitingListDataCommandTests(TestCase):
         return row
 
     def test_import_command_preserves_fields_history_and_source_creation_time(self):
-        path = self._write_export(self._valid_row())
+        path = self._write_export(
+            self._valid_row(**{"Телефон": "внутренний 123"})
+        )
         output = StringIO()
 
         call_command(
@@ -118,6 +120,7 @@ class WaitingListDataCommandTests(TestCase):
         entry = WaitingListEntry.objects.get()
         self.assertEqual(entry.author, self.author)
         self.assertEqual(entry.patient_dob, date(1946, 8, 12))
+        self.assertEqual(entry.patient_phone, "внутренний 123")
         self.assertEqual(entry.service_id, "s3")
         self.assertEqual(entry.status, WaitingListStatus.SCHEDULED)
         self.assertEqual(entry.date_tag, date(2027, 10, 13))

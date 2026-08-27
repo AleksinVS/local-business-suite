@@ -166,9 +166,12 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL routes for Settings Center
     views.py: file # Django template/HTMX views for Settings Center
   waiting_list: # Лист ожидания клиентов
+    management: # Команды управления данными листа ожидания
+      commands: file
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills листа ожидания для открытия записей и workflow-инструкций
     apps.py: file # Конфигурация приложения
+    data_operations.py: file # Проверяемый разбор и атомарный импорт данных листа ожидания
     forms.py: file # Формы листа ожидания
     models.py: file # Модель WaitingListEntry
     policies.py: file # Политики доступа
@@ -399,6 +402,7 @@ docs: # Документация проекта
     SETTINGS_CENTER_OPERATIONS.md: file # Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals
     TEST_ACCELERATION.md: file # Практический guide по ускорению тестов без снижения покрытия
     TESTING_POLICY.md: file # Политика тестирования, матрица обязательных проверок и независимая проверка субагентом
+    WAITING_LIST_DATA_OPERATIONS.md: file # Руководство по безопасному импорту и полной очистке данных листа ожидания
     WORKER_AND_QUEUE_OPERATIONS.md: file # Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости
   legacy: # Устаревшая документация (MVP)
     MVP_Architecture.md: file # Архитектура MVP
@@ -538,6 +542,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     partials: # HTMX partials for Settings Center contextual help
       help_answer.html: file # Частичный ответ миничата
       help_panel.html: file # Плавающее окно справки и миничата по конкретному setting_id
+      waiting_list_import_preview.html: file # HTMX-результат проверки файла импорта без сброса выбранного файла
     access_workspace.html: file # Каноническое единое окно с six access tabs, таблицами и master-detail инспектором
     ad_link_form.html: file # Форма явной привязки локального пользователя к AD identity
     admin_access_assignment.html: file # Резервный Django Admin preview/apply для контрактных ролей и технических флагов
@@ -551,6 +556,7 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     role_definition_form.html: file # Точечный редактор одной роли с серверным diff и оценкой влияния
     setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
     user_form.html: file # Создание пользователя, отдельное изменение учётной записи и карточка доступа
+    waiting_list_data_operations.html: file # Superuser-only интерфейс проверки, импорта и полной очистки листа ожидания
     workflow_transitions.html: file # Матрица настройки переходов статусов заявок через workflow_rules contract
     workorder_status_colors.html: file # Форма настройки цветов статусов заявок через runtime contract
   waiting_list: # Шаблоны листа ожидания

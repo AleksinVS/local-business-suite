@@ -1,12 +1,20 @@
-from datetime import date
-from unittest.mock import patch
+import csv
+from datetime import date, datetime
+from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import ANY, patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.core.json_utils import load_json_file
 from apps.workorders.policies import ROLE_MANAGER
@@ -37,6 +45,207 @@ from .services import (
     transition_entry,
     update_entry,
 )
+
+
+@pytest.mark.integration
+class WaitingListDataCommandTests(TestCase):
+    headers = (
+        "Услуга",
+        "ФИО",
+        "Дата рождения",
+        "Телефон",
+        "Дата записи",
+        "История изменений",
+        "Дата бирки",
+        "Дата окончания",
+        "Cito",
+        "Статус",
+        "Комментарий",
+        "Период",
+    )
+
+    def setUp(self):
+        self.author = User.objects.create_user(
+            username="waiting-list-importer",
+            password="pass",
+        )
+        local_dir = Path(settings.BASE_DIR) / ".local"
+        local_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir = TemporaryDirectory(dir=local_dir)
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def _write_export(self, *rows):
+        path = Path(self.temp_dir.name) / "Выгрузка.txt"
+        with path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=self.headers, delimiter="\t")
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    @staticmethod
+    def _valid_row(**overrides):
+        row = {
+            "Услуга": "Катаракта",
+            "ФИО": "Алексин Валентин Васильевич",
+            "Дата рождения": "12.08.1946",
+            "Телефон": "89005815724",
+            "Дата записи": "11.11.2025 09:30:00",
+            "История изменений": (
+                "10.11.25 - Врач Тестовый - В очереди\n"
+                "10.11.25 - Врач Тестовый - Назначена"
+            ),
+            "Дата бирки": "13.10.2027 8:29:59",
+            "Дата окончания": "13.10.2027 9:29:59",
+            "Cito": "Нет",
+            "Статус": "Назначена",
+            "Комментарий": "Исходный комментарий",
+            "Период": "10.11.2025 10:27:02",
+        }
+        row.update(overrides)
+        return row
+
+    def test_import_command_preserves_fields_history_and_source_creation_time(self):
+        path = self._write_export(self._valid_row())
+        output = StringIO()
+
+        call_command(
+            "import_waiting_list",
+            str(path),
+            author=self.author.username,
+            stdout=output,
+        )
+
+        entry = WaitingListEntry.objects.get()
+        self.assertEqual(entry.author, self.author)
+        self.assertEqual(entry.patient_dob, date(1946, 8, 12))
+        self.assertEqual(entry.service_id, "s3")
+        self.assertEqual(entry.status, WaitingListStatus.SCHEDULED)
+        self.assertEqual(entry.date_tag, date(2027, 10, 13))
+        self.assertEqual(entry.date_end, date(2027, 10, 13))
+        self.assertFalse(entry.priority_cito)
+        self.assertIn("Исходный комментарий", entry.comment)
+        self.assertIn("Дата записи (импорт): 11.11.2025 09:30:00", entry.comment)
+        self.assertEqual(
+            timezone.localtime(entry.created_at).replace(tzinfo=None),
+            datetime(2025, 11, 10, 10, 27, 2),
+        )
+        self.assertEqual(entry.audit_logs.count(), 2)
+        self.assertTrue(
+            entry.audit_logs.filter(action__contains="Врач Тестовый - Назначена").exists()
+        )
+        self.assertIn("записей=1", output.getvalue())
+
+    def test_import_dry_run_validates_without_writing(self):
+        WaitingListEntry.objects.create(
+            author=self.author,
+            patient_name="Существующий Пациент",
+            patient_dob=date(1980, 1, 1),
+            patient_phone="89000000000",
+            service_id="s1",
+        )
+        path = self._write_export(self._valid_row())
+
+        call_command(
+            "import_waiting_list",
+            str(path),
+            author=self.author.username,
+            dry_run=True,
+            stdout=StringIO(),
+        )
+
+        self.assertEqual(WaitingListEntry.objects.count(), 1)
+
+    def test_import_rejects_invalid_file_without_partial_writes(self):
+        path = self._write_export(
+            self._valid_row(),
+            self._valid_row(**{"ФИО": "Ошибка Статуса", "Статус": "Неизвестен"}),
+        )
+
+        with self.assertRaisesMessage(CommandError, "строка 3"):
+            call_command(
+                "import_waiting_list",
+                str(path),
+                author=self.author.username,
+                stdout=StringIO(),
+            )
+
+        self.assertFalse(WaitingListEntry.objects.exists())
+
+    def test_import_requires_append_for_nonempty_list(self):
+        WaitingListEntry.objects.create(
+            author=self.author,
+            patient_name="Существующий Пациент",
+            patient_dob=date(1980, 1, 1),
+            patient_phone="89000000000",
+            service_id="s1",
+        )
+        path = self._write_export(self._valid_row())
+
+        with self.assertRaisesMessage(CommandError, "--append"):
+            call_command(
+                "import_waiting_list",
+                str(path),
+                author=self.author.username,
+                stdout=StringIO(),
+            )
+
+        self.assertEqual(WaitingListEntry.objects.count(), 1)
+
+    def test_clear_dry_run_and_confirmation_guard(self):
+        WaitingListEntry.objects.create(
+            author=self.author,
+            patient_name="Пациент Для Очистки",
+            patient_dob=date(1980, 1, 1),
+            patient_phone="89000000000",
+            service_id="s1",
+        )
+
+        call_command("clear_waiting_list", dry_run=True, stdout=StringIO())
+        self.assertEqual(WaitingListEntry.objects.count(), 1)
+        with self.assertRaisesMessage(CommandError, "DELETE_WAITING_LIST"):
+            call_command("clear_waiting_list", stdout=StringIO())
+        self.assertEqual(WaitingListEntry.objects.count(), 1)
+
+    def test_clear_removes_entries_and_audit_log(self):
+        entry = WaitingListEntry.objects.create(
+            author=self.author,
+            patient_name="Пациент Для Удаления",
+            patient_dob=date(1980, 1, 1),
+            patient_phone="89000000000",
+            service_id="s1",
+        )
+        WaitingListAuditLog.objects.create(
+            entry=entry,
+            actor=self.author,
+            action="Тестовая история",
+        )
+
+        call_command(
+            "clear_waiting_list",
+            confirm="DELETE_WAITING_LIST",
+            skip_projections=True,
+            stdout=StringIO(),
+        )
+
+        self.assertFalse(WaitingListEntry.objects.exists())
+        self.assertFalse(WaitingListAuditLog.objects.exists())
+
+    @patch("apps.waiting_list.management.commands.clear_waiting_list.call_command")
+    def test_clear_reconciles_derived_projections_by_default(self, reconcile):
+        call_command(
+            "clear_waiting_list",
+            confirm="DELETE_WAITING_LIST",
+            stdout=StringIO(),
+        )
+
+        reconcile.assert_called_once_with(
+            "source_adapter_reconcile",
+            source_code="waiting_list",
+            target="all",
+            backend="all",
+            stdout=ANY,
+            stderr=ANY,
+        )
 
 
 @pytest.mark.integration

@@ -263,6 +263,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/DOMAIN_MODEL.md` — доменная модель.
 - `docs/architecture/POLICY_MODEL.md` — модель ролей и политик.
 - `docs/guides/ACCESS_MANAGEMENT_USER_GUIDE.md` — назначение ролей, итоговый доступ, риски и журнал изменений.
+- `docs/guides/WAITING_LIST_DATA_OPERATIONS.md` — проверка, импорт и полная очистка данных листа ожидания через интерфейс и команды Django.
 - `docs/architecture/INTEGRATIONS.md` — стратегия интеграций.
 - `docs/architecture/ANALYTICS_MODEL.md` — аналитический контур.
 - `docs/architecture/OBSERVABILITY_BASELINE.md` — базовая наблюдаемость, p50/p95 и команда `performance_report`.

@@ -2,5 +2,6 @@
   ".": "HTMX partials for Settings Center contextual help",
   "help_panel.html": "Плавающее окно справки и миничата по конкретному setting_id",
   "help_answer.html": "Частичный ответ миничата",
+  "waiting_list_import_preview.html": "HTMX-результат проверки файла импорта без сброса выбранного файла",
   "access_workspace/": "Контекстные редакторы единого окна доступа"
 }

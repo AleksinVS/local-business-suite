@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Данные листа ожидания{% endblock %}
+
+{% block content %}
+<section class="panel settings-center waiting-list-data-operations">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">Администрирование данных</p>
+      <h1>Данные листа ожидания</h1>
+      <p class="description">Проверка и импорт табличной выгрузки, а также полная очистка листа ожидания.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button-link" href="{% url 'settings_center:dashboard' %}">К настройкам</a>
+    </div>
+  </div>
+
+  <dl class="waiting-list-data-summary" aria-label="Текущее состояние листа ожидания">
+    <div><dt>Записей</dt><dd>{{ entry_count }}</dd></div>
+    <div><dt>Событий журнала</dt><dd>{{ audit_count }}</dd></div>
+  </dl>
+</section>
+
+<div class="waiting-list-data-grid">
+  <section class="panel">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Загрузка</p>
+        <h2>Импорт из файла</h2>
+        <p class="description">Сначала проверьте файл. Запись начнётся только после нажатия «Импортировать».</p>
+      </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="settings-small-form waiting-list-data-form">
+      {% csrf_token %}
+      {% if import_form.non_field_errors %}<div class="form-errors" role="alert">{{ import_form.non_field_errors }}</div>{% endif %}
+      {% for field in import_form %}
+        <div class="input-group{% if field.errors %} has-error{% endif %}">
+          {% if field.field.widget.input_type == "checkbox" %}
+            <div class="checkbox-group">{{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+          {% else %}
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+          {% endif %}
+          {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+
+      <div id="waiting-list-import-preview" aria-live="polite">
+        {% include "settings_center/partials/waiting_list_import_preview.html" %}
+      </div>
+
+      <div class="table-actions">
+        <button type="submit" class="button-link" name="action" value="validate_import"
+                hx-post="{% url 'settings_center:waiting_list_data' %}"
+                hx-target="#waiting-list-import-preview"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this">Проверить файл</button>
+        <button type="submit" class="button" name="action" value="import">Импортировать</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel waiting-list-clear-panel">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Необратимая операция</p>
+        <h2>Очистить лист ожидания</h2>
+        <p class="description">Будут удалены все записи и вся связанная история изменений. Перед действием сделайте резервную копию.</p>
+      </div>
+    </div>
+
+    <form method="post" class="settings-small-form waiting-list-data-form">
+      {% csrf_token %}
+      {% if clear_form.non_field_errors %}<div class="form-errors" role="alert">{{ clear_form.non_field_errors }}</div>{% endif %}
+      {% for field in clear_form %}
+        <div class="input-group{% if field.errors %} has-error{% endif %}">
+          {% if field.field.widget.input_type == "checkbox" %}
+            <div class="checkbox-group">{{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+          {% else %}
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+          {% endif %}
+          {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="table-actions">
+        <button type="submit" class="button danger-button" name="action" value="clear">Удалить все данные</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<style>
+  .waiting-list-data-summary { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.25rem 0 0; }
+  .waiting-list-data-summary div { min-width: 10rem; padding: .8rem 1rem; border-left: 3px solid var(--primary); background: var(--surface); }
+  .waiting-list-data-summary dt { color: var(--text-muted); font-size: .82rem; }
+  .waiting-list-data-summary dd { margin: .15rem 0 0; font-size: 1.35rem; font-weight: 700; }
+  .waiting-list-data-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .65fr); gap: 1rem; }
+  .waiting-list-data-form { display: grid; gap: 1rem; }
+  .waiting-list-data-form .input-group { display: grid; gap: .4rem; }
+  .waiting-list-data-form input[type="text"], .waiting-list-data-form input[type="file"] { width: 100%; }
+  .waiting-list-data-form .helptext { color: var(--text-muted); }
+  .waiting-list-data-form .errorlist, .waiting-list-data-form .form-errors { color: var(--danger); }
+  .waiting-list-import-preview { border-left: 3px solid var(--success); background: var(--surface); padding: .8rem 1rem; }
+  .waiting-list-import-preview.is-error { border-left-color: var(--danger); background: var(--danger-bg); }
+  .waiting-list-import-preview p { margin: .35rem 0 0; }
+  .waiting-list-clear-panel { border-top: 3px solid var(--danger); }
+  .danger-button { background: var(--danger); border-color: var(--danger); }
+  @media (max-width: 860px) { .waiting-list-data-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+{% endblock %}

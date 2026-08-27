@@ -1,0 +1,15 @@
+{% if import_form.errors %}
+  <div class="waiting-list-import-preview is-error" role="alert">
+    <strong>Файл не прошёл проверку.</strong>
+    {% for field in import_form %}
+      {% if field.errors %}<div>{{ field.label }}: {{ field.errors }}</div>{% endif %}
+    {% endfor %}
+    {{ import_form.non_field_errors }}
+  </div>
+{% elif import_preview %}
+  <div class="waiting-list-import-preview" role="status">
+    <strong>Файл прошёл проверку. Записей в файле: {{ import_preview.rows }}.</strong>
+    <p>Услуги: {% for label, count in import_preview.services %}{{ label }} — {{ count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+    <p>Статусы: {% for label, count in import_preview.statuses %}{{ label }} — {{ count }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+  </div>
+{% endif %}

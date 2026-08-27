@@ -8,6 +8,65 @@ from apps.accounts.models import ExternalIdentity
 from apps.accounts.selectors import contract_role_names, selected_role_names_for_user
 from apps.accounts.services import assignable_role_names_for_actor
 from apps.core.contract_store import get_contract
+from apps.waiting_list.data_operations import (
+    WaitingListImportError,
+    parse_waiting_list_bytes,
+)
+
+
+MAX_WAITING_LIST_IMPORT_BYTES = 10 * 1024 * 1024
+
+
+class WaitingListImportForm(forms.Form):
+    source_file = forms.FileField(
+        label="Текстовый файл",
+        help_text="UTF-8, разделитель — табуляция, не более 10 МБ.",
+        widget=forms.ClearableFileInput(attrs={"accept": ".txt,text/plain"}),
+    )
+    append = forms.BooleanField(
+        label="Добавить к существующим записям",
+        required=False,
+        help_text="Без этого флага импорт в непустой лист запрещён.",
+    )
+    reconcile_projections = forms.BooleanField(
+        label="Обновить поиск и аналитику после импорта",
+        required=False,
+        initial=True,
+    )
+
+    parsed_rows = None
+
+    def clean_source_file(self):
+        uploaded = self.cleaned_data["source_file"]
+        if uploaded.size > MAX_WAITING_LIST_IMPORT_BYTES:
+            raise forms.ValidationError("Размер файла превышает 10 МБ.")
+        try:
+            self.parsed_rows = parse_waiting_list_bytes(uploaded.read())
+        except WaitingListImportError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        finally:
+            uploaded.seek(0)
+        return uploaded
+
+
+class WaitingListClearForm(forms.Form):
+    confirmation = forms.CharField(
+        label="Подтверждение",
+        help_text="Введите DELETE_WAITING_LIST без изменений.",
+        max_length=64,
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    reconcile_after_clear = forms.BooleanField(
+        label="Обновить поиск и аналитику после очистки",
+        required=False,
+        initial=True,
+    )
+
+    def clean_confirmation(self):
+        value = self.cleaned_data["confirmation"].strip()
+        if value != "DELETE_WAITING_LIST":
+            raise forms.ValidationError("Подтверждающая фраза введена неверно.")
+        return value
 
 
 class ContractPayloadForm(forms.Form):

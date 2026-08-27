@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections import Counter
 
 from django.contrib import messages
 from django.contrib.messages import get_messages
@@ -45,6 +47,12 @@ from apps.workorders.forms import BoardAccessForm
 from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import board_access_role_names, can_manage_board_access, can_manage_roles
 from apps.workorders.services import save_board_access
+from apps.waiting_list.data_operations import (
+    WaitingListImportError,
+    clear_waiting_list_data,
+    import_waiting_list_rows,
+)
+from apps.waiting_list.models import SERVICE_CHOICES, WaitingListAuditLog, WaitingListEntry, WaitingListStatus
 
 from .contract_services import (
     apply_contract_payload,
@@ -73,6 +81,8 @@ from .forms import (
     RoleCreateForm,
     RoleCopyForm,
     RoleDescriptionForm,
+    WaitingListClearForm,
+    WaitingListImportForm,
 )
 from .help_services import answer_help_question, initial_help_text
 from .access_bundle_services import save_user_access_bundle
@@ -81,6 +91,9 @@ from .policies import can_manage_settings
 from .registry import get_registry
 from .services import record_settings_change
 from .access_workspace import workspace_context
+
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -121,7 +134,130 @@ class SettingsDashboardView(SettingsManagementMixin, TemplateView):
         context["recent_changes"] = SettingsChange.objects.select_related("actor")[:12]
         context["can_manage_roles"] = can_manage_roles(self.request.user)
         context["can_manage_board_access"] = can_manage_board_access(self.request.user)
+        context["can_manage_waiting_list_data"] = bool(
+            self.request.user.is_active and self.request.user.is_superuser
+        )
         return context
+
+
+class WaitingListDataOperationsView(SuperuserUserManagementMixin, TemplateView):
+    template_name = "settings_center/waiting_list_data_operations.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault("import_form", WaitingListImportForm())
+        context.setdefault("clear_form", WaitingListClearForm())
+        context["entry_count"] = WaitingListEntry.objects.count()
+        context["audit_count"] = WaitingListAuditLog.objects.count()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        if action in {"validate_import", "import"}:
+            return self._handle_import(request, validate_only=action == "validate_import")
+        if action == "clear":
+            return self._handle_clear(request)
+        raise Http404
+
+    def _handle_import(self, request, *, validate_only):
+        form = WaitingListImportForm(request.POST, request.FILES)
+        context = self.get_context_data(import_form=form)
+        if not form.is_valid():
+            if validate_only and request.headers.get("HX-Request") == "true":
+                return render(
+                    request,
+                    "settings_center/partials/waiting_list_import_preview.html",
+                    {"import_form": form},
+                )
+            return self.render_to_response(context, status=400)
+
+        existing = WaitingListEntry.objects.count()
+        if existing and not form.cleaned_data["append"] and not validate_only:
+            form.add_error(
+                "append",
+                f"Лист уже содержит записей: {existing}. Подтвердите добавление либо сначала очистите лист.",
+            )
+            return self.render_to_response(context, status=400)
+
+        rows = form.parsed_rows or []
+        context["import_preview"] = self._import_preview(rows)
+        if validate_only:
+            if request.headers.get("HX-Request") == "true":
+                return render(
+                    request,
+                    "settings_center/partials/waiting_list_import_preview.html",
+                    {
+                        "import_form": form,
+                        "import_preview": context["import_preview"],
+                    },
+                )
+            messages.success(request, "Файл проверен. Данные в базе не изменены.")
+            return self.render_to_response(context)
+
+        try:
+            created, audit_created = import_waiting_list_rows(rows, author=request.user)
+        except WaitingListImportError as exc:
+            form.add_error(None, str(exc))
+            return self.render_to_response(context, status=400)
+
+        messages.success(
+            request,
+            f"Импорт завершён: записей — {created}, событий журнала — {audit_created}.",
+        )
+        if form.cleaned_data["reconcile_projections"]:
+            self._reconcile_projections(request)
+        return redirect("settings_center:waiting_list_data")
+
+    def _handle_clear(self, request):
+        form = WaitingListClearForm(request.POST)
+        context = self.get_context_data(clear_form=form)
+        if not form.is_valid():
+            return self.render_to_response(context, status=400)
+
+        entries, audit_rows = clear_waiting_list_data()
+        messages.success(
+            request,
+            f"Лист ожидания очищен: записей — {entries}, событий журнала — {audit_rows}.",
+        )
+        if form.cleaned_data["reconcile_after_clear"]:
+            self._reconcile_projections(request)
+        return redirect("settings_center:waiting_list_data")
+
+    def _reconcile_projections(self, request):
+        from django.core.management import call_command
+
+        try:
+            call_command(
+                "source_adapter_reconcile",
+                source_code="waiting_list",
+                target="all",
+                backend="all",
+            )
+        except Exception:
+            logger.exception("Не удалось обновить проекции листа ожидания")
+            messages.warning(
+                request,
+                "Основная операция завершена, но поиск и аналитика не обновлены. "
+                "Запустите source_adapter_reconcile вручную.",
+            )
+
+    @staticmethod
+    def _import_preview(rows):
+        service_labels = dict(SERVICE_CHOICES)
+        status_labels = dict(WaitingListStatus.choices)
+        services = Counter(row.service_id for row in rows)
+        statuses = Counter(row.status for row in rows)
+        return {
+            "rows": len(rows),
+            "services": [
+                (service_labels.get(code, code), count)
+                for code, count in services.items()
+            ],
+            "statuses": [
+                (status_labels.get(code, code), count)
+                for code, count in statuses.items()
+            ],
+        }
 
 
 class AccessWorkspaceView(UserManagementMixin, TemplateView):

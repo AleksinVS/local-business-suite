@@ -13,6 +13,7 @@
     <div class="header-actions">
       {% if can_manage_roles %}<a class="button-link" href="{% url 'settings_center:access_workspace' %}">Доступ</a>{% endif %}
       {% if can_manage_board_access %}<a class="button-link" href="{% url 'settings_center:board_access_list' %}">Доступ к доскам</a>{% endif %}
+      {% if can_manage_waiting_list_data %}<a class="button-link" href="{% url 'settings_center:waiting_list_data' %}">Данные листа ожидания</a>{% endif %}
       <a class="button-link" href="{% url 'settings_center:env_status' %}">Статус .env</a>
     </div>
   </div>

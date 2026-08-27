@@ -19,6 +19,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.template import Context
 from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.test.utils import ContextList
@@ -32,6 +33,7 @@ from apps.workorders.models import Board, BoardAccessAudit
 from apps.workorders.policies import ROLE_CUSTOMER, ROLE_TECHNICIAN
 from apps.workorders.forms import BoardAccessForm
 from apps.memory.models import MemoryGroupMembershipAudit
+from apps.waiting_list.models import WaitingListEntry
 
 from .contract_services import (
     _assert_deployment_catalog_candidate_delta,
@@ -1564,6 +1566,86 @@ class AccessWorkspaceTests(TestCase):
 
 
 class SettingsCenterRegistryTests(TestCase):
+    @staticmethod
+    def _waiting_list_upload():
+        content = (
+            "Услуга\tФИО\tДата рождения\tТелефон\tДата записи\t"
+            "История изменений\tДата бирки\tДата окончания\tCito\tСтатус\t"
+            "Комментарий\tПериод\n"
+            "Катаракта\tТестовый Пациент\t12.08.1946\t89005815724\t\t"
+            '"10.11.25 - Врач Тестовый - В очереди\n'
+            '10.11.25 - Врач Тестовый - Назначена"\t'
+            "13.10.2027 8:29:59\t13.10.2027 9:29:59\tНет\tНазначена\t\t"
+            "10.11.2025 10:27:02\n"
+        )
+        return SimpleUploadedFile(
+            "Выгрузка.txt",
+            content.encode("utf-8"),
+            content_type="text/plain",
+        )
+
+    def test_waiting_list_data_page_is_superuser_only_and_linked_from_dashboard(self):
+        regular = User.objects.create_user(username="waiting-data-regular", password="pass")
+        root = User.objects.create_superuser(username="waiting-data-root", password="pass")
+        url = reverse("settings_center:waiting_list_data")
+
+        self.client.force_login(regular)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+        self.client.force_login(root)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Данные листа ожидания")
+        dashboard = self.client.get(reverse("settings_center:dashboard"))
+        self.assertContains(dashboard, url)
+
+    def test_waiting_list_data_page_validates_upload_without_writing(self):
+        root = User.objects.create_superuser(username="waiting-data-validator", password="pass")
+        self.client.force_login(root)
+
+        response = self.client.post(
+            reverse("settings_center:waiting_list_data"),
+            {
+                "action": "validate_import",
+                "source_file": self._waiting_list_upload(),
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Записей в файле: 1")
+        self.assertFalse(WaitingListEntry.objects.exists())
+
+    def test_waiting_list_data_page_imports_and_clears(self):
+        root = User.objects.create_superuser(username="waiting-data-operator", password="pass")
+        self.client.force_login(root)
+        url = reverse("settings_center:waiting_list_data")
+
+        imported = self.client.post(
+            url,
+            {
+                "action": "import",
+                "source_file": self._waiting_list_upload(),
+            },
+        )
+        self.assertRedirects(imported, url, fetch_redirect_response=False)
+        entry = WaitingListEntry.objects.get()
+        self.assertEqual(entry.author, root)
+
+        rejected = self.client.post(
+            url,
+            {"action": "clear", "confirmation": "неверно"},
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertTrue(WaitingListEntry.objects.exists())
+
+        cleared = self.client.post(
+            url,
+            {"action": "clear", "confirmation": "DELETE_WAITING_LIST"},
+        )
+        self.assertRedirects(cleared, url, fetch_redirect_response=False)
+        self.assertFalse(WaitingListEntry.objects.exists())
+
     def test_access_administration_e2e_command(self):
         output = StringIO()
 

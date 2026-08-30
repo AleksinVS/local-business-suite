@@ -10,6 +10,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from apps.core.contract_store import get_contract
+from apps.core.status_colors import status_color_css_variables
 
 from .forms import WaitingListEntryForm, WaitingListStatusForm
 from .models import WaitingListEntry, WaitingListStatus
@@ -39,6 +40,13 @@ def _role_rules_snapshot(request):
         snapshot = get_contract("role_rules", request=request)
         request._waiting_role_rules = snapshot
     return snapshot
+
+
+def _waiting_list_status_color_style(request):
+    return status_color_css_variables(
+        get_contract("waiting_list_status_colors", request=request),
+        prefix="waiting-list-status",
+    )
 
 
 def waiting_list_detail_page_context(request, entry):
@@ -93,6 +101,7 @@ def waiting_list_detail_context(request, entry, *, form=None, error=None):
         "detail_ai_context_json": page_context_json(
             waiting_list_detail_page_context(request, entry)
         ),
+        "waiting_list_status_color_style": _waiting_list_status_color_style(request),
         "is_standalone_detail": not request.htmx,
         "error": error,
     }
@@ -158,6 +167,9 @@ class WaitingListDashboardView(WaitingListAccessMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["service_choices"] = WaitingListEntry._meta.get_field("service_id").choices
         context["status_choices"] = WaitingListStatus.choices
+        context["waiting_list_status_color_style"] = _waiting_list_status_color_style(
+            self.request
+        )
         context["filters"] = {
             "service": self.request.GET.get("service", "all"),
             "search": self.request.GET.get("search", ""),

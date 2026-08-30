@@ -1021,6 +1021,12 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         context["can_edit"] = self.descriptor.is_editable
         context["is_workflow_transition_matrix"] = self.descriptor.widget == "workflow_transition_matrix"
         context["is_status_color_palette"] = self.descriptor.widget == "status_color_palette"
+        palette_route_name = self.descriptor.metadata.get("palette_route_name")
+        context["structured_editor_url"] = (
+            reverse(palette_route_name)
+            if context["is_status_color_palette"] and palette_route_name
+            else ""
+        )
         return context
 
     def form_valid(self, form):
@@ -1158,20 +1164,33 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
         return transitions
 
 
-class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
-    template_name = "settings_center/workorder_status_colors.html"
-    setting_id = "workorders.contract.status_colors"
+class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
+    """Общий редактор доменных палитр, зарегистрированных дескрипторами."""
+
+    template_name = "settings_center/status_colors.html"
+    setting_ids = {
+        "workorders": "workorders.contract.status_colors",
+        "waiting-list": "waiting_list.contract.status_colors",
+    }
+
+    def get_setting_id(self):
+        try:
+            return self.setting_ids[self.kwargs["section"]]
+        except KeyError as exc:
+            raise Http404 from exc
 
     def get_descriptor(self):
-        return get_registry().get(self.setting_id)
+        return get_registry().get(self.get_setting_id())
 
     def get_payload(self):
         return read_contract_value(self.get_descriptor())
 
     def get_context_data(self, **kwargs):
+        payload = kwargs.pop("payload", None)
+        base_hash = kwargs.pop("base_hash", None)
         context = super().get_context_data(**kwargs)
         descriptor = self.get_descriptor()
-        payload = self.get_payload()
+        payload = payload or self.get_payload()
         rows = [
             {
                 "code": code,
@@ -1186,7 +1205,7 @@ class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 "descriptor": descriptor,
                 "rows": rows,
                 "raw_payload": pretty_json(payload),
-                "base_hash": normalized_hash(payload),
+                "base_hash": base_hash or normalized_hash(payload),
             }
         )
         return context
@@ -1205,7 +1224,7 @@ class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 ),
             }
         after = {
-            "$schema": before.get("$schema", "./schemas/workorder_status_colors.schema.json"),
+            "$schema": before.get("$schema", "./schemas/status_colors.schema.json"),
             "statuses": statuses,
         }
         try:
@@ -1218,9 +1237,14 @@ class WorkOrderStatusColorSettingsView(SettingsManagementMixin, TemplateView):
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
-            return self.render_to_response(self.get_context_data())
+            return self.render_to_response(
+                self.get_context_data(
+                    payload=after,
+                    base_hash=normalized_hash(before),
+                )
+            )
         messages.success(request, f"Цвета статусов сохранены. Аудит #{change.pk}.")
-        return redirect("settings_center:workorder_status_colors")
+        return redirect(descriptor.metadata["palette_route_name"])
 
 
 class EnvStatusView(SettingsManagementMixin, TemplateView):

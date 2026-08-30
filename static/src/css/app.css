@@ -1327,18 +1327,19 @@ table { width: 100%; border-collapse: collapse; }
 }
 
 /* Dynamic Badge Colors using data-status (Universal) */
-.badge[data-status="new"] { --status-color: var(--workorder-status-new, #3b82f6); }
-.badge[data-status="accepted"] { --status-color: var(--workorder-status-accepted, #10b981); }
-.badge[data-status="in_progress"] { --status-color: var(--workorder-status-in_progress, #f59e0b); }
-.badge[data-status="on_hold"] { --status-color: var(--workorder-status-on_hold, #8b5cf6); }
-.badge[data-status="resolved"] { --status-color: var(--workorder-status-resolved, #059669); }
-.badge[data-status="closed"] { --status-color: var(--workorder-status-closed, #6b7280); }
-.badge[data-status="cancelled"] { --status-color: var(--workorder-status-cancelled, #ef4444); }
+.workorders-board-context .badge[data-status="new"] { --status-color: var(--workorder-status-new, #3b82f6); --status-bg: var(--workorder-status-new-bg, #eff6ff); }
+.workorders-board-context .badge[data-status="accepted"] { --status-color: var(--workorder-status-accepted, #10b981); --status-bg: var(--workorder-status-accepted-bg, #ecfdf5); }
+.workorders-board-context .badge[data-status="in_progress"] { --status-color: var(--workorder-status-in_progress, #f59e0b); --status-bg: var(--workorder-status-in_progress-bg, #fffbeb); }
+.workorders-board-context .badge[data-status="on_hold"] { --status-color: var(--workorder-status-on_hold, #8b5cf6); --status-bg: var(--workorder-status-on_hold-bg, #f5f3ff); }
+.workorders-board-context .badge[data-status="resolved"] { --status-color: var(--workorder-status-resolved, #059669); --status-bg: var(--workorder-status-resolved-bg, #ecfdf5); }
+.workorders-board-context .badge[data-status="closed"] { --status-color: var(--workorder-status-closed, #6b7280); --status-bg: var(--workorder-status-closed-bg, #f3f4f6); }
+.workorders-board-context .badge[data-status="cancelled"] { --status-color: var(--workorder-status-cancelled, #ef4444); --status-bg: var(--workorder-status-cancelled-bg, #fef2f2); }
 
 /* Waiting List Statuses */
-.badge[data-status="waiting"] { --status-color: #f59e0b; }
-.badge[data-status="scheduled"] { --status-color: #3b82f6; }
-.badge[data-status="confirmed"] { --status-color: #10b981; }
+.waiting-list-context .badge[data-status="waiting"] { --status-color: var(--waiting-list-status-waiting, #b45309); --status-bg: var(--waiting-list-status-waiting-bg, #fffbeb); }
+.waiting-list-context .badge[data-status="scheduled"] { --status-color: var(--waiting-list-status-scheduled, #4338ca); --status-bg: var(--waiting-list-status-scheduled-bg, #eef2ff); }
+.waiting-list-context .badge[data-status="confirmed"] { --status-color: var(--waiting-list-status-confirmed, #047857); --status-bg: var(--waiting-list-status-confirmed-bg, #ecfdf5); }
+.waiting-list-context .badge[data-status="cancelled"] { --status-color: var(--waiting-list-status-cancelled, #b91c1c); --status-bg: var(--waiting-list-status-cancelled-bg, #fef2f2); }
 
 .badge {
   display: inline-flex;
@@ -1347,8 +1348,9 @@ table { width: 100%; border-collapse: collapse; }
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
-  background: var(--status-color, #e2e8f0);
-  color: white;
+  border: 1px solid var(--status-color, transparent);
+  background: var(--status-bg, var(--status-color, #e2e8f0));
+  color: var(--status-color, white);
 }
 
 .hero { display: grid; gap: 1rem; grid-template-columns: 2fr 1fr; }
@@ -2910,7 +2912,7 @@ textarea:focus {
 }
 
 /* Legacy badge override */
-.badge:not(.badge-waiting):not(.badge-scheduled):not(.badge-confirmed):not(.badge-cancelled) {
+.badge:not([data-status]):not([data-status-preview]):not(.badge-waiting):not(.badge-scheduled):not(.badge-confirmed):not(.badge-cancelled) {
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -3416,23 +3418,25 @@ textarea:focus {
 }
 
 .step-item.active {
-  background: var(--status-color, var(--brand)) !important;
-  color: white !important;
+  border: 1px solid var(--status-color, var(--brand));
+  background: var(--status-bg, var(--status-color, var(--brand))) !important;
+  color: var(--status-color, white) !important;
   box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
-.step-item[data-status="new"] { --status-color: #3b82f6; }
-.step-item[data-status="accepted"] { --status-color: #10b981; }
-.step-item[data-status="in_progress"] { --status-color: #f59e0b; }
-.step-item[data-status="on_hold"] { --status-color: #6366f1; }
-.step-item[data-status="resolved"] { --status-color: #059669; }
-.step-item[data-status="closed"] { --status-color: #6b7280; }
-.step-item[data-status="cancelled"] { --status-color: #ef4444; }
+.workorders-board-context .step-item[data-status="new"] { --status-color: var(--workorder-status-new, #3b82f6); --status-bg: var(--workorder-status-new-bg, #eff6ff); }
+.workorders-board-context .step-item[data-status="accepted"] { --status-color: var(--workorder-status-accepted, #10b981); --status-bg: var(--workorder-status-accepted-bg, #ecfdf5); }
+.workorders-board-context .step-item[data-status="in_progress"] { --status-color: var(--workorder-status-in_progress, #f59e0b); --status-bg: var(--workorder-status-in_progress-bg, #fffbeb); }
+.workorders-board-context .step-item[data-status="on_hold"] { --status-color: var(--workorder-status-on_hold, #8b5cf6); --status-bg: var(--workorder-status-on_hold-bg, #f5f3ff); }
+.workorders-board-context .step-item[data-status="resolved"] { --status-color: var(--workorder-status-resolved, #059669); --status-bg: var(--workorder-status-resolved-bg, #ecfdf5); }
+.workorders-board-context .step-item[data-status="closed"] { --status-color: var(--workorder-status-closed, #6b7280); --status-bg: var(--workorder-status-closed-bg, #f3f4f6); }
+.workorders-board-context .step-item[data-status="cancelled"] { --status-color: var(--workorder-status-cancelled, #ef4444); --status-bg: var(--workorder-status-cancelled-bg, #fef2f2); }
 
 /* Waiting List Status Colors */
-.step-item[data-status="waiting"] { --status-color: #f59e0b; }
-.step-item[data-status="scheduled"] { --status-color: #3b82f6; }
-.step-item[data-status="confirmed"] { --status-color: #10b981; }
+.waiting-list-context .step-item[data-status="waiting"], .waiting-list-detail-panel .step-item[data-status="waiting"] { --status-color: var(--waiting-list-status-waiting, #b45309); --status-bg: var(--waiting-list-status-waiting-bg, #fffbeb); }
+.waiting-list-context .step-item[data-status="scheduled"], .waiting-list-detail-panel .step-item[data-status="scheduled"] { --status-color: var(--waiting-list-status-scheduled, #4338ca); --status-bg: var(--waiting-list-status-scheduled-bg, #eef2ff); }
+.waiting-list-context .step-item[data-status="confirmed"], .waiting-list-detail-panel .step-item[data-status="confirmed"] { --status-color: var(--waiting-list-status-confirmed, #047857); --status-bg: var(--waiting-list-status-confirmed-bg, #ecfdf5); }
+.waiting-list-context .step-item[data-status="cancelled"], .waiting-list-detail-panel .step-item[data-status="cancelled"] { --status-color: var(--waiting-list-status-cancelled, #b91c1c); --status-bg: var(--waiting-list-status-cancelled-bg, #fef2f2); }
 
 .step-item.available:hover {
   background: #e2e8f0;

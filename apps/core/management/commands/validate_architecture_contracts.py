@@ -53,6 +53,7 @@ from apps.workorders.contracts import (
     validate_workflow_rules_payload,
     validate_workorder_status_colors_payload,
 )
+from apps.waiting_list.contracts import validate_waiting_list_status_colors_payload
 from services.agent_runtime.task_types import STATUS_ALIASES
 
 
@@ -85,6 +86,9 @@ class Command(BaseCommand):
         validate_workorder_status_colors_payload(
             load_json_file(settings.LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE),
             workflow_payload=workflow_payload,
+        )
+        validate_waiting_list_status_colors_payload(
+            load_json_file(settings.LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE)
         )
         validate_integration_registry_payload(load_json_file(settings.LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE))
         validate_dataset_registry_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE))

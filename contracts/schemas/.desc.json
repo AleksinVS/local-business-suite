@@ -18,5 +18,6 @@
   "memory_ingestion_profiles.schema.json": "Schema для профилей ingestion-коннектора памяти",
   "memory_file_organization_profiles.schema.json": "Schema для профилей автоупорядочивания файловых источников",
   "memory_graph_schema.schema.json": "Schema для контролируемого словаря типов рёбер/концептов relations: (ADR-0030 решение 3)",
-  "workorder_status_colors.schema.json": "Schema для палитры цветов статусов заявок"
+  "status_colors.schema.json": "Общая schema палитры цветов статусов",
+  "workorder_status_colors.schema.json": "Совместимая ссылка старого адреса на общую schema палитры"
 }

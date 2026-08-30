@@ -3,7 +3,7 @@
   "dashboard.html": "Дашборд зарегистрированных settings descriptors и audit",
   "setting_detail.html": "Страница просмотра/редактирования runtime contract descriptor",
   "workflow_transitions.html": "Матрица настройки переходов статусов заявок через workflow_rules contract",
-  "workorder_status_colors.html": "Форма настройки цветов статусов заявок через runtime contract",
+  "status_colors.html": "Общая форма настройки цветов статусов доменных разделов через runtime contracts",
   "board_access_list.html": "Список досок и назначенных им контрактных ролей",
   "board_access_form.html": "Основной и резервный preview/apply-сценарий доступа к доске",
   "role_catalog.html": "Компактный каталог ролей доступа с числом участников и уровнем риска",

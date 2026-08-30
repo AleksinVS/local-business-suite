@@ -30,6 +30,7 @@ from apps.workorders.contracts import (
     validate_workflow_rules_payload,
     validate_workorder_status_colors_payload,
 )
+from apps.waiting_list.contracts import validate_waiting_list_status_colors_payload
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,10 @@ _CONTRACTS = {
     "workorder_status_colors": {
         "path_setting": "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE",
         "validator": validate_workorder_status_colors_payload,
+    },
+    "waiting_list_status_colors": {
+        "path_setting": "LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE",
+        "validator": validate_waiting_list_status_colors_payload,
     },
 }
 

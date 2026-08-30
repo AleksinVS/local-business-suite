@@ -1,0 +1,25 @@
+{
+  "$schema": "./schemas/status_colors.schema.json",
+  "statuses": {
+    "waiting": {
+      "label": "В очереди",
+      "color": "#b45309",
+      "background": "#fffbeb"
+    },
+    "scheduled": {
+      "label": "Назначена",
+      "color": "#4338ca",
+      "background": "#eef2ff"
+    },
+    "confirmed": {
+      "label": "Подтверждена",
+      "color": "#047857",
+      "background": "#ecfdf5"
+    },
+    "cancelled": {
+      "label": "Отменена",
+      "color": "#b91c1c",
+      "background": "#fef2f2"
+    }
+  }
+}

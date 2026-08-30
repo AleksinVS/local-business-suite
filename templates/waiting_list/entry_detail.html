@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="waiting-list-standalone-detail panel">
+<div class="waiting-list-context waiting-list-standalone-detail panel" style="{{ waiting_list_status_color_style }}">
   {% include "waiting_list/partials/entry_detail_panel.html" %}
 </div>
 {% endblock %}

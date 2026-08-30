@@ -2,7 +2,7 @@
 
 Статус: актуальное эксплуатационное руководство.
 
-Дата обновления: 2026-08-25.
+Дата обновления: 2026-08-30.
 
 ## Назначение
 
@@ -13,7 +13,8 @@ Settings Center находится по маршруту `/settings/` и дае�
 - явной привязки пользователей к Active Directory identity;
 - `.env` status/proposal workflow;
 - contextual help mini-chat по каждому значимому `setting_id`;
-- memory ACL inheritance diagnostics.
+- memory ACL inheritance diagnostics;
+- палитр статусов доски заявок и листа ожидания.
 
 ## Доступ
 
@@ -38,7 +39,8 @@ Runtime contracts редактируются как полный JSON payload:
 
 Write выполняется атомарно через runtime contract path в `data/contracts/`. Default contracts в `contracts/` остаются Git-managed baseline.
 
-После ADR-0031 чтение `role_rules`, `workflow_rules` и `workorder_status_colors` идет через
+После ADR-0031 чтение `role_rules`, `workflow_rules`, `workorder_status_colors` и
+`waiting_list_status_colors` идет через
 `apps.core.contract_store.get_contract(name)`: каждый процесс перечитывает рабочую копию по
 ключу метаданных файла `(st_mtime_ns, st_size, st_ino)`, поэтому изменение контракта
 применяется во всех gunicorn-воркерах без перезапуска. Единственный путь записи —
@@ -183,6 +185,23 @@ Python-каталог инструментов с JSON, а не default-файл
 единого предупреждения.
 
 Для переходов статусов заявок есть отдельный экран `/settings/workflow/transitions/`. Он редактирует тот же `workflow_rules` contract, но показывает матрицу `из статуса -> в статус`. Кнопка `Разрешить все` включает все переходы между разными статусами; права ролей из `role_rules` продолжают применяться отдельно.
+
+### Цвета статусов разделов
+
+В разделе `/settings/` зарегистрированы две палитры:
+
+- `/settings/workorders/status-colors/` — доска заявок;
+- `/settings/waiting-list/status-colors/` — лист ожидания.
+
+Каждый статус имеет основной цвет и цвет заливки. Основной цвет используется для
+текста, границы и акцента, заливка — для фона метки, переключателя или строки.
+Форма показывает результат сразу в предварительном образце, но записывает изменение
+только после явного подтверждения. Дефолты находятся в
+`contracts/workorder_status_colors.json` и
+`contracts/waiting_list_status_colors.json`, рабочие значения — в одноимённых
+файлах `data/contracts/`. Изменение проходит через общий атомарный сервис центра
+настроек, создаёт `SettingsChange` и становится видно другим процессам без
+перезапуска.
 
 После изменения memory sources/profiles/routing/ingestion profiles может потребоваться reindex. После изменения role/workflow rules нужно проверить доступы на тестовом пользователе.
 

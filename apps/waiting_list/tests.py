@@ -1,4 +1,5 @@
 import csv
+import json
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
@@ -12,11 +13,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.json_utils import load_json_file
+from apps.core.status_colors import status_color_css_variables
 from apps.workorders.policies import ROLE_MANAGER
 
 User = get_user_model()
@@ -45,6 +47,34 @@ from .services import (
     transition_entry,
     update_entry,
 )
+
+
+@pytest.mark.unit
+class WaitingListStatusColorTests(SimpleTestCase):
+    def test_default_palette_covers_every_waiting_list_status(self):
+        from .contracts import validate_waiting_list_status_colors_payload
+
+        payload = load_json_file("contracts/waiting_list_status_colors.json")
+
+        validate_waiting_list_status_colors_payload(payload)
+        self.assertEqual(set(payload["statuses"]), set(WaitingListStatus.values))
+
+    def test_css_variables_skip_unsafe_names_and_values(self):
+        style = status_color_css_variables(
+            {
+                "statuses": {
+                    "waiting": {"color": "#123456", "background": "#abcdef"},
+                    "bad;name": {"color": "#111111", "background": "#222222"},
+                    "scheduled": {"color": "red; display:none", "background": "#333333"},
+                }
+            },
+            prefix="waiting-list-status",
+        )
+
+        self.assertIn("--waiting-list-status-waiting: #123456", style)
+        self.assertIn("--waiting-list-status-scheduled-bg: #333333", style)
+        self.assertNotIn("bad;name", style)
+        self.assertNotIn("display:none", style)
 
 
 @pytest.mark.integration
@@ -766,6 +796,29 @@ class WaitingListRouteTests(TestCase):
         self.assertContains(response, "page-container--flush-toolbar")
         self.assertContains(response, "Комментарий")
         self.assertContains(response, "Комментарий в списке")
+
+    def test_dashboard_and_htmx_detail_use_runtime_status_palette(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        payload = load_json_file("contracts/waiting_list_status_colors.json")
+        payload["statuses"]["waiting"]["color"] = "#123456"
+        with TemporaryDirectory() as tmpdir:
+            color_file = Path(tmpdir) / "waiting_list_status_colors.json"
+            color_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with override_settings(LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE=color_file):
+                _reset_for_tests()
+                try:
+                    self.client.force_login(self.user)
+                    dashboard = self.client.get(reverse("waiting_list:dashboard"))
+                    detail = self.client.get(
+                        reverse("waiting_list:detail", kwargs={"pk": self.entry.pk}),
+                        HTTP_HX_REQUEST="true",
+                    )
+                finally:
+                    _reset_for_tests()
+
+        self.assertContains(dashboard, "--waiting-list-status-waiting: #123456")
+        self.assertContains(detail, "--waiting-list-status-waiting: #123456")
 
     def test_dashboard_forbidden_without_doctor_role(self):
         non_doctor = User.objects.create_user(username="nondoctor", password="pass")

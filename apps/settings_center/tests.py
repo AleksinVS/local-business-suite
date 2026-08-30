@@ -1713,6 +1713,7 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertIn("core.contract.role_rules", setting_ids)
         self.assertIn("accounts.user.ad_identity_link", setting_ids)
         self.assertIn("workorders.contract.status_colors", setting_ids)
+        self.assertIn("waiting_list.contract.status_colors", setting_ids)
         self.assertIn("ai.contract.tools", setting_ids)
         self.assertIn("memory.contract.sources", setting_ids)
         self.assertNotIn("memory.source.acl_mode", setting_ids)
@@ -2398,6 +2399,51 @@ class SettingsCenterContractTests(TestCase):
 
             self.assertEqual(response.status_code, 302)
             self.assertEqual(load_json_file(color_file)["statuses"]["new"]["color"], "#111111")
+
+    def test_waiting_list_status_color_palette_view_updates_contract(self):
+        actor = User.objects.create_superuser(username="waiting-color-admin", password="pass")
+        payload = load_json_file("contracts/waiting_list_status_colors.json")
+        with TemporaryDirectory() as tmpdir:
+            color_file = Path(tmpdir) / "waiting_list_status_colors.json"
+            color_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            with override_settings(
+                LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE=color_file,
+                LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS=payload,
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir),
+            ):
+                self.client.force_login(actor)
+                response = self.client.get(
+                    reverse("settings_center:waiting_list_status_colors")
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Цвета статусов листа ожидания")
+
+                base_hash = response.context["base_hash"]
+                post_data = {"base_hash": base_hash}
+                for status, config in payload["statuses"].items():
+                    post_data[f"color__{status}"] = (
+                        "#123456" if status == "waiting" else config["color"]
+                    )
+                    post_data[f"background__{status}"] = config["background"]
+
+                confirmation_error = self.client.post(
+                    reverse("settings_center:waiting_list_status_colors"),
+                    post_data,
+                )
+                self.assertEqual(confirmation_error.status_code, 200)
+                self.assertEqual(confirmation_error.context["base_hash"], base_hash)
+
+                post_data["confirm"] = "on"
+                response = self.client.post(
+                    reverse("settings_center:waiting_list_status_colors"),
+                    post_data,
+                )
+
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(
+                load_json_file(color_file)["statuses"]["waiting"]["color"],
+                "#123456",
+            )
 
 
 class SettingsContractRecoveryTests(TransactionTestCase):

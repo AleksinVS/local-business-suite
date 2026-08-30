@@ -430,7 +430,7 @@ def get_contract_path(filename, env_var, sub_dir=None):
     (``apps.settings_center.contract_services``) шла строго в ``data/contracts/``
     и не затрагивала read-only дефолты из git. Отказоустойчивость чтения при
     отсутствии рабочей копии обеспечивается отдельно: для
-    role_rules/workflow_rules/workorder_status_colors — через
+    role_rules/workflow_rules/workorder_status_colors/waiting_list_status_colors — через
     ``apps.core.contract_store``, для payload-констант ниже — через
     ``_load_contract_payload`` с откатом на упакованный дефолт.
     """
@@ -477,6 +477,7 @@ def _load_contract_payload(path):
 LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUSINESS_ROLE_RULES_FILE")
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
 LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE = get_contract_path("workorder_status_colors.json", "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE")
+LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE = get_contract_path("waiting_list_status_colors.json", "LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE")
 LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", sub_dir="integrations")
 LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = get_contract_path("datasets.json", "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", sub_dir="analytics") # Note: analytics in data/analytics/
 LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE = get_contract_path("sources.json", "LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE", sub_dir="analytics")
@@ -778,6 +779,7 @@ if DJANGO_ENV == "production":
 LOCAL_BUSINESS_WORKFLOW_RULES = _load_contract_payload(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
 LOCAL_BUSINESS_ROLE_RULES = _load_contract_payload(LOCAL_BUSINESS_ROLE_RULES_FILE)
 LOCAL_BUSINESS_WORKORDER_STATUS_COLORS = _load_contract_payload(LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE)
+LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS = _load_contract_payload(LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE)
 LOCAL_BUSINESS_INTEGRATION_REGISTRY = _load_contract_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE)
 LOCAL_BUSINESS_ANALYTICS_DATASETS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE)
 LOCAL_BUSINESS_ANALYTICS_SOURCES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)

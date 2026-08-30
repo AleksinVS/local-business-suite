@@ -63,7 +63,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     context_processors.py: file # Контекстные процессоры шаблонов
     contract_drift.py: file # Диагностика дрейфа default (contracts/) vs runtime (data/contracts/) по всем контрактам реестра Settings Center: три исхода (совпадает / рабочая копия изменена / кандидат на перенос из дефолта), только диагностика без автослияния (ADR-0031 п.4)
     contract_store.py: file # Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)
-    contracts.py: file # Core-workflow валидаторы, не принадлежащие доменам: реестр интеграций, task brief и change plan (артефакты агентного workflow и общий SDK-реестр)
+    contracts.py: file # Общие валидаторы контрактных структур: реестр интеграций, task brief/change plan и формат палитр статусов
     debug_views.py: file # Debug-представления (включаются в DEBUG=True)
     file_locks.py: file # Межпроцессная блокировка файлов Linux/Windows с ограничением времени и закрытым отказом
     forms.py: file # Формы настроек
@@ -77,6 +77,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     right_panels.py: file # Общий контракт RightPanelProvider и registry безопасного открытия объектов в правом сайдбаре
     settings_descriptors.py: file # Доменные descriptors Settings Center для core contracts и .env status
     source_adapters.py: file # Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников
+    status_colors.py: file # Безопасное преобразование контрактных палитр статусов в CSS-переменные интерфейса
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты приложения
     views.py: file # Представления дашборда и настроек с actor-aware read selectors
@@ -171,6 +172,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills листа ожидания для открытия записей и workflow-инструкций
     apps.py: file # Конфигурация приложения
+    contracts.py: file # Валидатор runtime-контракта цветов статусов листа ожидания
     data_operations.py: file # Проверяемый разбор и атомарный импорт данных листа ожидания
     forms.py: file # Формы листа ожидания
     models.py: file # Модель WaitingListEntry
@@ -178,6 +180,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     right_panel.py: file # RightPanelProvider листа ожидания для безопасного открытия записи в общем правом сайдбаре
     selectors.py: file # Канонические ограниченные выборки записей листа ожидания
     services.py: file # Сервисы листа ожидания
+    settings_descriptors.py: file # Дескриптор палитры листа ожидания для центра настроек
     source_adapter.py: file # SourceAdapter листа ожидания для memory source_data search и analytics projection
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты
@@ -279,8 +282,10 @@ contracts: # Версионируемые default-контракты; runtime-к
     memory_routing.schema.json: file # Schema для правил sensitivity routing памяти
     memory_sources.schema.json: file # Schema для каталога источников сервиса памяти
     memory_trust_policy.schema.json: file # Schema для политики надежных источников памяти
-    workorder_status_colors.schema.json: file # Schema для палитры цветов статусов заявок
+    status_colors.schema.json: file # Общая schema палитры цветов статусов
+    workorder_status_colors.schema.json: file # Совместимая ссылка старого адреса на общую schema палитры
   role_rules.json: file # Default правила ролей и capabilities
+  waiting_list_status_colors.json: file # Default палитра цветов статусов листа ожидания
   workflow_rules.json: file # Default workflow статусы и переходы
   workorder_status_colors.json: file # Default палитра цветов статусов заявок для интерфейса
 docker: # Runtime-скрипты контейнерного production запуска
@@ -555,10 +560,10 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     role_catalog.html: file # Компактный каталог ролей доступа с числом участников и уровнем риска
     role_definition_form.html: file # Точечный редактор одной роли с серверным diff и оценкой влияния
     setting_detail.html: file # Страница просмотра/редактирования runtime contract descriptor
+    status_colors.html: file # Общая форма настройки цветов статусов доменных разделов через runtime contracts
     user_form.html: file # Создание пользователя, отдельное изменение учётной записи и карточка доступа
     waiting_list_data_operations.html: file # Superuser-only интерфейс проверки, импорта и полной очистки листа ожидания
     workflow_transitions.html: file # Матрица настройки переходов статусов заявок через workflow_rules contract
-    workorder_status_colors.html: file # Форма настройки цветов статусов заявок через runtime contract
   waiting_list: # Шаблоны листа ожидания
     dashboard.html: file # Дашборд листа ожидания
     entry_detail.html: file # Детали записи

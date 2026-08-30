@@ -20,6 +20,7 @@ DOMAIN_LABELS = {
     "ai": "ИИ",
     "accounts": "Учетные записи",
     "workorders": "Заявки",
+    "waiting_list": "Лист ожидания",
     "settings_center": "Центр настроек",
 }
 
@@ -49,6 +50,7 @@ def runtime_validators() -> dict[str, Any]:
     from apps.ai import contracts as ai_contracts
     from apps.core.json_utils import load_json_file
     from apps.memory import contracts as memory_contracts
+    from apps.waiting_list import contracts as waiting_list_contracts
     from apps.workorders import contracts as workorder_contracts
 
     return {
@@ -60,6 +62,7 @@ def runtime_validators() -> dict[str, Any]:
             payload,
             workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
         ),
+        "validate_waiting_list_status_colors_payload": waiting_list_contracts.validate_waiting_list_status_colors_payload,
         "validate_workflow_rules_payload": workorder_contracts.validate_workflow_rules_payload,
         "validate_ai_registry_payload": ai_contracts.validate_ai_registry_payload,
         "validate_ai_tools_payload": ai_contracts.validate_ai_tools_payload,

@@ -19,6 +19,7 @@ DESCRIPTOR_MODULES = (
     "apps.core.settings_descriptors",
     "apps.accounts.settings_descriptors",
     "apps.workorders.settings_descriptors",
+    "apps.waiting_list.settings_descriptors",
     "apps.ai.settings_descriptors",
     "apps.memory.settings_descriptors",
 )

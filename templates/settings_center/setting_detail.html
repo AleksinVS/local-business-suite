@@ -32,7 +32,7 @@
     {% endif %}
     {% if is_status_color_palette %}
       <div class="structured-setting-actions">
-        <a class="button" href="{% url 'settings_center:workorder_status_colors' %}">Открыть палитру</a>
+        <a class="button" href="{{ structured_editor_url }}">Открыть палитру</a>
         <span class="muted">Удобный режим для настройки цветов без ручного JSON.</span>
       </div>
     {% endif %}

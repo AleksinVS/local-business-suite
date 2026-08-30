@@ -198,17 +198,12 @@ def _department_option_labels(departments):
 
 def _workorder_status_color_style():
     from apps.core.contract_store import get_contract
+    from apps.core.status_colors import status_color_css_variables
 
-    statuses = get_contract("workorder_status_colors").get("statuses", {})
-    declarations = []
-    for status, config in statuses.items():
-        color = config.get("color")
-        background = config.get("background")
-        if color:
-            declarations.append(f"--workorder-status-{status}: {color}")
-        if background:
-            declarations.append(f"--workorder-status-{status}-bg: {background}")
-    return "; ".join(declarations)
+    return status_color_css_variables(
+        get_contract("workorder_status_colors"),
+        prefix="workorder-status",
+    )
 
 
 def _mark_workorders_changed(response):

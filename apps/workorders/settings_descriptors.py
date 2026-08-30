@@ -19,6 +19,7 @@ def get_settings_descriptors():
                 "settings_path": "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE",
                 "settings_payload_attr": "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS",
                 "validator": "validate_workorder_status_colors_payload",
+                "palette_route_name": "settings_center:workorder_status_colors",
             },
         ),
     ]

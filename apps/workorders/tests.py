@@ -94,6 +94,24 @@ User = get_user_model()
 
 
 @pytest.mark.unit
+class WorkOrderStatusColorStyleTests(SimpleTestCase):
+    def test_board_style_uses_runtime_palette(self):
+        from .views import _workorder_status_color_style
+
+        payload = json_utils.load_json_file("contracts/workorder_status_colors.json")
+        payload["statuses"]["new"]["color"] = "#123456"
+        with _override_contract_file(
+            "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE",
+            "workorder_status_colors.json",
+            payload,
+        ):
+            style = _workorder_status_color_style()
+
+        self.assertIn("--workorder-status-new: #123456", style)
+        self.assertIn("--workorder-status-new-bg:", style)
+
+
+@pytest.mark.unit
 class BoardAdminAccessTests(TestCase):
     def setUp(self):
         self.actor = User.objects.create_superuser(

@@ -1,0 +1,94 @@
+{
+  "block_id": "warehouse-management-system",
+  "title": "Общий раздел Склад, права, отчёты и legacy-миграция",
+  "status": "ready-for-adr-acceptance",
+  "adr": "docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md",
+  "architecture_doc": "docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md",
+  "planning_doc": "docs/planning/active/warehouse-management-system.md",
+  "execution_order": [
+    "01-domain-model-and-app-skeleton",
+    "02-department-scoped-access",
+    "03-ledger-posting-and-balances",
+    "04-warehouse-ui-and-address-storage",
+    "05-reports-and-expiry-control",
+    "06-legacy-migration-tooling",
+    "07-e2e-security-docs-and-pilot"
+  ],
+  "parallel_after_03": [
+    "04-warehouse-ui-and-address-storage",
+    "05-reports-and-expiry-control",
+    "06-legacy-migration-tooling"
+  ],
+  "tasks": [
+    {
+      "task_id": "01-domain-model-and-app-skeleton",
+      "packet": "task-packets/01-domain-model-and-app-skeleton.json",
+      "risk": "high",
+      "summary": "Создать отдельный складской домен, модели, миграции и базовые инварианты без копирования legacy-схемы."
+    },
+    {
+      "task_id": "02-department-scoped-access",
+      "packet": "task-packets/02-department-scoped-access.json",
+      "risk": "high",
+      "summary": "Добавить закрытые по умолчанию складские capabilities, роли, scoped selectors и интеграцию раздела Доступ."
+    },
+    {
+      "task_id": "03-ledger-posting-and-balances",
+      "packet": "task-packets/03-ledger-posting-and-balances.json",
+      "risk": "high",
+      "summary": "Реализовать атомарное проведение, неизменяемые проводки, сторно и пересобираемую проекцию остатков."
+    },
+    {
+      "task_id": "04-warehouse-ui-and-address-storage",
+      "packet": "task-packets/04-warehouse-ui-and-address-storage.json",
+      "risk": "medium",
+      "summary": "Добавить пользовательский интерфейс справочников, адресного хранения, остатков и документов."
+    },
+    {
+      "task_id": "05-reports-and-expiry-control",
+      "packet": "task-packets/05-reports-and-expiry-control.json",
+      "risk": "medium",
+      "summary": "Реализовать три отчёта из общего набора данных, экспорт и контроль сроков годности."
+    },
+    {
+      "task_id": "06-legacy-migration-tooling",
+      "packet": "task-packets/06-legacy-migration-tooling.json",
+      "risk": "high",
+      "summary": "Создать общий read-only транспорт, профиль Access, landing package, идемпотентный импорт и строгую сверку."
+    },
+    {
+      "task_id": "07-e2e-security-docs-and-pilot",
+      "packet": "task-packets/07-e2e-security-docs-and-pilot.json",
+      "risk": "high",
+      "summary": "Провести security/e2e/reconciliation-приёмку, обновить документацию и выполнить приватный пилотный dry-run."
+    }
+  ],
+  "owner_decisions": {
+    "recorded_at": "2026-08-31",
+    "quantity_precision": "В первом внедрении только целые количества; Decimal-поле имеет запас 6 знаков, UnitOfMeasure.quantity_precision=0.",
+    "requirement_number": "Необязателен для расхода.",
+    "cross_department_transfer": "Отложен; MVP поддерживает отдельные выдачу/приёмку и перемещение адреса внутри подразделения.",
+    "expiry_warning": "Пороги хранятся в runtime-настройках склада и задаются до пилота.",
+    "report_output": "Экран и CSV/XLSX; серверный PDF и специальная печатная форма не нужны.",
+    "roles": "Отдельные warehouse_operator и warehouse_controller; существующие роли складской доступ не получают.",
+    "legacy_signatories": "Не мигрируются."
+  },
+  "owner_decisions_required": [
+    "Принять ADR-0047"
+  ],
+  "required_checks": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=ui",
+    "python manage.py validate_architecture_contracts",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py warehouse_rebuild_balances --check",
+    "python manage.py warehouse_acceptance_e2e",
+    "python manage.py warehouse_legacy_reconcile --run-id <run-id> --strict",
+    "make verify-full",
+    "git diff --check"
+  ],
+  "adr_required": true,
+  "adr_note": "ADR-0047 создан со статусом Proposed. Реализация apps/ и contracts/ начинается после решения владельца."
+}

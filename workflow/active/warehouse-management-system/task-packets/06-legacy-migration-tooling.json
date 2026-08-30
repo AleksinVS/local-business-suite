@@ -1,0 +1,52 @@
+{
+  "task_id": "06-legacy-migration-tooling",
+  "title": "Инструменты миграции старых складских баз",
+  "goal": "Создать общий воспроизводимый конвейер миграции и первый профиль Access без привязки продукта к VOB3.",
+  "depends_on": [
+    "03-ledger-posting-and-balances"
+  ],
+  "read_scope": [
+    "apps/core/postgresql_migration.py",
+    "apps/inventory/management/commands/import_frmo_devices.py",
+    "deployments/vob3/.tmp/uls.mdb only for authorized local dry-run",
+    "docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md"
+  ],
+  "write_scope": [
+    "apps/core/integrations/access_reader.py",
+    "scripts/windows/export_warehouse_access.ps1",
+    "apps/warehouse/legacy_import/",
+    "apps/warehouse/management/commands/warehouse_legacy_*.py",
+    "apps/warehouse/models.py",
+    "apps/warehouse/tests/fixtures/legacy_import/",
+    "apps/warehouse/tests/",
+    "docs/guides/WAREHOUSE_LEGACY_MIGRATION.md"
+  ],
+  "runtime_output_scope": [
+    "data/warehouse/imports/<run-id>/",
+    ".local/warehouse-import/ for disposable developer output"
+  ],
+  "non_goals": [
+    "Не коммитить реальную MDB или извлечённые строки",
+    "Не импортировать s_otdelenie.pass",
+    "Не импортировать реквизиты подписантов из sett даже после ручной проверки",
+    "Не создавать подразделения автоматически",
+    "Не считать prepared FastReport источником истины",
+    "Не обходить доменные команды прямой массовой записью"
+  ],
+  "implementation_notes": [
+    "Access transport работает read-only через ACE OLE DB и выдаёт versioned manifest + JSONL.",
+    "Бизнес-профиль сопоставляет legacy-таблицы с DTO и поддерживает версии преобразования.",
+    "Prepare создаёт подтверждаемые mappings и issues для неизвестных подразделений, единиц, дублей и отсутствующих адресов.",
+    "Import использует source fingerprint + table + legacy key/row hash для идемпотентности.",
+    "stelazh создаёт начальные партийные остатки, Sklad служит сверкой, uchet загружается только после балансной проверки, а sett/tmp/treb всегда пропускаются.",
+    "Реальные пути и сопоставления остаются в data/ или deployment-репозитории."
+  ],
+  "acceptance_checks": [
+    "warehouse_legacy_inspect читает только allowlisted schema/sample и скрывает secret columns",
+    "Повторный prepare/import не создаёт дублей",
+    "Неизвестная единица или подразделение блокирует commit-mode",
+    "warehouse_legacy_reconcile --strict обнаруживает намеренно внесённое расхождение",
+    "Синтетический fixture покрывает пустой uchet и начальные остатки",
+    "В импортированных моделях нет legacy password/local path/signatory data"
+  ]
+}

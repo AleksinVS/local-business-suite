@@ -1,0 +1,46 @@
+{
+  "task_id": "03-ledger-posting-and-balances",
+  "title": "Складской журнал, проведение и остатки",
+  "goal": "Реализовать атомарные операции, неизменяемые проводки и восстанавливаемую текущую проекцию.",
+  "depends_on": [
+    "01-domain-model-and-app-skeleton",
+    "02-department-scoped-access"
+  ],
+  "read_scope": [
+    "apps/warehouse/models.py",
+    "apps/warehouse/policies.py",
+    "apps/warehouse/selectors.py",
+    "apps/inventory/services.py",
+    "apps/workorders/services.py"
+  ],
+  "write_scope": [
+    "apps/warehouse/services/",
+    "apps/warehouse/models.py",
+    "apps/warehouse/selectors.py",
+    "apps/warehouse/management/commands/warehouse_rebuild_balances.py",
+    "apps/warehouse/tests/"
+  ],
+  "non_goals": [
+    "Не реализовывать закупки или цены",
+    "Не разрешать редактирование проведённого документа",
+    "Не допускать отрицательный остаток",
+    "Не добавлять асинхронную очередь"
+  ],
+  "implementation_notes": [
+    "Проведение выполняется transaction.atomic и блокирует actor, документ и balance keys в стабильном порядке.",
+    "Перемещение адреса создаёт парные проводки только внутри одного подразделения; межподразделенческое перемещение отклоняется. Передача между подразделениями оформляется независимыми выдачей и приёмкой.",
+    "Номер требования в расходном документе необязателен и сохраняется только при наличии.",
+    "StockBalance обновляется в той же транзакции и пересобирается из StockEntry отдельной командой.",
+    "Идемпотентный ключ проведения защищает от двойной отправки формы.",
+    "Аудит хранит actor, reason и correlation id."
+  ],
+  "acceptance_checks": [
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "Параллельное проведение не создаёт отрицательный остаток или lost update",
+    "Повтор idempotency key не создаёт вторую проводку",
+    "Сторно полностью компенсирует исходный документ",
+    "Расход без номера требования проходит, межподразделенческое перемещение отклоняется",
+    "python manage.py warehouse_rebuild_balances --check",
+    "git diff --check"
+  ]
+}

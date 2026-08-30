@@ -34,7 +34,7 @@
   ],
   "implementation_notes": [
     "Добавить секцию warehouse, warehouse_scopes и шесть capabilities из архитектурного документа.",
-    "Добавить отдельные warehouse_operator и warehouse_controller; существующие роли получают none/false. Controller получает управление общим каталогом, а superuser остаётся техническим резервом без третьей продуктовой роли склада.",
+    "Добавить отдельные warehouse_operator, warehouse_controller и warehouse_administrator; существующие роли получают none/false. Administrator получает view/manage_locations/manage_report_profiles=all и manage_catalog=true, но operate/adjust=none; superuser остаётся техническим резервом.",
     "Scoped selectors должны работать для none, own_department, department_branch и all.",
     "Каждая команда повторно загружает активного актора и перепроверяет область после row locks.",
     "Редактор роли должен отображать новые значения через существующий metadata-driven renderer."
@@ -45,7 +45,8 @@
     "make verify-fast TEST_SCOPE=apps/settings_center",
     "make verify-profile PROFILE=contracts",
     "python manage.py validate_architecture_contracts",
-    "Security matrix: no-role/own/child/sibling/all/inactive/superuser",
+    "Security matrix: no-role/operator/controller/administrator/own/child/sibling/all/inactive/superuser",
+    "Warehouse administrator меняет общий каталог, но без дополнительной роли не проводит документы, корректировки и сторно",
     "Прямой URL чужого подразделения закрыт"
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "task_id": "06-legacy-migration-tooling",
+  "task_id": "05-legacy-migration-tooling",
   "title": "Инструменты миграции старых складских баз",
   "goal": "Создать общий воспроизводимый конвейер миграции и первый профиль Access без привязки продукта к VOB3.",
   "depends_on": [
@@ -31,22 +31,25 @@
     "Не импортировать реквизиты подписантов из sett даже после ручной проверки",
     "Не создавать подразделения автоматически",
     "Не считать prepared FastReport источником истины",
-    "Не обходить доменные команды прямой массовой записью"
+    "Не обходить доменные команды прямой массовой записью",
+    "Не фиксировать организационный регламент переключения конкретного учреждения"
   ],
   "implementation_notes": [
     "Access transport работает read-only через ACE OLE DB и выдаёт versioned manifest + JSONL.",
+    "Внутренние этапы inspect, extract, prepare, import и reconcile сохраняют состояние, но операторский интерфейс состоит из warehouse_legacy_inspect, warehouse_legacy_import --dry-run|--commit и warehouse_legacy_reconcile.",
     "Бизнес-профиль сопоставляет legacy-таблицы с DTO и поддерживает версии преобразования.",
-    "Prepare создаёт подтверждаемые mappings и issues для неизвестных подразделений, единиц, дублей и отсутствующих адресов.",
-    "Import использует source fingerprint + table + legacy key/row hash для идемпотентности.",
+    "Prepare создаёт подтверждаемые mappings и issues для неизвестных подразделений, единиц, дублей и отсутствующих адресов; такие остатки получают location purpose unassigned и недоступны для выдачи.",
+    "Import использует source fingerprint + table + legacy key/row hash для идемпотентности; --commit запрещён при критических issues.",
     "stelazh создаёт начальные партийные остатки, Sklad служит сверкой, uchet загружается только после балансной проверки, а sett/tmp/treb всегда пропускаются.",
     "Реальные пути и сопоставления остаются в data/ или deployment-репозитории."
   ],
   "acceptance_checks": [
     "warehouse_legacy_inspect читает только allowlisted schema/sample и скрывает secret columns",
-    "Повторный prepare/import не создаёт дублей",
+    "Повторный warehouse_legacy_import --dry-run или --commit не создаёт дублей",
     "Неизвестная единица или подразделение блокирует commit-mode",
     "warehouse_legacy_reconcile --strict обнаруживает намеренно внесённое расхождение",
     "Синтетический fixture покрывает пустой uchet и начальные остатки",
-    "В импортированных моделях нет legacy password/local path/signatory data"
+    "В импортированных моделях нет legacy password/local path/signatory data",
+    "Остаток без подтверждённого адреса помечен unassigned и недоступен для выдачи"
   ]
 }

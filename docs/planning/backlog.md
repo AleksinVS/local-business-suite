@@ -15,19 +15,21 @@
 Контекст:
 
 - ADR: `docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md`
-  (`Proposed`);
+  (`Accepted`);
 - архитектура: `docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md`;
 - активный план: `docs/planning/active/warehouse-management-system.md`;
-- workflow: `workflow/active/warehouse-management-system/` (7 task packets).
+- workflow: `workflow/active/warehouse-management-system/` (6 task packets).
 
-Бизнес-решения MVP зафиксированы 2026-08-31: только целые количества с запасом
-точности в схеме, необязательное требование, только внутриподразделенческое
-перемещение адреса, пороги срока годности в runtime-настройках, CSV/XLSX без
-серверного PDF, отдельные роли `warehouse_operator`/`warehouse_controller` и
-полный запрет миграции подписантов. Перед реализацией остаётся принять ADR.
-Первый профиль миграции поддержит inspect/extract/prepare/import/reconcile,
-dry-run, идемпотентность и сверку начальных остатков; пароли старой системы не
-переносятся.
+Бизнес-решения MVP и ADR зафиксированы 2026-08-31: только целые количества с
+запасом точности в схеме, необязательное требование, только перемещение адреса
+внутри подразделения, пороги срока годности в runtime-настройках, обязательные
+CSV/XLSX без серверного PDF, сохраняемый `WarehouseReportProfile` и отдельные
+роли `warehouse_operator`/`warehouse_controller`/`warehouse_administrator`.
+Реквизиты подписантов не мигрируются и вводятся вручную. Первый профиль миграции
+сохраняет внутренние стадии inspect/extract/prepare/import/reconcile, но даёт
+оператору три команды inspect/import/reconcile, dry-run, идемпотентность и сверку
+начальных остатков. Организационное переключение конкретного учреждения не
+фиксируется в общем продуктовом плане; пароли старой системы не переносятся.
 
 ### Единый UX администрирования доступа
 

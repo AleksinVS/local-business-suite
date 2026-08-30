@@ -25,18 +25,20 @@
     "Не создавать отдельную базу или сервис"
   ],
   "implementation_notes": [
-    "Создать WarehouseItemCategory, UnitOfMeasure, WarehouseItem, FundingSource, Warehouse, StorageLocation, StockLot, StockDocument, StockDocumentLine, StockEntry, StockBalance, WarehouseAuditEvent и импортные модели.",
-    "Количество хранить DecimalField с шестью знаками после запятой; UnitOfMeasure.quantity_precision допускает 0..6 и в первом внедрении равно 0, поэтому дроби отклоняются без изменения физической схемы.",
+    "Создать WarehouseItemCategory, UnitOfMeasure, WarehouseItem, FundingSource, Warehouse, StorageLocation, StockLot, StockDocument, StockDocumentLine, StockEntry, StockBalance, WarehouseAuditEvent, WarehouseReportProfile и импортные модели.",
+    "StorageLocation сделать плоским справочником с уникальным составным кодом и purpose available|quarantine|unassigned; parent и проверку циклов не добавлять.",
+    "StockLot не содержит FundingSource. Источник финансирования хранится в проводке и входит в уникальный ключ StockBalance вместе с department, warehouse, location и lot.",
+    "Количество хранить DecimalField с шестью знаками после запятой; UnitOfMeasure.quantity_precision допускает 0..6 и в первом внедрении равно 0, поэтому дроби отклоняются без изменения физической схемы. После первого движения точность нельзя уменьшать.",
     "Добавить runtime-контракт настроек склада с default_quantity_precision=0 и конфигурируемым expiry_warning_days.",
     "Проведённые документы/проводки защищать от обычного update/delete доменными сервисами, admin и моделями.",
     "Warehouse связан с apps.core.Department; отдельную организационную иерархию не создавать.",
-    "Добавить DB constraints и индексы под ключи остатков, даты отчётов, сроки годности и импортную идемпотентность."
+    "Добавить UniqueConstraint полного ключа StockBalance, CheckConstraint quantity >= 0 и индексы под даты отчётов, сроки годности и импортную идемпотентность."
   ],
   "acceptance_checks": [
     "python manage.py check",
     "python manage.py makemigrations --check --dry-run",
     "make verify-fast TEST_SCOPE=apps/warehouse",
-    "Модельные тесты запрещают циклы адресов и некорректные строки документов",
+    "Модельные тесты проверяют уникальность кодов адресов, их purpose, ключ остатка и некорректные строки документов",
     "git diff --check"
   ]
 }

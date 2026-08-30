@@ -38,7 +38,7 @@
     "services/agent_runtime legacy file delivery",
     "all affected tests/e2e",
     "README.md",
-    "docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md после решения владельца",
+    "docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md после решения владельца",
     "docs/adr/ADR-0031-runtime-contract-store-and-delivery.md с supersession note",
     "docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md",
     "docs/deployment/SETTINGS_DOCUMENTS_MIGRATION.md",
@@ -61,7 +61,7 @@
     "Проверить export всех effective documents и возможность сравнить с Git defaults без raw secrets.",
     "Выполнить постоянные e2e: status colors UI, concurrent edit, role/workflow, AI gateway, memory job snapshot, migration idempotency, recovery smoke.",
     "Выполнить один make verify-full после успешных targeted/profile checks.",
-    "ADR-0047 менять Proposed -> Accepted и помечать ADR-0031 partially superseded только после явного решения владельца и фактического cutover; не переписывать историю задним числом.",
+    "ADR-0048 менять Proposed -> Accepted и помечать ADR-0031 partially superseded только после явного решения владельца и фактического cutover; не переписывать историю задним числом.",
     "Обновить README и user/operator docs. После пользовательской приемки удалить задачу из backlog и архивировать planning/workflow по правилам AGENTS.md."
   ],
   "non_goals": [

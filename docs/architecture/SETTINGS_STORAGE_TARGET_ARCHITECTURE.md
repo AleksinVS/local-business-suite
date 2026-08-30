@@ -6,7 +6,7 @@
 
 Связанные материалы:
 
-- решение: `docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md`;
+- решение: `docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md`;
 - активный план: `docs/planning/active/settings-storage-simplification.md`;
 - workflow: `workflow/active/settings-storage-simplification/`;
 - действующий файловый store: `docs/adr/ADR-0031-runtime-contract-store-and-delivery.md`;

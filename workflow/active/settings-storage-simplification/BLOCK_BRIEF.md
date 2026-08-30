@@ -1,7 +1,7 @@
 # Упрощение хранения и доставки настроек
 
 Статус: planning complete, implementation not started. Старт реализации требует
-принятия ADR-0047 владельцем.
+принятия ADR-0048 владельцем.
 
 ## Цель
 
@@ -30,7 +30,7 @@
 
 ## Источники решения
 
-- `docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md`;
+- `docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md`;
 - `docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md`;
 - `docs/planning/active/settings-storage-simplification.md`;
 - ADR-0007, ADR-0029, ADR-0031;
@@ -74,7 +74,7 @@
 
 ## Обязательные ограничения
 
-- ADR-0047 должен стать `Accepted` до пакета 02; пакет 01 может выполняться как
+- ADR-0048 должен стать `Accepted` до пакета 02; пакет 01 может выполняться как
   уточняющий inventory только после согласования старта;
 - текущие незакоммиченные изменения владельца сохраняются;
 - каждый cutover имеет backup, freeze, final plan, smoke и rollback window;

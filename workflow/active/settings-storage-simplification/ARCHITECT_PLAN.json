@@ -3,12 +3,12 @@
   "title": "Упрощение хранения и доставки настроек",
   "status": "planned-awaiting-adr-acceptance",
   "created_at": "2026-08-31",
-  "adr": "docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md",
+  "adr": "docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md",
   "architecture_doc": "docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md",
   "planning_doc": "docs/planning/active/settings-storage-simplification.md",
   "execution_guide": "workflow/active/settings-storage-simplification/EXECUTION_GUIDE.md",
   "start_gates": [
-    "ADR-0047 принят владельцем",
+    "ADR-0048 принят владельцем",
     "утверждена классификация документов первой волны",
     "согласованы freeze/backup/rollback для pilot",
     "тестовый PostgreSQL профиль доступен"

@@ -6,7 +6,7 @@
   "objective": "Перевести role_rules и workflow_rules на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
   "start_gate": [
     "Пакет 04 accepted и observation не выявил дефектов backend.",
-    "ADR-0047 Accepted.",
+    "ADR-0048 Accepted.",
     "Согласован полный role/access acceptance matrix.",
     "Нет пересекающегося write с workflow/active/access-administration-ux-unification.",
     "Cutover freeze/backup/rollback разрешены отдельно."

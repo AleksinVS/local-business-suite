@@ -338,7 +338,8 @@ docs: # Документация проекта
     ADR-0044-unified-native-ai-chat-execution.md: file # Принятый ADR: единый путь выполнения бокового и полноэкранного самописного ИИ-чата
     ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md: file # Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию
     ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md: file # Предлагаемый ADR: копирование ролей сейчас и ограниченная аддитивная иерархия после отдельного подтверждения
-    ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
+    ADR-0047-warehouse-ledger-and-department-scoped-access.md: file # Предлагаемый ADR: складской журнал, адресное хранение и доступ по подразделениям
+    ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -377,6 +378,7 @@ docs: # Документация проекта
     SERVICE_EXTRACTION_GUIDE.md: file # Правила безопасного выноса технических сервисов из Django
     SETTINGS_CENTER_IMPLEMENTATION_PLAN.md: file # План реализации Settings Center, GUI настроек и контекстной справки
     SETTINGS_STORAGE_TARGET_ARCHITECTURE.md: file # Целевая архитектура хранения настроек: единый реестр, Git-дефолты и PostgreSQL runtime-документы
+    WAREHOUSE_SYSTEM_ARCHITECTURE.md: file # Архитектура общего раздела Склад, прав, отчётов и legacy-миграции
   deployment: # Гайды по деплою (Docker, IIS)
     AI_UI_PROTOCOL_DEPLOYMENT.md: file # Deployment note по выбору AI UI драйвера copilotkit/native
     COPILOTKIT_AG_UI_DEPLOYMENT.md: file # Deployment note для CopilotKit Runtime, AG-UI endpoint и React island
@@ -429,16 +431,13 @@ docs: # Документация проекта
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
       settings-storage-simplification.md: file # Активный план упрощения хранения и доставки настроек
+      warehouse-management-system.md: file # Активный план общего раздела Склад и миграции старых баз
     archive: # Архив закрытых или остановленных планов
       2026: file
       README.md: file # Описание архива planning-файлов
     backlog.md: file # Актуальный backlog без архивного раздела
     README.md: file # Правила planning-системы проекта
 drafts: directory... # Черновики и незавершённые планы, прототипы
-learning: # Учебный модуль владельца проекта по Python и устройству local-business-suite
-  LESSON_01_PYTHON_LANGUAGE_OVERVIEW.md: file # Урок 1: обзор Python как языка, синтаксиса и структуры программ
-  PYTHON_LEARNING_PROGRAM.md: file # Учебная программа по Python на базе проекта
-  README.md: file # Описание учебного модуля и связи с основным проектом
 scripts: # Скрипты и инструменты разработки
   dev: # Инструменты разработки для сопровождения структуры проекта
     generate-structure.js: file # Генератор PROJECT_STRUCTURE.yaml из .desc.json
@@ -731,6 +730,10 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Порядок исполнения, зависимости пакетов и общие проверки
       BLOCK_BRIEF.md: file # Цель, границы, риски и критерии приемки блока
       EXECUTION_GUIDE.md: file # Правила исполнения, отчётности, миграции и независимой приемки
+    warehouse-management-system: # Workflow: общий раздел Склад, права, отчёты и миграция legacy-баз
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Порядок и состав исполнительных пакетов
+      BLOCK_BRIEF.md: file # Цель, границы и критерии приёмки складского блока
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков

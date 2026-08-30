@@ -6,7 +6,7 @@
   "objective": "Добавить текущую рабочую версию документа в PostgreSQL, единый repository и атомарную запись value+audit, не переключая production документы до pilot.",
   "start_gate": [
     "Пакет 01 accepted.",
-    "ADR-0047 имеет статус Accepted.",
+    "ADR-0048 имеет статус Accepted.",
     "Утверждены имена модели и generic module boundaries."
   ],
   "dependencies": [

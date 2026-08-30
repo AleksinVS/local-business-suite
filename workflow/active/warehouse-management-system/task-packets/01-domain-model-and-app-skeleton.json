@@ -1,0 +1,42 @@
+{
+  "task_id": "01-domain-model-and-app-skeleton",
+  "title": "Доменная модель и каркас приложения Склад",
+  "goal": "Создать отдельное Django-приложение склада с нормализованной моделью и инвариантами ADR-0047.",
+  "depends_on": [],
+  "read_scope": [
+    "docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md",
+    "docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md",
+    "apps/core/models.py",
+    "apps/inventory/"
+  ],
+  "write_scope": [
+    "apps/warehouse/",
+    "contracts/warehouse/settings.json",
+    "contracts/schemas/warehouse_settings.schema.json",
+    "config/settings.py",
+    "config/urls.py",
+    "apps/*/.desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Не добавлять UI операций",
+    "Не менять MedicalDevice",
+    "Не реализовывать импорт Access",
+    "Не создавать отдельную базу или сервис"
+  ],
+  "implementation_notes": [
+    "Создать WarehouseItemCategory, UnitOfMeasure, WarehouseItem, FundingSource, Warehouse, StorageLocation, StockLot, StockDocument, StockDocumentLine, StockEntry, StockBalance, WarehouseAuditEvent и импортные модели.",
+    "Количество хранить DecimalField с шестью знаками после запятой; UnitOfMeasure.quantity_precision допускает 0..6 и в первом внедрении равно 0, поэтому дроби отклоняются без изменения физической схемы.",
+    "Добавить runtime-контракт настроек склада с default_quantity_precision=0 и конфигурируемым expiry_warning_days.",
+    "Проведённые документы/проводки защищать от обычного update/delete доменными сервисами, admin и моделями.",
+    "Warehouse связан с apps.core.Department; отдельную организационную иерархию не создавать.",
+    "Добавить DB constraints и индексы под ключи остатков, даты отчётов, сроки годности и импортную идемпотентность."
+  ],
+  "acceptance_checks": [
+    "python manage.py check",
+    "python manage.py makemigrations --check --dry-run",
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "Модельные тесты запрещают циклы адресов и некорректные строки документов",
+    "git diff --check"
+  ]
+}

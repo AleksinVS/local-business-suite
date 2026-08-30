@@ -1,0 +1,52 @@
+{
+  "task_id": "07-e2e-security-docs-and-pilot",
+  "title": "Сквозная приёмка, документация и пилот VOB3",
+  "goal": "Подтвердить весь пользовательский и миграционный сценарий, обновить документацию и подготовить безопасный запуск.",
+  "depends_on": [
+    "04-warehouse-ui-and-address-storage",
+    "05-reports-and-expiry-control",
+    "06-legacy-migration-tooling"
+  ],
+  "read_scope": [
+    "all warehouse implementation and tests",
+    "docs/guides/TESTING_POLICY.md",
+    "deployment instructions",
+    "private VOB3 source for owner-authorized dry-run only"
+  ],
+  "write_scope": [
+    "apps/warehouse/management/commands/warehouse_acceptance_e2e.py",
+    "apps/warehouse/tests/",
+    "docs/guides/WAREHOUSE_USER_GUIDE.md",
+    "docs/guides/WAREHOUSE_LEGACY_MIGRATION.md",
+    "docs/deployment/WAREHOUSE_DEPLOYMENT.md",
+    "README.md",
+    "docs/planning/",
+    "workflow/active/warehouse-management-system/",
+    ".desc.json",
+    "PROJECT_STRUCTURE.yaml"
+  ],
+  "non_goals": [
+    "Не применять миграцию к production без отдельного cutover-подтверждения",
+    "Не хранить длинные логи вне .local/ или data/warehouse/imports",
+    "Не менять код при выполнении независимой проверки",
+    "Не архивировать блок до пользовательской приёмки"
+  ],
+  "implementation_notes": [
+    "E2E создаёт два соседних подразделения и проверяет полный запрет пересечения.",
+    "Основной сценарий: приход партии на стеллаж, перемещение адреса внутри подразделения, расход без номера требования, сторно и три отчёта; межподразделенческое перемещение должно быть отклонено.",
+    "Пилот VOB3 начинается с inspect/prepare/dry-run на приватной копии; commit и cutover оформляются отдельным операторским шагом.",
+    "Зафиксировать counts, issues, reconciliation и остаточный риск без публикации строк source data.",
+    "После приёмки заполнить EXECUTOR_REPORT, TASK_ACCEPTANCE и RETROSPECTIVE, удалить задачу из backlog и архивировать блок."
+  ],
+  "acceptance_checks": [
+    "git status --short before checks",
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=ui",
+    "python manage.py warehouse_acceptance_e2e",
+    "python manage.py warehouse_legacy_reconcile --run-id <pilot-run-id> --strict",
+    "make verify-full",
+    "git diff --check",
+    "README, guides, deployment, planning and PROJECT_STRUCTURE reviewed"
+  ]
+}

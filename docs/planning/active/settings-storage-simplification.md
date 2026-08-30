@@ -1,13 +1,13 @@
 # Упрощение хранения и доставки настроек
 
 Статус: архитектура и исполнительные пакеты подготовлены; реализация не начата,
-ADR-0047 имеет статус `Proposed`.
+ADR-0048 имеет статус `Proposed`.
 
 Дата: 2026-08-31.
 
 Связанные материалы:
 
-- ADR: `docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md`;
+- ADR: `docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md`;
 - проектная архитектура:
   `docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md`;
 - workflow-блок: `workflow/active/settings-storage-simplification/`;
@@ -85,7 +85,7 @@ ADR-0045 и фактической матрицей доступа.
 
 ## Решения, обязательные до реализации
 
-- владелец принимает или изменяет ADR-0047;
+- владелец принимает или изменяет ADR-0048;
 - утверждается предварительная классификация 29 документов;
 - подтверждается короткое окно заморозки записи для каждого cutover slice;
 - утверждается fail-closed поведение role/workflow и last-known-good поведение
@@ -269,7 +269,7 @@ make verify-full
 
 ## Критерии готовности (Definition of Ready)
 
-- ADR-0047 принят;
+- ADR-0048 принят;
 - inventory подтверждён владельцами доменов;
 - каждый packet имеет точный read/write scope и rollback;
 - тестовый PostgreSQL профиль доступен;
@@ -312,7 +312,7 @@ make verify-full
 ## ADR
 
 ADR обязателен и подготовлен:
-`docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md`.
+`docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md`.
 
 Дополнительный ADR потребуется, если реализация предложит:
 

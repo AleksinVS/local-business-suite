@@ -1,0 +1,51 @@
+{
+  "task_id": "02-department-scoped-access",
+  "title": "Права склада по подразделениям",
+  "goal": "Добавить закрытые по умолчанию складские возможности и единую серверную область ресурсов.",
+  "depends_on": [
+    "01-domain-model-and-app-skeleton"
+  ],
+  "read_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/accounts/access_contracts.py",
+    "apps/workorders/policies.py",
+    "apps/workorders/selectors.py",
+    "apps/settings_center/",
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "docs/adr/ADR-0043-declarative-access-policy-catalog.md"
+  ],
+  "write_scope": [
+    "contracts/role_rules.json",
+    "contracts/schemas/role_rules.schema.json",
+    "apps/accounts/",
+    "apps/settings_center/",
+    "apps/warehouse/policies.py",
+    "apps/warehouse/selectors.py",
+    "apps/core/context_processors.py",
+    "templates/base.html",
+    "tests in touched apps"
+  ],
+  "non_goals": [
+    "Не переиспользовать manage_inventory",
+    "Не выдавать складской доступ существующим ролям по умолчанию",
+    "Не вводить общий object-ACL engine",
+    "Не менять AG-UI контур"
+  ],
+  "implementation_notes": [
+    "Добавить секцию warehouse, warehouse_scopes и шесть capabilities из архитектурного документа.",
+    "Добавить отдельные warehouse_operator и warehouse_controller; существующие роли получают none/false. Controller получает управление общим каталогом, а superuser остаётся техническим резервом без третьей продуктовой роли склада.",
+    "Scoped selectors должны работать для none, own_department, department_branch и all.",
+    "Каждая команда повторно загружает активного актора и перепроверяет область после row locks.",
+    "Редактор роли должен отображать новые значения через существующий metadata-driven renderer."
+  ],
+  "acceptance_checks": [
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "make verify-fast TEST_SCOPE=apps/accounts",
+    "make verify-fast TEST_SCOPE=apps/settings_center",
+    "make verify-profile PROFILE=contracts",
+    "python manage.py validate_architecture_contracts",
+    "Security matrix: no-role/own/child/sibling/all/inactive/superuser",
+    "Прямой URL чужого подразделения закрыт"
+  ]
+}

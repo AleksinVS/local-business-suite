@@ -1,0 +1,46 @@
+{
+  "task_id": "04-warehouse-ui-and-address-storage",
+  "title": "Интерфейс склада и адресное хранение",
+  "goal": "Добавить доступный пользовательский интерфейс справочников, адресов, остатков, партий и складских документов.",
+  "depends_on": [
+    "03-ledger-posting-and-balances"
+  ],
+  "read_scope": [
+    "templates/base.html",
+    "templates/inventory/",
+    "static/src/",
+    "apps/warehouse/services/",
+    "apps/warehouse/selectors.py"
+  ],
+  "write_scope": [
+    "apps/warehouse/forms.py",
+    "apps/warehouse/views.py",
+    "apps/warehouse/urls.py",
+    "templates/warehouse/",
+    "static/src/warehouse/",
+    "templates/base.html",
+    "apps/core/context_processors.py",
+    "apps/warehouse/tests/"
+  ],
+  "non_goals": [
+    "Не дублировать бизнес-валидацию во view",
+    "Не добавлять SPA-фреймворк",
+    "Не реализовывать штрихкоды",
+    "Не показывать неразрешённые подразделения в фильтрах"
+  ],
+  "implementation_notes": [
+    "Навигация Склад видна только при warehouse_view_scope или write-capability.",
+    "Фильтры подразделения, склада и адреса формируются только из scoped queryset.",
+    "Формы документов работают через доменные команды и имеют защиту от двойной отправки.",
+    "Поле номера требования необязательно; UI перемещения предлагает только адреса того же подразделения.",
+    "Дерево адресов поддерживает помещение, стеллаж, полку и ячейку.",
+    "Интерфейс явно показывает черновик, проведён, сторнирован, неполную партию и срок годности."
+  ],
+  "acceptance_checks": [
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "make verify-profile PROFILE=ui",
+    "Клавиатурная навигация и подписи форм доступны",
+    "Чужие подразделения отсутствуют в списках и закрыты по прямому URL",
+    "Двойная отправка не создаёт второй документ"
+  ]
+}

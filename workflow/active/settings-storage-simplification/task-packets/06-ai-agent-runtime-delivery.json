@@ -1,0 +1,108 @@
+{
+  "task_id": "06-ai-agent-runtime-delivery",
+  "title": "AI-документы и доставка agent-runtime через Django gateway",
+  "status": "planned",
+  "risk": "high",
+  "objective": "Разделить AI security contracts и операторские настройки, затем обеспечить agent-runtime единым effective snapshot через allowlisted authenticated gateway с ETag и last-known-good.",
+  "start_gate": [
+    "Пакет 04 accepted; generic backend стабилен.",
+    "Решено, является ли ai.contract.models git_static или database_override.",
+    "Проверена зафиксированная версия @ag-ui/client и LOCAL_BUSINESS_AI_UI_AGUI_PROFILE; обновление версии не разрешено этим пакетом.",
+    "Согласован allowlist документов и last-known-good TTL/age policy.",
+    "Production cutover разрешён отдельно."
+  ],
+  "dependencies": [
+    "04-status-colors-pilot"
+  ],
+  "read_scope": [
+    "docs/adr/ADR-0027-copilotkit-ag-ui-django-integration.md",
+    "docs/adr/ADR-0028-versioned-ai-ui-protocol-foundation.md",
+    "docs/adr/ADR-0032-retire-legacy-ai-ui-driver.md",
+    "docs/adr/ADR-0044-unified-native-ai-chat-execution.md",
+    "apps/ai/settings_descriptors.py",
+    "apps/ai/contracts.py",
+    "apps/ai/views.py",
+    "apps/ai/urls.py",
+    "apps/ai/ui_runtime/",
+    "services/agent_runtime/config.py",
+    "services/agent_runtime/contract_cache.py",
+    "services/agent_runtime/protocols/",
+    "package.json",
+    "package-lock.json",
+    "AI UI deployment/settings docs"
+  ],
+  "write_scope": [
+    "apps/ai/config_documents.py",
+    "apps/ai/ AI document consumers",
+    "apps/ai/views.py и urls.py для существующего authenticated gateway",
+    "apps/ai/tests/",
+    "services/agent_runtime/config.py",
+    "services/agent_runtime/contract_cache.py",
+    "services/agent_runtime/tests/",
+    "apps/settings_center/ AI descriptor adapters",
+    "config/settings.py после AI cutover",
+    "docs/deployment/ AI runtime delivery documentation",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.06-ai-agent-runtime-delivery.md"
+  ],
+  "requirements": [
+    "Классифицировать ai.registry, tools и task_types как git_static: registry задаёт identity/execution policy, tools обязан совпадать с Python tool definitions, task_types содержит allowed_tools/confirmation policy. Убрать их из generic runtime editor только вместе с обновлением UX/docs/tests.",
+    "Классифицировать chat_settings как database_override. Models — только по решению start gate: git_static либо специальный model-profile workflow; raw API keys всегда остаются secret/env. Не переносить system prompt и runtime skills этим пакетом.",
+    "Django AI consumers читают один repository snapshot, который одинаково разрешает Git-static и DB-effective документы, а не startup settings constants.",
+    "Добавить read-only endpoint в существующий service-identity gateway. Endpoint принимает только allowlisted ids и никогда не возвращает env/secrets/access contracts.",
+    "Ответ содержит document_id, schema_version, revision, content_hash и payload; aggregate strong ETag детерминирован по отсортированному набору ids/hashes.",
+    "Поддержать If-None-Match/304 для polling; write method и generic document enumeration отсутствуют.",
+    "Agent-runtime проверяет service response, schema versions и content hashes, затем атомарно заменяет in-memory last-known-good set целиком.",
+    "При временной недоступности gateway разрешён только последний валидный совместимый снимок; diagnostics показывают source, age, revisions и error. При unknown schema/invalid hash новый payload отвергается.",
+    "Не смешивать revisions взаимозависимых AI documents в одной runtime operation; использовать aggregate snapshot.",
+    "После parity удалить прямой resolver data/contracts/ai для переведённых документов. Mount может оставаться только для других файловых artifacts до пакета 08.",
+    "Не менять AG-UI wire contract, dependencies или agui_profile. Если анализ показывает необходимость обновления, остановиться и запросить согласование с отдельным ADR/планом.",
+    "Добавить gateway auth/allowlist/ETag/race tests и end-to-end изменение AI document -> agent-runtime observed hash без restart.",
+    "Не включать raw prompts, secrets или unrelated settings в diagnostics/logs."
+  ],
+  "non_goals": [
+    "Обновлять AG-UI/CopilotKit.",
+    "Добавлять внешний публичный config API.",
+    "Давать agent-runtime доступ к PostgreSQL.",
+    "Переносить AI skills directories или system prompt.",
+    "Менять tool business definitions."
+  ],
+  "acceptance_checks": [
+    "Без service identity endpoint закрыт.",
+    "Unknown/non-allowlisted ids не раскрывают наличие документа.",
+    "ETag стабилен для одного snapshot и меняется при revision change.",
+    "If-None-Match возвращает 304 без payload.",
+    "Agent-runtime принимает полный валидный set и сообщает те же hashes, что Django.",
+    "Invalid hash/unknown schema не заменяет last-known-good.",
+    "Gateway outage показывает stale age/source; поведение соответствует согласованной policy.",
+    "Изменение DB-backed chat settings применяется без restart agent-runtime; изменение Git-static security contract применяется только через reviewed deployment и также получает новый ETag.",
+    "Нет прямых reads переведённых AI JSON files после cutover.",
+    "AG-UI version/profile не изменились."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/ai services/agent_runtime/tests apps/settings_center/tests.py'",
+    "make verify-profile PROFILE=ai",
+    "make verify-profile PROFILE=contracts",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "gateway auth and information disclosure",
+    "allowlist combinations",
+    "ETag/304",
+    "aggregate snapshot consistency",
+    "invalid hash/schema",
+    "outage and stale age",
+    "Django/agent-runtime hash parity",
+    "AG-UI dependency/profile unchanged"
+  ],
+  "rollback": "Вернуть agent-runtime к сохранённому compatible legacy snapshot только по runbook и до несовместимых новых DB revisions. Gateway endpoint можно отключить feature switch после export; DB revisions и audit не удалять.",
+  "deliverables": [
+    "AI document cutover",
+    "authenticated allowlisted config endpoint",
+    "ETag/last-known-good agent cache",
+    "parity e2e and diagnostics",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

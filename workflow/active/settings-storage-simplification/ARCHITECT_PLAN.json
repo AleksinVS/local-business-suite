@@ -1,0 +1,117 @@
+{
+  "block_id": "settings-storage-simplification",
+  "title": "Упрощение хранения и доставки настроек",
+  "status": "planned-awaiting-adr-acceptance",
+  "created_at": "2026-08-31",
+  "adr": "docs/adr/ADR-0047-typed-setting-documents-and-postgresql-runtime-state.md",
+  "architecture_doc": "docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md",
+  "planning_doc": "docs/planning/active/settings-storage-simplification.md",
+  "execution_guide": "workflow/active/settings-storage-simplification/EXECUTION_GUIDE.md",
+  "start_gates": [
+    "ADR-0047 принят владельцем",
+    "утверждена классификация документов первой волны",
+    "согласованы freeze/backup/rollback для pilot",
+    "тестовый PostgreSQL профиль доступен"
+  ],
+  "execution_order": [
+    "01-inventory-and-document-registry",
+    "02-postgresql-document-store",
+    "03-migration-planner-and-operations",
+    "04-status-colors-pilot",
+    "05-access-workflow-security-cutover",
+    "06-ai-agent-runtime-delivery",
+    "07-memory-filehub-and-static-classification",
+    "08-cleanup-recovery-and-final-acceptance"
+  ],
+  "parallelizable_after_pilot": [
+    [
+      "05-access-workflow-security-cutover:implementation-preparation-only",
+      "06-ai-agent-runtime-delivery:implementation-preparation-only"
+    ]
+  ],
+  "tasks": [
+    {
+      "task_id": "01-inventory-and-document-registry",
+      "packet": "task-packets/01-inventory-and-document-registry.json",
+      "risk": "medium",
+      "independent_review": "architecture",
+      "summary": "Классифицировать все документы и ввести единый доменно-регистрируемый ConfigDocumentSpec без смены backend."
+    },
+    {
+      "task_id": "02-postgresql-document-store",
+      "packet": "task-packets/02-postgresql-document-store.json",
+      "risk": "high",
+      "independent_review": "database-and-concurrency",
+      "summary": "Добавить RuntimeSettingDocument, repository и транзакционный writer с revision/hash CAS и единым audit."
+    },
+    {
+      "task_id": "03-migration-planner-and-operations",
+      "packet": "task-packets/03-migration-planner-and-operations.json",
+      "risk": "high",
+      "independent_review": "migration-and-recovery",
+      "summary": "Создать идемпотентный plan/apply migration workflow с audit evidence, backup и rollback."
+    },
+    {
+      "task_id": "04-status-colors-pilot",
+      "packet": "task-packets/04-status-colors-pilot.json",
+      "risk": "medium",
+      "independent_review": "ui-and-multi-worker",
+      "summary": "Перевести два status color документа как раздельный DB pilot и проверить общий UX."
+    },
+    {
+      "task_id": "05-access-workflow-security-cutover",
+      "packet": "task-packets/05-access-workflow-security-cutover.json",
+      "risk": "critical",
+      "independent_review": "security-role-matrix",
+      "summary": "Перевести роли и workflow с сохранением специальных полномочий, cross-validation и fail-closed поведения."
+    },
+    {
+      "task_id": "06-ai-agent-runtime-delivery",
+      "packet": "task-packets/06-ai-agent-runtime-delivery.json",
+      "risk": "high",
+      "independent_review": "gateway-and-agent-parity",
+      "summary": "Классифицировать AI security contracts как Git-static, рабочие параметры как DB documents и доставлять общий effective set через allowlisted Django gateway с ETag/last-known-good."
+    },
+    {
+      "task_id": "07-memory-filehub-and-static-classification",
+      "packet": "task-packets/07-memory-filehub-and-static-classification.json",
+      "risk": "high",
+      "independent_review": "memory-operation-matrix",
+      "summary": "Перевести memory/FileHub consumers на repository snapshots и определить судьбу analytics/integrations документов."
+    },
+    {
+      "task_id": "08-cleanup-recovery-and-final-acceptance",
+      "packet": "task-packets/08-cleanup-recovery-and-final-acceptance.json",
+      "risk": "high",
+      "independent_review": "cross-domain-final-acceptance",
+      "summary": "Удалить доказанно неиспользуемый legacy path, обновить recovery/operations и провести полную приемку."
+    }
+  ],
+  "global_constraints": [
+    "Не объединять документы только ради уменьшения количества файлов.",
+    "Не хранить raw secrets в RuntimeSettingDocument, SettingsChange или migration reports.",
+    "Не вводить постоянный dual-write и не выполнять автоматический импорт неоднозначного drift.",
+    "Не менять business semantics ролей, workflow, AI tools или memory policies.",
+    "Не обновлять AG-UI/CopilotKit dependencies/profile без отдельного согласования.",
+    "Production cutover требует отдельного разрешения владельца.",
+    "Временные файлы и длинные логи находятся только в .local/."
+  ],
+  "verification_ladder": [
+    "make verify-fast TEST_SCOPE=<affected-tests>",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=ui",
+    "make verify-profile PROFILE=ai for task 06",
+    "one make verify-full in task 08"
+  ],
+  "global_acceptance": [
+    "one specification per managed document",
+    "transactional current value and audit",
+    "no stale startup payload reads for migrated documents",
+    "multi-worker consistency without restart",
+    "security fail-closed and unchanged role matrix",
+    "Django/agent-runtime hash parity",
+    "idempotent migration and tested rollback",
+    "backup/restore continuity",
+    "documentation and PROJECT_STRUCTURE updated"
+  ]
+}

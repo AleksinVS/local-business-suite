@@ -1,0 +1,120 @@
+{
+  "task_id": "05-access-workflow-security-cutover",
+  "title": "Security-cutover ролей и workflow",
+  "status": "planned",
+  "risk": "critical",
+  "objective": "Перевести role_rules и workflow_rules на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
+  "start_gate": [
+    "Пакет 04 accepted и observation не выявил дефектов backend.",
+    "ADR-0047 Accepted.",
+    "Согласован полный role/access acceptance matrix.",
+    "Нет пересекающегося write с workflow/active/access-administration-ux-unification.",
+    "Cutover freeze/backup/rollback разрешены отдельно."
+  ],
+  "dependencies": [
+    "04-status-colors-pilot"
+  ],
+  "read_scope": [
+    "docs/adr/ADR-0034-predefined-access-groups-and-capability-descriptions.md",
+    "docs/adr/ADR-0035-mandatory-user-department.md",
+    "docs/adr/ADR-0038-privileged-flags-access-assignment.md",
+    "docs/adr/ADR-0040-unified-access-administration-control-plane.md",
+    "docs/adr/ADR-0041-access-and-memory-lock-partition.md",
+    "docs/adr/ADR-0042-direct-save-access-administration.md",
+    "docs/adr/ADR-0043-declarative-access-policy-catalog.md",
+    "docs/adr/ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md",
+    "docs/adr/ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/settings_center/contract_services.py",
+    "apps/core/contract_store.py",
+    "apps/workorders/contracts.py",
+    "все get_contract(role_rules/workflow_rules) и settings/file consumers"
+  ],
+  "write_scope": [
+    "apps/accounts/config_documents.py для role_rules spec",
+    "apps/workorders/config_documents.py для workflow_rules spec",
+    "apps/accounts/access_contracts.py",
+    "apps/accounts/selectors.py",
+    "apps/accounts/management/commands/seed_roles.py",
+    "apps/settings_center/access_bundle_services.py",
+    "apps/settings_center/contract_services.py compatibility/domain adapters",
+    "apps/settings_center/views.py и forms/templates access/workflow только при необходимости adapter change",
+    "apps/workorders/ role/workflow consumers",
+    "apps/waiting_list/ и apps/inventory/ role consumers",
+    "apps/ai/ role context consumer",
+    "apps/core/contract_store.py после завершённого cutover",
+    "apps/accounts/tests.py",
+    "apps/settings_center/tests.py",
+    "apps/core/tests.py",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/tests.py",
+    "постоянный access/workflow e2e",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.05-access-workflow-security-cutover.md"
+  ],
+  "requirements": [
+    "Зарегистрировать role_rules и workflow_rules как отдельные database_override документы с fail_closed policy.",
+    "Для одного access decision использовать согласованный request snapshot; один запрос не видит разные revisions role/workflow.",
+    "При cross-validation получать transaction-level advisory locks для role/workflow document ids в детерминированном порядке, затем блокировать существующие rows. Это обязательно и когда один override отсутствует, чтобы исключить first-create race и промежуточную пару.",
+    "Сохранить active superuser gate полного role catalog writer, delegated single-role writer, signed preview, privilege ceiling, operation fingerprint и audit context.",
+    "Сохранить $capabilities Git-default authority и отдельный deployment migration workflow; generic DB editor не получает право менять frozen catalog.",
+    "Сохранить default new user role, role copy, roleless fail-closed, mandatory department quarantine и AD group semantics без изменения.",
+    "Сохранить прямое сохранение пользовательских форм по ADR-0042; storage migration не возвращает обязательный preview для обычного UX.",
+    "Заменить все direct file/settings reads role/workflow на repository; добавить architecture test, запрещающий новые reads для этих ids.",
+    "Изменение workflow продолжает проверять role capabilities/status colors против согласованного набора. Не держать transaction во время длительных memory/reindex jobs.",
+    "При repository/schema/hash ошибке доступ закрывается; fallback на Git default для security decision запрещён, если существует повреждённый override.",
+    "До cutover классифицировать legacy drift через audit evidence. Любой ambiguous role/workflow drift требует решения владельца.",
+    "Независимая проверка выполняет матрицу пользователей, ролей, подразделений, privileged flags, AD links и workflow transitions."
+  ],
+  "non_goals": [
+    "Включать иерархию ролей.",
+    "Менять capability catalog.",
+    "Объединять role и workflow payload.",
+    "Перепроектировать access UX.",
+    "Запускать memory lifecycle внутри access transaction."
+  ],
+  "acceptance_checks": [
+    "Пользователь без роли не видит защищённые разделы.",
+    "Роль по умолчанию назначается только по текущим правилам и не расширяет доступ молча.",
+    "Копирование роли не копирует участников/ACL и даёт тот же результат, что до cutover.",
+    "Нельзя назначить себе/другому права выше privilege ceiling.",
+    "Active superuser и delegated role editor имеют ровно прежние границы.",
+    "AD-linked и local user получают одинаковое access decision при одинаковых ролях.",
+    "Workflow transition matrix до/после совпадает; stale edit не перезаписывает изменения.",
+    "Два worker видят новую роль/revision без restart.",
+    "Corrupt/unknown schema даёт fail-closed и health signal.",
+    "Rollback восстанавливает capabilities и transitions новой revision.",
+    "rg/architecture test не находит запрещённых role/workflow file/settings reads."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/accounts/tests.py apps/settings_center/tests.py apps/core/tests.py apps/workorders/tests.py apps/waiting_list/tests.py'",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=ui",
+    ".venv/bin/python manage.py access_management_e2e",
+    ".venv/bin/python manage.py access_administration_e2e",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "roleless/new user/default role",
+    "normal role assignment/removal",
+    "role copy",
+    "privileged flags and self-assignment",
+    "delegated role definition",
+    "AD link/local identity parity",
+    "department boundary",
+    "workflow transition allow/deny",
+    "concurrent edits and rollback",
+    "repository failure fail-closed",
+    "multi-worker freshness"
+  ],
+  "rollback": "Только по approved cutover runbook. Если после cutover появились новые role revisions, сначала экспортировать и проверить текущий payload; потеря изменений доступа недопустима. При сомнении оставить DB reader и закрытый доступ, а не использовать устаревший файл.",
+  "deliverables": [
+    "role/workflow DB cutover",
+    "security matrix report",
+    "legacy consumer prohibition test",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

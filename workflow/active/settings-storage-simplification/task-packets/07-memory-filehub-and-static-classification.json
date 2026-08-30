@@ -1,0 +1,115 @@
+{
+  "task_id": "07-memory-filehub-and-static-classification",
+  "title": "Memory/FileHub snapshots и классификация статических документов",
+  "status": "planned",
+  "risk": "high",
+  "objective": "Убрать startup payload constants из memory/FileHub операций и определить явный storage policy для analytics/integrations без изменения knowledge canon.",
+  "start_gate": [
+    "Пакеты 04 и 02/03 accepted; repository/migration stable.",
+    "Для каждого memory document согласованы owner, failure policy и requires_reindex.",
+    "Изучены обязательные memory ADR/operations документы из AGENTS.md.",
+    "Production cutover разрешён отдельно."
+  ],
+  "dependencies": [
+    "04-status-colors-pilot",
+    "03-migration-planner-and-operations"
+  ],
+  "read_scope": [
+    "docs/adr/ADR-0003-ai-memory-service.md",
+    "docs/adr/ADR-0004-memory-ingestion-and-graph-schema-bootstrapping.md",
+    "docs/adr/ADR-0030-memory-alignment-hybrid-knowledge-v05.md",
+    "docs/architecture/MEMORY_INGESTION_BOOTSTRAPPING_PLAN.md",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "apps/memory/settings_descriptors.py",
+    "apps/memory/contracts.py",
+    "apps/memory/document_ingestion.py",
+    "apps/memory/policies.py",
+    "apps/memory/retrieval.py",
+    "apps/memory/routing.py",
+    "apps/memory/knowledge_edges.py",
+    "apps/memory/management/commands/",
+    "apps/filehub/file_organization.py",
+    "apps/filehub/management/commands/",
+    "apps/analytics/ contracts/consumers",
+    "apps/integrations/ contracts/consumers"
+  ],
+  "write_scope": [
+    "apps/memory/config_documents.py",
+    "apps/memory/ repository consumers and commands",
+    "apps/filehub/ repository consumers and commands",
+    "apps/memory/tests/",
+    "apps/filehub/tests.py",
+    "apps/analytics/config_documents.py только для классификации/reader adapter, без нового writer без владельца",
+    "apps/core/integration registry reader только при утверждённой git_static классификации",
+    "config/settings.py после конкретных cutovers",
+    "apps/core/management/commands/bootstrap_runtime.py после concrete classifications",
+    "docs/guides/MEMORY_INGESTION_OPERATIONS.md",
+    "docs/deployment/MEMORY_DEPLOYMENT.md",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.07-memory-filehub-and-static-classification.md"
+  ],
+  "requirements": [
+    "Memory sources, profiles, routing, trust, retrieval budget, ingestion profiles, file organization profiles и graph schema сохраняют отдельные document ids и validators. Graph schema изменяется только domain workflow с модерацией, не generic JSON editor.",
+    "memory_claims_policy остаётся unresolved до consumer audit: claim/belief layer отложен. Если active consumer отсутствует, выбрать git_static или отдельное удаление dead config; автоматически создавать DB override запрещено.",
+    "Каждая HTTP request/management command/background job читает необходимый набор документов один раз в начале операции и передаёт snapshot дальше; не выполнять repository read внутри циклов по файлам.",
+    "Trust/privacy/scope decisions используют fail_closed policy. Некритичные tuning settings получают только явно согласованный fallback.",
+    "Requires_reindex/reconcile действия планируются после commit и не выполняются внутри document transaction.",
+    "FileHub worker использует один immutable file organization profile snapshot на job, чтобы середина обхода не меняла правила.",
+    "Не менять knowledge files, graph edge semantics, ingestion source ACL inheritance, raw mode или max file size этим пакетом.",
+    "Заменить direct getattr(settings, LOCAL_BUSINESS_MEMORY_*) для мигрированных document payloads. Deployment scalar env settings остаются settings/env.",
+    "Analytics/integrations документы без runtime writer не переносить автоматически в DB. Для каждого определить git_static, generated_file или отдельный future database_override с owner/write workflow.",
+    "Если analytics/integrations признаны git_static, прекратить bootstrap mirror и читать Git default через repository/spec; если generated, зафиксировать producer и atomic write path.",
+    "Добавить architecture tests на запрет startup payload constants для migrated memory docs и отсутствие reads внутри item loops.",
+    "Выполнить matrix dry-run команд памяти/FileHub на одном snapshot и проверить health/schema failure."
+  ],
+  "non_goals": [
+    "Менять ingestion business behavior.",
+    "Менять knowledge canon или contracts без явно нужной schema migration.",
+    "Возвращать удалённые memory contours.",
+    "Добавлять analytics editor без owner/workflow ADR.",
+    "Переносить runtime eval reports/data files в DB."
+  ],
+  "acceptance_checks": [
+    "Каждый memory/FileHub operation фиксирует один document revision set на начало.",
+    "Изменение профиля между двумя jobs применяется ко второму, но не меняет первый посередине.",
+    "Trust/privacy document failure закрывает обработку, а не использует permissive default.",
+    "requires_reindex action запускается только после successful commit.",
+    "Основные memory dry-run/acceptance commands завершаются на migrated backend.",
+    "rg/architecture tests не находят startup payload reads для migrated memory docs.",
+    "Все analytics/integrations documents имеют owner и storage classification; unresolved остаются явным blocker, а не скрытым выбором.",
+    "Knowledge repo/media/runtime eval data не изменены storage migration."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/memory apps/filehub apps/settings_center/tests.py'",
+    "make verify-profile PROFILE=memory",
+    "make verify-profile PROFILE=contracts",
+    ".venv/bin/python manage.py memory_sync_source --dry-run",
+    ".venv/bin/python manage.py memory_discover_source --source-code project_architecture_docs --dry-run",
+    ".venv/bin/python manage.py memory_ingest_source --source-code project_architecture_docs --dry-run",
+    ".venv/bin/python manage.py memory_reconcile --dry-run",
+    ".venv/bin/python manage.py memory_verify_knowledge_files",
+    ".venv/bin/python manage.py memory_file_auto_organization_e2e",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "snapshot per command/job",
+    "trust/privacy fail-closed",
+    "source/profile/routing combinations",
+    "FileHub profile changes between jobs",
+    "requires_reindex on_commit",
+    "memory dry-run command matrix",
+    "analytics/integrations classification completeness",
+    "no knowledge canon or runtime data mutation"
+  ],
+  "rollback": "По каждому memory slice экспортировать current DB revisions и возвращать legacy reader только при schema/hash compatibility. Long-running jobs завершаются на исходном snapshot; новые jobs запускаются после switch. Knowledge canon rollback не требуется и не допускается.",
+  "deliverables": [
+    "memory/FileHub document cutover",
+    "operation snapshot API",
+    "analytics/integrations classification",
+    "memory matrix acceptance",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

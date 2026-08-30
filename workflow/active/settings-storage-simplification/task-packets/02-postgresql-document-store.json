@@ -1,0 +1,98 @@
+{
+  "task_id": "02-postgresql-document-store",
+  "title": "PostgreSQL document store и транзакционный writer",
+  "status": "planned",
+  "risk": "high",
+  "objective": "Добавить текущую рабочую версию документа в PostgreSQL, единый repository и атомарную запись value+audit, не переключая production документы до pilot.",
+  "start_gate": [
+    "Пакет 01 accepted.",
+    "ADR-0047 имеет статус Accepted.",
+    "Утверждены имена модели и generic module boundaries."
+  ],
+  "dependencies": [
+    "01-inventory-and-document-registry"
+  ],
+  "read_scope": [
+    "apps/settings_center/models.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/services.py",
+    "apps/core/contract_store.py",
+    "apps/core/file_locks.py",
+    "apps/core/json_utils.py",
+    "apps/settings_center/tests.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md"
+  ],
+  "write_scope": [
+    "apps/settings_center/models.py",
+    "apps/settings_center/migrations/",
+    "apps/settings_center/document_repository.py",
+    "apps/settings_center/document_services.py",
+    "apps/settings_center/document_specs.py",
+    "apps/settings_center/document_registry.py",
+    "apps/settings_center/admin.py",
+    "apps/settings_center/test_document_repository.py",
+    "apps/settings_center/test_document_services.py",
+    "apps/core/checks.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.02-postgresql-document-store.md"
+  ],
+  "requirements": [
+    "Добавить RuntimeSettingDocument с document_id PK, schema_version, JSONField payload, positive revision, content_hash, default_hash, updated_by, created_at, updated_at.",
+    "Добавить DB constraints/indexes, включая revision >= 1 и уникальность document_id. content_hash проверяется service/check, потому что DB не вычисляет Python canonical JSON hash.",
+    "Расширить SettingsChange document_revision_before/document_revision_after либо эквивалентными полями без нарушения существующих access/user audit rows.",
+    "Repository поддерживает git_static и database_override, отсутствие override означает Git default. Он не обращается к БД при импорте config/settings.py.",
+    "Repository валидирует schema version, hash и domain validator; возвращает copy/immutable value и request-local snapshot.",
+    "Для failure_policy fail_closed поднимать типизированную ConfigurationUnavailable и выставлять health degradation. Для visible_default_fallback использовать Git default только с видимым signal.",
+    "Writer выполняет короткий transaction.atomic: получает transaction-level PostgreSQL advisory locks для сортированных affected document ids, затем select_for_update существующих rows, проверяет expected revision/hash, domain/cross validation, обновляет/создаёт document и SettingsChange status=applied в одной transaction.",
+    "Advisory key строить детерминированно как signed 64-bit из SHA-256 document_id; Python hash() запрещён. Lock автоматически освобождается transaction end и закрывает гонку отсутствующей override row.",
+    "Для первого insert использовать default hash как base и корректно классифицировать concurrent create/unique race как stale edit.",
+    "Rollback берёт snapshot из применённого SettingsChange, повторно валидирует текущей схемой и создаёт новую revision/audit event.",
+    "Никакие внешние вызовы, reindex или cache mutation не выполняются до commit; использовать transaction.on_commit только для некритичных действий.",
+    "Legacy contract_services остаётся рабочим отдельным adapter до конкретных cutover packets. DB writer не вызывает file writer.",
+    "Создать test-only document specs/fixtures, чтобы доказать backend до переключения реальных документов.",
+    "Не вводить global cross-process cache, Redis, LISTEN/NOTIFY или background service."
+  ],
+  "non_goals": [
+    "Импортировать data/contracts.",
+    "Переводить status colors, roles, AI или memory.",
+    "Удалять legacy fields/reconciliation.",
+    "Добавлять отдельную version table."
+  ],
+  "acceptance_checks": [
+    "Без DB override repository возвращает валидный Git default.",
+    "Insert создаёт revision 1; update увеличивает revision ровно на один.",
+    "Stale revision/hash не меняет document и не создаёт applied audit.",
+    "Исключение после начала transaction откатывает и document, и SettingsChange.",
+    "Rollback создаёт новую revision и сохраняет монотонную историю.",
+    "Два конкурентных writer теста дают один success и один stale conflict.",
+    "Два cross-document writer получают advisory locks в одном порядке и не видят смешанную пару default/override.",
+    "Request snapshot не смешивает revisions внутри одного запроса.",
+    "Security failure policy не откатывается молча на default.",
+    "Existing file-backed tests остаются зелёными."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/settings_center/test_document_repository.py apps/settings_center/test_document_services.py apps/settings_center/tests.py'",
+    ".venv/bin/python manage.py makemigrations --check --dry-run",
+    ".venv/bin/python manage.py check",
+    "make verify-profile PROFILE=contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "concurrent first insert",
+    "concurrent update",
+    "stable advisory key and sorted multi-document lock order",
+    "transaction rollback between document/audit operations",
+    "schema/hash corruption",
+    "request snapshot consistency",
+    "legacy writer isolation"
+  ],
+  "rollback": "Reverse migration допустима до появления реальных RuntimeSettingDocument rows. После появления rows сначала export/backup; автоматическая destructive reverse запрещена.",
+  "deliverables": [
+    "model/migration",
+    "repository",
+    "transactional writer/rollback",
+    "health/check integration",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

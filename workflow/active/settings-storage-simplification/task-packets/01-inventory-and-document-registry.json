@@ -1,0 +1,92 @@
+{
+  "task_id": "01-inventory-and-document-registry",
+  "title": "Инвентарь конфигурации и единый реестр документов",
+  "status": "planned",
+  "risk": "medium",
+  "objective": "Получить проверяемую классификацию всех конфигурационных документов и ввести один ConfigDocumentSpec registry, не меняя фактический backend чтения или записи.",
+  "start_gate": [
+    "Владелец разрешил начать реализацию planning-блока.",
+    "ADR-0047 как минимум рассмотрен; пакет не делает storage cutover."
+  ],
+  "dependencies": [],
+  "read_scope": [
+    "contracts/",
+    "data/contracts/ без изменения содержимого",
+    "config/settings.py",
+    "apps/settings_center/descriptors.py",
+    "apps/settings_center/registry.py",
+    "apps/*/settings_descriptors.py",
+    "apps/core/contract_store.py",
+    "apps/core/contract_drift.py",
+    "apps/core/management/commands/bootstrap_runtime.py",
+    "services/agent_runtime/config.py",
+    "все production consumers LOCAL_BUSINESS_* payload constants и load_json_file для contract paths"
+  ],
+  "write_scope": [
+    "apps/settings_center/document_specs.py",
+    "apps/settings_center/document_registry.py",
+    "apps/settings_center/registry.py",
+    "apps/core/management/commands/settings_documents_inventory.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "apps/core/tests.py",
+    "apps/settings_center/test_document_registry.py",
+    "apps/accounts/config_documents.py",
+    "apps/workorders/config_documents.py",
+    "apps/waiting_list/config_documents.py",
+    "apps/ai/config_documents.py",
+    "apps/memory/config_documents.py",
+    "apps/analytics/config_documents.py только для классификации существующих документов",
+    "docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.01-inventory-and-document-registry.md"
+  ],
+  "requirements": [
+    "Пересчитать и зафиксировать baseline: 29 JSON value documents, 18 runtime descriptors, 17 editable runtime descriptors и текущие consumers каждого документа. Сравнить со snapshot 2026-08-31: 10 identical, 7 runtime changed, role_rules missing default-only $defaults/viewer.",
+    "Команда settings_documents_inventory должна выдавать JSON/табличный отчет с document_id, default path, runtime path, descriptor, validator, write policy, consumer classes, owner, proposed storage policy, secret scan result и migration ambiguity.",
+    "Если задан --output, разрешать путь только внутри .local/; по умолчанию писать stdout и не менять data/contracts/.",
+    "Ввести frozen ConfigDocumentSpec с полями из проектной архитектуры. Validator хранится callable/импортируемой ссылкой спецификации, а не дублирующим строковым switch в generic writer.",
+    "Доменные спецификации размещать рядом с владельцем: role rules — accounts, workflow — workorders, палитры — соответствующие домены, AI/memory/analytics — их приложения. Стабильные document_id при этом не переименовывать. Общий registry собирает модули и валидирует метаданные, но не содержит role/workflow/memory semantics.",
+    "Settings Center runtime descriptors должны ссылаться на document spec или строиться из неё; env/model/secret descriptors не менять.",
+    "На этом пакете legacy settings_path и validator metadata можно сохранить как compatibility projection, но source of truth должен быть один и это доказывается тестом.",
+    "Fail-fast проверки: duplicate document_id/default path, unknown storage/failure policy, editable document without validator/schema, secret-like document, critical document with soft fallback, missing domain owner.",
+    "Классифицировать каждый из 29 документов как database_override candidate, git_static, generated_file или unresolved. Unresolved не угадывать и вынести в решения владельца.",
+    "Отдельно перечислить runtime AI skills и другие не-JSON artifacts; не включать их в document row migration.",
+    "Обновить комментарии/документацию, которые утверждают устаревшее число обслуживаемых контрактов, но не менять runtime behavior."
+  ],
+  "non_goals": [
+    "Добавлять RuntimeSettingDocument или DB writer.",
+    "Переключать consumers.",
+    "Изменять JSON payloads в contracts или data/contracts.",
+    "Объединять документы.",
+    "Добавлять универсальную x-ui schema."
+  ],
+  "acceptance_checks": [
+    "Inventory содержит ровно все 29 текущих JSON value documents и явно отмечает документы без Settings Center descriptor.",
+    "Все 18 runtime descriptors сопоставлены ровно одной document spec или явно отмечены legacy compatibility до следующего пакета.",
+    "Registry отказывается стартовать при duplicate id/path и небезопасных metadata.",
+    "Команда inventory read-only: hashes data/contracts до/после совпадают.",
+    "Ни один secret raw value не попадает в report.",
+    "Поведение существующего contract reader/writer не изменилось.",
+    "Архитектурная независимая проверка подтверждает отсутствие domain semantics в generic registry."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/settings_center/test_document_registry.py apps/core/tests.py'",
+    ".venv/bin/python manage.py settings_documents_inventory",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "сверить find contracts JSON inventory с отчетом команды",
+    "сверить rg consumers с declared consumer classes",
+    "проверить import boundaries generic registry -> domain modules",
+    "проверить masking и secret rejection",
+    "проверить, что runtime behavior не изменён"
+  ],
+  "rollback": "Удалить только новый registry/inventory код и compatibility projections; данные и runtime backend пакет не меняет.",
+  "deliverables": [
+    "машинно читаемый inventory command",
+    "единый ConfigDocumentSpec registry",
+    "решения владельца по unresolved documents",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

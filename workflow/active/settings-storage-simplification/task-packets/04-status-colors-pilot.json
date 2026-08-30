@@ -1,0 +1,92 @@
+{
+  "task_id": "04-status-colors-pilot",
+  "title": "Pilot PostgreSQL-настроек цветов статусов",
+  "status": "planned",
+  "risk": "medium",
+  "objective": "Перевести workorders и waiting list status colors на новый backend как два самостоятельных документа и доказать UI/multi-worker поведение до критичных срезов.",
+  "start_gate": [
+    "Пакеты 01-03 accepted.",
+    "Pilot migration plan не содержит ambiguous drift.",
+    "Согласованы backup/freeze/rollback и observation window.",
+    "Production cutover разрешён отдельно; без разрешения выполнить только dev/test pilot."
+  ],
+  "dependencies": [
+    "03-migration-planner-and-operations"
+  ],
+  "read_scope": [
+    "apps/workorders/settings_descriptors.py",
+    "apps/workorders/contracts.py",
+    "apps/waiting_list/settings_descriptors.py",
+    "apps/waiting_list/contracts.py",
+    "apps/core/contract_store.py",
+    "apps/settings_center/views.py",
+    "templates/settings_center/",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/tests.py",
+    "apps/settings_center/tests.py"
+  ],
+  "write_scope": [
+    "apps/workorders/config_documents.py",
+    "apps/waiting_list/config_documents.py",
+    "apps/workorders/ и apps/waiting_list/ consumers цветов",
+    "apps/settings_center/ views/forms/templates для status colors",
+    "apps/core/contract_store.py только для удаления pilot legacy registrations после cutover",
+    "apps/workorders/tests.py",
+    "apps/waiting_list/tests.py",
+    "apps/settings_center/tests.py или отдельные test files",
+    "постоянный UI/API e2e test для status colors",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.04-status-colors-pilot.md"
+  ],
+  "requirements": [
+    "Оставить два document_id: workorders.contract.status_colors и waiting_list.contract.status_colors. Не объединять payload/revision/rollback.",
+    "Оба документа имеют database_override policy и visible_default_fallback с health signal; fallback не должен скрывать invalid DB state.",
+    "UI может показывать оба редактора на одной странице, но каждая форма передаёт свой expected revision/hash и создаёт отдельный audit event.",
+    "Workorders validator продолжает проверять статусы относительно согласованного workflow snapshot. Waiting list validator сохраняет собственный status vocabulary.",
+    "Все production consumers цветов читают repository/request snapshot, а не settings constant/file.",
+    "До cutover выполнить --plan и backup; переключение reader/writer атомарно на уровне deployment change, без dual-write.",
+    "Добавить multi-worker integration test: worker/process B видит обновление нового request без restart.",
+    "Добавить stale edit test между двумя формами и rollback UI/service test.",
+    "Сохранить текущие пользовательские названия, цвета и визуальный результат; storage migration не является redesign.",
+    "После cutover legacy files сохраняются read-only до observation acceptance."
+  ],
+  "non_goals": [
+    "Переводить workflow rules или roles.",
+    "Объединять status palettes.",
+    "Менять список статусов.",
+    "Удалять общий legacy infrastructure."
+  ],
+  "acceptance_checks": [
+    "Два документа имеют независимые revisions/audit/rollback.",
+    "Общий экран корректно сохраняет каждый документ и показывает conflict.",
+    "Waiting list статусы отображаются фактическими настроенными цветами, а не единым зелёным.",
+    "Новый request в другом worker видит изменение без restart.",
+    "Отсутствие override использует Git default.",
+    "Invalid/corrupt override виден в health и не применяется молча.",
+    "Legacy file hash не меняется после cutover.",
+    "UI e2e и доменные тесты зелёные."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/workorders/tests.py apps/waiting_list/tests.py apps/settings_center/tests.py'",
+    "make verify-profile PROFILE=ui",
+    "make verify-profile PROFILE=contracts",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "workorders palette CRUD/conflict/rollback",
+    "waiting list palette CRUD/conflict/rollback",
+    "one combined page with independent forms",
+    "two worker freshness",
+    "default fallback and degraded health",
+    "legacy file remains unchanged"
+  ],
+  "rollback": "В пределах observation window экспортировать DB effective values, проверить отсутствие новых несовместимых revisions, переключить readers на сохранённые legacy files и задокументировать hashes. После новых revisions silent switch запрещён.",
+  "deliverables": [
+    "первый real document cutover",
+    "UI/multi-worker e2e",
+    "observation and rollback report",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

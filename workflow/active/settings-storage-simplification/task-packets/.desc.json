@@ -1,0 +1,11 @@
+{
+  ".": "Task packets блока упрощения хранения и доставки настроек",
+  "01-inventory-and-document-registry.json": "Инвентарь 29 документов и единый ConfigDocumentSpec registry без смены backend",
+  "02-postgresql-document-store.json": "RuntimeSettingDocument, repository, транзакционный writer, revision/hash CAS и audit",
+  "03-migration-planner-and-operations.json": "Идемпотентный plan/apply импорт legacy JSON, diagnostics, backup и rollback",
+  "04-status-colors-pilot.json": "Pilot двух раздельных status color документов в PostgreSQL и общий UX",
+  "05-access-workflow-security-cutover.json": "Security-cutover role/workflow с матрицей ролей, fail-closed и cross-validation",
+  "06-ai-agent-runtime-delivery.json": "AI DB documents и allowlisted Django gateway с ETag/last-known-good для agent-runtime",
+  "07-memory-filehub-and-static-classification.json": "Memory/FileHub repository snapshots и классификация analytics/integrations",
+  "08-cleanup-recovery-and-final-acceptance.json": "Удаление legacy path, recovery drill, документация и финальная приемка"
+}

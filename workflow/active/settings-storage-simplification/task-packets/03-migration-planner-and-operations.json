@@ -1,0 +1,91 @@
+{
+  "task_id": "03-migration-planner-and-operations",
+  "title": "Планировщик миграции legacy JSON и операционный контур",
+  "status": "planned",
+  "risk": "high",
+  "objective": "Создать безопасный идемпотентный plan/apply процесс, который отличает default copies от подтверждённых overrides и не импортирует неоднозначный drift.",
+  "start_gate": [
+    "Пакеты 01 и 02 accepted.",
+    "Утверждены каталог backup и формат migration report.",
+    "Production apply не выполняется в этом пакете без отдельного разрешения."
+  ],
+  "dependencies": [
+    "01-inventory-and-document-registry",
+    "02-postgresql-document-store"
+  ],
+  "read_scope": [
+    "apps/core/contract_drift.py",
+    "apps/settings_center/contract_services.py",
+    "apps/settings_center/models.py",
+    "apps/core/management/commands/bootstrap_runtime.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "docs/deployment/POSTGRESQL_MIGRATION.md"
+  ],
+  "write_scope": [
+    "apps/settings_center/management/commands/settings_documents_migrate.py",
+    "apps/settings_center/management/commands/settings_documents_export.py",
+    "apps/settings_center/document_migration.py",
+    "apps/settings_center/test_document_migration.py",
+    "apps/core/management/commands/validate_architecture_contracts.py",
+    "docs/guides/SETTINGS_CENTER_OPERATIONS.md",
+    "docs/deployment/SETTINGS_DOCUMENTS_MIGRATION.md",
+    "docs/deployment/.desc.json",
+    "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.03-migration-planner-and-operations.md"
+  ],
+  "requirements": [
+    "Команда settings_documents_migrate имеет обязательный default mode --plan; запись разрешена только с --apply и явным перечнем document ids/slice.",
+    "Для каждого документа вычислять default hash, runtime hash, текущий DB hash/revision, schema version, env override state и audit evidence.",
+    "Классы: identical_default, audited_override, ambiguous_drift, migration_required, env_override, missing_runtime, already_imported, conflict.",
+    "identical_default и missing_runtime не создают DB row; audited_override импортируется; ambiguous/migration/env override/conflict останавливают apply для документа.",
+    "Текущий role_rules case с default-only $defaults/viewer всегда классифицировать как security_review_required, а не generic migration_required; apply запрещён до явного решения пакета 05.",
+    "Audit evidence считается достаточным, только если applied SettingsChange.after_hash совпадает с runtime hash и setting/document id совпадает.",
+    "Повторный --apply идемпотентен: уже импортированная совпадающая revision не изменяется и новая audit row не создаётся.",
+    "Migration report по умолчанию stdout; --output разрешён только под .local/. Report не содержит raw secrets или unmasked sensitive values.",
+    "Перед apply создавать проверяемый backup legacy payload в явном deployment backup root, не в Git и не в data/contracts/backups без согласования backup review.",
+    "Export command создаёт канонический JSON текущего effective document и manifest с hashes/schema/revision; export path только .local/ или явный безопасный operator path.",
+    "Добавить health/check состояния migration_required и ambiguous_legacy без автоматического исправления.",
+    "Runbook описывает freeze, final plan, backup, apply, switch, smoke, observation и rollback с запретом silent data loss.",
+    "Тесты используют temp paths и test DB; реальные data/contracts не меняются."
+  ],
+  "non_goals": [
+    "Автоматически решать ambiguous drift.",
+    "Выполнять production cutover.",
+    "Удалять legacy files.",
+    "Делать постоянный shadow write."
+  ],
+  "acceptance_checks": [
+    "--plan не делает DB/file writes и даёт стабильный результат при повторе.",
+    "identical default не создаёт override row.",
+    "audited override импортируется с правильными hashes/schema и audit context.",
+    "ambiguous drift/env override/schema mismatch не импортируются.",
+    "Повторный --apply не увеличивает revision и audit count.",
+    "Report masking проходит secret-like fixture matrix.",
+    "Backup/export manifest проверяет content hash.",
+    "Rollback runbook не предлагает переключение на старый файл после новых DB revisions."
+  ],
+  "verification_commands": [
+    "git status --short",
+    "make verify-fast TEST_SCOPE='apps/settings_center/test_document_migration.py apps/settings_center/tests.py'",
+    ".venv/bin/python manage.py settings_documents_migrate --plan",
+    ".venv/bin/python manage.py validate_architecture_contracts",
+    "make verify-profile PROFILE=contracts",
+    "make verify-profile PROFILE=deployment",
+    "git diff --check"
+  ],
+  "independent_review_matrix": [
+    "all migration classifications",
+    "idempotent plan/apply",
+    "secret masking",
+    "backup hash corruption",
+    "ambiguous audit history",
+    "rollback before and after new revisions"
+  ],
+  "rollback": "Пакет не переключает readers. Тестовые/imported dev rows удаляются только явной management operation после export; production rows не удаляются автоматически.",
+  "deliverables": [
+    "plan/apply command",
+    "export command",
+    "migration classifier",
+    "deployment runbook",
+    "EXECUTOR_REPORT и TASK_ACCEPTANCE"
+  ]
+}

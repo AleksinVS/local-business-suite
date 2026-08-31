@@ -1,6 +1,7 @@
 # Отчёт исполнения — пакет 04
 
-Статус: **реализация dev/test завершена; production cutover не выполнялся**.
+Статус: **реализация dev/test завершена; production cutover заблокирован
+решением по legacy-данным**.
 
 ## Результат
 
@@ -60,10 +61,57 @@ Luna xhigh вынесла verdict **approve** для dev/test реализаци
 активные DB-документы исключены из legacy migration probe и добавлен отдельный
 регрессионный тест.
 
+## Production preflight 2026-08-31
+
+Собран воспроизводимый image из чистого commit `5f75248` с OCI revision label;
+предыдущий image сохранён отдельным rollback-тегом. Compose resolution подтвердил
+рабочий mount `/home/abc/projects/local-business-suite/data:/app/data`, пустой
+allowlist и отсутствие дополнительных Django workers. `bootstrap_runtime
+--dry-run` не запланировал изменений, проверка контрактов нового image не дала
+ошибок.
+
+До изменения schema созданы и проверены:
+
+- PostgreSQL custom dump;
+- побайтовая копия legacy-палитры с SHA-256;
+- защищённая копия приватного env.
+
+Операторский каталог:
+`/home/abc/.local-backups/local-business-suite/settings-pilot-5f75248-20260831`.
+Payload и секреты в отчёт не включены.
+
+Реальный migration plan дополнительно показал параллельные `ai.0014`,
+`inventory.0010` и `waiting_list.0006`. После Sol high review отдельным
+schema-only окном применены:
+
+- `settings_center.0004` — новая таблица документов и nullable audit metadata;
+- `ai.0014` — новая пустая таблица `ChatRun`;
+- `inventory.0010` — `varchar` в `text` для таблицы из шести строк.
+
+`waiting_list.0006` намеренно не применялась. В БД остаются две записи
+`service_id=s1`, созданные при старом каталоге услуг. Новый код переиспользует
+`s1` для несвязанной офтальмологической услуги, а миграция данных отсутствует.
+Удалять записи или угадывать соответствие без решения владельца запрещено.
+
+Состояние после окна:
+
+- старый web image запущен напрямую через Gunicorn и отвечает `/health/`;
+- agent-runtime `/health` отвечает;
+- `RuntimeSettingDocument` rows: 0;
+- allowlist отсутствует;
+- legacy-файл не изменён;
+- `waiting_list.0006` остаётся pending.
+
+Прямой Gunicorn — временное восстановление предыдущего runtime: штатный startup
+старого image теперь блокируется существующим `core.E001`, потому что рабочий
+реестр AI-инструментов уже новее образа. Этот режим нельзя считать завершённым
+deployment; он сохраняет доступность test-host до решения по данным и запуска
+нового совместимого image.
+
 ## Невыполненный эксплуатационный шлюз
 
-Production allowlist не менялся, рабочая БД и `data/contracts/` не затрагивались.
-Для фактического переключения ещё нужны применённая schema migration,
-read-only plan без неоднозначного drift, защищённая резервная копия,
-согласованное окно наблюдения и отдельное разрешение владельца. До этого пакет
-не считается production cutover.
+Production allowlist не менялся, `data/contracts/` не затрагивался. Для
+фактического переключения ещё нужны решение владельца по двум legacy-записям,
+применение `waiting_list.0006`, final plan `identical_default`, freeze, export,
+smoke и read-only окно наблюдения. До этого пакет не считается production
+cutover.

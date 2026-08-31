@@ -336,8 +336,8 @@ editor то, что должно проходить code review.
 |---|---|---|
 | `role_rules.json` | `database_override` | специальный access workflow, fail closed |
 | `workflow_rules.json` | `database_override` | доменная команда и cross-validation |
-| `workorder_status_colors.json` | `database_override` | первый безопасный pilot |
-| `waiting_list_status_colors.json` | `database_override` | первый безопасный pilot |
+| `workorder_status_colors.json` | `database_override` | связанный access/workflow срез, не pilot |
+| `waiting_list_status_colors.json` | `database_override` | первый независимый pilot |
 | `ai/chat_settings.json` | `database_override` | операторские параметры UX/контекста |
 | `ai/registry.json` | `git_static` | identity/execution security architecture, не обычная настройка |
 | `ai/tools.json` | `git_static` | каталог должен совпадать с Python tool definitions |
@@ -393,8 +393,10 @@ evidence и предлагаемое действие.
 1. Инвентарь и единый registry без изменения поведения.
 2. Модель, repository, transactional writer и тесты на временных документах.
 3. Идемпотентный migration planner/importer.
-4. Pilot двух status color документов; общий экран остаётся поверх двух записей.
-5. Core role/workflow как единый security acceptance slice.
+4. Pilot независимого `waiting_list.contract.status_colors`; общий экран
+   продолжает показывать обе палитры, но палитра заявок пока остаётся legacy.
+5. Core role/workflow и `workorders.contract.status_colors` как единый
+   dependency-closed security acceptance slice.
 6. AI documents одновременно с gateway и agent-runtime ETag delivery.
 7. Memory/FileHub consumers; один снимок на job/command.
 8. Analytics/integrations classification, удаление startup payload constants и

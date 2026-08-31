@@ -1,7 +1,8 @@
 # Упрощение хранения и доставки настроек
 
-Статус: архитектура и исполнительные пакеты подготовлены; реализация не начата,
-ADR-0048 имеет статус `Proposed`.
+Статус: ADR-0048 принят; пакеты 01–03 и dev/test-часть пилота 04 реализованы и
+приняты. Production-пилот ожидает отдельного операционного разрешения, миграции
+схемы, backup и окна наблюдения.
 
 Дата: 2026-08-31.
 
@@ -64,7 +65,8 @@ ADR-0045 и фактической матрицей доступа.
 3. `RuntimeSettingDocument`, repository и транзакционный writer.
 4. Версии схем, content hash, revision/CAS и health state.
 5. Идемпотентный migration planner/importer для legacy runtime JSON.
-6. Pilot на двух status color документах без их физического объединения.
+6. Pilot на независимом документе цветов листа ожидания; обе палитры остаются
+   отдельными документами.
 7. Перевод role/workflow с независимой security-приёмкой.
 8. Django gateway и доставка AI-документов в agent-runtime по ETag.
 9. Перевод memory/FileHub consumers со startup constants на repository.
@@ -145,19 +147,20 @@ ADR-0045 и фактической матрицей доступа.
 
 Результат: dry-run даёт исчерпывающий и идемпотентный план.
 
-### Пакет 04. Pilot status colors
+### Пакет 04. Pilot цвета статусов листа ожидания
 
-- перевести два документа цветов на DB backend;
-- оставить отдельные document/revision/rollback;
+- перевести независимый `waiting_list.contract.status_colors` на DB backend;
+- оставить палитру заявок на legacy backend до согласованного перехода с
+  workflow;
 - показать их рядом в существующем UX;
 - выполнить multi-worker и UI e2e;
 - выдержать окно наблюдения перед следующим срезом.
 
 Результат: первый безопасный proof of architecture.
 
-### Пакет 05. Access/workflow security slice
+### Пакет 05. Access/workflow/status-colors security slice
 
-- перевести role/workflow repository и writer одной согласованной волной;
+- перевести role/workflow и палитру заявок одной согласованной волной;
 - сохранить специальные команды изменения ролей;
 - заменить прямые file/settings reads;
 - проверить roleless access, default role, privilege ceiling, role copy и
@@ -273,7 +276,7 @@ make verify-full
 - inventory подтверждён владельцами доменов;
 - каждый packet имеет точный read/write scope и rollback;
 - тестовый PostgreSQL профиль доступен;
-- выбраны первые два status color документа для pilot;
+- выбран независимый `waiting_list.contract.status_colors` для первого pilot;
 - backup и freeze procedure согласованы;
 - ни один документ с secret-bearing payload не попал в scope;
 - для security/AI/memory срезов назначена независимая проверка.

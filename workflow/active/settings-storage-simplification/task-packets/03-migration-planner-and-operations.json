@@ -1,7 +1,7 @@
 {
   "task_id": "03-migration-planner-and-operations",
   "title": "Планировщик миграции legacy JSON и операционный контур",
-  "status": "planned",
+  "status": "accepted",
   "risk": "high",
   "objective": "Создать безопасный идемпотентный plan/apply процесс, который отличает default copies от подтверждённых overrides и не импортирует неоднозначный drift.",
   "start_gate": [

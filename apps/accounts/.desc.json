@@ -9,6 +9,7 @@
   "access_contracts.py": "Каталог определений ролей, подписанный preview/apply одной роли и серверная оценка влияния",
   "department_policy.py": "Fail-closed политика обязательного подразделения и карантинной записи",
   "settings_descriptors.py": "Доменные descriptors для Settings Center по пользователям и AD link",
+  "config_documents.py": "Спецификации документов настроек домена учётных записей и ролей",
   "signals.py": "Сигналы Django (пост-сохранение пользователя)",
   "management/commands/seed_roles.py": "Сидирование ролей и групп",
   "management/commands/access_management_e2e.py": "Откатываемая сквозная проверка назначения рискованной роли",

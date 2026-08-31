@@ -6,6 +6,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     access_contracts.py: file # Каталог определений ролей, подписанный preview/apply одной роли и серверная оценка влияния
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
+    config_documents.py: file # Спецификации документов настроек домена учётных записей и ролей
     department_policy.py: file # Fail-closed политика обязательного подразделения и карантинной записи
     ldap_backend.py: file # LDAP-бэкенд аутентификации с сериализованным внешним созданием пользователя и fail-closed синхронизацией контрактных ролей
     middleware.py: file # Middleware для согласования ручного входа с REMOTE_USER
@@ -29,6 +30,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     ai_skills.py: file # Системные AI skills приложения AI, включая ai.skill_creator
     chat_settings.py: file # Разрешение эффективных runtime-настроек full-page/sidebar AI-чата
     commands.py: file # Предопределённые slash-команды
+    config_documents.py: file # Спецификации статических и рабочих документов настроек ИИ
     context_processors.py: file # Template flags и базовый route context для встроенного AI-чата без DB-запросов
     contracts.py: file # Валидаторы доменных контрактов ИИ (реестр, инструменты, типы задач, настройки чата, семантические кросс-проверки), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     media_policies.py: file # Политика защищённой выдачи вложений ИИ-чата (префикс chat_attachments) для media-dispatcher: доступ владельцу по цепочке ChatAttachment->message->session->user
@@ -48,6 +50,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
       commands: file
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
+    config_documents.py: file # Спецификации статических документов аналитики в общем реестре настроек
     contracts.py: file # Валидаторы доменных контрактов аналитики (реестр датасетов, источники, scope-правила, бизнес-факты, метрики, мониторы, playbook-и, workflow-маршруты, dedup и retention), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     models.py: file # Модели аналитики
     services.py: file # Сервисы knowledge-driven analytics pipeline и analytics projection из SourceObjectEnvelope
@@ -60,9 +63,10 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     ai_skills.py: file # Общий контракт AgentSkillProvider и registry модульных AI skills
     apps.py: file # Конфигурация приложения (в ready регистрирует system checks)
     checks.py: file # Django system checks: валидация бизнес-контрактов (тег contracts), вынесенная с импорта settings в штатный manage.py check (ADR-0031)
+    config_documents.py: file # Спецификации общих документов ролей и workflow для типизированного реестра настроек
     context_processors.py: file # Контекстные процессоры шаблонов
     contract_drift.py: file # Диагностика дрейфа default (contracts/) vs runtime (data/contracts/) по всем контрактам реестра Settings Center: три исхода (совпадает / рабочая копия изменена / кандидат на перенос из дефолта), только диагностика без автослияния (ADR-0031 п.4)
-    contract_store.py: file # Единый слой чтения рабочих контрактов: кэш по метаданным файла, деградационный сигнал, хеши для оптимистической записи (ADR-0031)
+    contract_store.py: file # Совместимый слой чтения legacy-файлов и request-local снимков типизированных DB-документов
     contracts.py: file # Общие валидаторы контрактных структур: реестр интеграций, task brief/change plan и формат палитр статусов
     debug_views.py: file # Debug-представления (включаются в DEBUG=True)
     file_locks.py: file # Межпроцессная блокировка файлов Linux/Windows с ограничением времени и закрытым отказом
@@ -112,6 +116,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей памяти в Django Admin
     apps.py: file # Конфигурация Django-приложения memory
     chat_memory.py: file # Синхронный memory.remember (файл+commit+индекс), personal/org chat knowledge writer path, organization candidacy (pending pages) и reflection
+    config_documents.py: file # Спецификации документов памяти и FileHub в типизированном реестре настроек
     contracts.py: file # Валидаторы доменных контрактов памяти (sources, profiles, routing, trust/claims policy, retrieval budget, graph schema, ingestion и file organization), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     deidentification.py: file # Детерминированная деидентификация и редактирование PII перед индексированием
     document_ingestion.py: file # Discovery/ingestion корпоративных документов из local/UNC источников и issue queue (graph schema bootstrapping/extraction helpers удалены, ADR-0030 решение 3)
@@ -154,8 +159,16 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     access_workspace.py: file # Prefetched read model for the canonical unified access workspace
     admin.py: file # Django Admin registration for Settings Center audit models
     apps.py: file # Django AppConfig for Settings Center
+    checks.py: file # Privacy-safe Django checks и health состояния хранилища и миграции настроек
     contract_services.py: file # Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback
     descriptors.py: file # Dataclass contract for setting descriptors and safe context masking
+    document_hashes.py: file # Строгая канонизация JSON и SHA-256 документов настроек
+    document_migration.py: file # Безопасное планирование, backup, перенос и export подтверждённых legacy overrides
+    document_registry.py: file # Доменная сборка, проверка зависимостей и закрытый DB allowlist документов настроек
+    document_repository.py: file # Проверенное чтение Git, legacy и PostgreSQL-снимков документов настроек
+    document_security.py: file # Единый запрет необработанных секретов и нормализация чувствительных ключей
+    document_services.py: file # Транзакционная запись и rollback PostgreSQL-документов с CAS и аудитом
+    document_specs.py: file # Типы ConfigDocumentSpec и политики хранения типизированных документов настроек
     env_services.py: file # .env effective status and proposal generation service
     forms.py: file # Forms for contracts, env proposals, help and user workflows
     help_services.py: file # Contextual help context and mini-chat response service
@@ -163,6 +176,11 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     policies.py: file # Server-side permissions for settings and user management
     registry.py: file # Registry loading domain descriptors from core/accounts/ai/memory
     services.py: file # Generic audit/hash/masked diff helpers
+    test_document_migration_health.py: file # Проверки безопасной выдачи migration health и system checks
+    test_document_migration.py: file # Проверки классификации, backup, plan/apply/export и атомарности миграции
+    test_document_registry.py: file # Проверки полноты, политик и связности реестра документов
+    test_document_repository.py: file # Матрица чтения, записи, конкурентности, аудита и health PostgreSQL-хранилища
+    test_status_colors_pilot.py: file # HTTP и PostgreSQL e2e-проверки DB-пилота палитры листа ожидания
     tests.py: file # Settings Center tests
     urls.py: file # URL routes for Settings Center
     views.py: file # Django template/HTMX views for Settings Center
@@ -172,6 +190,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills листа ожидания для открытия записей и workflow-инструкций
     apps.py: file # Конфигурация приложения
+    config_documents.py: file # Спецификация независимой палитры листа ожидания и её DB-пилота
     contracts.py: file # Валидатор runtime-контракта цветов статусов листа ожидания
     data_operations.py: file # Проверяемый разбор и атомарный импорт данных листа ожидания
     forms.py: file # Формы листа ожидания
@@ -189,6 +208,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills заявок для открытия карточек и workflow-инструкций
     apps.py: file # Конфигурация приложения
+    config_documents.py: file # Спецификации связанных документов workflow и палитры заявок
     contracts.py: file # Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     department_filter.py: file # Нормализация фильтра подразделений и безопасная модель доступного дерева
     forms.py: file # Формы нарядов, подписи справочников и проверка согласованности изделия с подразделением
@@ -388,6 +408,7 @@ docs: # Документация проекта
     MEMORY_DEPLOYMENT.md: file # Развертывание, runtime contracts и smoke-проверки системы памяти
     POSTGRESQL_MIGRATION.md: file # Runbook миграции основного репозитория с SQLite на одну PostgreSQL database
     SETTINGS_CENTER_DEPLOYMENT.md: file # Deployment note для Settings Center, env proposals, migrations и restart semantics
+    SETTINGS_DOCUMENTS_MIGRATION.md: file # Runbook безопасного plan/apply/export переноса legacy JSON overrides в RuntimeSettingDocument
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
@@ -730,6 +751,14 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Порядок исполнения, зависимости пакетов и общие проверки
       BLOCK_BRIEF.md: file # Цель, границы, риски и критерии приемки блока
       EXECUTION_GUIDE.md: file # Правила исполнения, отчётности, миграции и независимой приемки
+      EXECUTOR_REPORT.01-inventory-and-document-registry.md: file # Отчёт реализации инвентаря и реестра документов
+      EXECUTOR_REPORT.02-postgresql-document-store.md: file # Отчёт реализации PostgreSQL-хранилища и транзакционной записи
+      EXECUTOR_REPORT.03-migration-planner-and-operations.md: file # Отчёт безопасного планирования, переноса и экспорта legacy-настроек
+      EXECUTOR_REPORT.04-status-colors-pilot.md: file # Отчёт dev/test реализации DB-пилота палитры листа ожидания
+      TASK_ACCEPTANCE.01-inventory-and-document-registry.md: file # Приёмка пакета 01 после независимого ревью и тестов
+      TASK_ACCEPTANCE.02-postgresql-document-store.md: file # Приёмка пакета 02 после Sol high database/concurrency review
+      TASK_ACCEPTANCE.03-migration-planner-and-operations.md: file # Приёмка безопасного контура миграции после независимых correction cycles
+      TASK_ACCEPTANCE.04-status-colors-pilot.md: file # Приёмка dev/test-пилота без production cutover
     warehouse-management-system: # Workflow: общий раздел Склад, права, отчёты и миграция legacy-баз
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок и состав исполнительных пакетов

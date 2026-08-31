@@ -1,7 +1,7 @@
 {
   "block_id": "settings-storage-simplification",
   "title": "Упрощение хранения и доставки настроек",
-  "status": "planned-awaiting-adr-acceptance",
+  "status": "production-pilot-gate",
   "created_at": "2026-08-31",
   "adr": "docs/adr/ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md",
   "architecture_doc": "docs/architecture/SETTINGS_STORAGE_TARGET_ARCHITECTURE.md",
@@ -32,6 +32,7 @@
   "tasks": [
     {
       "task_id": "01-inventory-and-document-registry",
+      "status": "accepted",
       "packet": "task-packets/01-inventory-and-document-registry.json",
       "risk": "medium",
       "independent_review": "architecture",
@@ -39,6 +40,7 @@
     },
     {
       "task_id": "02-postgresql-document-store",
+      "status": "accepted",
       "packet": "task-packets/02-postgresql-document-store.json",
       "risk": "high",
       "independent_review": "database-and-concurrency",
@@ -46,6 +48,7 @@
     },
     {
       "task_id": "03-migration-planner-and-operations",
+      "status": "accepted",
       "packet": "task-packets/03-migration-planner-and-operations.json",
       "risk": "high",
       "independent_review": "migration-and-recovery",
@@ -53,13 +56,15 @@
     },
     {
       "task_id": "04-status-colors-pilot",
+      "status": "accepted-dev-test",
       "packet": "task-packets/04-status-colors-pilot.json",
       "risk": "medium",
       "independent_review": "ui-and-multi-worker",
-      "summary": "Перевести два status color документа как раздельный DB pilot и проверить общий UX."
+      "summary": "Перевести только независимую палитру листа ожидания как DB pilot; палитру заявок оставить в связанном security-срезе."
     },
     {
       "task_id": "05-access-workflow-security-cutover",
+      "status": "planned",
       "packet": "task-packets/05-access-workflow-security-cutover.json",
       "risk": "critical",
       "independent_review": "security-role-matrix",
@@ -67,6 +72,7 @@
     },
     {
       "task_id": "06-ai-agent-runtime-delivery",
+      "status": "planned",
       "packet": "task-packets/06-ai-agent-runtime-delivery.json",
       "risk": "high",
       "independent_review": "gateway-and-agent-parity",
@@ -74,6 +80,7 @@
     },
     {
       "task_id": "07-memory-filehub-and-static-classification",
+      "status": "planned",
       "packet": "task-packets/07-memory-filehub-and-static-classification.json",
       "risk": "high",
       "independent_review": "memory-operation-matrix",
@@ -81,6 +88,7 @@
     },
     {
       "task_id": "08-cleanup-recovery-and-final-acceptance",
+      "status": "planned",
       "packet": "task-packets/08-cleanup-recovery-and-final-acceptance.json",
       "risk": "high",
       "independent_review": "cross-domain-final-acceptance",

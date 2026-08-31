@@ -3591,13 +3591,15 @@ class ProductSettingsAuthorityTests(TestCase):
         lock_mock.assert_called_once_with(access_control_write_lock_path(), timeout=10.0)
 
     def test_editable_runtime_descriptors_have_resolvable_validators(self):
-        from apps.settings_center.contract_services import VALIDATORS
+        from apps.settings_center.document_registry import get_document_registry
 
         for descriptor in get_registry().all():
             if descriptor.write_policy != "editable":
                 continue
             self.assertEqual(descriptor.required_permission, "manage_settings", descriptor.setting_id)
-            self.assertIn(descriptor.metadata.get("validator"), VALIDATORS, descriptor.setting_id)
+            spec = get_document_registry().get(descriptor.setting_id)
+            self.assertTrue(callable(spec.validator), descriptor.setting_id)
+            self.assertIs(descriptor.metadata.get("validator_callable"), spec.validator)
             self.assertTrue(descriptor.metadata.get("settings_path"), descriptor.setting_id)
 
     def test_preview_resolves_canonical_descriptor_from_setting_id(self):

@@ -7,6 +7,7 @@ class SettingsCenterConfig(AppConfig):
     verbose_name = "Центр настроек"
 
     def ready(self):
+        from . import checks  # noqa: F401
         from . import right_panel
 
         right_panel.register()

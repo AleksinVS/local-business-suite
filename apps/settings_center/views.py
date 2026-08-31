@@ -57,6 +57,7 @@ from apps.waiting_list.models import SERVICE_CHOICES, WaitingListAuditLog, Waiti
 from .contract_services import (
     apply_contract_payload,
     preview_contract_payload,
+    read_contract_snapshot,
     read_contract_value,
     save_default_new_user_role,
 )
@@ -1007,9 +1008,10 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         initial = super().get_initial()
         if self.descriptor.storage_kind == "runtime_contract":
             try:
-                payload = read_contract_value(self.descriptor)
-                initial["payload"] = pretty_json(payload)
-                initial["base_hash"] = normalized_hash(payload)
+                snapshot = read_contract_snapshot(self.descriptor, request=self.request)
+                initial["payload"] = pretty_json(snapshot.payload)
+                initial["base_hash"] = snapshot.content_hash
+                initial["base_revision"] = snapshot.revision
             except Exception as exc:
                 initial["payload"] = f'{{"error": "{exc}"}}'
         return initial
@@ -1061,6 +1063,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
                 raw_payload=form.cleaned_data["payload"],
                 confirmed=form.cleaned_data["confirm"],
                 base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
             )
         except ValidationError as exc:
             form.add_error(None, exc)
@@ -1182,15 +1185,17 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
     def get_descriptor(self):
         return get_registry().get(self.get_setting_id())
 
-    def get_payload(self):
-        return read_contract_value(self.get_descriptor())
+    def get_snapshot(self):
+        return read_contract_snapshot(self.get_descriptor(), request=self.request)
 
     def get_context_data(self, **kwargs):
         payload = kwargs.pop("payload", None)
         base_hash = kwargs.pop("base_hash", None)
+        base_revision = kwargs.pop("base_revision", None)
         context = super().get_context_data(**kwargs)
         descriptor = self.get_descriptor()
-        payload = payload or self.get_payload()
+        snapshot = self.get_snapshot()
+        payload = payload or snapshot.payload
         rows = [
             {
                 "code": code,
@@ -1205,14 +1210,20 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 "descriptor": descriptor,
                 "rows": rows,
                 "raw_payload": pretty_json(payload),
-                "base_hash": base_hash or normalized_hash(payload),
+                "base_hash": base_hash or snapshot.content_hash,
+                "base_revision": (
+                    snapshot.revision if base_revision is None else base_revision
+                ),
+                "settings_degraded": snapshot.degraded,
+                "settings_degradation_code": snapshot.degradation_reason,
             }
         )
         return context
 
     def post(self, request, *args, **kwargs):
         descriptor = self.get_descriptor()
-        before = self.get_payload()
+        snapshot = self.get_snapshot()
+        before = snapshot.payload
         statuses = {}
         for code, config in before.get("statuses", {}).items():
             statuses[code] = {
@@ -1234,13 +1245,15 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 raw_payload=json.dumps(after, ensure_ascii=False),
                 confirmed=request.POST.get("confirm") == "on",
                 base_hash=request.POST.get("base_hash"),
+                base_revision=request.POST.get("base_revision"),
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
             return self.render_to_response(
                 self.get_context_data(
                     payload=after,
-                    base_hash=normalized_hash(before),
+                    base_hash=snapshot.content_hash,
+                    base_revision=snapshot.revision,
                 )
             )
         messages.success(request, f"Цвета статусов сохранены. Аудит #{change.pk}.")

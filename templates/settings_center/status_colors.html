@@ -17,9 +17,17 @@
     </div>
   </div>
 
+  {% if settings_degraded %}
+    <div class="message warning" role="alert">
+      Рабочая версия палитры повреждена. Показан Git-дефолт; сохранение закрыто
+      до явного восстановления. Код: <code>{{ settings_degradation_code }}</code>.
+    </div>
+  {% endif %}
+
   <form method="post" class="settings-form status-color-form" data-status-color-form>
     {% csrf_token %}
     <input type="hidden" name="base_hash" value="{{ base_hash }}">
+    <input type="hidden" name="base_revision" value="{{ base_revision }}">
     <div class="status-color-grid">
       {% for row in rows %}
         <div class="status-color-row" data-status-color-row>

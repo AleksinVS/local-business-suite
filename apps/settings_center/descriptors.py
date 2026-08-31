@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .document_security import normalize_sensitive_key
+
 
 SENSITIVE_KEY_PARTS = (
     "password",
@@ -184,7 +186,7 @@ def mask_sensitive(value: Any) -> Any:
     if isinstance(value, dict):
         masked = {}
         for key, item in value.items():
-            key_text = str(key).lower()
+            key_text = normalize_sensitive_key(key)
             if any(part in key_text for part in SENSITIVE_KEY_PARTS):
                 masked[key] = "***"
             else:

@@ -41,9 +41,12 @@ def health_details(request):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
         health_status["services"]["database"] = {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Health check failed: Database is unreachable: {e}")
-        health_status["services"]["database"] = {"status": "error", "message": str(e)}
+    except Exception as exc:
+        logger.error("Health check failed: Database is unreachable: %s", exc)
+        health_status["services"]["database"] = {
+            "status": "error",
+            "code": "unavailable",
+        }
         overall_ok = False
 
     # 2. AI Runtime Check
@@ -51,13 +54,20 @@ def health_details(request):
     try:
         response = httpx.get(f"{ai_runtime_url}/health", timeout=2.0)
         if response.status_code == 200:
-            health_status["services"]["ai_runtime"] = {"status": "ok", "details": response.json()}
+            health_status["services"]["ai_runtime"] = {"status": "ok"}
         else:
             health_status["services"]["ai_runtime"] = {"status": "degraded", "code": response.status_code}
             # AI Runtime is important but might not be fatal for core portal
-    except Exception as e:
-        logger.warning(f"Health check: AI Runtime is unreachable at {ai_runtime_url}: {e}")
-        health_status["services"]["ai_runtime"] = {"status": "unreachable", "message": str(e)}
+    except Exception as exc:
+        logger.warning(
+            "Health check: AI Runtime is unreachable at %s: %s",
+            ai_runtime_url,
+            exc,
+        )
+        health_status["services"]["ai_runtime"] = {
+            "status": "unreachable",
+            "code": "unavailable",
+        }
         # We don't set overall_ok = False here to allow portal to work even if AI is down
 
     # 3. Contract store health (ADR-0031) — активная проверка, а не только флаг
@@ -84,12 +94,33 @@ def health_details(request):
         logger.error("Health check: contract store degraded: %s", degraded_contracts)
         health_status["services"]["contracts"] = {
             "status": "degraded",
-            "contracts": degraded_contracts,
+            "contracts": {
+                name: {"code": "invalid_contract"}
+                for name in sorted(degraded_contracts)
+            },
         }
     else:
         health_status["services"]["contracts"] = {"status": "ok"}
 
-    # 4. LDAP Connectivity (if configured)
+    # 4. Typed settings documents (ADR-0048). Читаем только активные DB-срезы;
+    # payload, локальные пути и тексты исключений в health не выдаются.
+    from apps.settings_center.document_repository import probe_settings_document_health
+
+    settings_documents = probe_settings_document_health()
+    health_status["services"]["settings_documents"] = settings_documents
+    if settings_documents["status"] == "error":
+        overall_ok = False
+
+    # 5. Legacy settings migration readiness.  This is kept separate from
+    # active DB-document health while migration is an operator-controlled step.
+    from apps.settings_center.checks import probe_settings_migration_health
+
+    settings_migration = probe_settings_migration_health()
+    health_status["services"]["settings_document_migration"] = settings_migration
+    if settings_migration["status"] == "error":
+        overall_ok = False
+
+    # 6. LDAP Connectivity (if configured)
     auth_mode = getattr(settings, "DJANGO_AUTH_MODE", "local")
     if auth_mode in ["ldap", "remote_user", "hybrid"]:
         # We could add a more robust LDAP ping here if ldap3 is available

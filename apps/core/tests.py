@@ -177,6 +177,77 @@ class CrossPlatformFileLockTests(SimpleTestCase):
                 outcome.append("released")
             self.assertEqual(outcome, ["timeout", "released"])
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink semantics")
+    def test_lock_refuses_symlink_target(self):
+        from apps.core.file_locks import exclusive_file_lock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "real.lock"
+            target.write_bytes(b"0")
+            link = root / "write.lock"
+            link.symlink_to(target)
+
+            with self.assertRaises(OSError):
+                with exclusive_file_lock(link):
+                    pass
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink semantics")
+    def test_lock_refuses_symlink_parent(self):
+        from apps.core.file_locks import exclusive_file_lock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            real_parent = root / "real"
+            real_parent.mkdir()
+            linked_parent = root / "linked"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+
+            with self.assertRaises(OSError):
+                with exclusive_file_lock(linked_parent / "write.lock"):
+                    pass
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX inode semantics")
+    def test_lock_detects_inode_replacement_while_held(self):
+        from apps.core.file_locks import exclusive_file_lock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            lock_path = root / "write.lock"
+            replacement = root / "replacement.lock"
+
+            with self.assertRaisesRegex(RuntimeError, "заменён"):
+                with exclusive_file_lock(lock_path):
+                    replacement.write_bytes(b"0")
+                    os.replace(replacement, lock_path)
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX subprocess contention check")
+    def test_second_process_times_out_on_same_lock(self):
+        from apps.core.file_locks import exclusive_file_lock
+
+        script = """
+import sys
+from apps.core.file_locks import FileLockTimeoutError, exclusive_file_lock
+try:
+    with exclusive_file_lock(sys.argv[1], timeout=0.15, poll_interval=0.01):
+        print("acquired")
+except FileLockTimeoutError:
+    print("timeout")
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = Path(tmpdir) / "write.lock"
+            with exclusive_file_lock(lock_path):
+                result = subprocess.run(
+                    [sys.executable, "-c", script, str(lock_path)],
+                    cwd=settings.BASE_DIR,
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                    timeout=5,
+                )
+
+        self.assertEqual(result.stdout.strip(), "timeout")
+
     def test_windows_msvcrt_branch_locks_and_unlocks_one_byte(self):
         from apps.core.file_locks import exclusive_file_lock
 

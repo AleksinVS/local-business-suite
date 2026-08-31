@@ -68,6 +68,13 @@ _CONTRACTS = {
     },
 }
 
+_DOCUMENT_ID_BY_CONTRACT_NAME = {
+    "role_rules": "core.contract.role_rules",
+    "workflow_rules": "core.contract.workflow_rules",
+    "workorder_status_colors": "workorders.contract.status_colors",
+    "waiting_list_status_colors": "waiting_list.contract.status_colors",
+}
+
 # Процессный кэш: имя -> {"key": кортеж метаданных, "payload": разобранный dict}.
 # ``payload`` считается приватным и наружу отдаётся только глубокой копией.
 _cache: dict[str, dict] = {}
@@ -143,6 +150,16 @@ def get_contract(name: str, request=None):
     недоступен, вызывается ``get_contract(name)`` — согласованность в пределах
     запроса в типичном случае обеспечивает кэш по ключу метаданных.
     """
+    document_id = _active_database_document_id(name)
+    if document_id is not None:
+        # Lazy import keeps the transport-only contract store independent from
+        # Settings Center models during Django settings import.
+        from apps.settings_center.document_repository import ConfigDocumentRepository
+
+        return ConfigDocumentRepository().get_document(
+            document_id, request=request
+        ).payload
+
     if request is not None:
         snapshots = getattr(request, "_contract_snapshots", None)
         if snapshots is None:
@@ -170,12 +187,32 @@ def normalized_hash(payload) -> str:
 
 def current_contract_hash(name: str) -> str:
     """Хеш актуальной версии контракта для оптимистической проверки записи."""
+    document_id = _active_database_document_id(name)
+    if document_id is not None:
+        from apps.settings_center.document_repository import ConfigDocumentRepository
+
+        return ConfigDocumentRepository().get_document(document_id).content_hash
     return normalized_hash(get_contract(name))
 
 
 def registered_contracts() -> tuple:
     """Имена контрактов, которые обслуживает store (для активных health-проверок)."""
-    return tuple(_CONTRACTS)
+    return tuple(
+        name for name in _CONTRACTS if _active_database_document_id(name) is None
+    )
+
+
+def _active_database_document_id(name: str) -> str | None:
+    document_id = _DOCUMENT_ID_BY_CONTRACT_NAME.get(name)
+    if document_id is None:
+        return None
+    from apps.settings_center.document_registry import get_document_registry
+
+    return (
+        document_id
+        if get_document_registry().get(document_id).active_backend == "database"
+        else None
+    )
 
 
 def get_degradation_state() -> dict:

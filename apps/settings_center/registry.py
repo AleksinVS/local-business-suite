@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from dataclasses import replace
 from functools import lru_cache
 
 from .descriptors import (
@@ -13,6 +14,28 @@ from .descriptors import (
 
 
 KNOWN_REQUIRED_PERMISSIONS = frozenset({"manage_settings", "manage_users"})
+EXPECTED_RUNTIME_DOCUMENT_IDS = frozenset(
+    {
+        "core.contract.role_rules",
+        "core.contract.workflow_rules",
+        "workorders.contract.status_colors",
+        "waiting_list.contract.status_colors",
+        "ai.contract.registry",
+        "ai.contract.tools",
+        "ai.contract.task_types",
+        "ai.contract.models",
+        "ai.contract.chat_settings",
+        "memory.contract.sources",
+        "memory.contract.profiles",
+        "memory.contract.routing",
+        "memory.contract.trust_policy",
+        "memory.contract.claims_policy",
+        "memory.contract.retrieval_budget",
+        "memory.contract.ingestion_profiles",
+        "memory.contract.file_organization_profiles",
+        "memory.contract.graph_schema",
+    }
+)
 
 
 DESCRIPTOR_MODULES = (
@@ -65,7 +88,50 @@ def get_registry() -> SettingsRegistry:
                 raise ValueError(f"Duplicate setting_id '{descriptor.setting_id}'.")
             seen.add(descriptor.setting_id)
             descriptors.append(descriptor)
-    return SettingsRegistry(descriptors)
+    # Compatibility projection: document specs are authoritative for runtime
+    # contract path/validator and static/domain-workflow editability.
+    from .document_registry import get_document_registry
+
+    document_specs = {spec.document_id: spec for spec in get_document_registry().all()}
+    projected = []
+    for descriptor in descriptors:
+        spec = document_specs.get(descriptor.setting_id)
+        if not spec or descriptor.storage_kind != "runtime_contract":
+            projected.append(descriptor)
+            continue
+        metadata = dict(descriptor.metadata)
+        if spec.legacy_settings_path:
+            metadata["settings_path"] = spec.legacy_settings_path
+        if spec.validator is not None:
+            metadata["validator_callable"] = spec.validator
+        metadata.update(
+            {
+                "storage_policy": spec.storage_policy,
+                "active_backend": spec.active_backend,
+                "failure_policy": spec.failure_policy,
+                "delivery_scope": spec.delivery_scope,
+                "cross_document_ids": spec.cross_document_ids,
+            }
+        )
+        projected.append(
+            replace(
+                descriptor,
+                metadata=metadata,
+                write_policy=spec.write_policy,
+                required_permission=spec.required_permission,
+                sensitivity=spec.sensitivity,
+                requires_restart=spec.requires_restart,
+                requires_reindex=spec.requires_reindex,
+            )
+        )
+    runtime_ids = {
+        descriptor.setting_id
+        for descriptor in projected
+        if descriptor.storage_kind == "runtime_contract"
+    }
+    if runtime_ids != EXPECTED_RUNTIME_DOCUMENT_IDS:
+        raise ValueError("Runtime descriptor/document spec parity mismatch")
+    return SettingsRegistry(projected)
 
 
 def _validate_descriptor_security(descriptor: SettingDescriptor) -> None:
@@ -97,11 +163,13 @@ def _validate_descriptor_security(descriptor: SettingDescriptor) -> None:
             raise ValueError(
                 f"Editable runtime descriptor '{descriptor.setting_id}' must define settings_path."
             )
-        if not descriptor.metadata.get("validator"):
+        validator_callable = descriptor.metadata.get("validator_callable")
+        legacy_validator = descriptor.metadata.get("validator")
+        if validator_callable is not None and not callable(validator_callable):
             raise ValueError(
-                f"Editable runtime descriptor '{descriptor.setting_id}' must define validator."
+                f"Editable runtime descriptor '{descriptor.setting_id}' has a non-callable validator."
             )
-        if descriptor.metadata["validator"] not in runtime_validator_names():
+        if validator_callable is None and legacy_validator not in runtime_validator_names():
             raise ValueError(
-                f"Editable runtime descriptor '{descriptor.setting_id}' has an unknown validator."
+                f"Editable runtime descriptor '{descriptor.setting_id}' has no resolvable validator."
             )

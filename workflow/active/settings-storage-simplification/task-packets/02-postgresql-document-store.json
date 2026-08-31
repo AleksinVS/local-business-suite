@@ -1,7 +1,7 @@
 {
   "task_id": "02-postgresql-document-store",
   "title": "PostgreSQL document store и транзакционный writer",
-  "status": "planned",
+  "status": "accepted",
   "risk": "high",
   "objective": "Добавить текущую рабочую версию документа в PostgreSQL, единый repository и атомарную запись value+audit, не переключая production документы до pilot.",
   "start_gate": [

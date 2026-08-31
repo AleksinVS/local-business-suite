@@ -12,6 +12,7 @@
   "commands.py": "Предопределённые slash-команды",
   "runtime_client.py": "Клиент канонического AG-UI-потока agent runtime (HTTP/SSE)",
   "settings_descriptors.py": "Доменные descriptors Settings Center для AI runtime contracts",
+  "config_documents.py": "Спецификации статических и рабочих документов настроек ИИ",
   "urls.py": "URL-маршруты AI-чата",
   "admin.py": "Регистрация моделей в Django Admin",
   "skills_service.py": "Сервис каталога AI skills из модульного registry и contract-файлов",

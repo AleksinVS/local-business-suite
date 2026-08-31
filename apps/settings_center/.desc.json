@@ -5,6 +5,14 @@
   "registry.py": "Registry loading domain descriptors from core/accounts/ai/memory",
   "policies.py": "Server-side permissions for settings and user management",
   "models.py": "Audit and env proposal models",
+  "document_specs.py": "Типы ConfigDocumentSpec и политики хранения типизированных документов настроек",
+  "document_registry.py": "Доменная сборка, проверка зависимостей и закрытый DB allowlist документов настроек",
+  "document_hashes.py": "Строгая канонизация JSON и SHA-256 документов настроек",
+  "document_security.py": "Единый запрет необработанных секретов и нормализация чувствительных ключей",
+  "document_repository.py": "Проверенное чтение Git, legacy и PostgreSQL-снимков документов настроек",
+  "document_services.py": "Транзакционная запись и rollback PostgreSQL-документов с CAS и аудитом",
+  "document_migration.py": "Безопасное планирование, backup, перенос и export подтверждённых legacy overrides",
+  "checks.py": "Privacy-safe Django checks и health состояния хранилища и миграции настроек",
   "admin.py": "Django Admin registration for Settings Center audit models",
   "services.py": "Generic audit/hash/masked diff helpers",
   "contract_services.py": "Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback",
@@ -17,7 +25,14 @@
   "access_bundle_services.py": "Атомарный preview/apply координатор единого черновика пользователя",
   "urls.py": "URL routes for Settings Center",
   "tests.py": "Settings Center tests",
+  "test_document_registry.py": "Проверки полноты, политик и связности реестра документов",
+  "test_document_repository.py": "Матрица чтения, записи, конкурентности, аудита и health PostgreSQL-хранилища",
+  "test_document_migration.py": "Проверки классификации, backup, plan/apply/export и атомарности миграции",
+  "test_document_migration_health.py": "Проверки безопасной выдачи migration health и system checks",
+  "test_status_colors_pilot.py": "HTTP и PostgreSQL e2e-проверки DB-пилота палитры листа ожидания",
   "migrations/": "Settings Center database migrations"
   ,"management/commands/reconcile_settings_changes.py": "Dry-run/apply сверка незавершённых file/audit переходов рабочих контрактов",
-  "management/commands/access_administration_e2e.py": "Самоочищаемая HTTP e2e-проверка редактора роли, доступа к доске и технических групп памяти"
+  "management/commands/access_administration_e2e.py": "Самоочищаемая HTTP e2e-проверка редактора роли, доступа к доске и технических групп памяти",
+  "management/commands/settings_documents_migrate.py": "Read-only plan и явный атомарный перенос legacy overrides в PostgreSQL",
+  "management/commands/settings_documents_export.py": "Проверяемый экспорт effective документа настроек и manifest"
 }

@@ -21,18 +21,37 @@ from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
 )
-from .descriptors import runtime_validators
+from .document_registry import get_document_registry
+from .document_repository import ConfigDocumentRepository
+from .document_services import ConfigDocumentWriter
 from .models import SettingsChange
 from .registry import get_registry
 from .services import build_masked_diff, record_settings_change
 
 
-VALIDATORS = runtime_validators()
-
-
-def read_contract_value(descriptor):
+def read_contract_snapshot(descriptor, *, request=None):
+    spec = get_document_registry().get(descriptor.setting_id)
+    if spec.active_backend != "legacy_file":
+        return ConfigDocumentRepository().get_document(
+            spec.document_id, request=request
+        )
     path = _contract_path(descriptor)
-    return load_json_file(path)
+    payload = load_json_file(path)
+    from .document_repository import RuntimeSettingSnapshot
+
+    return RuntimeSettingSnapshot(
+        document_id=spec.document_id,
+        payload=payload,
+        source="legacy_file",
+        schema_version=spec.schema_version,
+        revision=0,
+        content_hash=normalized_hash(payload),
+        default_hash="",
+    )
+
+
+def read_contract_value(descriptor, *, request=None):
+    return read_contract_snapshot(descriptor, request=request).payload
 
 
 def save_default_new_user_role(*, actor, role_name, base_hash, reason=""):
@@ -81,14 +100,16 @@ def preview_contract_payload(*, actor, setting_id: str, raw_payload: str):
     # the validation/diff endpoint as a read oracle for a protected contract.
     descriptor = get_registry().get(setting_id)
     _require_contract_editor(actor=actor, setting_id=descriptor.setting_id, descriptor=descriptor)
-    before = read_contract_value(descriptor)
+    snapshot = read_contract_snapshot(descriptor)
+    before = snapshot.payload
     after = parse_and_validate_payload(descriptor, raw_payload)
     return {
         "before": before,
         "after": after,
         "masked_diff": build_masked_diff(before, after),
         "validation_result": {"valid": True},
-        "base_hash": normalized_hash(before),
+        "base_hash": snapshot.content_hash,
+        "base_revision": snapshot.revision,
     }
 
 
@@ -99,6 +120,7 @@ def apply_contract_payload(
     raw_payload: str,
     confirmed: bool,
     base_hash: str | None = None,
+    base_revision: int | None = None,
     _action=SettingsChange.Action.APPLY,
     _rollback_of=None,
     operation_fingerprint: str | None = None,
@@ -112,6 +134,7 @@ def apply_contract_payload(
         raw_payload=raw_payload,
         confirmed=confirmed,
         base_hash=base_hash,
+        base_revision=base_revision,
         _action=_action,
         _rollback_of=_rollback_of,
         operation_fingerprint=operation_fingerprint,
@@ -167,6 +190,7 @@ def _apply_contract_payload(
     raw_payload: str | None,
     confirmed: bool,
     base_hash: str | None = None,
+    base_revision: int | None = None,
     _action=SettingsChange.Action.APPLY,
     _rollback_of=None,
     operation_fingerprint: str | None = None,
@@ -196,12 +220,52 @@ def _apply_contract_payload(
         raise ValidationError("Изменение определения роли требует подписанного предпросмотра.")
     if descriptor.storage_kind != "runtime_contract":
         raise ValidationError("Настройка не связана с рабочим контрактом.")
-    if not descriptor.is_editable:
+    role_domain_workflow = (
+        setting_id == "core.contract.role_rules"
+        and descriptor.write_policy == "requires_domain_workflow"
+    )
+    if not descriptor.is_editable and not role_domain_workflow:
         raise ValidationError("Настройка недоступна для редактирования.")
     if not confirmed:
         raise ValidationError("Для изменения контракта нужно явное подтверждение.")
     if not base_hash:
         raise ValidationError("Не указана версия контракта. Перечитайте актуальную версию.")
+    spec = get_document_registry().get(setting_id)
+    if spec.active_backend == "database":
+        if any(
+            (
+                _allow_delegated_role_definition,
+                _raw_payload_factory is not None,
+                _pre_write_callback is not None,
+                locked_precondition is not None,
+                _action != SettingsChange.Action.APPLY,
+                _rollback_of is not None,
+            )
+        ):
+            raise ValidationError(
+                "Для этого PostgreSQL-документа требуется специальный доменный writer."
+            )
+        if base_revision is None:
+            raise ValidationError(
+                "Не указана ревизия документа. Перечитайте актуальную версию."
+            )
+        try:
+            expected_revision = int(base_revision)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия документа имеет неверный формат.") from exc
+        after = parse_and_validate_payload(descriptor, raw_payload)
+        snapshot = ConfigDocumentWriter().save_document(
+            actor=actor,
+            document_id=setting_id,
+            payload=after,
+            expected_revision=expected_revision,
+            expected_content_hash=_plain_hash(base_hash),
+            operation_fingerprint=operation_fingerprint,
+            audit_context=audit_context,
+        )
+        if snapshot.change_id is None:
+            raise ValidationError("Аудит изменения документа не создан.")
+        return SettingsChange.objects.get(pk=snapshot.change_id)
     _require_autocommit_boundary()
     if descriptor.sensitivity == "secret":
         raise ValidationError("Секретный контракт нельзя сохранять в журнале версий.")
@@ -552,8 +616,9 @@ def rollback_explicit_viewer_contract_locked(
 
 def preview_contract_rollback(*, actor, change_id: int):
     source, descriptor = _rollback_source(actor=actor, change_id=change_id)
-    current = read_contract_value(descriptor)
-    current_hash = normalized_hash(current)
+    snapshot = read_contract_snapshot(descriptor)
+    current = snapshot.payload
+    current_hash = snapshot.content_hash
     if current_hash != source.after_hash:
         raise ValidationError(
             "После выбранной версии контракт уже изменялся. Восстановление старой версии запрещено."
@@ -567,13 +632,19 @@ def preview_contract_rollback(*, actor, change_id: int):
         "before": current,
         "after": restored,
         "base_hash": current_hash,
+        "base_revision": snapshot.revision,
         "masked_diff": build_masked_diff(current, restored),
         "validation_result": {"valid": True},
     }
 
 
 def rollback_contract_change(
-    *, actor, change_id: int, confirmed: bool, base_hash: str | None = None
+    *,
+    actor,
+    change_id: int,
+    confirmed: bool,
+    base_hash: str | None = None,
+    base_revision: int | None = None,
 ):
     preview = preview_contract_rollback(actor=actor, change_id=change_id)
     if not confirmed:
@@ -581,6 +652,24 @@ def rollback_contract_change(
     if not base_hash or _plain_hash(base_hash) != preview["base_hash"]:
         raise ValidationError("Предпросмотр восстановления устарел. Повторите проверку.")
     source = SettingsChange.objects.get(pk=change_id)
+    spec = get_document_registry().get(source.setting_id)
+    if spec.active_backend == "database":
+        try:
+            requested_revision = int(base_revision) if base_revision is not None else None
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия документа имеет неверный формат.") from exc
+        if requested_revision != preview["base_revision"]:
+            raise ValidationError("Предпросмотр восстановления устарел. Повторите проверку.")
+        snapshot = ConfigDocumentWriter().rollback_document(
+            actor=actor,
+            document_id=source.setting_id,
+            source_change_id=source.pk,
+            expected_revision=preview["base_revision"],
+            expected_content_hash=preview["base_hash"],
+        )
+        if snapshot.change_id is None:
+            raise ValidationError("Аудит восстановления документа не создан.")
+        return SettingsChange.objects.get(pk=snapshot.change_id)
     return apply_contract_payload(
         actor=actor,
         setting_id=source.setting_id,
@@ -688,10 +777,9 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
     except json.JSONDecodeError as exc:
         raise ValidationError(f"Некорректный JSON: {exc.msg}.") from exc
     payload = copy.deepcopy(payload)
-    validator_name = descriptor.metadata.get("validator")
-    validator = VALIDATORS.get(validator_name)
+    validator = get_document_registry().get(descriptor.setting_id).validator
     if validator is None:
-        raise ValidationError(f"Неизвестный валидатор контракта: '{validator_name}'.")
+        raise ValidationError("Для документа не зарегистрирован callable validator.")
     validator(payload)
     return payload
 
@@ -699,10 +787,9 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
 def _validate_payload_object(*, descriptor, payload) -> None:
     if not isinstance(payload, dict):
         raise ValidationError("Контракт ролей должен быть JSON-объектом.")
-    validator_name = descriptor.metadata.get("validator")
-    validator = VALIDATORS.get(validator_name)
+    validator = get_document_registry().get(descriptor.setting_id).validator
     if validator is None:
-        raise ValidationError(f"Неизвестный валидатор контракта: '{validator_name}'.")
+        raise ValidationError("Для документа не зарегистрирован callable validator.")
     validator(copy.deepcopy(payload))
 
 
@@ -866,6 +953,11 @@ def _write_role_contract_backup(payload) -> Path:
 
 
 def _contract_path(descriptor):
+    spec = get_document_registry().get(descriptor.setting_id)
+    if spec.active_backend != "legacy_file":
+        raise ValidationError(
+            "Файловый compatibility writer отключён после переключения документа."
+        )
     setting_name = descriptor.metadata.get("settings_path")
     if not setting_name:
         raise ValidationError("Дескриптор не задает settings_path.")
@@ -1125,7 +1217,11 @@ def _rollback_source(*, actor, change_id):
         raise ValidationError("Изменение для восстановления не найдено.") from exc
     descriptor = get_registry().get(source.setting_id)
     _require_contract_editor(actor=actor, setting_id=source.setting_id, descriptor=descriptor)
-    if source.storage_kind != "runtime_contract" or source.action not in {
+    spec = get_document_registry().get(source.setting_id)
+    expected_storage_kind = (
+        "runtime_document" if spec.active_backend == "database" else "runtime_contract"
+    )
+    if source.storage_kind != expected_storage_kind or source.action not in {
         SettingsChange.Action.APPLY,
         SettingsChange.Action.ROLLBACK,
     }:
@@ -1134,12 +1230,19 @@ def _rollback_source(*, actor, change_id):
         raise ValidationError("Восстанавливать можно только успешно применённую версию.")
     if source.before_snapshot is None or source.after_snapshot is None:
         raise ValidationError("Для этой версии нет безопасного снимка восстановления.")
-    if not descriptor.is_editable or descriptor.sensitivity == "secret":
+    role_domain_workflow = (
+        source.setting_id == "core.contract.role_rules"
+        and descriptor.write_policy == "requires_domain_workflow"
+    )
+    if (
+        not descriptor.is_editable
+        and not role_domain_workflow
+    ) or descriptor.sensitivity == "secret":
         raise ValidationError("Этот контракт нельзя восстановить через интерфейс.")
     latest = (
         SettingsChange.objects.filter(
             setting_id=source.setting_id,
-            storage_kind="runtime_contract",
+            storage_kind=expected_storage_kind,
             action__in=(SettingsChange.Action.APPLY, SettingsChange.Action.ROLLBACK),
             status=SettingsChange.Status.APPLIED,
         )
@@ -1165,14 +1268,23 @@ def _contract_relative_path(descriptor) -> str:
 
 
 def _validate_cross_contract_candidate(*, setting_id, candidate):
-    if setting_id != "core.contract.workflow_rules":
-        return
-    from apps.workorders.contracts import (
-        validate_role_rules_payload,
-        validate_workorder_status_colors_payload,
-    )
-
-    role_rules = read_contract_value(get_registry().get("core.contract.role_rules"))
-    status_colors = read_contract_value(get_registry().get("workorders.contract.status_colors"))
-    validate_role_rules_payload(role_rules, workflow_payload=candidate)
-    validate_workorder_status_colors_payload(status_colors, workflow_payload=candidate)
+    document_registry = get_document_registry()
+    scope = document_registry.connected_validation_scope((setting_id,))
+    descriptors = get_registry()
+    payloads = {}
+    for document_id in scope:
+        payloads[document_id] = (
+            copy.deepcopy(candidate)
+            if document_id == setting_id
+            else read_contract_value(descriptors.get(document_id))
+        )
+    for document_id in scope:
+        spec = document_registry.get(document_id)
+        if spec.validator is not None:
+            spec.validator(copy.deepcopy(payloads[document_id]))
+        if spec.cross_validator is not None:
+            related = {
+                dependency: copy.deepcopy(payloads[dependency])
+                for dependency in spec.cross_document_ids
+            }
+            spec.cross_validator(copy.deepcopy(payloads[document_id]), related)

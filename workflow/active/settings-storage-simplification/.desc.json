@@ -3,5 +3,13 @@
   "BLOCK_BRIEF.md": "Цель, границы, риски и критерии приемки блока",
   "ARCHITECT_PLAN.json": "Порядок исполнения, зависимости пакетов и общие проверки",
   "EXECUTION_GUIDE.md": "Правила исполнения, отчётности, миграции и независимой приемки",
+  "EXECUTOR_REPORT.01-inventory-and-document-registry.md": "Отчёт реализации инвентаря и реестра документов",
+  "TASK_ACCEPTANCE.01-inventory-and-document-registry.md": "Приёмка пакета 01 после независимого ревью и тестов",
+  "EXECUTOR_REPORT.02-postgresql-document-store.md": "Отчёт реализации PostgreSQL-хранилища и транзакционной записи",
+  "TASK_ACCEPTANCE.02-postgresql-document-store.md": "Приёмка пакета 02 после Sol high database/concurrency review",
+  "EXECUTOR_REPORT.03-migration-planner-and-operations.md": "Отчёт безопасного планирования, переноса и экспорта legacy-настроек",
+  "TASK_ACCEPTANCE.03-migration-planner-and-operations.md": "Приёмка безопасного контура миграции после независимых correction cycles",
+  "EXECUTOR_REPORT.04-status-colors-pilot.md": "Отчёт dev/test реализации DB-пилота палитры листа ожидания",
+  "TASK_ACCEPTANCE.04-status-colors-pilot.md": "Приёмка dev/test-пилота без production cutover",
   "task-packets": "Исполнительные пакеты 01-08"
 }

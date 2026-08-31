@@ -1,9 +1,9 @@
 {
   "task_id": "05-access-workflow-security-cutover",
-  "title": "Security-cutover ролей и workflow",
+  "title": "Security-cutover ролей, workflow и палитры заявок",
   "status": "planned",
   "risk": "critical",
-  "objective": "Перевести role_rules и workflow_rules на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
+  "objective": "Перевести role_rules, workflow_rules и зависимую палитру заявок на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
   "start_gate": [
     "Пакет 04 accepted и observation не выявил дефектов backend.",
     "ADR-0048 Accepted.",
@@ -54,7 +54,8 @@
     "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.05-access-workflow-security-cutover.md"
   ],
   "requirements": [
-    "Зарегистрировать role_rules и workflow_rules как отдельные database_override документы с fail_closed policy.",
+    "Зарегистрировать role_rules и workflow_rules как отдельные database_override документы с fail_closed policy, а workorders status colors — как отдельный presentation-документ в том же dependency closure.",
+    "Writer затрагивающий workflow или палитру заявок блокирует отсортированный набор role_rules, workflow_rules и workorders.contract.status_colors до кросс-валидации.",
     "Для одного access decision использовать согласованный request snapshot; один запрос не видит разные revisions role/workflow.",
     "При cross-validation получать transaction-level advisory locks для role/workflow document ids в детерминированном порядке, затем блокировать существующие rows. Это обязательно и когда один override отсутствует, чтобы исключить first-create race и промежуточную пару.",
     "Сохранить active superuser gate полного role catalog writer, delegated single-role writer, signed preview, privilege ceiling, operation fingerprint и audit context.",

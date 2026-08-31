@@ -42,8 +42,27 @@ if DJANGO_ENV not in {"development", "production"}:
 TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
+def env_csv(name):
+    """Разобрать строгий список без неявного удаления ошибок оператора."""
+
+    raw = os.environ.get(name, "")
+    values = tuple(item.strip() for item in raw.split(",") if item.strip())
+    if len(values) != len(set(values)):
+        raise ImproperlyConfigured(f"{name} must not contain duplicate values")
+    if any(value == "*" for value in values):
+        raise ImproperlyConfigured(f"{name} does not support wildcards")
+    return values
+
+
 def env_bool(name, default=False):
     return os.environ.get(name, str(default)).strip().lower() in TRUE_VALUES
+
+
+# Выпуск кода и schema migration не переключают источники чтения. Непустой
+# allowlist задаётся только в приватном deployment-конфиге и требует restart.
+LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST = env_csv(
+    "LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST"
+)
 
 
 APP_DISPLAY_NAME = os.environ.get("APP_DISPLAY_NAME", "Корпоративный портал ВОБ №3")

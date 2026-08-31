@@ -76,6 +76,7 @@ class ContractPayloadForm(forms.Form):
     )
     confirm = forms.BooleanField(label="Подтверждаю применение изменения", required=False)
     base_hash = forms.CharField(widget=forms.HiddenInput, required=True)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
 
 
 class RoleDefinitionForm(forms.Form):

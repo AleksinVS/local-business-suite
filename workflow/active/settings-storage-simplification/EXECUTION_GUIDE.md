@@ -125,18 +125,21 @@ git diff --check
 
 Для каждого документа/среза:
 
-1. определить владельца и freeze window;
-2. сделать backup legacy-файла и PostgreSQL;
-3. выполнить migration `--plan`;
-4. проверить audit evidence и schema version;
-5. остановить write UI/commands для среза;
-6. повторить final `--plan`;
-7. выполнить `--apply`;
-8. переключить reader/writer;
-9. выполнить unit/integration/e2e smoke;
-10. проверить health и hashes во всех потребителях;
-11. открыть write;
-12. зафиксировать observation window и rollback deadline.
+1. определить владельца, freeze и observation window;
+2. проверить точный commit/image, итоговый compose config и рабочий data mount;
+3. при пустом allowlist проверить migrations и bootstrap dry-run;
+4. до schema migration сделать и проверить backup legacy-файла и PostgreSQL;
+5. развернуть новую schema при пустом allowlist и проверить health;
+6. остановить write UI/commands для среза;
+7. выполнить final `--plan` и pre-cutover export на рабочей БД/data;
+8. проверить audit evidence, schema version и hashes;
+9. выполнить `--apply` только если классификация требует DB row; no-op не
+   считается резервной копией;
+10. переключить reader/writer приватным allowlist и пересоздать потребителей;
+11. выполнить unit/integration/e2e smoke и проверить другой worker;
+12. провести observation window без записи выбранного документа;
+13. проверить health, hashes, DB/audit rows и журналы во всех потребителях;
+14. открыть write и зафиксировать rollback deadline.
 
 Если runtime drift неоднозначен, `--apply` отказывается продолжать. Решение
 владельца фиксируется в executor report и audit context.
@@ -149,14 +152,17 @@ comparison в рамках dry-run/verification.
 Rollback разрешён автоматически только когда:
 
 - legacy backup проверен;
-- после cutover нет новых несовместимых DB revisions;
+- после остановки writers доказано отсутствие DB row выбранного документа;
 - schema versions совместимы;
 - ожидаемые hashes совпадают;
 - возврат не потеряет audit или изменения пользователя.
 
-Если новые ревизии появились, сначала выполняется управляемый export текущей DB
-версии в совместимый legacy payload и validation. Простое переключение на старый
-файл запрещено.
+Такой backend rollback очищает allowlist и возвращает legacy reader; schema
+migration назад не откатывается. Если DB row появилась, очистка allowlist
+запрещена. Откат содержимого выполняется writer-ом как новая DB revision с audit.
+Возврат к файловому backend после DB-записи требует отдельного управляемого
+DB-to-legacy cutover с export текущей версии, validation и атомарной записью
+совместимого файла.
 
 ## 9. Завершение блока
 

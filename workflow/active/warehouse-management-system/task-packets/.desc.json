@@ -3,8 +3,7 @@
   "01-domain-model-and-app-skeleton.json": "Доменная модель, миграции и каркас приложения",
   "02-department-scoped-access.json": "Складские права, роли и серверные области доступа",
   "03-ledger-posting-and-balances.json": "Проведение документов, журнал и проекция остатков",
-  "04-warehouse-ui-and-address-storage.json": "Интерфейс справочников, адресов и операций",
-  "05-reports-and-expiry-control.json": "Три отчёта, экспорт и контроль сроков годности",
-  "06-legacy-migration-tooling.json": "Read-only Access transport и идемпотентная миграция",
-  "07-e2e-security-docs-and-pilot.json": "Сквозная приёмка, документация и пилотный dry-run"
+  "04-warehouse-ui-reports-and-address-storage.json": "Интерфейс, плоские адреса, три отчёта и CSV/XLSX",
+  "05-legacy-migration-tooling.json": "Read-only Access transport и идемпотентная миграция",
+  "06-e2e-security-docs-and-pilot.json": "Сквозная приёмка, документация и пилотный dry-run"
 }

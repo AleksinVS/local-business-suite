@@ -1,0 +1,65 @@
+{
+  "task_id": "04-warehouse-ui-reports-and-address-storage",
+  "title": "Интерфейс, адресное хранение и складские отчёты",
+  "goal": "Добавить интерфейс справочников, адресов, остатков и документов, а также три обязательных отчёта с безопасным CSV/XLSX-экспортом.",
+  "depends_on": [
+    "03-ledger-posting-and-balances"
+  ],
+  "read_scope": [
+    "docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md",
+    "templates/base.html",
+    "templates/inventory/",
+    "static/src/",
+    "apps/warehouse/models.py",
+    "apps/warehouse/services/",
+    "apps/warehouse/selectors.py",
+    "legacy report screenshots and private 1.fp3 for local comparison only"
+  ],
+  "write_scope": [
+    "apps/warehouse/forms.py",
+    "apps/warehouse/views.py",
+    "apps/warehouse/urls.py",
+    "apps/warehouse/reports/",
+    "apps/warehouse/selectors.py",
+    "templates/warehouse/",
+    "static/src/warehouse/",
+    "templates/base.html",
+    "apps/core/context_processors.py",
+    "requirements.txt",
+    "requirements.lock",
+    "apps/warehouse/tests/"
+  ],
+  "non_goals": [
+    "Не дублировать бизнес-валидацию во view",
+    "Не добавлять SPA-фреймворк",
+    "Не реализовывать штрихкоды или дерево адресов",
+    "Не показывать неразрешённые подразделения в фильтрах",
+    "Не читать StockBalance для исторического отчёта",
+    "Не расширять права при экспорте",
+    "Не добавлять серверный PDF и специальную печатную форму",
+    "Не копировать FastReport XML"
+  ],
+  "implementation_notes": [
+    "Навигация Склад видна только при warehouse_view_scope или write-capability; фильтры подразделения, склада и адреса строятся только из scoped queryset.",
+    "StorageLocation редактируется как плоский справочник со стабильным составным кодом и purpose available|quarantine|unassigned.",
+    "Формы документов работают через доменные команды, защищены от двойной отправки и не предлагают карантинные, неразобранные или просроченные остатки для выдачи.",
+    "Поле номера требования необязательно; UI перемещения предлагает только адреса того же подразделения; отклонение от FEFO требует причины.",
+    "Интерфейс явно показывает черновик, проведённый и отдельно сторнирующий документ, неполную партию, срок годности и недоступность остатка.",
+    "WarehouseReportProfile сохраняется и редактируется только с warehouse_manage_report_profiles_scope; legacy-реквизиты не импортируются.",
+    "Один scoped report dataset обслуживает экран, CSV и XLSX для расхода за период, стеллажной карты и наличия в подразделении.",
+    "Добавить XlsxWriter как runtime-зависимость только для записи XLSX. Пользовательские строки писать через write_string; автоматическое распознавание формул и URL отключить. CSV формировать в UTF-8 BOM с общей защитой от formula injection.",
+    "Расход за период классифицирует операции по типу документа: внутреннее перемещение адреса не считается поступлением или расходом подразделения.",
+    "Фильтры просрочено/истекает читают пороги из runtime-настройки warehouse.expiry_warning_days без фоновой очереди."
+  ],
+  "acceptance_checks": [
+    "make verify-fast TEST_SCOPE=apps/warehouse",
+    "make verify-profile PROFILE=ui",
+    "Клавиатурная навигация и подписи форм доступны",
+    "Чужие подразделения отсутствуют в списках и закрыты по прямому URL",
+    "Двойная отправка не создаёт второй документ",
+    "HTML, CSV и XLSX имеют одинаковые строки и scope",
+    "Отчёты корректны на границах периода и до первой операции",
+    "CSV/XLSX проверены на длинных наименованиях, кириллице, числовых форматах Excel, пустых значениях и строках, начинающихся с =, +, - и @",
+    "WarehouseReportProfile сохраняется и применяется без данных из legacy"
+  ]
+}

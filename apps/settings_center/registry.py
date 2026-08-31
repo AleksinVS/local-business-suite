@@ -22,6 +22,7 @@ DESCRIPTOR_MODULES = (
     "apps.waiting_list.settings_descriptors",
     "apps.ai.settings_descriptors",
     "apps.memory.settings_descriptors",
+    "apps.warehouse.settings_descriptors",
 )
 
 

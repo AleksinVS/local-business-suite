@@ -40,6 +40,8 @@ PROTECTED_CAPABILITIES = frozenset(
         "manage_settings",
         "manage_ai_skills",
         "memory_organization_review",
+        "warehouse_adjust_scope",
+        "warehouse_manage_catalog",
         "create_waiting_list",
         "waiting_list_view_scope",
         "waiting_list_edit_scope",
@@ -52,6 +54,7 @@ PROTECTED_CAPABILITIES = frozenset(
 
 SCOPE_LABELS = {
     "all": "Все",
+    "own_department": "Только своё подразделение",
     "department_branch": "Ветка подразделения",
     "assigned_or_unassigned_or_authored": "Свои, назначенные и неназначенные",
     "assigned_or_unassigned": "Назначенные и неназначенные",
@@ -70,10 +73,12 @@ CAPABILITY_GROUP_LABELS = {
     "access": "Доступ",
     "ai": "ИИ-центр",
     "memory": "Память организации",
+    "warehouse": "Склад",
     "other": "Прочие права",
 }
 CAPABILITY_GROUP_DESCRIPTIONS = {
     "memory": "Права памяти организации. Технические группы памяти назначаются отдельно в карточке пользователя.",
+    "warehouse": "Права количественного складского учёта с ограничением по подразделениям.",
 }
 CAPABILITY_RISK_LABELS = {
     "elevated": "Повышенный риск",
@@ -105,6 +110,12 @@ CAPABILITY_GROUP_BY_CAPABILITY = {
     "manage_ai_skills": "ai",
     "memory_organization_write": "memory",
     "memory_organization_review": "memory",
+    "warehouse_view_scope": "warehouse",
+    "warehouse_operate_scope": "warehouse",
+    "warehouse_adjust_scope": "warehouse",
+    "warehouse_manage_locations_scope": "warehouse",
+    "warehouse_manage_report_profiles_scope": "warehouse",
+    "warehouse_manage_catalog": "warehouse",
     "waiting_list_view_scope": "waiting_list",
     "waiting_list_edit_scope": "waiting_list",
     "waiting_list_edit_statuses": "waiting_list",

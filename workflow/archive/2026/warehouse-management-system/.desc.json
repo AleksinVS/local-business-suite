@@ -1,0 +1,9 @@
+{
+  ".": "Workflow: общий раздел Склад, права, отчёты и миграция legacy-баз",
+  "BLOCK_BRIEF.md": "Цель, границы и критерии приёмки складского блока",
+  "ARCHITECT_PLAN.json": "Порядок и состав исполнительных пакетов",
+  "task-packets": "Исполнительные пакеты реализации раздела Склад",
+  "EXECUTOR_REPORT.warehouse-implementation.md": "Итог исполнения шести складских пакетов",
+  "TASK_ACCEPTANCE.warehouse-implementation.md": "Техническая приёмка и остаточные ограничения",
+  "RETROSPECTIVE.md": "Краткие выводы реализации"
+}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}<section class="panel"><h1>{{ document }}</h1><p>{{ document.department }} · {{ document.get_status_display }}</p>
+<div class="table-container"><table><thead><tr><th>Позиция</th><th>Партия</th><th>Источник</th><th>Количество</th></tr></thead><tbody>
+{% for line in document.lines.all %}<tr><td>{{ line.item }}</td><td>{{ line.lot }}</td><td>{{ line.funding_source }}</td><td>{{ line.quantity }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if document.status == 'draft' and can_operate_document %}<form method="post" action="{% url 'warehouse:document_post' document.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit">Провести</button></form>
+<form method="post" action="{% url 'warehouse:document_cancel' document.pk %}">{% csrf_token %}<label>Причина отмены <input name="reason" required></label><button class="btn btn-outline" type="submit">Отменить</button></form>{% endif %}
+{% if document.status == 'posted' and can_adjust_document and not document.is_reversed %}<form method="post" action="{% url 'warehouse:document_reverse' document.pk %}">{% csrf_token %}<label>Дата сторно <input type="date" name="operation_date" required></label><label>Причина <input name="reason" required></label><button class="btn btn-outline" type="submit">Сторнировать</button></form>{% endif %}
+</section>{% endblock %}

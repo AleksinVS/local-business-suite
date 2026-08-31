@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.inventory",
+    "apps.warehouse",
     "apps.workorders",
     "apps.notifications",
     "apps.analytics",
@@ -478,6 +479,9 @@ LOCAL_BUSINESS_ROLE_RULES_FILE = get_contract_path("role_rules.json", "LOCAL_BUS
 LOCAL_BUSINESS_WORKFLOW_RULES_FILE = get_contract_path("workflow_rules.json", "LOCAL_BUSINESS_WORKFLOW_RULES_FILE")
 LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE = get_contract_path("workorder_status_colors.json", "LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE")
 LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE = get_contract_path("waiting_list_status_colors.json", "LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE")
+LOCAL_BUSINESS_WAREHOUSE_SETTINGS_FILE = get_contract_path(
+    "settings.json", "LOCAL_BUSINESS_WAREHOUSE_SETTINGS_FILE", sub_dir="warehouse"
+)
 LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE = get_contract_path("registry.json", "LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE", sub_dir="integrations")
 LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE = get_contract_path("datasets.json", "LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE", sub_dir="analytics") # Note: analytics in data/analytics/
 LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE = get_contract_path("sources.json", "LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE", sub_dir="analytics")

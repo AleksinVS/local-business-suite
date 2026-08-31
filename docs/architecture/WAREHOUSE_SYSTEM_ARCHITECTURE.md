@@ -3,8 +3,8 @@
 - Статус: Accepted
 - Дата: 2026-08-31
 - Связанное решение: `docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md`
-- Активный план: `docs/planning/active/warehouse-management-system.md`
-- Исполнительный пакет: `workflow/active/warehouse-management-system/`
+- Архивный план: `docs/planning/archive/2026/warehouse-management-system.md`
+- Исполнительный пакет: `workflow/archive/2026/warehouse-management-system/`
 
 ## 1. Цель и граница
 

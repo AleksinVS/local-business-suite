@@ -2427,7 +2427,14 @@ class CapabilityRegistryTests(TestCase):
         for key, metadata in capabilities.items():
             self.assertIn(
                 metadata.get("section"),
-                {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"},
+                {
+                    "workorders",
+                    "organization",
+                    "ai_memory",
+                    "personal_data",
+                    "waiting_list",
+                    "warehouse",
+                },
                 f"{key}: неизвестный section",
             )
             self.assertIn(
@@ -2595,9 +2602,10 @@ class CapabilityRegistryTests(TestCase):
             "waiting_list_transition_from_statuses",
             "waiting_list_transition_targets",
         )
+        role_names = [key for key in legacy if not key.startswith("$")]
         for code in waiting_codes:
             legacy["$capabilities"].pop(code)
-            for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
+            for role in role_names:
                 legacy[role].pop(code)
         legacy["$capabilities"]["view_waiting_list"] = {
             "type": "flag",
@@ -2606,7 +2614,7 @@ class CapabilityRegistryTests(TestCase):
             "label": "Просмотр листа ожидания",
             "description": "Совместимый старый флаг просмотра листа ожидания.",
         }
-        for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
+        for role in role_names:
             legacy[role]["view_waiting_list"] = role == "doctor"
         for code in (
             "view_scope",

@@ -41,9 +41,9 @@ ADR-0048 имеет статус `Proposed`.
 
 ## Фактическая исходная точка
 
-- 29 JSON-документов значений в Git и 29 runtime-копий;
-- 33 `SettingDescriptor`;
-- 18 runtime descriptors, 17 editable;
+- 30 JSON-документов значений в Git и 30 runtime-копий после `bootstrap_runtime`;
+- 34 `SettingDescriptor`;
+- 19 runtime descriptors, 18 editable;
 - четыре документа в `apps.core.contract_store`;
 - AI/memory/FileHub/analytics в основном используют startup payload constants;
 - agent-runtime имеет отдельный resolver AI-файлов;
@@ -51,7 +51,8 @@ ADR-0048 имеет статус `Proposed`.
   версий;
 - production main работает на PostgreSQL с 2026-08-18.
 
-Snapshot `validate_architecture_contracts` от 2026-08-31: 10 контрактов
+Snapshot `validate_architecture_contracts` до добавления `warehouse.settings`
+от 2026-08-31: 10 контрактов
 совпадают с дефолтом, 7 имеют runtime-отличия, а `core.contract.role_rules`
 отстаёт по default-only ключам `$defaults` и `viewer`. Последний случай является
 security migration gate: автоматический merge запрещён, требуется сверка с
@@ -86,7 +87,7 @@ ADR-0045 и фактической матрицей доступа.
 ## Решения, обязательные до реализации
 
 - владелец принимает или изменяет ADR-0048;
-- утверждается предварительная классификация 29 документов;
+- утверждается предварительная классификация 30 документов;
 - подтверждается короткое окно заморозки записи для каждого cutover slice;
 - утверждается fail-closed поведение role/workflow и last-known-good поведение
   agent-runtime;

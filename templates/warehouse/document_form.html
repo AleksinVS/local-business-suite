@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}<section class="panel"><h1>Новый складской документ</h1>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}{{ form.as_p }}
+<div class="section-head"><h2>Строки</h2><a href="{% url 'warehouse:lots' %}" target="_blank" rel="noopener">Зарегистрировать новую партию</a></div>{{ formset.management_form }}{{ formset.non_form_errors }}
+{% for line in formset %}<fieldset>{{ line.non_field_errors }}{{ line.as_p }}</fieldset>{% endfor %}
+<button class="btn btn-primary" type="submit">Сохранить черновик</button></form></section>{% endblock %}

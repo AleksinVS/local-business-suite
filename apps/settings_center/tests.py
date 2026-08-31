@@ -452,6 +452,12 @@ class AccessWorkspaceTests(TestCase):
             "manage_ai_skills": "ai",
             "memory_organization_write": "memory",
             "memory_organization_review": "memory",
+            "warehouse_view_scope": "warehouse",
+            "warehouse_operate_scope": "warehouse",
+            "warehouse_adjust_scope": "warehouse",
+            "warehouse_manage_locations_scope": "warehouse",
+            "warehouse_manage_report_profiles_scope": "warehouse",
+            "warehouse_manage_catalog": "warehouse",
         }
         self.assertEqual(CAPABILITY_GROUP_BY_CAPABILITY, expected)
         # Runtime role_rules may intentionally lag the code-first default until

@@ -1,0 +1,8 @@
+{
+  ".": "Django management-команды склада",
+  "warehouse_legacy_inspect.py": "Безопасное исследование схемы и N строк Access",
+  "warehouse_legacy_import.py": "Dry-run/commit legacy landing package",
+  "warehouse_legacy_reconcile.py": "Строгая сверка миграции",
+  "warehouse_rebuild_balances.py": "Пересборка остатков из проводок",
+  "warehouse_acceptance_e2e.py": "Сквозная приёмка основных операций и отчётов"
+}

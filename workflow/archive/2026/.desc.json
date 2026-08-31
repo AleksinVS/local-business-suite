@@ -35,5 +35,6 @@
   "waiting-list-cards-and-access-flags": "Архивный workflow-блок карточек пациента и технических флагов доступа",
   "default-board-view-and-sso-diagnostics": "Архивный workflow-блок базового просмотра канбана и диагностики SSO",
   "declarative-access-policy-model": "Архивный workflow-блок упрощённого управления ролями для малого и среднего бизнеса (implemented, 2026-08-25)",
-  "fail-closed-new-user-access": "Архивный workflow-блок закрытого доступа без роли и роли новых пользователей по умолчанию (implemented, 2026-08-26)"
+  "fail-closed-new-user-access": "Архивный workflow-блок закрытого доступа без роли и роли новых пользователей по умолчанию (implemented, 2026-08-26)",
+  "warehouse-management-system": "Архивный workflow-блок общего раздела Склад, отчётов и legacy-миграции (implemented, 2026-08-31)"
 }

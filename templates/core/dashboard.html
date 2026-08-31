@@ -7,13 +7,16 @@
     <h1>Операционный центр отдела ТО и ремонтов</h1>
     <p>Каркас уже включает локальную авторизацию, справочник медицинских изделий и общую канбан-доску заявок.</p>
   </div>
-  {% if show_inventory or show_workorders %}
+  {% if show_inventory or show_workorders or show_warehouse %}
   <div class="metrics">
     {% if show_inventory %}
       <article class="metric"><span>{{ device_count }}</span><small>медизделий</small></article>
     {% endif %}
     {% if show_workorders %}
       <article class="metric"><span>{{ open_workorder_count }}</span><small>открытых заявок</small></article>
+    {% endif %}
+    {% if show_warehouse %}
+      <article class="metric"><span>{{ warehouse_balance_count }}</span><small>складских остатков</small></article>
     {% endif %}
   </div>
   {% endif %}
@@ -68,11 +71,17 @@
     </table>
   </div>
 </section>
-{% elif not show_inventory %}
+{% elif not show_inventory and not show_warehouse %}
 <section class="panel">
   <div class="empty-state">
     Рабочие разделы пока недоступны. Обратитесь к администратору для назначения роли.
   </div>
+</section>
+{% endif %}
+
+{% if show_warehouse %}
+<section class="panel">
+  <div class="section-head"><div><h2>Склад</h2><p>Остатки по подразделениям, партиям, срокам и адресам хранения.</p></div><a class="btn btn-outline" href="{% url 'warehouse:overview' %}">Открыть склад</a></div>
 </section>
 {% endif %}
 {% endblock %}

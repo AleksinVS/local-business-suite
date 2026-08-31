@@ -16,6 +16,7 @@ DEFAULT_BOARD_VISIBILITY_GROUP = ROLE_CUSTOMER
 
 SCOPE_LABELS = {
     "all": "Все записи",
+    "own_department": "Только своё подразделение",
     "department_branch": "Ветка подразделения",
     "assigned_or_unassigned_or_authored": "Свои, назначенные и неназначенные",
     "assigned_or_unassigned": "Назначенные и неназначенные",

@@ -16,6 +16,7 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {{ form.base_hash }}
+    {{ form.base_revision }}
 
     <div class="access-form-field">
       {{ form.code.label_tag }}

@@ -17,7 +17,6 @@ def get_settings_descriptors():
             required_permission="manage_settings",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_ROLE_RULES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_ROLE_RULES",
                 "validator": "validate_role_rules_payload",
             },
         ),
@@ -35,7 +34,6 @@ def get_settings_descriptors():
             required_permission="manage_settings",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_WORKFLOW_RULES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_WORKFLOW_RULES",
                 "validator": "validate_workflow_rules_payload",
             },
         ),

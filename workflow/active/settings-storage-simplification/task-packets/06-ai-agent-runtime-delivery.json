@@ -1,7 +1,7 @@
 {
   "task_id": "06-ai-agent-runtime-delivery",
   "title": "AI-документы и доставка agent-runtime через Django gateway",
-  "status": "planned",
+  "status": "accepted",
   "risk": "high",
   "objective": "Разделить AI security contracts и операторские настройки, затем обеспечить agent-runtime единым effective snapshot через allowlisted authenticated gateway с ETag и last-known-good.",
   "start_gate": [

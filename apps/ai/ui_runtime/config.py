@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.timezone import localtime
 
 from apps.ai.chat_settings import CHAT_SURFACE_FULL_PAGE, CHAT_SURFACE_SIDEBAR, get_recent_message_limit
+from apps.ai.config_documents import get_ai_document_payloads
 from apps.ai.commands import get_predefined_commands
 from apps.ai.models import ChatMessage, ChatRun, ChatSession, SlashCommand
 from apps.ai.services import (
@@ -130,7 +131,9 @@ def _session_urls(session) -> dict[str, str]:
     }
 
 
-def build_full_page_ai_ui_config(*, user, session: ChatSession) -> dict[str, object]:
+def build_full_page_ai_ui_config(
+    *, user, session: ChatSession, request=None, snapshot=None
+) -> dict[str, object]:
     """Build the owned full-page config using the same native transport contract."""
     model_id = str((session.metadata or {}).get("model_id") or "")
     messages = list(
@@ -138,7 +141,10 @@ def build_full_page_ai_ui_config(*, user, session: ChatSession) -> dict[str, obj
         .prefetch_related("attachments")
         .order_by("created_at", "id")
     )
-    limit = get_recent_message_limit(CHAT_SURFACE_FULL_PAGE)
+    snapshot = get_ai_document_payloads(request=request, snapshot=snapshot)
+    limit = get_recent_message_limit(
+        CHAT_SURFACE_FULL_PAGE, request=request, snapshot=snapshot
+    )
     messages = messages[-limit:]
     urls = _session_urls(session)
     return {
@@ -155,7 +161,7 @@ def build_full_page_ai_ui_config(*, user, session: ChatSession) -> dict[str, obj
         },
         "messages": [_serialize_full_page_message(message) for message in messages],
         "recoverable_run": _recoverable_prepared_run(session),
-        "models": _model_options(model_id),
+        "models": _model_options(model_id, request=request, snapshot=snapshot),
         "current_model_id": model_id,
         "commands": _command_catalog(user),
         "command_discovery": {"slash_prefix": "/", "server_authoritative": True},
@@ -176,8 +182,10 @@ def build_full_page_ai_ui_config(*, user, session: ChatSession) -> dict[str, obj
     }
 
 
-def _sidebar_messages(session) -> list[dict[str, object]]:
-    recent_limit = get_recent_message_limit(CHAT_SURFACE_SIDEBAR)
+def _sidebar_messages(session, *, request=None, snapshot=None) -> list[dict[str, object]]:
+    recent_limit = get_recent_message_limit(
+        CHAT_SURFACE_SIDEBAR, request=request, snapshot=snapshot
+    )
     messages = list(
         session.messages.exclude(role=ChatMessage.Role.TOOL)
         .prefetch_related("attachments")
@@ -187,9 +195,10 @@ def _sidebar_messages(session) -> list[dict[str, object]]:
     return [_serialize_sidebar_message(message) for message in messages]
 
 
-def _model_options(current_model_id: str) -> list[dict[str, object]]:
+def _model_options(current_model_id: str, *, snapshot=None, request=None) -> list[dict[str, object]]:
     options = []
-    for model in getattr(settings, "LOCAL_BUSINESS_AI_MODELS", []):
+    snapshot = get_ai_document_payloads(request=request, snapshot=snapshot)
+    for model in snapshot["ai.contract.models"]:
         model_id = str(model.get("id") or "")
         if not model_id:
             continue
@@ -221,6 +230,8 @@ def build_sidebar_ai_ui_config(
     driver: str | None = None,
     runtime_url: str = "",
     agent_id: str = "",
+    request=None,
+    snapshot=None,
 ) -> dict[str, object]:
     resolved_driver = driver or configured_ai_ui_driver()
     session = get_or_create_sidebar_session(user)
@@ -233,6 +244,7 @@ def build_sidebar_ai_ui_config(
     if not agent_id:
         agent_id = settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID
 
+    snapshot = get_ai_document_payloads(request=request, snapshot=snapshot)
     config = {
         "enabled": True,
         "driver": resolved_driver,
@@ -241,9 +253,9 @@ def build_sidebar_ai_ui_config(
         "agent_id": agent_id,
         "thread_id": str(session.external_id),
         "labels": DEFAULT_LABELS,
-        "messages": _sidebar_messages(session),
+        "messages": _sidebar_messages(session, request=request, snapshot=snapshot),
         "recoverable_run": _recoverable_prepared_run(session),
-        "models": _model_options(model_id),
+        "models": _model_options(model_id, request=request, snapshot=snapshot),
         "current_model_id": model_id,
         "urls": _sidebar_urls(session),
         "protocol": {

@@ -3,7 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from importlib import import_module
 import math
+import os
+import tempfile
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from threading import Barrier, Thread
 from unittest import skipUnless
@@ -12,8 +15,8 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from django.db import IntegrityError, connection, connections
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase
+from django.db import DatabaseError, IntegrityError, connection, connections
+from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 
 from .document_hashes import InvalidDocumentPayload, canonical_json, document_hash
 from .document_registry import ConfigDocumentRegistry, get_document_registry
@@ -82,6 +85,40 @@ class DocumentRepositoryTests(TestCase):
 
         self.assertEqual(snapshot.source, "git_default")
         self.assertEqual(snapshot.revision, 0)
+        self.assertEqual(snapshot.content_hash, snapshot.default_hash)
+
+    def test_missing_explicit_env_legacy_override_fails_closed(self):
+        spec = replace(
+            get_document_registry().get("waiting_list.contract.status_colors"),
+            active_backend="legacy_file",
+        )
+        repository = ConfigDocumentRepository(_registry(spec))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "missing" / "waiting_list_status_colors.json"
+            with patch.dict(
+                os.environ,
+                {spec.legacy_settings_path: str(missing)},
+                clear=False,
+            ), override_settings(**{spec.legacy_settings_path: missing}):
+                with self.assertRaises(ConfigurationUnavailable):
+                    repository.get_document(spec.document_id)
+
+    def test_missing_canonical_legacy_file_uses_validated_git_default(self):
+        spec = replace(
+            get_document_registry().get("waiting_list.contract.status_colors"),
+            active_backend="legacy_file",
+        )
+        repository = ConfigDocumentRepository(_registry(spec))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = Path(tmpdir) / "contracts"
+            with override_settings(
+                RUNTIME_CONTRACTS_DIR=runtime,
+                LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE=(
+                    runtime / "waiting_list_status_colors.json"
+                ),
+            ):
+                snapshot = repository.get_document(spec.document_id)
+        self.assertEqual(snapshot.source, "git_default")
         self.assertEqual(snapshot.content_hash, snapshot.default_hash)
 
     def test_valid_database_override_has_precedence_and_is_copied(self):
@@ -178,6 +215,22 @@ class DocumentRepositoryTests(TestCase):
         self.assertEqual(
             set(snapshots),
             {workflow_spec.document_id, colors_spec.document_id},
+        )
+
+    def test_database_error_from_in_bulk_is_converted_to_configuration_unavailable(self):
+        with patch(
+            "django.db.models.query.QuerySet.in_bulk",
+            side_effect=DatabaseError("database-password=/private/secret"),
+        ):
+            with self.assertRaises(ConfigurationUnavailable) as raised:
+                self.repository.get_document(self.spec.document_id)
+
+        self.assertIsInstance(raised.exception.__cause__, DatabaseError)
+        self.assertEqual(str(raised.exception), "Настройки временно недоступны.")
+        state = get_document_degradation_state()
+        self.assertEqual(
+            state["documents"][self.spec.document_id]["code"],
+            "database_unavailable",
         )
 
     def test_default_hash_drift_is_visible_without_rewriting_payload(self):

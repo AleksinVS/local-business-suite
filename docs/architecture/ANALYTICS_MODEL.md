@@ -8,7 +8,7 @@ Extended target architecture:
 Current implementation:
 
 - `apps.analytics` is an operational dashboard over the Django OLTP database.
-- Dataset defaults are declared in `contracts/analytics/datasets.json`; runtime copies live in `data/contracts/analytics/`.
+- Analytics contracts, including dataset definitions, are `git_static` and read directly from validated defaults in `contracts/analytics/`; mutable runtime mirrors are not created.
 - This layer is intended for lightweight operational summaries, not heavy BI/reporting workloads.
 - Universal source adapters can now feed analytics without direct reads from domain tables. `workorders` and `waiting_list` render `SourceObjectEnvelope`; analytics stores `AnalyticsSource`, `AnalyticsContentObject`, `AnalyticsExtractionPacket`, `AnalyticsEvidenceRef` and `AnalyticsFact` projections from that envelope.
 - The MVP remains snapshot/reconcile based: `python manage.py source_adapter_reconcile --target analytics` refreshes normalized objects and facts. A mandatory event bus/outbox is intentionally not part of this stage.
@@ -31,5 +31,5 @@ Flow:
 Rules:
 
 - heavy reporting must not read live OLTP tables;
-- datasets are versioned in `contracts/analytics/datasets.json` and copied to `data/contracts/analytics/`;
+- datasets are versioned and reviewed in `contracts/analytics/datasets.json`;
 - analytical changes should be reviewed like code changes.

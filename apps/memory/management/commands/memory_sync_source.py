@@ -1,8 +1,8 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.memory.models import MemorySource
 from apps.memory.services import sync_sources_from_contract
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 SOURCE_FIELD_DEFAULTS = {
@@ -21,7 +21,7 @@ SOURCE_FIELD_DEFAULTS = {
 
 
 class Command(BaseCommand):
-    help = "Synchronize MemorySource rows from settings.LOCAL_BUSINESS_MEMORY_SOURCES."
+    help = "Synchronize MemorySource rows from the memory.contract.sources document snapshot."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -35,14 +35,26 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        sources_payload = list(getattr(settings, "LOCAL_BUSINESS_MEMORY_SOURCES", []) or [])
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.sources",)
+        )
+        source_snapshot = snapshots["memory.contract.sources"]
+        sources_payload = list(
+            source_snapshot.payload
+            if hasattr(source_snapshot, "payload")
+            else source_snapshot
+            or []
+        )
         source_code = (options.get("source_code") or "").strip()
         dry_run = bool(options.get("dry_run"))
 
         if source_code:
             sources_payload = [item for item in sources_payload if item.get("code") == source_code]
             if not sources_payload:
-                raise CommandError(f"Memory source '{source_code}' is not defined in settings.LOCAL_BUSINESS_MEMORY_SOURCES.")
+                raise CommandError(
+                    f"Memory source '{source_code}' is not defined in the captured "
+                    "memory.contract.sources document snapshot."
+                )
 
         if dry_run:
             summary = self._dry_run_summary(sources_payload)
@@ -54,7 +66,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {item['code']}: {item['action']}")
             return
 
-        synced_sources = sync_sources_from_contract(sources_payload)
+        synced_sources = sync_sources_from_contract(
+            sources_payload, source_code=source_code or None
+        )
         self.stdout.write(self.style.SUCCESS(f"MemorySource synchronized: {len(synced_sources)}"))
 
     def _dry_run_summary(self, sources_payload):

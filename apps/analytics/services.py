@@ -14,7 +14,6 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from apps.core.source_adapters import OPERATION_DELETE, SourceObjectEnvelope
-from apps.core.json_utils import load_json_file
 from apps.memory.security import scan_for_secrets
 
 from .models import (
@@ -32,6 +31,7 @@ from .models import (
     AnalyticsSignal,
     AnalyticsSource,
 )
+from .config_documents import get_analytics_document_payload
 
 
 EXTRACTION_PACKET_SCHEMA_VERSION = "extraction-packet-v1"
@@ -840,15 +840,15 @@ def get_contract_source(source_code):
 
 
 def analytics_sources_contract():
-    return load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)
+    return get_analytics_document_payload("sources")
 
 
 def analytics_metrics_contract():
-    return load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_METRICS_FILE)
+    return get_analytics_document_payload("metrics")
 
 
 def analytics_monitors_contract():
-    return load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE)
+    return get_analytics_document_payload("monitors")
 
 
 def email_source_object_id(source, message):

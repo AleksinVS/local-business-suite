@@ -82,7 +82,14 @@ Get-ChildItem "\\FILESERVER\MemoryCorpus\DepartmentA" -File | Select-Object -Fir
 
 ## Настройка source contract
 
-Default contracts лежат в `contracts/ai/`, runtime-копии - в `data/contracts/ai/`. На конкретном host обычно редактируется runtime-копия `data/contracts/ai/memory_sources.json`, потому что путь к папке является deployment-specific значением.
+Default contracts лежат в `contracts/ai/`. `memory_sources` остаётся
+`database_override` с legacy backend до включения полного document ID в
+`LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST`; до этого его рабочая копия
+на host находится в `data/contracts/ai/memory_sources.json`. Чтение выполняется
+через ConfigDocumentRepository и фиксируется одним operation snapshot, поэтому
+изменение профиля не меняет правила внутри текущего discovery/ingestion job.
+`git_static` документы (claims, analytics и integration registry) runtime-копии
+не требуют.
 
 Минимальный пример local source:
 
@@ -196,6 +203,13 @@ Envelope, ИИ-память и worker не могут включить исто�
 повторное включение выполняется только явным административным действием или
 применением контракта источников.
 
+Полная синхронизация source-контракта атомарно отключает отсутствующие строки и
+ставит идемпотентные `source_cleanup` задания для закрытия поисковых индексов и
+проекций. Частичная команда с `--source-code` остальные источники не отключает.
+Если синхронизация инициирована изменением DB-документа, worker сначала
+проверяет revision/hash captured snapshot; устаревший job безопасно завершается
+без применения старого payload.
+
 Формы единого окна доступа используют транспортный таймаут HTMX 15 секунд.
 При таймауте, ошибке отправки/загрузки/замены или прерванном запросе интерфейс
 снимает `aria-busy` и `htmx-request`, сохраняет черновик и показывает ошибку с
@@ -306,11 +320,15 @@ Password-protected, encrypted, partial и suspicious документы не д�
 
 Архитектурное решение: `docs/adr/ADR-0025-file-source-auto-organization.md`.
 
-Runtime-профили настраиваются в:
+До DB cutover legacy runtime-профиль настраивается в:
 
 ```text
 data/contracts/ai/memory_file_organization_profiles.json
 ```
+
+Это legacy runtime-путь до явного DB cutover. В обоих режимах каждый FileHub
+job захватывает один profile snapshot перед обработкой файлов; смена профиля
+в середине job не меняет уже принятое физическое решение.
 
 Default-шаблон лежит в:
 

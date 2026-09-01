@@ -23,6 +23,7 @@ from apps.core.contract_store import normalized_hash
 
 from .document_hashes import document_hash
 from .document_migration import (
+    ALREADY_IMPORTED,
     AMBIGUOUS_DRIFT,
     AUDITED_OVERRIDE,
     CONFLICT,
@@ -447,6 +448,105 @@ class DocumentMigrationTests(TestCase):
         entry = classify_document(spec, registry=ConfigDocumentRegistry((spec,)))
 
         self.assertEqual(entry.classification, SECURITY_REVIEW_REQUIRED)
+
+    @skipUnless(connection.vendor == "postgresql", "security import проверяется на PostgreSQL")
+    def test_exact_role_security_review_can_preserve_runtime_with_explicit_hashes(self):
+        catalog = {"view_scope": {"type": "scope"}}
+        administration = {"mode": "managed"}
+        default = {
+            "$capabilities": catalog,
+            "$administration": administration,
+            "$defaults": {"new_user_role": None},
+            "viewer": {"view_scope": "department_branch"},
+            "manager": {"view_scope": "all"},
+        }
+        runtime = {
+            "$capabilities": catalog,
+            "$administration": administration,
+            "manager": {"view_scope": "department_branch"},
+        }
+        self.default_file.write_text(json.dumps(default), encoding="utf-8")
+        self.runtime_file.write_text(json.dumps(runtime), encoding="utf-8")
+        spec = ConfigDocumentSpec(
+            "core.contract.role_rules",
+            "accounts",
+            "database_override",
+            "contracts/test.json",
+            1,
+            lambda payload: None,
+            "fail_closed",
+            "requires_domain_workflow",
+            "manage_settings",
+            "accounts",
+        )
+        registry = ConfigDocumentRegistry((spec,))
+        actor = self._create_superuser()
+
+        with TemporaryDirectory() as backup_directory:
+            result = apply_migration(
+                (spec.document_id,),
+                actor=actor,
+                backup_root=backup_directory,
+                registry=registry,
+                approved_role_runtime_document_hash=document_hash(runtime),
+                approved_role_default_document_hash=document_hash(default),
+                security_review_reason="Сохранить фактическую закрытую модель доступа.",
+            )
+
+        row = RuntimeSettingDocument.objects.get(document_id=spec.document_id)
+        change = SettingsChange.objects.get(
+            setting_id=spec.document_id,
+            storage_kind="runtime_document",
+        )
+        self.assertEqual(row.payload, runtime)
+        self.assertEqual(row.revision, 1)
+        self.assertEqual(result[0].classification, ALREADY_IMPORTED)
+        self.assertEqual(
+            change.validation_result["security_review"]["decision"],
+            "preserve_exact_runtime_payload",
+        )
+
+    @skipUnless(connection.vendor == "postgresql", "security import проверяется на PostgreSQL")
+    def test_role_security_review_rejects_capability_catalog_drift(self):
+        default = {
+            "$capabilities": {"view_scope": {"type": "scope"}},
+            "$administration": {},
+            "$defaults": {},
+            "viewer": {},
+            "manager": {},
+        }
+        runtime = {
+            "$capabilities": {"view_scope": {"type": "flag"}},
+            "$administration": {},
+            "manager": {},
+        }
+        self.default_file.write_text(json.dumps(default), encoding="utf-8")
+        self.runtime_file.write_text(json.dumps(runtime), encoding="utf-8")
+        spec = ConfigDocumentSpec(
+            "core.contract.role_rules",
+            "accounts",
+            "database_override",
+            "contracts/test.json",
+            1,
+            lambda payload: None,
+            "fail_closed",
+            "requires_domain_workflow",
+            "manage_settings",
+            "accounts",
+        )
+        actor = self._create_superuser()
+        with TemporaryDirectory() as backup_directory:
+            with self.assertRaisesMessage(MigrationError, "$capabilities"):
+                apply_migration(
+                    (spec.document_id,),
+                    actor=actor,
+                    backup_root=backup_directory,
+                    registry=ConfigDocumentRegistry((spec,)),
+                    approved_role_runtime_document_hash=document_hash(runtime),
+                    approved_role_default_document_hash=document_hash(default),
+                    security_review_reason="Проверка отклонения каталога.",
+                )
+        self.assertFalse(RuntimeSettingDocument.objects.exists())
 
     def test_plan_is_stable_and_read_only(self):
         first = plan_migration((self.spec.document_id,), registry=self.registry)

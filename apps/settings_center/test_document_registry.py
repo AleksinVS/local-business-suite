@@ -10,7 +10,11 @@ from django.conf import settings
 from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, override_settings
 
-from .document_registry import ConfigDocumentRegistry, get_document_registry
+from .document_registry import (
+    DATABASE_BACKEND_RELEASED_DOCUMENT_IDS,
+    ConfigDocumentRegistry,
+    get_document_registry,
+)
 from .document_specs import ConfigDocumentSpec
 from .registry import get_registry
 
@@ -39,6 +43,11 @@ def _static_spec(document_id, path, **kwargs):
 
 
 class DocumentRegistryTests(SimpleTestCase):
+    def test_access_consumers_do_not_read_legacy_settings_directly(self):
+        from .architecture_validation import find_migrated_document_access_violations
+
+        self.assertEqual(find_migrated_document_access_violations(), ())
+
     def test_registry_matches_all_value_documents(self):
         registry = get_document_registry()
         expected_paths = {
@@ -51,6 +60,150 @@ class DocumentRegistryTests(SimpleTestCase):
         self.assertEqual(len(registry.all()), 29)
         self.assertEqual(registered_paths, expected_paths)
         self.assertEqual(len({spec.document_id for spec in registry.all()}), 29)
+
+    def test_database_override_release_gate_covers_all_thirteen_documents(self):
+        registry = get_document_registry()
+        database_ids = {
+            spec.document_id
+            for spec in registry.all()
+            if spec.storage_policy == "database_override"
+        }
+        self.assertEqual(database_ids, DATABASE_BACKEND_RELEASED_DOCUMENT_IDS)
+        self.assertEqual(len(database_ids), 13)
+        self.assertTrue(
+            all(
+                spec.active_backend in {"legacy_file", "database"}
+                for spec in registry.all()
+                if spec.document_id in database_ids
+            )
+        )
+
+    def test_registered_database_descriptors_have_no_removed_payload_attributes(self):
+        registry = get_document_registry()
+        documents = {spec.document_id: spec for spec in registry.all()}
+        for descriptor in get_registry().all():
+            spec = documents.get(descriptor.setting_id)
+            if spec is None or spec.storage_policy != "database_override":
+                continue
+            self.assertNotIn("settings_payload_attr", descriptor.metadata)
+
+    def test_architecture_validator_file_access_guard_is_clean(self):
+        from .architecture_validation import (
+            find_migrated_document_access_violations,
+            validate_contract_registry_coverage,
+        )
+
+        self.assertEqual(find_migrated_document_access_violations(), ())
+        validate_contract_registry_coverage()
+
+    def test_architecture_validator_detects_synthetic_direct_reader(self):
+        from .architecture_validation import find_migrated_document_access_violations
+
+        with tempfile.TemporaryDirectory() as directory:
+            apps_root = Path(directory) / "apps"
+            apps_root.mkdir()
+            contracts_root = Path(directory) / "contracts"
+            contracts_root.mkdir()
+            (contracts_root / "rogue.json").write_text("{}", encoding="utf-8")
+            (apps_root / "unsafe_consumer.py").write_text(
+                "from django.conf import settings\n"
+                "from apps.core.json_utils import load_json_file\n"
+                "CONTRACT_PATH = 'contracts/rogue.json'\n"
+                "payload = load_json_file('contracts/role_rules.json')\n"
+                "with open(CONTRACT_PATH) as stream:\n"
+                "    payload = stream.read()\n"
+                "path = settings.LOCAL_BUSINESS_ROLE_RULES_FILE\n",
+                encoding="utf-8",
+            )
+            violations = find_migrated_document_access_violations(root=Path(directory))
+
+        self.assertTrue(any("unsafe_consumer.py" in item for item in violations))
+        self.assertTrue(any("load_json_file" in item for item in violations))
+        self.assertTrue(any("settings.LOCAL_BUSINESS_ROLE_RULES_FILE" in item for item in violations))
+        self.assertTrue(any("unregistered:contracts/rogue.json" in item for item in violations))
+
+    def test_architecture_validator_detects_known_filename_constant_reader(self):
+        from .architecture_validation import find_migrated_document_access_violations
+
+        with tempfile.TemporaryDirectory() as directory:
+            apps_root = Path(directory) / "apps"
+            apps_root.mkdir()
+            (apps_root / "unsafe_consumer.py").write_text(
+                "from apps.core.json_utils import load_json_file\n"
+                "NAME = 'role_rules.json'\n"
+                "payload = load_json_file(NAME)\n",
+                encoding="utf-8",
+            )
+            violations = find_migrated_document_access_violations(root=Path(directory))
+
+        self.assertTrue(any("unsafe_consumer.py" in item for item in violations))
+        self.assertTrue(any("load_json_file" in item for item in violations))
+        self.assertFalse(any("unregistered:" in item for item in violations))
+
+    def test_architecture_validator_detects_memory_payload_attribute(self):
+        from .architecture_validation import find_migrated_document_access_violations
+
+        with tempfile.TemporaryDirectory() as directory:
+            apps_root = Path(directory) / "apps"
+            apps_root.mkdir()
+            (apps_root / "unsafe_consumer.py").write_text(
+                "from django.conf import settings\n"
+                "payload = settings.LOCAL_BUSINESS_MEMORY_PROFILES\n",
+                encoding="utf-8",
+            )
+            violations = find_migrated_document_access_violations(root=Path(directory))
+
+        self.assertTrue(
+            any("settings.LOCAL_BUSINESS_MEMORY_PROFILES" in item for item in violations)
+        )
+
+    def test_architecture_validator_detects_registered_path_through_custom_reader(self):
+        from .architecture_validation import find_migrated_document_access_violations
+
+        with tempfile.TemporaryDirectory() as directory:
+            apps_root = Path(directory) / "apps"
+            apps_root.mkdir()
+            (apps_root / "unsafe_consumer.py").write_text(
+                "def custom_reader(path):\n"
+                "    return path\n"
+                "payload = custom_reader('contracts/ai/tools.json')\n",
+                encoding="utf-8",
+            )
+            violations = find_migrated_document_access_violations(root=Path(directory))
+
+        self.assertTrue(
+            any("direct:contracts/ai/tools.json" in item for item in violations)
+        )
+
+    def test_legacy_contract_snapshot_uses_default_on_clean_runtime(self):
+        from .contract_services import read_contract_snapshot
+
+        descriptor = get_registry().get("waiting_list.contract.status_colors")
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "contracts"
+            with override_settings(
+                RUNTIME_CONTRACTS_DIR=runtime,
+                LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE=(
+                    runtime / "waiting_list_status_colors.json"
+                ),
+            ):
+                snapshot = read_contract_snapshot(descriptor)
+
+        self.assertEqual(snapshot.source, "git_default")
+        self.assertEqual(snapshot.revision, 0)
+
+    def test_settings_has_no_migrated_payload_constants(self):
+        settings_source = (Path(settings.BASE_DIR) / "config" / "settings.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn(
+            "LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS =",
+            settings_source,
+        )
+        self.assertNotIn(
+            "LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS = _load_contract_payload",
+            settings_source,
+        )
 
     def test_all_defaults_and_cross_document_rules_validate(self):
         self.assertTrue(get_document_registry().validate_defaults())

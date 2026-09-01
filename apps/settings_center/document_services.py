@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
@@ -11,6 +12,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
+
+from apps.core.file_locks import (
+    FileLockTimeoutError,
+    access_control_write_lock_path,
+    exclusive_file_lock,
+)
 
 from .document_hashes import document_hash, is_document_hash
 from .document_registry import ConfigDocumentRegistry, get_document_registry
@@ -135,6 +142,133 @@ class ConfigDocumentWriter:
             locked_authorize=locked_domain_authorize,
         )[document_id]
 
+    def save_constrained_document_via_domain_workflow(
+        self,
+        *,
+        actor,
+        document_id: str,
+        expected_revision: int,
+        expected_content_hash: str,
+        authorize: Callable[[Any], None],
+        candidate_factory: Callable[[Any, Any], Any],
+        validate_candidate: Callable[[Any, Any, Any], None],
+        before_write: Callable[[Any, Any], None] | None = None,
+        operation_fingerprint: str | None = None,
+        audit_context: Mapping[str, Any] | None = None,
+        on_commit: Callable[[], None] | None = None,
+    ) -> RuntimeSettingSnapshot:
+        """Записать один документ через полностью предметную проверку.
+
+        Метод предназначен для security-критичных документов, где общее право
+        ``manage_settings`` не описывает допустимых авторов. Фабрика кандидата,
+        повторная авторизация и предметная проверка выполняются после общей
+        access-блокировки, advisory locks и row locks. Поэтому вызывающий сервис
+        не может подменить соседний документ связанного среза или проверить
+        подписанный план против устаревшего снимка.
+        """
+
+        return self._save_constrained_domain_document(
+            actor=actor,
+            document_id=document_id,
+            expected_revision=expected_revision,
+            expected_content_hash=expected_content_hash,
+            authorize=authorize,
+            candidate_factory=candidate_factory,
+            validate_candidate=validate_candidate,
+            before_write=before_write,
+            operation_fingerprint=operation_fingerprint,
+            audit_context=audit_context,
+            on_commit=on_commit,
+            allow_default_drift=False,
+        )
+
+    def migrate_constrained_document_default_via_domain_workflow(
+        self,
+        *,
+        actor,
+        document_id: str,
+        expected_revision: int,
+        expected_content_hash: str,
+        authorize: Callable[[Any], None],
+        candidate_factory: Callable[[Any, Any], Any],
+        validate_candidate: Callable[[Any, Any, Any], None],
+        before_write: Callable[[Any, Any], None] | None = None,
+        operation_fingerprint: str | None = None,
+        audit_context: Mapping[str, Any] | None = None,
+        on_commit: Callable[[], None] | None = None,
+    ) -> RuntimeSettingSnapshot:
+        """Применить проверенную deployment-миграцию изменившегося Git-дефолта."""
+
+        return self._save_constrained_domain_document(
+            actor=actor,
+            document_id=document_id,
+            expected_revision=expected_revision,
+            expected_content_hash=expected_content_hash,
+            authorize=authorize,
+            candidate_factory=candidate_factory,
+            validate_candidate=validate_candidate,
+            before_write=before_write,
+            operation_fingerprint=operation_fingerprint,
+            audit_context=audit_context,
+            on_commit=on_commit,
+            allow_default_drift=True,
+        )
+
+    def _save_constrained_domain_document(
+        self,
+        *,
+        actor,
+        document_id,
+        expected_revision,
+        expected_content_hash,
+        authorize,
+        candidate_factory,
+        validate_candidate,
+        before_write,
+        operation_fingerprint,
+        audit_context,
+        on_commit,
+        allow_default_drift,
+    ):
+        spec = self.registry.get(document_id)
+        if spec.write_policy != "requires_domain_workflow":
+            raise DocumentWriteError("Для документа не объявлен специальный доменный сценарий.")
+        actor = self._require_authenticated_actor(actor)
+        authorize(actor)
+
+        def locked_domain_authorize():
+            return self._authorize_domain_actor(actor, authorize)
+
+        def locked_prepare(current_actor, snapshots):
+            before = deepcopy(snapshots[document_id].payload)
+            candidate = candidate_factory(current_actor, deepcopy(before))
+            validate_candidate(current_actor, deepcopy(before), deepcopy(candidate))
+            return {document_id: candidate}
+
+        def locked_before_write(current_actor, candidates):
+            if before_write is not None:
+                before_write(current_actor, deepcopy(candidates[document_id]))
+
+        return self._save_documents(
+            actor=actor,
+            candidates={document_id: None},
+            expected={
+                document_id: ExpectedDocumentVersion(
+                    revision=expected_revision,
+                    content_hash=expected_content_hash,
+                )
+            },
+            operation_fingerprints={document_id: operation_fingerprint},
+            audit_context=audit_context,
+            on_commit=on_commit,
+            locked_authorize=locked_domain_authorize,
+            locked_prepare=locked_prepare,
+            before_write=locked_before_write,
+            allow_default_drift_ids=(
+                frozenset({document_id}) if allow_default_drift else frozenset()
+            ),
+        )[document_id]
+
     def save_documents_via_domain_workflow(
         self,
         *,
@@ -189,6 +323,7 @@ class ConfigDocumentWriter:
         expected_revision: int,
         expected_content_hash: str,
         authorize: Callable[[Any], None] | None = None,
+        validate_candidate: Callable[[Any, Any, Any], None] | None = None,
         audit_context: Mapping[str, Any] | None = None,
     ) -> RuntimeSettingSnapshot:
         spec = self.registry.get(document_id)
@@ -208,9 +343,46 @@ class ConfigDocumentWriter:
         ).first()
         if source is None or source.before_snapshot is None:
             raise DocumentWriteError("Версия для rollback не найдена или не содержит снимок.")
+        if source.document_revision_after is not None and source.document_revision_after < 1:
+            raise DocumentWriteError("История документа не содержит корректной ревизии.")
+        if (
+            source.document_revision_after is not None
+            and source.document_revision_before is not None
+            and source.document_revision_after != source.document_revision_before + 1
+        ):
+            raise DocumentWriteError("История документа содержит разрыв ревизий.")
+        source_before_hash = document_hash(source.before_snapshot)
+        source_after_hash = None
+        if source.after_snapshot is not None:
+            try:
+                source_after_hash = document_hash(source.after_snapshot)
+            except (TypeError, ValueError, InvalidDocumentPayload) as exc:
+                raise DocumentWriteError("История документа содержит повреждённый снимок.") from exc
+        if source_before_hash != str(source.before_hash or "").removeprefix("sha256:"):
+            raise DocumentWriteError("Хеш снимка истории документа не совпадает с аудитом.")
+        if source_after_hash is not None and source_after_hash != str(source.after_hash or "").removeprefix("sha256:"):
+            raise DocumentWriteError("Хеш снимка истории документа не совпадает с аудитом.")
+        if (
+            source.document_revision_after is not None
+            and source.document_revision_after == expected_revision
+            and source_after_hash is not None
+            and source_after_hash != str(expected_content_hash or "").removeprefix("sha256:")
+        ):
+            raise DocumentWriteError("Текущая ревизия документа не совпадает с источником rollback.")
+
+        def locked_prepare(current_actor, snapshots):
+            candidate = deepcopy(source.before_snapshot)
+            if validate_candidate is not None:
+                validate_candidate(
+                    current_actor,
+                    deepcopy(snapshots[document_id].payload),
+                    deepcopy(candidate),
+                )
+            return {document_id: candidate}
+
         result = self._save_documents(
             actor=actor,
-            candidates={document_id: source.before_snapshot},
+            candidates={document_id: None},
             expected={
                 document_id: ExpectedDocumentVersion(
                     revision=expected_revision,
@@ -230,6 +402,7 @@ class ConfigDocumentWriter:
                 if spec.write_policy == "requires_domain_workflow"
                 else (lambda: self._require_actor(actor, spec.required_permission))
             ),
+            locked_prepare=locked_prepare,
         )
         return result[document_id]
 
@@ -245,6 +418,12 @@ class ConfigDocumentWriter:
         audit_context: Mapping[str, Any] | None = None,
         on_commit: Callable[[], None] | None = None,
         locked_authorize: Callable[[], Any] | None = None,
+        locked_prepare: Callable[
+            [Any, Mapping[str, RuntimeSettingSnapshot]], Mapping[str, Any]
+        ]
+        | None = None,
+        before_write: Callable[[Any, Mapping[str, Any]], None] | None = None,
+        allow_default_drift_ids: frozenset[str] = frozenset(),
     ) -> dict[str, RuntimeSettingSnapshot]:
         if connection.vendor != "postgresql":
             raise UnsupportedDocumentWriteBackend(
@@ -280,7 +459,7 @@ class ConfigDocumentWriter:
         actions = actions or {}
         rollback_of = rollback_of or {}
         operation_fingerprints = operation_fingerprints or {}
-        with transaction.atomic():
+        with self._write_context(scope):
             self._acquire_locks(scope)
             if locked_authorize is not None:
                 actor = locked_authorize()
@@ -305,15 +484,27 @@ class ConfigDocumentWriter:
                         f"Документ '{document_id}' повреждён; запись закрыта до явного восстановления."
                     )
                 if current.migration_required:
-                    raise DocumentMigrationRequired(
-                        f"Документ '{document_id}' требует отдельной миграции схемы или дефолта."
-                    )
+                    if document_id not in allow_default_drift_ids:
+                        raise DocumentMigrationRequired(
+                            f"Документ '{document_id}' требует отдельной миграции схемы или дефолта."
+                        )
+                    if document_id not in candidate_ids or rows.get(document_id) is None:
+                        raise DocumentMigrationRequired(
+                            f"Документ '{document_id}' нельзя восстановить обычной миграцией дефолта."
+                        )
             for document_id in candidate_ids:
                 current = snapshots[document_id]
                 version = expected[document_id]
                 if current.revision != version.revision or current.content_hash != version.content_hash:
                     raise DocumentWriteConflict(
                         f"Документ '{document_id}' уже изменён. Перечитайте актуальную версию."
+                    )
+
+            if locked_prepare is not None:
+                candidates = dict(locked_prepare(actor, snapshots))
+                if set(candidates) != set(candidate_ids):
+                    raise DocumentWriteError(
+                        "Доменная фабрика должна вернуть ровно заявленные документы."
                     )
 
             payloads = {
@@ -337,7 +528,17 @@ class ConfigDocumentWriter:
                 related = {item: payloads[item] for item in spec.cross_document_ids}
                 spec.cross_validator(deepcopy(payloads[document_id]), deepcopy(related))
 
+            if before_write is not None:
+                before_write(
+                    actor,
+                    {
+                        document_id: deepcopy(payloads[document_id])
+                        for document_id in candidate_ids
+                    },
+                )
+
             result: dict[str, RuntimeSettingSnapshot] = {}
+            outbox_callbacks = []
             for document_id in candidate_ids:
                 spec = self.registry.get(document_id)
                 before = snapshots[document_id]
@@ -409,9 +610,48 @@ class ConfigDocumentWriter:
                     default_hash=default_hash,
                     change_id=change.pk,
                 )
+                if spec.transactional_outbox_callback is not None:
+                    outbox_callbacks.append(
+                        (
+                            spec.document_id,
+                            spec.transactional_outbox_callback,
+                            revision,
+                            after_hash,
+                            change.pk,
+                        )
+                    )
+            # Domain callbacks are durable outbox writers, not deferred work:
+            # invoke them only after every document row and SettingsChange in
+            # this batch exists, while still inside the same transaction.  A
+            # callback failure or any later rollback therefore removes both the
+            # setting revision and its queue row; the callback never runs a
+            # heavy reindex inline.
+            for document_id, callback, revision, content_hash, change_id in outbox_callbacks:
+                callback(document_id, revision, content_hash, change_id)
             if on_commit is not None:
                 transaction.on_commit(on_commit)
+            # Следующее чтение в том же HTTP-запросе должно увидеть уже
+            # сохранённую ревизию, а не снимок, с которым была открыта форма.
+            self.repository.invalidate(scope)
             return result
+
+    @staticmethod
+    @contextmanager
+    def _write_context(document_ids: Iterable[str]):
+        """Сохранить переходную сериализацию access-домена поверх DB locks."""
+
+        try:
+            if "core.contract.role_rules" in set(document_ids):
+                with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
+                    with transaction.atomic():
+                        yield
+                return
+            with transaction.atomic():
+                yield
+        except FileLockTimeoutError as exc:
+            raise DocumentWriteError(
+                "Доступ сейчас изменяет другой процесс. Повторите позже."
+            ) from exc
 
     def _locked_snapshots(self, scope: Iterable[str], rows) -> dict[str, RuntimeSettingSnapshot]:
         result = {}

@@ -15,7 +15,10 @@ def get_document_specs():
             write_policy="read_only",
             required_permission="manage_settings",
             owner="core",
-            legacy_settings_path="LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE",
+            # The registry is a git-static document; its file path remains a
+            # deployment/test compatibility setting, not an authoritative
+            # runtime mirror.
+            legacy_settings_path=None,
             delivery_scope="django",
             consumer_classes=("integrations",),
             active_backend="git",

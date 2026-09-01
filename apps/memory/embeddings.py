@@ -5,9 +5,6 @@ import math
 from dataclasses import dataclass
 from typing import Protocol, Sequence, runtime_checkable
 
-from django.conf import settings
-
-
 DEFAULT_TEST_EMBEDDING_PROFILE = "local_hash_test_v1"
 
 
@@ -110,9 +107,19 @@ class SentenceTransformerEmbeddingProvider:
         return [float(item) for item in embedding.tolist()]
 
 
-def get_embedding_provider(profile_id: str | None = None) -> EmbeddingProvider:
-    selected_profile = profile_id or getattr(settings, "LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE", DEFAULT_TEST_EMBEDDING_PROFILE)
-    profiles = dict((getattr(settings, "LOCAL_BUSINESS_MEMORY_PROFILES", {}) or {}).get("embedding_profiles", {}) or {})
+def get_embedding_provider(profile_id: str | None = None, *, snapshots=None) -> EmbeddingProvider:
+    selected_profile = profile_id or DEFAULT_TEST_EMBEDDING_PROFILE
+    from .config_documents import get_memory_document_payload
+
+    profiles = dict(
+        (
+            get_memory_document_payload(
+                "memory.contract.profiles", snapshots=snapshots
+            )
+            or {}
+        ).get("embedding_profiles", {})
+        or {}
+    )
     profile = profiles.get(selected_profile)
     if profile is None and selected_profile == DEFAULT_TEST_EMBEDDING_PROFILE:
         profile = {

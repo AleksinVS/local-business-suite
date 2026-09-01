@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -35,6 +36,11 @@ from .vector_backends import (
     get_default_fulltext_schema_version,
     get_default_vector_backend,
 )
+from .config_documents import (
+    get_memory_document_payload,
+    get_memory_document_snapshots,
+    get_memory_test_source_allowlist,
+)
 
 
 ENCRYPTED_PDF_MARKER = b"/Encrypt"
@@ -55,17 +61,42 @@ class IngestionProfile:
     stable_after_seconds: int
 
 
-def discover_source_objects(*, source: MemorySource, dry_run=False, created_by=None):
+def discover_source_objects(*, source: MemorySource, dry_run=False, created_by=None, snapshots=None):
     with enabled_source_operation(source_id=source.pk) as fresh_source:
+        if snapshots is None:
+            snapshots = get_memory_document_snapshots(
+                document_ids=(
+                    "memory.contract.sources",
+                    "memory.contract.ingestion_profiles",
+                )
+            )
         return _discover_source_objects_locked(
             source=fresh_source,
             dry_run=dry_run,
             created_by=created_by,
+            profile=get_source_ingestion_profile(fresh_source, snapshots=snapshots),
+            snapshots=snapshots,
         )
 
 
-def _discover_source_objects_locked(*, source: MemorySource, dry_run=False, created_by=None):
-    profile = get_source_ingestion_profile(source)
+def _discover_source_objects_locked(
+    *,
+    source: MemorySource,
+    dry_run=False,
+    created_by=None,
+    profile=None,
+    snapshots=None,
+):
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.sources",
+                "memory.contract.ingestion_profiles",
+            )
+        )
+    if profile is None:
+        profile = get_source_ingestion_profile(source, snapshots=snapshots)
+    assert_source_projection_matches_contract(source, snapshots=snapshots)
     run = _create_run(source=source, dry_run=dry_run, created_by=created_by)
     metrics = {
         "seen": 0,
@@ -148,18 +179,51 @@ def _discover_source_objects_locked(*, source: MemorySource, dry_run=False, crea
 
 def ingest_source_objects(*, source: MemorySource, dry_run=False, created_by=None, limit=None):
     with enabled_source_operation(source_id=source.pk) as fresh_source:
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.sources",
+                "memory.contract.ingestion_profiles",
+                "memory.contract.profiles",
+            )
+        )
         return _ingest_source_objects_locked(
             source=fresh_source,
             dry_run=dry_run,
             created_by=created_by,
             limit=limit,
+            profile=get_source_ingestion_profile(fresh_source, snapshots=snapshots),
+            snapshots=snapshots,
         )
 
 
-def _ingest_source_objects_locked(*, source: MemorySource, dry_run=False, created_by=None, limit=None):
-    profile = get_source_ingestion_profile(source)
+def _ingest_source_objects_locked(
+    *,
+    source: MemorySource,
+    dry_run=False,
+    created_by=None,
+    limit=None,
+    profile=None,
+    snapshots=None,
+):
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.ingestion_profiles",
+                "memory.contract.profiles",
+                "memory.contract.sources",
+            )
+        )
+    if profile is None:
+        profile = get_source_ingestion_profile(source, snapshots=snapshots)
+    assert_source_projection_matches_contract(source, snapshots=snapshots)
     if not dry_run and not MemorySourceObject.objects.filter(source=source).exists():
-        _discover_source_objects_locked(source=source, dry_run=False, created_by=created_by)
+        _discover_source_objects_locked(
+            source=source,
+            dry_run=False,
+            created_by=created_by,
+            profile=profile,
+            snapshots=snapshots,
+        )
 
     run = _create_run(source=source, dry_run=dry_run, created_by=created_by)
     metrics = {
@@ -209,6 +273,7 @@ def _ingest_source_objects_locked(*, source: MemorySource, dry_run=False, create
                     safe_text=outcome["text"],
                     partial_reason=outcome["partial_reason"],
                     extraction_metadata=outcome["metadata"].get("extraction"),
+                    snapshots=snapshots,
                 )
             except ValueError as exc:
                 _create_issue(
@@ -296,8 +361,10 @@ def _prepare_bootstrap_package_locked(*, source: MemorySource, department: str, 
     return {**package, "path": str(path)}
 
 
-def get_source_ingestion_profile(source: MemorySource):
-    payload = getattr(settings, "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES", {}) or {}
+def get_source_ingestion_profile(source: MemorySource, *, snapshots=None):
+    payload = get_memory_document_payload(
+        "memory.contract.ingestion_profiles", snapshots=snapshots
+    ) or {}
     profile_id = source.config.get("ingestion_profile") or source.config.get("ingestion", {}).get("profile") or "corporate_docs_windows_v1"
     profile = payload.get("profiles", {}).get(profile_id)
     if not profile:
@@ -314,18 +381,83 @@ def get_source_ingestion_profile(source: MemorySource):
         acl_mode=profile["acl_mode"],
         unresolved_acl_policy=profile.get("acl_policy", {}).get(
             "unresolved_policy",
-            getattr(settings, "MEMORY_ACL_UNRESOLVED_POLICY", "block"),
+            "block",
         ),
         acl_fail_closed=bool(
             profile.get("acl_policy", {}).get(
                 "fail_closed",
-                getattr(settings, "MEMORY_ACL_FAIL_CLOSED", True),
+                True,
             )
         ),
         partial_indexing_enabled=profile["partial_indexing"] == "enabled",
         follow_symlinks=bool(adapter.get("follow_symlinks", False)),
         stable_after_seconds=int(adapter.get("stable_after_seconds", 5)),
     )
+
+
+def assert_source_projection_matches_contract(source: MemorySource, *, snapshots=None) -> None:
+    """Reject a stale ``MemorySource`` projection before filesystem work.
+
+    ``MemorySource.config`` stores the source item used by the last explicit
+    contract sync. When the current operation snapshot contains that source,
+    compare both the stored contract item and denormalized model fields. A
+    manually-created fixture source is accepted only when the test explicitly
+    registers its code in the test-only source allowlist.
+    """
+
+    if snapshots is None or "memory.contract.sources" not in snapshots:
+        return
+    payload = get_memory_document_payload(
+        "memory.contract.sources", snapshots=snapshots
+    ) or []
+    expected = next(
+        (item for item in payload if item.get("code") == source.code),
+        None,
+    )
+    if expected is None:
+        # Unit/integration fixtures must opt in explicitly; a missing source in
+        # a real captured contract means the source was deleted or revoked.
+        if source.code in get_memory_test_source_allowlist():
+            return
+        raise ValidationError(
+            f"Источник '{source.code}' отсутствует в снимке контракта."
+        )
+    if dict(source.config or {}) != dict(expected):
+        raise ValidationError(
+            f"Источник '{source.code}' больше не соответствует снимку контракта."
+        )
+    expected_fields = {
+        "title": expected.get("title", ""),
+        "source_kind": expected.get("source_kind", ""),
+        "domain": expected.get("domain", ""),
+        "owner": expected.get("owner", ""),
+        "sync_mode": expected.get("sync_mode", ""),
+        "scope_rule": expected.get("scope_rule", ""),
+        "sensitivity": expected.get("sensitivity", ""),
+        "pii_policy": expected.get("pii_policy", ""),
+        "extractor_profile": expected.get("extractor_profile", ""),
+        "chunking_profile": expected.get("chunking_profile", ""),
+        "index_profiles": expected.get("index_profiles", []),
+        "trust_status": expected.get("trust_status", ""),
+        "authority_class": expected.get("authority_class", ""),
+        "trusted_for_context": bool(expected.get("trusted_for_context", False)),
+        "requires_source_review": bool(expected.get("requires_source_review", True)),
+        "review_owner": expected.get("review_owner", ""),
+        "trusted_context_kinds": expected.get("trusted_context_kinds", []),
+        "untrusted_handling": expected.get("untrusted_handling", ""),
+        "status": MemorySource.Status.ENABLED
+        if expected.get("enabled", True)
+        else MemorySource.Status.DISABLED,
+    }
+    mismatched = [
+        field
+        for field, expected_value in expected_fields.items()
+        if getattr(source, field) != expected_value
+    ]
+    if mismatched:
+        raise ValidationError(
+            f"Источник '{source.code}' имеет устаревшую проекцию: {', '.join(mismatched)}."
+        )
 
 
 def resolve_source_root(source: MemorySource):
@@ -530,6 +662,13 @@ def ingest_source_object_text(
     index_backends=("fulltext", "vector"),
 ):
     with enabled_source_operation(source_id=source_object.source_id) as source:
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.sources",
+                "memory.contract.ingestion_profiles",
+                "memory.contract.profiles",
+            )
+        )
         fresh_object = MemorySourceObject.objects.select_related("source").get(
             pk=source_object.pk,
             source=source,
@@ -540,6 +679,8 @@ def ingest_source_object_text(
             partial_reason=partial_reason,
             extraction_metadata=extraction_metadata,
             index_backends=index_backends,
+            profile=get_source_ingestion_profile(source, snapshots=snapshots),
+            snapshots=snapshots,
         )
 
 
@@ -551,9 +692,20 @@ def _ingest_source_object_text_locked(
     partial_reason="",
     extraction_metadata=None,
     index_backends=("fulltext", "vector"),
+    profile=None,
+    snapshots=None,
 ):
     source = source_object.source
-    profile = get_source_ingestion_profile(source)
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.sources",
+                "memory.contract.ingestion_profiles",
+                "memory.contract.profiles",
+            )
+        )
+    profile = profile or get_source_ingestion_profile(source, snapshots=snapshots)
+    assert_source_projection_matches_contract(source, snapshots=snapshots)
     scope_tokens = scope_tokens_for_source_object(source_object=source_object, profile=profile)
     if not scope_tokens:
         raise ValueError("No resolved memory scope tokens for source object.")
@@ -566,7 +718,11 @@ def _ingest_source_object_text_locked(
     document_id = _source_document_id(source_object)
     selected_backends = set(index_backends or ())
     fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
-    vector_backend = get_default_vector_backend() if "vector" in selected_backends else None
+    vector_backend = (
+        get_default_vector_backend(snapshots=snapshots)
+        if "vector" in selected_backends
+        else None
+    )
     existing_document = MemorySearchDocument.objects.filter(document_id=document_id).first()
     existing_versions = dict(((existing_document.metadata or {}).get("index_versions") if existing_document else {}) or {})
     if "fulltext" in selected_backends:
@@ -648,7 +804,12 @@ def _ingest_source_object_text_locked(
     return {"document_id": document.document_id, "document_ids": [document.document_id], "source_object_id": source_object.object_id}
 
 
-def delete_search_document_indexes(document_ids, *, index_backends=("fulltext", "vector")) -> dict:
+def delete_search_document_indexes(
+    document_ids,
+    *,
+    index_backends=("fulltext", "vector"),
+    snapshots=None,
+) -> dict:
     selected_backends = set(index_backends or ())
     ids = [str(document_id or "").strip() for document_id in document_ids if str(document_id or "").strip()]
     result = {"fulltext_deleted": 0, "vector_deleted": 0}
@@ -657,7 +818,7 @@ def delete_search_document_indexes(document_ids, *, index_backends=("fulltext", 
     if "fulltext" in selected_backends:
         result["fulltext_deleted"] = get_default_backend().delete(ids)
     if "vector" in selected_backends:
-        vector_backend = get_default_vector_backend()
+        vector_backend = get_default_vector_backend(snapshots=snapshots)
         if vector_backend is not None:
             result["vector_deleted"] = vector_backend.delete(ids)
     return result

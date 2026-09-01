@@ -1,7 +1,7 @@
 from langchain.tools import tool
 
+from .config import get_effective_tool_policies, normalize_priority, normalize_status
 from .gateway_client import DjangoGatewayClient
-from .task_types import normalize_status, normalize_priority
 
 
 def build_tools(
@@ -13,6 +13,7 @@ def build_tools(
     request_id: str = "",
     origin_channel: str = "",
     actor_version: str = "",
+    contract_snapshot=None,
 ):
     """
     Build LangChain tools with identity/correlation context.
@@ -70,7 +71,7 @@ def build_tools(
     def list_workorders(status: str = "", limit: int = 20) -> dict:
         """List work orders visible to the current user, optionally filtered by status."""
         if status:
-            status = normalize_status(status)
+            status = normalize_status(status, snapshot=contract_snapshot)
         result = gateway_client.execute_tool(
             tool_code="workorders.list",
             actor=actor,
@@ -116,7 +117,7 @@ def build_tools(
     @tool("workorders.create")
     def create_workorder(department_id: int, subject: str, description: str, priority: str = "medium") -> dict:
         """Create a work order for the current user."""
-        priority = normalize_priority(priority)
+        priority = normalize_priority(priority, snapshot=contract_snapshot)
         result = gateway_client.execute_tool(
             tool_code="workorders.create",
             actor=actor,
@@ -137,7 +138,7 @@ def build_tools(
     @tool("workorders.transition")
     def transition_workorder(workorder_id: int, target_status: str) -> dict:
         """Move a work order to a target status if policy allows."""
-        target_status = normalize_status(target_status)
+        target_status = normalize_status(target_status, snapshot=contract_snapshot)
         result = gateway_client.execute_tool(
             tool_code="workorders.transition",
             actor=actor,
@@ -421,7 +422,7 @@ def build_tools(
             "message": f"Skill '{skill_id}' activated. I have updated my instructions."
         }
 
-    return [
+    tools = [
         get_current_context,
         open_right_panel,
         list_workorders,
@@ -443,3 +444,10 @@ def build_tools(
         list_groups,
         activate_skill,
     ]
+    if contract_snapshot is None:
+        return tools
+    # Binding is a capability boundary, not presentation metadata.  The
+    # effective set is the intersection of the static Python registry, the
+    # delivered tool catalog and a mode-compatible task policy.
+    policies = get_effective_tool_policies(snapshot=contract_snapshot)
+    return [tool for tool in tools if tool.name in policies]

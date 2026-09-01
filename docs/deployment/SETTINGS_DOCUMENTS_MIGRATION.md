@@ -3,6 +3,13 @@
 Статус: операционный runbook пакета 03. Production apply этим пакетом не
 выполняется без отдельного окна и письменного разрешения владельца.
 
+Тестовый хост 2026-09-01 переключён на полный allowlist из 13 документов.
+Владелец отдельно разрешил удалить 30 legacy-тестовых JSON без экспорта. После
+этого выполнен PostgreSQL backup/restore drill в изолированной временной БД;
+values, revisions, audit, назначения ролей, AI parity и memory dry-run
+проверены. Временная БД и dump удалены. Это разовое решение для тестовых данных
+не ослабляет приведённые ниже требования к production backup и retention.
+
 ## Назначение и границы
 
 Команда `settings_documents_migrate` переносит только подтверждённые изменения
@@ -32,10 +39,13 @@ legacy-файлы, не удаляет их и не переключает reade
 | `conflict` | повреждён JSON/DB metadata, conflicting row или несогласованные hash |
 | `security_review_required` | специальный случай `core.contract.role_rules` с drift `$defaults`/`viewer` |
 
-`ambiguous_drift`, `migration_required`, `env_override`, `conflict` и
-`security_review_required` блокируют apply. `role_rules` никогда не импортируется
-этим пакетом в специальном случае security review. `git_static` не импортируется
-в DB даже при наличии похожего drift.
+`ambiguous_drift`, `migration_required`, `env_override` и `conflict` блокируют
+apply. `security_review_required` также закрыт по умолчанию, но пакет 05 добавляет
+единственное явное исключение: active superuser может подтвердить точные compact
+хеши runtime и Git-default `role_rules` и импортировать без слияния ровно текущий
+runtime payload. Каталоги `$capabilities` и `$administration` при этом обязаны
+совпадать с Git-default. `git_static` не импортируется в DB даже при наличии
+похожего drift.
 
 ## Порядок production cutover
 
@@ -50,7 +60,8 @@ legacy-файлы, не удаляет их и не переключает reade
 
 1. проверить чистоту исходного дерева, commit и image ID;
 2. при пустом DB allowlist проверить итоговый compose config, mount рабочего
-   `data/`, список ожидающих миграций и `bootstrap_runtime --dry-run`;
+   `data/`, список ожидающих миграций и `bootstrap_runtime --dry-run`; команда
+   не создаёт новые runtime-копии для `database_override` или `git_static`;
 3. до schema migration создать и проверить две независимые точки
    восстановления: полный PostgreSQL dump и копию legacy-файла с SHA-256;
 4. развернуть тот же новый образ при пустом allowlist и применить только
@@ -122,6 +133,27 @@ python manage.py settings_documents_migrate --apply \
   --actor-id <active-superuser-id> \
   --backup-root <protected-deployment-backup-root>
 ```
+
+Для заранее рассмотренного `security_review_required` роли команда требует все
+три дополнительных параметра; частичное подтверждение отклоняется:
+
+```text
+python manage.py settings_documents_migrate --apply \
+  --document-id core.contract.role_rules \
+  --document-id core.contract.workflow_rules \
+  --document-id workorders.contract.status_colors \
+  --actor-id <active-superuser-id> \
+  --backup-root <protected-deployment-backup-root> \
+  --approve-role-runtime-document-hash <compact-runtime-sha256> \
+  --approve-role-default-document-hash <compact-default-sha256> \
+  --security-review-reason "<решение владельца и change ticket>"
+```
+
+Эта операция не добавляет отсутствующие `$defaults`/`viewer` и не нормализует
+определения ролей по Git. Она сохраняет фактическую закрытую модель доступа и
+записывает решение, оба хеша и masked diff в аудит. Любое изменение файла,
+дефолта или классификации после plan останавливает транзакцию. Активация
+`viewer` остаётся отдельной access-миграцией и не входит в storage cutover.
 
 Каждый выбранный документ обязан иметь `active_backend=legacy_file`. Документ,
 уже переключённый на PostgreSQL, исключается из общего plan и отклоняется при

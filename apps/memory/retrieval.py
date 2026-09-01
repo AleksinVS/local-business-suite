@@ -21,6 +21,11 @@ from .policies import (
 )
 from .routing import resolve_retrieval_route, route_allows_context_kind
 from .services import record_access_audit
+from .config_documents import (
+    get_memory_document_payload,
+    get_memory_document_snapshots,
+    get_memory_test_source_allowlist,
+)
 from .vector_backends import get_default_backend, get_default_vector_backend
 
 
@@ -82,9 +87,41 @@ def memory_search(
     query_hash = _query_hash(query_text)
     normalized_limit = _normalize_limit(limit)
     normalized_search_mode = _normalize_search_mode(search_mode)
-    normalized_ranking_profile, ranking_profile_config = _select_ranking_profile(ranking_profile)
+    config_snapshots = get_memory_document_snapshots(
+        document_ids=(
+            "memory.contract.profiles",
+            "memory.contract.routing",
+            "memory.contract.retrieval_budget",
+            "memory.contract.trust_policy",
+            "memory.contract.ingestion_profiles",
+            "memory.contract.sources",
+        )
+    )
+    normalized_ranking_profile, ranking_profile_config = _select_ranking_profile(
+        ranking_profile, snapshots=config_snapshots
+    )
     allowed_corpus_types = _allowed_corpus_types(normalized_search_mode)
-    allowed_source_codes = _normalize_tokens(source_codes)
+    requested_source_codes = set(_normalize_tokens(source_codes) or ())
+    source_payload = get_memory_document_payload(
+        "memory.contract.sources", snapshots=config_snapshots
+    ) or []
+    contract_source_codes = {
+        str(item.get("code") or "").strip()
+        for item in source_payload
+        if isinstance(item, dict) and item.get("enabled", True)
+    }
+    # Test fixtures may use synthetic source codes. They are admitted only by
+    # the disposable UserSettingsHolder allowlist; production has no such
+    # setting and therefore remains closed to stale projections.
+    contract_source_codes.update(get_memory_test_source_allowlist())
+    # The captured contract is an authorization fence, not just a filter
+    # hint: an enabled stale DB projection cannot be returned after its source
+    # has been removed from the current operation snapshot.
+    allowed_source_codes = (
+        requested_source_codes & contract_source_codes
+        if requested_source_codes
+        else contract_source_codes
+    )
     trace: dict[str, Any] = {
         "filtered": {},
         "search_mode": normalized_search_mode,
@@ -97,7 +134,9 @@ def memory_search(
     try:
         actor = resolve_active_actor(actor, force_refresh=True)
         _assert_actor(actor)
-        route_decision = resolve_retrieval_route(sensitivity)
+        route_decision = resolve_retrieval_route(
+            sensitivity, snapshots=config_snapshots
+        )
         trace["route"] = route_decision.as_trace()
 
         effective_scope_tokens = _effective_scope_tokens(actor, scope_tokens)
@@ -120,6 +159,7 @@ def memory_search(
                 sensitivity=route_decision.allowed_sensitivities,
                 limit=normalized_limit,
                 allowed_corpus_types=allowed_corpus_types,
+                snapshots=config_snapshots,
             ),
             channel="vector",
         )
@@ -152,6 +192,9 @@ def memory_search(
             trusted_context_only=trusted_context_only,
             allowed_corpus_types=allowed_corpus_types,
             allowed_source_codes=set(allowed_source_codes or ()),
+            restrict_knowledge_source_codes=bool(requested_source_codes),
+            route_decision=route_decision,
+            config_snapshots=config_snapshots,
         ):
             candidate_items.append(item)
 
@@ -164,6 +207,7 @@ def memory_search(
             trace=trace,
             ranking_profile=normalized_ranking_profile,
             ranking_profile_config=ranking_profile_config,
+            budget=_retrieval_budget(snapshots=config_snapshots),
         )
         for item in ranked_items:
             _append_item(item, items, citations_by_id, returned_document_ids, returned_fact_ids, normalized_limit)
@@ -176,6 +220,8 @@ def memory_search(
                 limit=normalized_limit,
                 trace=trace,
                 allowed_source_codes=set(allowed_source_codes or ()),
+                trusted_context_only=trusted_context_only,
+                snapshots=config_snapshots,
             ):
                 items.append(item)
                 returned_document_ids.append(str(item.get("id", "")))
@@ -224,9 +270,9 @@ def memory_search(
         )
         raise
 
-def read_search_document_text(document: MemorySearchDocument, *, actor=None) -> str:
+def read_search_document_text(document: MemorySearchDocument, *, actor=None, snapshots=None) -> str:
     actor = resolve_active_actor(actor, force_refresh=True)
-    if actor is None or not can_access_search_document(actor, document):
+    if actor is None or not can_access_search_document(actor, document, snapshots=snapshots):
         # Never fall back to a filename, path, or object id on a denied read:
         # those values are themselves personal/source metadata.
         raise PermissionDenied("Доступ к поисковому документу запрещен.")
@@ -237,7 +283,11 @@ def read_search_document_text(document: MemorySearchDocument, *, actor=None) -> 
     if document.source_object_id:
         from .services import render_source_object_text
 
-        return render_source_object_text(document.source_object, actor=actor)
+        return render_source_object_text(
+            document.source_object,
+            actor=actor,
+            snapshots=snapshots,
+        )
     return ""
 
 
@@ -280,10 +330,20 @@ def _annotate_candidate_ranks(candidates, *, channel: str):
     return annotated
 
 
-def _search_vector_candidates(*, search_mode, ranking_profile_config, query, scope_tokens, sensitivity, limit, allowed_corpus_types):
+def _search_vector_candidates(
+    *,
+    search_mode,
+    ranking_profile_config,
+    query,
+    scope_tokens,
+    sensitivity,
+    limit,
+    allowed_corpus_types,
+    snapshots=None,
+):
     if not _vector_search_requested(search_mode, ranking_profile_config):
         return []
-    backend = get_default_vector_backend()
+    backend = get_default_vector_backend(snapshots=snapshots)
     if backend is None:
         return []
     if not hasattr(backend, "search"):
@@ -312,8 +372,8 @@ def _search_graph_candidates(*, graph_backend, actor, query, scope_tokens, sensi
     return []
 
 
-def _rank_and_pack_items(items, *, limit, trace, ranking_profile, ranking_profile_config):
-    budget = _retrieval_budget()
+def _rank_and_pack_items(items, *, limit, trace, ranking_profile, ranking_profile_config, budget=None):
+    budget = budget if budget is not None else _retrieval_budget()
     context_budget = budget.get("context_packing", {})
     max_items = min(limit, int(context_budget.get("max_items", limit) or limit))
     max_tokens = int(context_budget.get("max_tokens", 1200) or 1200)
@@ -403,7 +463,7 @@ def _merge_candidate_items(items):
     return [by_id[item_id] for item_id in ordered_ids]
 
 
-def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types, allowed_source_codes):
+def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_context_only, allowed_corpus_types, allowed_source_codes, restrict_knowledge_source_codes=False, route_decision=None, config_snapshots=None):
     document_ids = [_candidate_id(candidate, "document_id") for candidate in candidates]
     documents = _documents_by_id(document_ids)
 
@@ -413,10 +473,19 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
         if document is None:
             _bump(trace, "missing_document")
             continue
-        if not _document_route_allowed(document, allowed_sensitivities):
+        if not _document_route_allowed(
+            document,
+            allowed_sensitivities,
+            route_decision=route_decision,
+            snapshots=config_snapshots,
+        ):
             _bump(trace, "route_denied_document")
             continue
-        if not can_access_search_document(actor, document):
+        if not can_access_search_document(
+            actor,
+            document,
+            snapshots=config_snapshots,
+        ):
             _bump(trace, "policy_denied_document")
             continue
         if not _document_is_retrievable(document):
@@ -427,11 +496,21 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             continue
 
         source = search_document_source(document)
-        if allowed_source_codes and _document_source_code(document, source=source) not in allowed_source_codes:
+        document_source_code = _document_source_code(document, source=source)
+        if document.corpus_type == MemorySearchDocument.CorpusType.SOURCE_DATA and (
+            not allowed_source_codes or document_source_code not in allowed_source_codes
+        ):
             _bump(trace, "source_code_denied_document")
             continue
-        trust_decision = effective_source_trust(source)
-        if trusted_context_only and not source_allows_direct_context(source, "retrieved_chunk"):
+        if restrict_knowledge_source_codes and document_source_code not in allowed_source_codes:
+            _bump(trace, "source_code_denied_document")
+            continue
+        trust_decision = effective_source_trust(
+            source, snapshots=config_snapshots
+        )
+        if trusted_context_only and not source_allows_direct_context(
+            source, "retrieved_chunk", snapshots=config_snapshots
+        ):
             _bump(trace, "trust_gate_denied_document")
             continue
 
@@ -440,7 +519,11 @@ def _document_items(*, actor, candidates, allowed_sensitivities, trace, trusted_
             _bump(trace, "missing_document_citation")
             continue
         try:
-            text = read_search_document_text(document, actor=actor)
+            text = read_search_document_text(
+                document,
+                actor=actor,
+                snapshots=config_snapshots,
+            )
         except (OSError, ValidationError):
             _bump(trace, "unsafe_or_missing_document_text")
             continue
@@ -509,12 +592,25 @@ def _documents_by_id(document_ids):
     return {document_id: by_id[document_id] for document_id in ids if document_id in by_id}
 
 
-def _document_route_allowed(document: MemorySearchDocument, allowed_sensitivities) -> bool:
+def _document_route_allowed(
+    document: MemorySearchDocument,
+    allowed_sensitivities,
+    *,
+    route_decision=None,
+    snapshots=None,
+) -> bool:
     sensitivity = search_document_sensitivity(document)
+    if route_decision is not None:
+        route = route_decision.routes.get(sensitivity, {})
+        return (
+            sensitivity in allowed_sensitivities
+            and "retrieved_chunk" in set(route.get("allowed_context_kinds") or ())
+            and "citation" in set(route.get("allowed_context_kinds") or ())
+        )
     return (
         sensitivity in allowed_sensitivities
-        and route_allows_context_kind(sensitivity, "retrieved_chunk")
-        and route_allows_context_kind(sensitivity, "citation")
+        and route_allows_context_kind(sensitivity, "retrieved_chunk", snapshots=snapshots)
+        and route_allows_context_kind(sensitivity, "citation", snapshots=snapshots)
     )
 
 
@@ -561,7 +657,7 @@ def _normalize_search_mode(value) -> str:
     return mode
 
 
-def _select_ranking_profile(requested_profile: str = "") -> tuple[str, dict[str, Any]]:
+def _select_ranking_profile(requested_profile: str = "", *, snapshots=None) -> tuple[str, dict[str, Any]]:
     """
     Single ranking-profile extension point.
 
@@ -581,7 +677,7 @@ def _select_ranking_profile(requested_profile: str = "") -> tuple[str, dict[str,
     contract (see apps/ai/tool_definitions.py).
     """
     del requested_profile
-    profile = dict(_ranking_profile_config())
+    profile = dict(_ranking_profile_config(snapshots=snapshots))
     profile.setdefault("fusion", "rrf")
     profile.setdefault("rrf_k", RRF_K)
     profile.setdefault("overlap_boost", DEFAULT_RANKING_PROFILE.get("overlap_boost", 0.0))
@@ -590,12 +686,22 @@ def _select_ranking_profile(requested_profile: str = "") -> tuple[str, dict[str,
     return DEFAULT_RANKING_PROFILE_ID, profile
 
 
-def _ranking_profile_config() -> dict[str, Any]:
+def _ranking_profile_config(*, snapshots=None) -> dict[str, Any]:
     # Ops can still tune the single default profile's weights via
     # LOCAL_BUSINESS_MEMORY_PROFILES.ranking_profiles.default without a code
     # change; any other named key in that config is legacy/unused dead
     # config (ADR-0016 profiles are not selectable at runtime).
-    configured = dict((getattr(settings, "LOCAL_BUSINESS_MEMORY_PROFILES", {}) or {}).get("ranking_profiles", {}) or {})
+    from .config_documents import get_memory_document_payload
+
+    configured = dict(
+        (
+            get_memory_document_payload(
+                "memory.contract.profiles", snapshots=snapshots
+            )
+            or {}
+        ).get("ranking_profiles", {})
+        or {}
+    )
     override = dict(configured.get(DEFAULT_RANKING_PROFILE_ID) or {})
     return {**DEFAULT_RANKING_PROFILE, **override}
 
@@ -684,13 +790,22 @@ def _source_data_fallback_allowed(search_mode: str, include_source_data: bool) -
     return bool(include_source_data or search_mode in {"knowledge_default", "source_explicit"})
 
 
-def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, trace, allowed_source_codes):
+def _source_data_fallback_items(
+    *,
+    actor,
+    query,
+    allowed_sensitivities,
+    limit,
+    trace,
+    allowed_source_codes,
+    trusted_context_only=True,
+    snapshots=None,
+):
     terms = _query_terms(query)
-    if not terms:
+    if not terms or not allowed_source_codes:
         return []
     queryset = MemorySourceObject.objects.select_related("source").filter(source__status="enabled")
-    if allowed_source_codes:
-        queryset = queryset.filter(source__code__in=allowed_source_codes)
+    queryset = queryset.filter(source__code__in=allowed_source_codes)
     if allowed_sensitivities:
         queryset = queryset.filter(source__sensitivity__in=allowed_sensitivities)
     items = []
@@ -706,6 +821,7 @@ def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, t
         ).lower()
         if not all(term.lower() in haystack for term in terms[:3]):
             continue
+        source = source_object.source
         object_tokens = set((source_object.metadata or {}).get("scope_tokens") or [])
         if object_tokens and not object_tokens & actor_tokens and not getattr(actor, "is_superuser", False):
             _bump(trace, "source_data_scope_denied")
@@ -713,7 +829,17 @@ def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, t
         if not object_tokens and not getattr(actor, "is_superuser", False):
             _bump(trace, "source_data_missing_scope")
             continue
-        from .services import can_access_source_object_via_adapter
+        from .services import can_access_source_object, can_access_source_object_via_adapter
+
+        if not can_access_source_object(actor, source_object, snapshots=snapshots):
+            _bump(trace, "source_data_scope_denied")
+            continue
+        trust_decision = effective_source_trust(source, snapshots=snapshots)
+        if trusted_context_only and not source_allows_direct_context(
+            source, "retrieved_chunk", snapshots=snapshots
+        ):
+            _bump(trace, "source_data_trust_denied")
+            continue
 
         if not can_access_source_object_via_adapter(actor, source_object):
             _bump(trace, "source_data_adapter_denied")
@@ -735,7 +861,10 @@ def _source_data_fallback_items(*, actor, query, allowed_sensitivities, limit, t
                         "file_name": source_object.file_name,
                         "relative_path": source_object.relative_path,
                         "content_hash": source_object.content_hash,
-                        "sensitivity": source_object.source.sensitivity,
+                        "sensitivity": source.sensitivity,
+                        "trust_status": trust_decision.trust_status,
+                        "authority_class": trust_decision.authority_class,
+                        "trusted_for_context": trust_decision.trusted_for_context,
                         "corpus_type": "source_data",
                     }
                 ),
@@ -924,8 +1053,15 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(value) // 4)
 
 
-def _retrieval_budget() -> dict:
-    return dict(getattr(settings, "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET", {}) or {})
+def _retrieval_budget(*, snapshots=None) -> dict:
+    from .config_documents import get_memory_document_payload
+
+    return dict(
+        get_memory_document_payload(
+            "memory.contract.retrieval_budget", snapshots=snapshots
+        )
+        or {}
+    )
 
 
 def _query_terms(query: str) -> tuple[str, ...]:

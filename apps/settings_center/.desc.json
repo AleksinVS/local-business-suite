@@ -7,6 +7,7 @@
   "models.py": "Audit and env proposal models",
   "document_specs.py": "Типы ConfigDocumentSpec и политики хранения типизированных документов настроек",
   "document_registry.py": "Доменная сборка, проверка зависимостей и закрытый DB allowlist документов настроек",
+  "architecture_validation.py": "Production-проверка запрета прямого file I/O мигрированных документов вне централизованных адаптеров",
   "document_hashes.py": "Строгая канонизация JSON и SHA-256 документов настроек",
   "document_security.py": "Единый запрет необработанных секретов и нормализация чувствительных ключей",
   "document_repository.py": "Проверенное чтение Git, legacy и PostgreSQL-снимков документов настроек",

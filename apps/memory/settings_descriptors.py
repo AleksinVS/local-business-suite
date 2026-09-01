@@ -17,7 +17,6 @@ def get_settings_descriptors():
             requires_reindex=True,
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_SOURCES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_SOURCES",
                 "validator": "validate_memory_sources_payload",
             },
         ),
@@ -35,7 +34,6 @@ def get_settings_descriptors():
             requires_reindex=True,
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_PROFILES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_PROFILES",
                 "validator": "validate_memory_profiles_payload",
             },
         ),
@@ -52,7 +50,6 @@ def get_settings_descriptors():
             write_policy="editable",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_ROUTING_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_ROUTING",
                 "validator": "validate_memory_routing_payload",
             },
         ),
@@ -70,7 +67,6 @@ def get_settings_descriptors():
             requires_reindex=True,
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_TRUST_POLICY",
                 "validator": "validate_memory_trust_policy_payload",
             },
         ),
@@ -83,12 +79,10 @@ def get_settings_descriptors():
             help_topic_id="settings.memory.contract.claims_policy",
             storage_kind="runtime_contract",
             value_type="json",
-            widget="json_editor",
-            write_policy="editable",
+            widget="json_viewer",
+            write_policy="read_only",
             requires_reindex=False,
             metadata={
-                "settings_path": "LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY",
                 "validator": "validate_memory_claims_policy_payload",
             },
         ),
@@ -105,7 +99,6 @@ def get_settings_descriptors():
             write_policy="editable",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET",
                 "validator": "validate_memory_retrieval_budget_payload",
             },
         ),
@@ -123,7 +116,6 @@ def get_settings_descriptors():
             requires_reindex=True,
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES",
                 "validator": "validate_memory_ingestion_profiles_payload",
             },
         ),
@@ -141,7 +133,6 @@ def get_settings_descriptors():
             requires_reindex=False,
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES",
                 "validator": "validate_memory_file_organization_profiles_payload",
             },
         ),
@@ -160,10 +151,9 @@ def get_settings_descriptors():
             storage_kind="runtime_contract",
             value_type="json",
             widget="json_editor",
-            write_policy="editable",
+            write_policy="requires_domain_workflow",
             metadata={
                 "settings_path": "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE",
-                "settings_payload_attr": "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA",
                 "validator": "validate_memory_graph_schema_payload",
             },
         ),

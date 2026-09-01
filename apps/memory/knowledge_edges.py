@@ -6,9 +6,9 @@ ADR-0030 decision 3 (concept v0.5 §6, §7.3): the LLM graph-extraction contour
 
 * :func:`validate_relations_block` / :func:`validate_relation_entry` check a
   knowledge file's ``relations:`` frontmatter against the controlled edge-type
-  vocabulary (``contracts/ai/memory_graph_schema.json``, loaded as
-  ``settings.LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA``); an edge type not accepted
-  in that contract is rejected with a clear error (the moderated-schema
+  vocabulary from the captured ``memory.contract.graph_schema`` document
+  snapshot; an edge type not accepted in that contract is rejected with a
+  clear error (the moderated-schema
   mechanic from ADR-0004, now carried by the contract + this validator instead
   of the removed proposal/review tables).
 * :func:`materialize_knowledge_edges` walks every knowledge file, validates
@@ -24,7 +24,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -57,17 +56,20 @@ class MaterializeResult:
     skipped: list[dict]
 
 
-def accepted_edge_types() -> dict[str, dict]:
+def accepted_edge_types(*, snapshots=None) -> dict[str, dict]:
     """Return the ``relation_types`` from the controlled vocabulary contract with ``status: accepted``.
 
     Backed by ``contracts/ai/memory_graph_schema.json``
-    (``settings.LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA``, validated at settings
-    load time by ``validate_memory_graph_schema_payload``). Only accepted
+    (validated by ``validate_memory_graph_schema_payload``). Only accepted
     entries are usable in ``relations:``; ``proposed``/``rejected``/``deprecated``
     entries exist in the contract for the moderated-schema expansion workflow
     but are not yet (or no longer) valid for authors to reference.
     """
-    schema = getattr(settings, "LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA", {}) or {}
+    from .config_documents import get_memory_document_payload
+
+    schema = get_memory_document_payload(
+        "memory.contract.graph_schema", snapshots=snapshots
+    ) or {}
     relation_types = schema.get("relation_types") or {}
     return {
         code: item
@@ -76,7 +78,7 @@ def accepted_edge_types() -> dict[str, dict]:
     }
 
 
-def validate_relation_entry(entry, *, index: int = 0) -> ValidatedRelation:
+def validate_relation_entry(entry, *, index: int = 0, snapshots=None) -> ValidatedRelation:
     """Validate a single ``relations:`` entry; raise ``ValidationError`` with a clear message."""
     if not isinstance(entry, dict):
         raise ValidationError(f"relations[{index}] должен быть объектом с полями type/target/provenance.")
@@ -87,7 +89,7 @@ def validate_relation_entry(entry, *, index: int = 0) -> ValidatedRelation:
 
     if not edge_type:
         raise ValidationError(f"relations[{index}] не содержит поле type.")
-    vocabulary = accepted_edge_types()
+    vocabulary = accepted_edge_types(snapshots=snapshots)
     if edge_type not in vocabulary:
         allowed = ", ".join(sorted(vocabulary)) or "<нет принятых типов>"
         raise ValidationError(
@@ -115,7 +117,7 @@ def validate_relation_entry(entry, *, index: int = 0) -> ValidatedRelation:
     return ValidatedRelation(edge_type=edge_type, target=target, provenance=provenance)
 
 
-def validate_relations_block(relations) -> list[ValidatedRelation]:
+def validate_relations_block(relations, *, snapshots=None) -> list[ValidatedRelation]:
     """Validate a full ``relations:`` frontmatter list; raise on the first invalid entry.
 
     Returns an empty list for a missing/empty block (``relations:`` is
@@ -127,7 +129,10 @@ def validate_relations_block(relations) -> list[ValidatedRelation]:
         return []
     if not isinstance(relations, list):
         raise ValidationError("relations: должен быть списком.")
-    return [validate_relation_entry(entry, index=index) for index, entry in enumerate(relations)]
+    return [
+        validate_relation_entry(entry, index=index, snapshots=snapshots)
+        for index, entry in enumerate(relations)
+    ]
 
 
 def _build_concept_index(entries: list[tuple[str, dict, str]]) -> dict[str, tuple[str, str]]:
@@ -148,7 +153,9 @@ def _resolve_target(target: str, concept_index: dict[str, tuple[str, str]]) -> t
     return concept_index.get(target, ("", ""))
 
 
-def materialize_knowledge_edges(*, dry_run: bool = False, root: Path | None = None) -> MaterializeResult:
+def materialize_knowledge_edges(
+    *, dry_run: bool = False, root: Path | None = None, snapshots=None
+) -> MaterializeResult:
     """Rebuild ``MemoryKnowledgeEdge`` deterministically from every knowledge file's ``relations:`` block.
 
     No LLM: this is a plain parse-and-validate pass over the knowledge repo
@@ -167,6 +174,13 @@ def materialize_knowledge_edges(*, dry_run: bool = False, root: Path | None = No
     """
     repo_root = root or ensure_knowledge_repo()
     entries = walk_all_knowledge_files(root=repo_root)
+    schema_snapshots = snapshots
+    if entries and schema_snapshots is None:
+        from .config_documents import get_memory_document_snapshots
+
+        schema_snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.graph_schema",)
+        )
     concept_index = _build_concept_index(entries)
 
     desired: dict[tuple[str, str, str], dict] = {}
@@ -184,7 +198,9 @@ def materialize_knowledge_edges(*, dry_run: bool = False, root: Path | None = No
         for index, entry in enumerate(relations):
             scanned_relations += 1
             try:
-                relation = validate_relation_entry(entry, index=index)
+                relation = validate_relation_entry(
+                    entry, index=index, snapshots=schema_snapshots
+                )
             except ValidationError as exc:
                 skipped.append({"source_path": relative_path, "index": index, "error": str(exc)})
                 continue

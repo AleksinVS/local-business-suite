@@ -136,6 +136,11 @@ def build_middleware(iis_compat_enabled):
         "django_htmx.middleware.HtmxMiddleware",
         "django.middleware.csrf.CsrfViewMiddleware",
         "django.contrib.auth.middleware.AuthenticationMiddleware",
+        # Bind the request-local configuration snapshot only after sessions
+        # and AuthenticationMiddleware have initialized request.user.  The AD
+        # middleware is inserted immediately after this boundary below, so AD
+        # provisioning observes the same snapshot as the rest of the request.
+        "apps.settings_center.middleware.ConfigDocumentRequestMiddleware",
         "django.contrib.messages.middleware.MessageMiddleware",
         "django.middleware.clickjacking.XFrameOptionsMiddleware",
     ]
@@ -393,7 +398,10 @@ else:
 
 if DJANGO_AUTH_MODE in {"remote_user", "hybrid"}:
     MIDDLEWARE.insert(
-        MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware") + 1,
+        MIDDLEWARE.index(
+            "apps.settings_center.middleware.ConfigDocumentRequestMiddleware"
+        )
+        + 1,
         "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware",
     )
 
@@ -431,27 +439,26 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Contracts configuration
 # Default contracts are stored in the 'contracts/' directory (tracked by Git)
-# Runtime contracts are stored in 'data/contracts/' (not tracked by Git, editable via UI)
+# Existing files in 'data/contracts/' are transition-time legacy artifacts. The
+# authoritative source is the registry-selected Git document or DB override.
 RUNTIME_CONTRACTS_DIR = DATA_DIR / "contracts"
 DEFAULT_CONTRACTS_DIR = BASE_DIR / "contracts"
 
 def get_contract_path(filename, env_var, sub_dir=None):
     """Возвращает путь к рабочей копии контракта БЕЗ побочных эффектов.
 
-    Только вычисляет путь: переопределение через переменную окружения (семантика
-    env-override не меняется) либо рабочая копия в ``data/contracts/``. Импорт
-    настроек больше не создаёт каталоги и не копирует дефолты — это делает
-    идемпотентная команда ``python manage.py bootstrap_runtime`` (каталоги +
-    копии default->runtime для контрактов, которых ещё нет в рабочей копии).
+    Только вычисляет путь legacy-адаптера: переопределение через переменную
+    окружения (семантика env-override не меняется) либо файл в
+    ``data/contracts/``. Импорт настроек больше не создаёт каталоги и не
+    копирует дефолты. Идемпотентная команда ``python manage.py
+    bootstrap_runtime`` создаёт только необходимые каталоги и сохраняет уже
+    существующие переходные файлы.
 
-    Возвращается ВСЕГДА путь рабочей копии (или явного env-override), а не
-    дефолта, — чтобы запись через Settings Center
-    (``apps.settings_center.contract_services``) шла строго в ``data/contracts/``
-    и не затрагивала read-only дефолты из git. Отказоустойчивость чтения при
-    отсутствии рабочей копии обеспечивается отдельно: для
-    role_rules/workflow_rules/workorder_status_colors/waiting_list_status_colors — через
-    ``apps.core.contract_store``, для payload-констант ниже — через
-    ``_load_contract_payload`` с откатом на упакованный дефолт.
+    Возвращается путь legacy-адаптера (или явного env-override), а не дефолта.
+    Запись через Settings Center выполняется через центральный repository и не
+    затрагивает read-only дефолты из Git. Отсутствие канонического legacy-файла
+    обрабатывается repository как validated Git-default; поведение явного
+    env-override и битого существующего файла задаётся этим адаптером.
     """
     runtime_path = RUNTIME_CONTRACTS_DIR / (sub_dir or "") / filename
     override = os.environ.get(env_var, "").strip()
@@ -475,13 +482,12 @@ def _contract_default_path(runtime_path):
 
 
 def _load_contract_payload(path):
-    """Грузит payload контракта для settings-констант БЕЗ побочек и БЕЗ падения импорта.
+    """Грузит payload только для оставшихся generated/template adapters.
 
-    Читает рабочую копию; при её отсутствии/ошибке — упакованный дефолт; при
+    Читает legacy-файл; при его отсутствии/ошибке — упакованный дефолт; при
     полном провале возвращает ``None`` (импорт настроек не должен падать в среде
-    без выполненного ``bootstrap_runtime``). ВАЛИДАЦИЯ здесь НЕ выполняется — она
-    перенесена в Django system check ``apps.core.checks`` (тег ``contracts``,
-    который читает именно рабочие копии и падает на битом контракте).
+    без выполненного ``bootstrap_runtime``). Managed documents не используют
+    этот helper: их валидирует и читает центральный repository.
     """
     path = Path(path)
     for candidate in (path, _contract_default_path(path)):
@@ -783,46 +789,10 @@ if DJANGO_ENV == "production":
             f"Current GUNICORN_TIMEOUT={GUNICORN_TIMEOUT}, required>={min_stream_timeout}."
         )
 
-# Payload-константы контрактов для рантайм-читателей (apps.ai / apps.memory /
-# apps.filehub / apps.core.forms / apps.analytics и т.д., многие через
-# ``getattr(settings, "...", default)``). Раньше здесь же выполнялась ВАЛИДАЦИЯ
-# всех контрактов на импорте — она перенесена в Django system check
-# ``apps.core.checks`` (тег ``contracts``), который выполняют и обычный
-# ``manage.py check`` (его зовёт ``make check``), и ``check --tag contracts``, и
-# system-check-фаза перед ``migrate`` в ``docker/entrypoint.prod.sh``.
-#
-# Здесь остаётся только ЧТЕНИЕ без побочек и без падения импорта: отсутствующая
-# рабочая копия молча откатывается на упакованный дефолт (см.
-# ``_load_contract_payload``), поэтому dev-запуск без ``bootstrap_runtime`` не
-# падает на импорте настроек, а битый контракт по-прежнему ловит system check.
-LOCAL_BUSINESS_WORKFLOW_RULES = _load_contract_payload(LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
-LOCAL_BUSINESS_ROLE_RULES = _load_contract_payload(LOCAL_BUSINESS_ROLE_RULES_FILE)
-LOCAL_BUSINESS_WORKORDER_STATUS_COLORS = _load_contract_payload(LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE)
-LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS = _load_contract_payload(LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE)
-LOCAL_BUSINESS_INTEGRATION_REGISTRY = _load_contract_payload(LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE)
-LOCAL_BUSINESS_ANALYTICS_DATASETS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE)
-LOCAL_BUSINESS_ANALYTICS_SOURCES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE)
-LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE)
-LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE)
-LOCAL_BUSINESS_ANALYTICS_METRICS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_METRICS_FILE)
-LOCAL_BUSINESS_ANALYTICS_MONITORS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE)
-LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
-LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE)
-LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE)
-LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE)
+# Payload-константы migrated documents больше не являются runtime API. Палитра
+# листа ожидания читается через ``ConfigDocumentRepository``/registry по
+# document_id; в settings остаются только совместимые пути и process/deployment
+# scalars. Шаблоны workflow ниже не являются managed setting documents и пока
+# сохраняют минимальный legacy adapter для существующих генераторов.
 LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE = _load_contract_payload(LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE)
 LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE = _load_contract_payload(LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE)
-LOCAL_BUSINESS_AI_REGISTRY = _load_contract_payload(LOCAL_BUSINESS_AI_REGISTRY_FILE)
-LOCAL_BUSINESS_AI_TOOLS = _load_contract_payload(LOCAL_BUSINESS_AI_TOOLS_FILE)
-LOCAL_BUSINESS_AI_TASK_TYPES = _load_contract_payload(LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
-LOCAL_BUSINESS_AI_MODELS = _load_contract_payload(LOCAL_BUSINESS_AI_MODELS_FILE)
-LOCAL_BUSINESS_AI_CHAT_SETTINGS = _load_contract_payload(LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE)
-LOCAL_BUSINESS_MEMORY_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
-LOCAL_BUSINESS_MEMORY_ROUTING = _load_contract_payload(LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
-LOCAL_BUSINESS_MEMORY_TRUST_POLICY = _load_contract_payload(LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE)
-LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY = _load_contract_payload(LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE)
-LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET = _load_contract_payload(LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE)
-LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
-LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE)
-LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA = _load_contract_payload(LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE)
-LOCAL_BUSINESS_MEMORY_SOURCES = _load_contract_payload(LOCAL_BUSINESS_MEMORY_SOURCES_FILE)

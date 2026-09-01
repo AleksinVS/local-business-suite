@@ -35,8 +35,10 @@ class MemoryRouteDecision:
         }
 
 
-def resolve_retrieval_route(sensitivity: str | Iterable[str] | None = None) -> MemoryRouteDecision:
-    payload = _routing_payload()
+def resolve_retrieval_route(
+    sensitivity: str | Iterable[str] | None = None, *, snapshots=None
+) -> MemoryRouteDecision:
+    payload = _routing_payload(snapshots=snapshots)
     levels = tuple(payload.get("sensitivity_levels") or FALLBACK_SENSITIVITY_LEVELS)
     routes = payload.get("routes") or {}
     default_route = payload.get("default_route") or FALLBACK_DEFAULT_ROUTE
@@ -64,13 +66,17 @@ def resolve_retrieval_route(sensitivity: str | Iterable[str] | None = None) -> M
     )
 
 
-def route_allows_context_kind(sensitivity: str, context_kind: str) -> bool:
-    route = (_routing_payload().get("routes") or {}).get(sensitivity, {})
+def route_allows_context_kind(sensitivity: str, context_kind: str, *, snapshots=None) -> bool:
+    route = (_routing_payload(snapshots=snapshots).get("routes") or {}).get(sensitivity, {})
     return context_kind in set(route.get("allowed_context_kinds") or [])
 
 
-def _routing_payload() -> dict:
-    payload = getattr(settings, "LOCAL_BUSINESS_MEMORY_ROUTING", None)
+def _routing_payload(*, snapshots=None) -> dict:
+    from .config_documents import get_memory_document_payload
+
+    payload = get_memory_document_payload(
+        "memory.contract.routing", snapshots=snapshots
+    )
     if isinstance(payload, dict) and payload:
         return payload
     return {

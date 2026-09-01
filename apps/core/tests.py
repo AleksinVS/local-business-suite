@@ -842,6 +842,34 @@ class ContractStoreTests(TestCase):
     def _write(self, path, payload):
         path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
+    def test_clean_canonical_legacy_path_reads_git_default_without_mirror(self):
+        from apps.core.contract_store import get_contract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = Path(tmpdir) / "contracts"
+            with override_settings(
+                RUNTIME_CONTRACTS_DIR=runtime,
+                LOCAL_BUSINESS_ROLE_RULES_FILE=runtime / "role_rules.json",
+            ):
+                payload = get_contract("role_rules")
+        self.assertEqual(payload, self.base)
+
+    def test_missing_explicit_env_path_fails_closed_in_contract_store(self):
+        from apps.core.contract_store import ContractStoreError, get_contract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "explicit" / "role_rules.json"
+            with patch.dict(
+                os.environ,
+                {"LOCAL_BUSINESS_ROLE_RULES_FILE": str(missing)},
+                clear=False,
+            ), override_settings(
+                RUNTIME_CONTRACTS_DIR=Path(tmpdir) / "contracts",
+                LOCAL_BUSINESS_ROLE_RULES_FILE=missing,
+            ):
+                with self.assertRaises(ContractStoreError):
+                    get_contract("role_rules")
+
     def test_cache_invalidates_on_metadata_key_change(self):
         from apps.core.contract_store import get_contract
         from apps.core.json_utils import atomic_write_json
@@ -1058,6 +1086,29 @@ class IisCompatContourTests(TestCase):
         self.assertIn(
             "apps.core.middleware.PathInfoDebugMiddleware",
             build_middleware(True),
+        )
+
+    def test_configuration_snapshot_middleware_runs_after_authentication(self):
+        from config.settings import build_middleware
+
+        middleware = build_middleware(False)
+        self.assertLess(
+            middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware"),
+            middleware.index(
+                "apps.settings_center.middleware.ConfigDocumentRequestMiddleware"
+            ),
+        )
+
+    def test_remote_user_middleware_runs_inside_configuration_snapshot(self):
+        if "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware" not in settings.MIDDLEWARE:
+            self.skipTest("Remote-user authentication is disabled in this profile.")
+        self.assertLess(
+            settings.MIDDLEWARE.index(
+                "apps.settings_center.middleware.ConfigDocumentRequestMiddleware"
+            ),
+            settings.MIDDLEWARE.index(
+                "apps.accounts.middleware.ManualAuthAwareRemoteUserMiddleware"
+            ),
         )
 
     def test_request_with_flag_disabled_creates_no_files(self):
@@ -1353,6 +1404,15 @@ class ArchitectureContractTests(TestCase):
                 self.skipTest(f"{setting_name} is not configured yet")
         call_command("validate_architecture_contracts")
 
+    @patch(
+        "apps.core.management.commands.validate_architecture_contracts.validate_migrated_document_file_access"
+    )
+    def test_validate_architecture_contracts_runs_migrated_file_access_guard(
+        self, file_access_guard
+    ):
+        call_command("validate_architecture_contracts")
+        file_access_guard.assert_called_once_with()
+
     @override_settings(LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT=90, GUNICORN_TIMEOUT=30)
     def test_validate_architecture_contracts_rejects_short_gunicorn_timeout(self):
         with self.assertRaisesMessage(ValidationError, "GUNICORN_TIMEOUT"):
@@ -1488,6 +1548,11 @@ class ArchitectureContractTests(TestCase):
             retrieval_budget_path.write_text(json.dumps(retrieval_budget_payload), encoding="utf-8")
 
             with override_settings(
+                # This fixture intentionally exercises the legacy-file
+                # compatibility path.  The default test deployment may have
+                # released memory DB documents, which must not read these
+                # temporary files after their backend cutover.
+                LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST=(),
                 LOCAL_BUSINESS_MEMORY_PROFILES_FILE=profiles_path,
                 LOCAL_BUSINESS_MEMORY_ROUTING_FILE=routing_path,
                 LOCAL_BUSINESS_MEMORY_SOURCES_FILE=sources_path,
@@ -1498,7 +1563,18 @@ class ArchitectureContractTests(TestCase):
                 LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE=claims_policy_path,
                 LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE=retrieval_budget_path,
             ):
-                with self.assertRaisesMessage(ValidationError, "secret"):
+                from apps.settings_center.document_registry import get_document_registry
+
+                get_document_registry.cache_clear()
+                self.addCleanup(get_document_registry.cache_clear)
+                # The repository deliberately wraps an invalid legacy document
+                # in the public fail-closed error before the command can run
+                # any validator.  Keep this assertion at the command boundary:
+                # it proves the temporary legacy fixture is authoritative while
+                # preserving the no-leak failure contract.
+                from apps.settings_center.document_repository import ConfigurationUnavailable
+
+                with self.assertRaisesMessage(ConfigurationUnavailable, "memory.contract.routing"):
                     call_command("validate_architecture_contracts")
 
     def test_generate_change_plan_command_uses_task_brief(self):
@@ -1630,6 +1706,45 @@ class ContractDriftTests(TestCase):
         }
         entries = collect_contract_drift()
         self.assertEqual({entry.name for entry in entries}, expected_names)
+
+    def test_collect_contract_drift_skips_database_active_document_and_legacy_path(self):
+        from dataclasses import replace
+        from types import SimpleNamespace
+
+        from apps.core.contract_drift import collect_contract_drift
+        from apps.settings_center.document_registry import get_document_registry
+        from apps.settings_center.registry import get_registry
+
+        with override_settings(
+            LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST=("ai.contract.chat_settings",)
+        ):
+            get_document_registry.cache_clear()
+            get_registry.cache_clear()
+            self.addCleanup(get_document_registry.cache_clear)
+            self.addCleanup(get_registry.cache_clear)
+            descriptor = get_registry().get("ai.contract.chat_settings")
+            self.assertEqual(descriptor.metadata.get("active_backend"), "database")
+            self.assertNotIn("settings_path", descriptor.metadata)
+            self.assertNotIn(
+                "ai.contract.chat_settings",
+                {entry.name for entry in collect_contract_drift()},
+            )
+            # Also exercise the drift guard itself with a stale raw descriptor
+            # path.  The authoritative active_backend must win even if a
+            # caller hands the collector an unprojected descriptor.
+            raw_descriptor = replace(
+                descriptor,
+                metadata={
+                    **descriptor.metadata,
+                    "active_backend": "database",
+                    "settings_path": "LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE",
+                },
+            )
+            with patch(
+                "apps.core.contract_drift.get_registry",
+                return_value=SimpleNamespace(all=lambda: [raw_descriptor]),
+            ):
+                self.assertEqual(collect_contract_drift(), [])
 
 
 @pytest.mark.integration
@@ -1917,12 +2032,36 @@ class BootstrapRuntimeCommandTests(TestCase):
                 for sub in ("ai", "integrations", "analytics"):
                     self.assertTrue((runtime_contracts / sub).is_dir(), sub)
 
-                # Дефолтные контракты скопированы в рабочую копию.
-                self.assertTrue((runtime_contracts / "role_rules.json").is_file())
-                self.assertTrue((runtime_contracts / "workflow_rules.json").is_file())
-                self.assertTrue((runtime_contracts / "ai" / "tools.json").is_file())
-                self.assertTrue((runtime_contracts / "analytics" / "sources.json").is_file())
-                self.assertTrue((runtime_contracts / "integrations" / "registry.json").is_file())
+                # Все зарегистрированные value documents теперь читаются из
+                # Git или PostgreSQL. Bootstrap не создаёт для них mutable
+                # mirror даже при пустом deployment allowlist.
+                for relative in (
+                    "role_rules.json",
+                    "workflow_rules.json",
+                    "workorder_status_colors.json",
+                    "waiting_list_status_colors.json",
+                    "integrations/registry.json",
+                    "analytics/sources.json",
+                    "ai/registry.json",
+                    "ai/tools.json",
+                    "ai/task_types.json",
+                    "ai/models.json",
+                    "ai/chat_settings.json",
+                    "ai/memory_sources.json",
+                    "ai/memory_profiles.json",
+                    "ai/memory_routing.json",
+                    "ai/memory_trust_policy.json",
+                    "ai/memory_claims_policy.json",
+                    "ai/memory_retrieval_budget.json",
+                    "ai/memory_ingestion_profiles.json",
+                    "ai/memory_file_organization_profiles.json",
+                    "ai/memory_graph_schema.json",
+                ):
+                    self.assertFalse((runtime_contracts / relative).exists(), relative)
+                self.assertFalse((runtime_contracts / "ai" / "registry.json").exists())
+                self.assertFalse((runtime_contracts / "ai" / "tools.json").exists())
+                self.assertFalse((runtime_contracts / "ai" / "task_types.json").exists())
+                self.assertFalse((runtime_contracts / "ai" / "models.json").exists())
 
                 # Схемы и .desc.json НЕ попадают в рабочую копию.
                 self.assertFalse((runtime_contracts / "schemas").exists())
@@ -1930,13 +2069,64 @@ class BootstrapRuntimeCommandTests(TestCase):
 
                 # Повторный запуск не ломается и не затирает отредактированную
                 # рабочую копию (идемпотентность + сохранение правок админа).
-                edited = runtime_contracts / "role_rules.json"
+                edited = runtime_contracts / "generated" / "runtime-manifest.json"
+                edited.parent.mkdir(parents=True)
                 edited.write_text('{"edited_by_admin": true}', encoding="utf-8")
                 call_command("bootstrap_runtime", stdout=StringIO())
                 self.assertEqual(
                     json.loads(edited.read_text(encoding="utf-8")),
                     {"edited_by_admin": True},
                 )
+
+    def test_database_documents_are_not_copied_even_when_allowlisted(self):
+        from apps.settings_center.document_registry import (
+            DATABASE_BACKEND_RELEASED_DOCUMENT_IDS,
+            get_document_registry,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            runtime_contracts = data_dir / "contracts"
+            with override_settings(
+                DATA_DIR=data_dir,
+                RUNTIME_CONTRACTS_DIR=runtime_contracts,
+                LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST=tuple(
+                    sorted(DATABASE_BACKEND_RELEASED_DOCUMENT_IDS)
+                ),
+            ):
+                get_document_registry.cache_clear()
+                self.addCleanup(get_document_registry.cache_clear)
+                call_command("bootstrap_runtime", stdout=StringIO())
+
+            self.assertFalse(
+                any(runtime_contracts.rglob("*.json")),
+                "bootstrap must not mirror database_override documents",
+            )
+
+    def test_clean_bootstrap_check_uses_git_defaults_without_mirrors(self):
+        from apps.settings_center.document_registry import get_document_registry
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            runtime_contracts = data_dir / "contracts"
+            path_overrides = {
+                spec.legacy_settings_path: runtime_contracts
+                / Path(spec.default_path).relative_to("contracts")
+                for spec in get_document_registry().all()
+                if spec.storage_policy == "database_override"
+                and spec.legacy_settings_path
+            }
+            with override_settings(
+                DATA_DIR=data_dir,
+                RUNTIME_CONTRACTS_DIR=runtime_contracts,
+                LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST=(),
+                **path_overrides,
+            ):
+                get_document_registry.cache_clear()
+                self.addCleanup(get_document_registry.cache_clear)
+                call_command("bootstrap_runtime", stdout=StringIO())
+                self.assertFalse(any(runtime_contracts.rglob("*.json")))
+                call_command("check", tags=["contracts"])
 
     def test_dry_run_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmpdir:

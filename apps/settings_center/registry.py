@@ -100,8 +100,13 @@ def get_registry() -> SettingsRegistry:
             projected.append(descriptor)
             continue
         metadata = dict(descriptor.metadata)
-        if spec.legacy_settings_path:
+        if spec.legacy_settings_path and spec.active_backend == "legacy_file":
             metadata["settings_path"] = spec.legacy_settings_path
+        else:
+            # A non-legacy backend has no authoritative settings path.  This
+            # also removes stale raw-descriptor paths for git-static and DB
+            # documents so drift code cannot accidentally read a mirror.
+            metadata.pop("settings_path", None)
         if spec.validator is not None:
             metadata["validator_callable"] = spec.validator
         metadata.update(
@@ -159,7 +164,10 @@ def _validate_descriptor_security(descriptor: SettingDescriptor) -> None:
             f"Descriptor '{descriptor.setting_id}' has an unknown required_permission."
         )
     if descriptor.storage_kind == "runtime_contract" and descriptor.is_editable:
-        if not descriptor.metadata.get("settings_path"):
+        if (
+            descriptor.metadata.get("active_backend", "legacy_file") == "legacy_file"
+            and not descriptor.metadata.get("settings_path")
+        ):
             raise ValueError(
                 f"Editable runtime descriptor '{descriptor.setting_id}' must define settings_path."
             )

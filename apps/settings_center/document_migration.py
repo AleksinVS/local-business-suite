@@ -644,6 +644,8 @@ def _fresh_legacy_payload_for_insert(
     planned: DocumentMigrationPlan,
     current: DocumentMigrationPlan,
     spec,
+    *,
+    require_legacy_audit: bool = True,
 ) -> tuple[Any, Any]:
     """Повторно доказать source/default/audit непосредственно перед INSERT.
 
@@ -673,24 +675,27 @@ def _fresh_legacy_payload_for_insert(
     default_runtime_hash = legacy_hash(default_payload)
     if default_runtime_hash != planned.default_hash or default_runtime_hash != current.default_hash:
         raise MigrationError(f"Git default изменился перед INSERT: {planned.document_id}")
-    latest = _latest_audit(planned.document_id)
-    if (
-        latest is None
-        or latest.storage_kind != "runtime_contract"
-        or str(latest.after_hash or "") != legacy_hash(payload)
-    ):
-        raise MigrationError(f"Legacy audit изменился перед INSERT: {planned.document_id}")
+    if require_legacy_audit:
+        latest = _latest_audit(planned.document_id)
+        if (
+            latest is None
+            or latest.storage_kind != "runtime_contract"
+            or str(latest.after_hash or "") != legacy_hash(payload)
+        ):
+            raise MigrationError(f"Legacy audit изменился перед INSERT: {planned.document_id}")
     return deepcopy(payload), deepcopy(default_payload)
 
 
 def _verify_imported_documents_before_commit(
     plans: Sequence[DocumentMigrationPlan],
     registry: ConfigDocumentRegistry,
+    *,
+    imported_classes: frozenset[str] = frozenset({AUDITED_OVERRIDE}),
 ) -> None:
     """Проверить source и созданные строки перед выходом из transaction."""
 
     for planned in plans:
-        if planned.classification != AUDITED_OVERRIDE:
+        if planned.classification not in imported_classes:
             continue
         spec = registry.get(planned.document_id)
         runtime_path = effective_runtime_path(spec)
@@ -938,6 +943,9 @@ def apply_migration(
     actor,
     backup_root: str | os.PathLike[str],
     registry: ConfigDocumentRegistry | None = None,
+    approved_role_runtime_document_hash: str | None = None,
+    approved_role_default_document_hash: str | None = None,
+    security_review_reason: str = "",
 ) -> tuple[DocumentMigrationPlan, ...]:
     """Импортировать audited overrides одной PostgreSQL-транзакцией."""
 
@@ -955,6 +963,26 @@ def apply_migration(
             "settings_documents_migrate --apply требует PostgreSQL для advisory locks."
         )
     actor = _require_superuser(actor)
+    approval_values = (
+        approved_role_runtime_document_hash,
+        approved_role_default_document_hash,
+    )
+    if any(approval_values) and not all(approval_values):
+        raise MigrationError(
+            "Подтверждение role_rules требует одновременно runtime и default document hash."
+        )
+    approved_role_review = bool(all(approval_values))
+    security_review_reason = str(security_review_reason or "").strip()
+    if approved_role_review:
+        if not security_review_reason:
+            raise MigrationError(
+                "Подтверждённый импорт role_rules требует причину security review."
+            )
+        if len(security_review_reason) > 1000:
+            raise MigrationError("Причина security review не должна превышать 1000 символов.")
+        for value in approval_values:
+            if not is_document_hash(str(value)):
+                raise MigrationError("Подтверждённый document hash role_rules имеет неверный формат.")
     root = _assert_safe_existing_directory(Path(backup_root))
     registry = registry or get_document_registry()
     write_lock_path = access_control_write_lock_path()
@@ -972,16 +1000,49 @@ def apply_migration(
             MISSING_RUNTIME,
             ALREADY_IMPORTED,
         }
-        if any(entry.classification not in allowed for entry in plans):
+        role_plan = next(
+            (entry for entry in plans if entry.document_id == _ROLE_RULES_ID),
+            None,
+        )
+        if approved_role_review:
+            if role_plan is None or role_plan.classification != SECURITY_REVIEW_REQUIRED:
+                raise MigrationError(
+                    "Подтверждение role_rules допустимо только для security_review_required."
+                )
+            if (
+                role_plan.runtime_document_hash
+                != approved_role_runtime_document_hash
+                or role_plan.default_document_hash
+                != approved_role_default_document_hash
+            ):
+                raise MigrationError(
+                    "Хеши подтверждённого role_rules не совпадают с текущим plan."
+                )
+        blocked = [
+            entry
+            for entry in plans
+            if entry.classification not in allowed
+            and not (
+                approved_role_review
+                and entry.document_id == _ROLE_RULES_ID
+                and entry.classification == SECURITY_REVIEW_REQUIRED
+            )
+        ]
+        if blocked:
             details = "; ".join(
-                f"{item.document_id}: {item.classification}" for item in plans
+                f"{item.document_id}: {item.classification}" for item in blocked
             )
             raise MigrationError(f"Apply заблокирован классификациями: {details}")
 
         payloads: dict[str, Any] = {}
         backups: dict[str, BackupRecord] = {}
         for entry in plans:
-            if entry.classification != AUDITED_OVERRIDE:
+            should_import = entry.classification == AUDITED_OVERRIDE or (
+                approved_role_review
+                and entry.document_id == _ROLE_RULES_ID
+                and entry.classification == SECURITY_REVIEW_REQUIRED
+            )
+            if not should_import:
                 continue
             payload, error = _read_json(
                 Path(entry.runtime_path) if entry.runtime_path else None
@@ -999,6 +1060,20 @@ def apply_migration(
                 raise MigrationError(
                     f"Payload невалиден: {entry.document_id}: {validation_error}"
                 )
+            if entry.document_id == _ROLE_RULES_ID and approved_role_review:
+                default_payload, default_error = _read_json(
+                    Path(settings.BASE_DIR) / registry.get(entry.document_id).default_path
+                )
+                if default_error or not isinstance(default_payload, dict):
+                    raise MigrationError("Git default role_rules недоступен для security review.")
+                if not isinstance(payload, dict) or any(
+                    payload.get(key) != default_payload.get(key)
+                    for key in ("$capabilities", "$administration")
+                ):
+                    raise MigrationError(
+                        "Security-import запрещён: $capabilities или $administration "
+                        "расходятся с Git default."
+                    )
             payloads[entry.document_id] = deepcopy(payload)
             backups[entry.document_id] = _backup_document(entry, root, payload)
 
@@ -1017,6 +1092,11 @@ def apply_migration(
                 for entry in plans
             )
             for planned, current in zip(plans, current_plans):
+                approved_security_entry = (
+                    approved_role_review
+                    and planned.document_id == _ROLE_RULES_ID
+                    and planned.classification == SECURITY_REVIEW_REQUIRED
+                )
                 if planned.classification == AUDITED_OVERRIDE:
                     if current.classification == ALREADY_IMPORTED:
                         continue
@@ -1029,6 +1109,17 @@ def apply_migration(
                         raise MigrationError(
                             f"Legacy/audit версия изменилась после plan: {planned.document_id}"
                         )
+                elif approved_security_entry:
+                    if (
+                        current.classification != SECURITY_REVIEW_REQUIRED
+                        or current.runtime_document_hash
+                        != approved_role_runtime_document_hash
+                        or current.default_document_hash
+                        != approved_role_default_document_hash
+                    ):
+                        raise MigrationError(
+                            "Подтверждённый role_rules изменился после plan."
+                        )
                 elif current.classification != planned.classification:
                     # A no-op can become already_imported if another worker
                     # completed it while this process was waiting for locks.
@@ -1036,7 +1127,7 @@ def apply_migration(
                         raise MigrationError(
                             f"Состояние изменилось после plan: {planned.document_id}"
                         )
-                if current.classification in BLOCKED_CLASSES:
+                if current.classification in BLOCKED_CLASSES and not approved_security_entry:
                     raise MigrationError(
                         f"Apply заблокирован повторной проверкой: {planned.document_id}"
                     )
@@ -1094,7 +1185,12 @@ def apply_migration(
                     )
                     results.append(DocumentMigrationPlan(**values))
                     continue
-                if planned.classification != AUDITED_OVERRIDE:
+                approved_security_entry = (
+                    approved_role_review
+                    and planned.document_id == _ROLE_RULES_ID
+                    and planned.classification == SECURITY_REVIEW_REQUIRED
+                )
+                if planned.classification != AUDITED_OVERRIDE and not approved_security_entry:
                     # identical_default and missing_runtime are explicitly
                     # successful no-ops and never create DB/audit rows.
                     results.append(current)
@@ -1104,7 +1200,10 @@ def apply_migration(
                         f"Строка RuntimeSettingDocument появилась во время apply: {planned.document_id}"
                     )
                 payload, default_payload = _fresh_legacy_payload_for_insert(
-                    planned, current, spec
+                    planned,
+                    current,
+                    spec,
+                    require_legacy_audit=not approved_security_entry,
                 )
                 compact = document_hash(payload)
                 default_compact = document_hash(default_payload)
@@ -1145,6 +1244,16 @@ def apply_migration(
                             "legacy_runtime_hash": current.runtime_hash,
                             "legacy_default_hash": current.default_hash,
                             "legacy_audit_change_id": current.audit_change_id,
+                            "security_review": (
+                                {
+                                    "decision": "preserve_exact_runtime_payload",
+                                    "reason": security_review_reason,
+                                    "approved_runtime_document_hash": approved_role_runtime_document_hash,
+                                    "approved_default_document_hash": approved_role_default_document_hash,
+                                }
+                                if approved_security_entry
+                                else None
+                            ),
                             "backup_manifest_hash": backup.manifest_hash,
                             "secret_scan": classify_secret_references(payload),
                         }
@@ -1165,7 +1274,20 @@ def apply_migration(
                     backup_manifest_path=backup.manifest_path,
                 )
                 results.append(DocumentMigrationPlan(**values))
-            _verify_imported_documents_before_commit(plans, registry)
+            _verify_imported_documents_before_commit(
+                plans,
+                registry,
+                imported_classes=frozenset(
+                    {
+                        AUDITED_OVERRIDE,
+                        *(
+                            (SECURITY_REVIEW_REQUIRED,)
+                            if approved_role_review
+                            else ()
+                        ),
+                    }
+                ),
+            )
             held_lock.assert_current()
             return tuple(results)
 

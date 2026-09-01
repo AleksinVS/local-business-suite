@@ -2,7 +2,7 @@
 
 Статус: актуальное эксплуатационное руководство.
 
-Дата обновления: 2026-08-31.
+Дата обновления: 2026-09-01.
 
 ## Назначение
 
@@ -64,10 +64,27 @@ ID не включён в `LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST`; `git_
 читается из `contracts/`. Allowlist пуст по умолчанию, не принимает wildcard,
 проверяет полный связный срез и применяется только после restart процессов.
 
-На текущем этапе в коде выпущен только pilot
-`waiting_list.contract.status_colors`. Это разрешение тестового backend, а не
-автоматический production cutover. `workorders.contract.status_colors` остаётся
-legacy до совместной приемки role/workflow среза.
+В коде выпущены `waiting_list.contract.status_colors` и связанный срез
+`core.contract.role_rules`, `core.contract.workflow_rules`,
+`workorders.contract.status_colors`, а также `ai.contract.chat_settings`.
+Выпуск означает только возможность явно
+добавить полный срез в allowlist. На текущем тестовом хосте включён только pilot
+листа ожидания; access-срез остаётся legacy до отдельного решения владельца по
+точным хешам роли и операционного окна.
+
+Для memory/FileHub выпущен полный connected DB-ready срез из восьми
+документов: `memory.contract.sources`, `memory.contract.profiles`,
+`memory.contract.routing`, `memory.contract.trust_policy`,
+`memory.contract.retrieval_budget`, `memory.contract.ingestion_profiles`,
+`memory.contract.file_organization_profiles` и `memory.contract.graph_schema`.
+Исключение — `memory.contract.claims_policy`: это `git_static`-документ и в
+DB allowlist не входит. Выпуск не меняет приватный deployment allowlist. Для
+memory-документа с `requires_reindex` writer в той же PostgreSQL-транзакции
+после записи документа и `SettingsChange` создаёт идемпотентную durable
+outbox job с ключом
+`settings-memory-reindex:<document>:<revision>:<hash>`; при rollback, ошибке
+вставки или внешнем откате ни документ, ни job не остаются. Тяжёлый reindex
+выполняется только worker-ом после commit.
 Нельзя вручную создавать или исправлять строки `RuntimeSettingDocument` через
 Django Admin: раздел доступен только для просмотра. Нельзя также копировать
 runtime-файл поверх уже переключённого DB-документа — такой файл больше не
@@ -77,6 +94,48 @@ runtime-файл поверх уже переключённого DB-докум�
 проверки конкурентной первой записи, stale conflict, rollback и общего отката
 документа с аудитом. Production cutover выполняется только отдельным
 операционным решением владельца.
+
+### AI gateway и aggregate snapshot
+
+Agent-runtime не читает AI-контракты из `data/contracts/` и не раскрывает их
+пути. Django предоставляет только фиксированный read-only набор по маршруту
+`GET /ai/gateway/contracts/?ids=...` при наличии service token
+`X-AI-Gateway-Token`. Нужно передавать явные IDs; неизвестные IDs не превращают
+маршрут в перечисление документов. В каждом документе передаются
+`document_id`, `schema_version`, `revision`, `content_hash` и `payload`. Общий
+strong ETag учитывает отсортированные ID, версии схемы, ревизии и хеши;
+совпадающий `If-None-Match` получает `304` без тела.
+
+Runtime проверяет полный requested set, schema version `1`, канонический
+SHA-256 payload и ETag, после чего одной операцией заменяет LKG-снимок. Успешные
+`200` и `304` обновляют время последней проверки. Ошибка шлюза не заменяет LKG;
+по умолчанию он используется не более 300 секунд
+(`LOCAL_BUSINESS_AI_CONTRACT_MAX_STALE_AGE_SECONDS`). До первого валидного
+снимка и после истечения срока runtime работает fail-closed.
+`/health/details` показывает только источник, возраст, ревизии, хеши и безопасный
+код ошибки — без payload, секретов и абсолютных путей.
+
+Перед binding инструмента agent-runtime пересекает статический Python-реестр,
+доставленный `ai.contract.tools` и mode-совместимые `allowed_tools` из
+`ai.contract.task_types`. Django повторяет эту проверку непосредственно перед
+исполнением или подтверждением действия. Поэтому отсутствие, конфликт или
+дрейф policy запрещает вызов, а вспомогательный read-инструмент из write-задачи
+не получает подтверждение ошибочно. При отсутствии LKG возраст в health API
+сериализуется как `null`.
+
+`ai.contract.chat_settings` включён в список выпущенных DB-документов. После
+переключения backend в приватном deployment allowlist Django видит изменение
+на следующем request, а runtime — на следующей операции после успешной проверки
+gateway; перезапуск для изменения самого документа не требуется. Изменение
+allowlist backend по-прежнему является deployment-настройкой и требует
+перезапуска процессов.
+
+Git-static документы (`ai.contract.registry`, `tools`, `task_types`, `models`)
+в Settings Center доступны только как JSON viewer: для них нет textarea,
+preview и apply. Endpoint preview также проверяет `write_policy` и не создаёт
+`SettingsChange` для read-only документа. `chat_settings` остаётся единственным
+редактируемым AI-документом этого среза и читается из постоянной
+`RuntimeSettingDocument` после DB cutover.
 
 ### Legacy file backend
 
@@ -89,7 +148,9 @@ Runtime contracts редактируются как полный JSON payload:
 5. поставить подтверждение;
 6. нажать `Применить`.
 
-Write выполняется атомарно через runtime contract path в `data/contracts/`. Default contracts в `contracts/` остаются Git-managed baseline.
+До DB cutover legacy-write выполняется атомарно через существующий runtime path
+в `data/contracts/`. После cutover запись идёт только в PostgreSQL; Git-дефолты
+в `contracts/` остаются неизменяемой базовой версией.
 
 После ADR-0031 чтение `role_rules`, `workflow_rules`, `workorder_status_colors` и
 `waiting_list_status_colors` идёт через
@@ -97,8 +158,10 @@ Write выполняется атомарно через runtime contract path �
 перечитывает рабочую копию по ключу метаданных файла
 `(st_mtime_ns, st_size, st_ino)`. Для выпущенного документа, включённого в DB
 allowlist, тот же совместимый вход получает проверенный request-local снимок из
-`ConfigDocumentRepository`; новая ревизия видна следующему запросу другого
-процесса без перезапуска.
+`ConfigDocumentRepository`; middleware фиксирует связанную ревизию даже для
+старых вызовов без аргумента `request`. После успешной записи request-local кэш
+сбрасывается, поэтому HTMX-ответ того же запроса уже строится по новой ревизии,
+а другой процесс видит её следующим запросом без перезапуска.
 
 Legacy-запись выполняет
 `apps.settings_center.contract_services.apply_contract_payload`: валидация,
@@ -125,7 +188,7 @@ Store отдает файл как есть, без legacy-нормализац�
 только определения ролей. Под общей access-блокировкой сервис всегда проверяет:
 
 ```text
-hash(data/contracts/role_rules.json.$capabilities)
+hash(effective role_rules.$capabilities)
   == hash(contracts/role_rules.json.$capabilities)
 candidate.$capabilities == runtime.$capabilities
 ```
@@ -155,11 +218,14 @@ python manage.py migrate_role_capabilities \
   --reason "<change-ticket/review reason>"
 ```
 
-Команда повторно загружает active superuser, сверяет все хеши под общей блокировкой,
-повторно валидирует полный candidate, делает копию исходного файла в
-`data/contracts/backups/`, создаёт staged `SettingsChange`, атомарно заменяет runtime-файл и
-проверяет итоговый хеш. No-op и любое несовпадение отклоняются. В stdout выводятся
-только ID аудита, короткие хеши и имя backup; JSON и значения прав не печатаются.
+Команда повторно загружает active superuser, сверяет все хеши под общей
+блокировкой и повторно валидирует полный candidate. На legacy backend она
+атомарно заменяет runtime-файл через staged audit. На DB backend она увеличивает
+ревизию `RuntimeSettingDocument`, обновляет `default_hash` и создаёт
+`SettingsChange` в одной транзакции. В обоих случаях сначала создаётся и
+проверяется копия в `data/contracts/backups/`. No-op и любое несовпадение
+отклоняются. В stdout выводятся только ID аудита, короткие хеши и имя backup;
+JSON и значения прав не печатаются.
 
 Восстановление backup не выполняется обычным rollback: исторический catalog будет отклонён.
 Для обратного deployment подготовьте обратный Git commit и reviewed candidate из резервной копии,
@@ -184,12 +250,23 @@ python manage.py migrate_role_administration \
   --reason "<change-ticket/review reason>"
 ```
 
-Команда повторно загружает active superuser под общей access-блокировкой,
-требует отсутствия `$administration` в Git-default и строит кандидат сама:
-точная runtime-копия без этого единственного блока. Она создаёт проверенный
-backup в `data/contracts/backups/`, staged audit, атомарно заменяет файл и
-печатает только ID, короткие хеши и имя backup. Неверный хеш, отсутствующий
-блок или любая ошибка не создают успешную миграцию.
+Вариант этой команды для legacy-файла нужно выполнить до DB cutover роли.
+После переключения `role_rules` запись в legacy-файл запрещена. Та же команда
+`migrate_role_administration` при active DB backend маршрутизируется в отдельный
+constrained DB writer `migrate_role_administration_metadata`: он изменяет
+проверенную PostgreSQL-ревизию через `ConfigDocumentWriter` и создаёт audit в
+одной транзакции; legacy-файл при этом не изменяется. Это отдельный
+deployment-срез для `$administration`: он не является продолжением миграции
+роли `viewer`.
+
+В legacy-варианте команда повторно загружает active superuser под общей
+access-блокировкой, требует отсутствия `$administration` в Git-default и
+строит кандидат сама: точная runtime-копия без этого единственного блока.
+Она создаёт проверенный backup в `data/contracts/backups/`, staged audit,
+атомарно заменяет файл и печатает только ID, короткие хеши и имя backup. В
+DB-варианте эти действия выполняет constrained writer для строки и аудита БД;
+legacy-файл не является write target. Неверный хеш, отсутствующий блок или
+любая ошибка не создают успешную миграцию.
 
 Создание новой роли выполняется fail-closed: под общей блокировкой сначала
 резервируется пустая предопределённая `Group/GroupProfile`, а затем атомарно
@@ -202,13 +279,12 @@ backup в `data/contracts/backups/`, staged audit, атомарно заменя
 
 ### Дрейф default/runtime
 
-`get_contract_path` (`config/settings.py`) копирует дефолт из `contracts/` в
-`data/contracts/` только один раз — при первом обращении к настройке на этой
-установке. Дальше `contracts/` и `data/contracts/` — два независимых файла:
-обновление дефолта в git (новая версия контракта в коде) само по себе не
-попадает в уже работающую установку. Раньше это расхождение никак не было
-видно, кроме частного случая AI tools (`validate_ai_tools_drift` сверяет
-Python-каталог инструментов с JSON, а не default-файл с runtime-файлом).
+Старые установки могли создать копию Git-дефолта в `data/contracts/`. Если такой
+legacy-файл существует, он остаётся независимым от `contracts/`: обновление
+дефолта в Git само по себе в него не попадает. Чистый `bootstrap_runtime` больше
+не создаёт зеркала; при отсутствии канонического legacy-файла до cutover
+repository читает проверенный Git-дефолт. После DB cutover сравниваются уже
+Git-дефолт и рабочая версия PostgreSQL.
 
 Команда `python manage.py validate_architecture_contracts` теперь дополнительно
 печатает отчет о дрейфе по всем контрактам реестра Settings Center
@@ -264,7 +340,10 @@ Python-каталог инструментов с JSON, а не default-файл
 legacy. В обоих режимах изменение создаёт `SettingsChange` и становится видно
 другим процессам без перезапуска.
 
-После изменения memory sources/profiles/routing/ingestion profiles может потребоваться reindex. После изменения role/workflow rules нужно проверить доступы на тестовом пользователе.
+После успешной записи любого memory-документа с `requires_reindex` worker
+обработает ровно одну идемпотентную outbox job после commit; ручной запуск
+reindex для этой границы не требуется. После изменения role/workflow rules
+нужно проверить доступы на тестовом пользователе.
 
 ## Объяснение доступа и передача в редактор
 
@@ -293,7 +372,19 @@ HTMX-фрагмент в `#global-right-panel-content`: таблица и нав
 
 ## Явная роль viewer: операция миграции
 
-Переход с `default_board_viewer` выполняется только active superuser. Runtime-признак фазы — наличие `viewer` в `data/contracts/role_rules.json`; постоянный флаг или таблица миграции не используются.
+На legacy access backend переход с `default_board_viewer` выполняется только
+active superuser. Runtime-признак фазы — наличие `viewer` в
+`data/contracts/role_rules.json`; постоянный флаг или таблица миграции не
+используются.
+
+Миграция `viewer` относится только к legacy access backend и должна быть
+полностью завершена до access DB cutover роли (`role_rules`), включая проверку
+подписанного результата `cutover`. Поэтому перед включением access-среза в
+PostgreSQL нужно закрыть все операции `prepare`/`cutover` по viewer. После DB
+cutover команды legacy `prepare_explicit_viewer`,
+`cutover_explicit_viewer` и `rollback_explicit_viewer` запрещены, в том числе
+для ранее подготовленного manifest. Изменение DB-версии ролей выполняется
+только через соответствующий DB writer и не запускает legacy viewer migration.
 
 ```bash
 python manage.py report_roleless_users --output data/access-migrations/roleless-users.json

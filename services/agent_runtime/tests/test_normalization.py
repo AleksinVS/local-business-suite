@@ -11,12 +11,27 @@ import json
 import os
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 
 pytestmark = pytest.mark.unit
+
+
+def _delivered_snapshot():
+    root = Path(__file__).resolve().parents[3]
+    return {
+        f"ai.contract.{name}": {
+            "payload": json.loads((root / "contracts/ai" / filename).read_text(encoding="utf-8"))
+        }
+        for name, filename in (
+            ("tools", "tools.json"),
+            ("task_types", "task_types.json"),
+            ("models", "models.json"),
+        )
+    }
 
 
 class TestModelConfiguration(unittest.TestCase):
@@ -210,7 +225,7 @@ class TestPromptAliasSection(unittest.TestCase):
 
     def test_build_alias_section_contains_statuses(self):
         from services.agent_runtime.prompting import _build_alias_section
-        section = _build_alias_section()
+        section = _build_alias_section(_delivered_snapshot()["ai.contract.task_types"]["payload"])
         self.assertIn("in_progress", section)
         self.assertIn("В работе", section)
         self.assertIn("new", section)
@@ -220,18 +235,18 @@ class TestPromptAliasSection(unittest.TestCase):
 
     def test_build_alias_section_contains_priorities(self):
         from services.agent_runtime.prompting import _build_alias_section
-        section = _build_alias_section()
+        section = _build_alias_section(_delivered_snapshot()["ai.contract.task_types"]["payload"])
         self.assertIn("critical", section)
         self.assertIn("Критичный", section)
 
     def test_build_alias_section_contains_transitions(self):
         from services.agent_runtime.prompting import _build_alias_section
-        section = _build_alias_section()
+        section = _build_alias_section(_delivered_snapshot()["ai.contract.task_types"]["payload"])
         self.assertIn("Допустимые переходы статусов", section)
 
     def test_build_alias_section_contains_instruction(self):
         from services.agent_runtime.prompting import _build_alias_section
-        section = _build_alias_section()
+        section = _build_alias_section(_delivered_snapshot()["ai.contract.task_types"]["payload"])
         self.assertIn("внутренние ключи", section)
 
 
@@ -260,7 +275,7 @@ class TestPromptMemorySection(unittest.TestCase):
     def test_build_system_prompt_includes_memory_section(self):
         from services.agent_runtime.prompting import build_system_prompt
 
-        prompt = build_system_prompt()
+        prompt = build_system_prompt(contract_snapshot=_delivered_snapshot())
 
         self.assertIn("Система памяти", prompt)
         self.assertIn("memory.search", prompt)
@@ -274,7 +289,7 @@ class TestPromptUiContextSection(unittest.TestCase):
     def test_build_system_prompt_includes_ui_context_tool(self):
         from services.agent_runtime.prompting import build_system_prompt
 
-        prompt = build_system_prompt()
+        prompt = build_system_prompt(contract_snapshot=_delivered_snapshot())
 
         self.assertIn("ui.get_current_context", prompt)
         self.assertIn("ui.open_right_panel", prompt)
@@ -293,7 +308,8 @@ class TestPromptUiContextSection(unittest.TestCase):
                     "description": "Открывает заявку справа.",
                     "trigger_examples": ["Открой заявку №17"],
                 }
-            ]
+            ],
+            contract_snapshot=_delivered_snapshot(),
         )
 
         self.assertIn("workorders.open_right_panel", prompt)
@@ -835,6 +851,14 @@ class TestAGUIAdapter(unittest.TestCase):
 class TestAGUIRuntimeEndpoint(unittest.TestCase):
     """Verify the FastAPI AG-UI endpoint wraps the existing runtime safely."""
 
+    def setUp(self):
+        self.contract_snapshot_patcher = patch(
+            "services.agent_runtime.app.load_ai_contract_snapshot",
+            return_value=_delivered_snapshot(),
+        )
+        self.contract_snapshot_patcher.start()
+        self.addCleanup(self.contract_snapshot_patcher.stop)
+
     def _signed_forwarded_props(self, payload, token="test-gateway-token"):
         from services.agent_runtime.app import _agui_signature_payload
         from services.agent_runtime.schemas import AGUIActorPayload
@@ -1200,10 +1224,26 @@ class TestMCPResources(unittest.TestCase):
                     ]
                 }
 
-        with patch("services.agent_runtime.mcp_server.DjangoGatewayClient", FakeGatewayClient):
+        with patch("services.agent_runtime.mcp_server.DjangoGatewayClient", FakeGatewayClient), patch(
+            "services.agent_runtime.mcp_server.load_ai_contract_snapshot",
+            return_value=_delivered_snapshot(),
+        ):
             from services.agent_runtime.mcp_server import build_mcp_server
 
             server = build_mcp_server()
+            # The current streamable HTTP transport has only a shared service
+            # credential and no verified per-request subject.  User-scoped
+            # project tools must therefore not be published: arbitrary admin,
+            # other-user, or missing actor fields cannot reach Django session,
+            # pending-action, or business-tool code.
+            self.assertEqual(asyncio.run(server.list_tools()), [])
+            for arguments in (
+                {"user_id": 1, "username": "admin", "roles": ["admin"]},
+                {"user_id": 999999, "username": "other", "roles": []},
+                {},
+            ):
+                with self.assertRaisesRegex(Exception, "Unknown tool"):
+                    asyncio.run(server.call_tool("workorders_list", arguments))
             skill_contents = asyncio.run(server.read_resource("local-business://skills/workorders.open_right_panel"))
             tool_contents = asyncio.run(server.read_resource("local-business://tools/ui.open_right_panel"))
 

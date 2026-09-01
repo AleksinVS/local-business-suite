@@ -31,6 +31,10 @@ class ConfigDocumentSpec:
     cross_validator: Callable | None = None
     requires_restart: bool = False
     requires_reindex: bool = False
+    # Optional domain-owned durable outbox writer. The generic writer invokes
+    # it inside the document transaction with immutable document metadata; the
+    # callback is deliberately not part of serialized descriptor metadata.
+    transactional_outbox_callback: Callable | None = None
     delivery_scope: str = "django"
     consumer_classes: tuple[str, ...] = ()
     sensitivity: str = "internal"
@@ -86,6 +90,14 @@ class ConfigDocumentSpec:
             raise ValueError(f"database_override requires callable validator: {self.document_id}")
         if self.validator is not None and not callable(self.validator):
             raise ValueError(f"validator must be callable: {self.document_id}")
+        if self.transactional_outbox_callback is not None and not callable(self.transactional_outbox_callback):
+            raise ValueError(f"transactional_outbox_callback must be callable: {self.document_id}")
+        if self.transactional_outbox_callback is not None and len(
+            inspect.signature(self.transactional_outbox_callback).parameters
+        ) != 4:
+            raise ValueError(
+                f"transactional_outbox_callback must accept document_id, revision, hash and change_id: {self.document_id}"
+            )
         if not isinstance(self.cross_document_ids, tuple) or any(
             not isinstance(item, str) or not item for item in self.cross_document_ids
         ):

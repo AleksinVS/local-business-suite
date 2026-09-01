@@ -26,7 +26,14 @@ from .protocols.agui.events import (
     EVENT_TEXT_MESSAGE_START,
     event,
 )
-from .config import describe_contract_sources, get_available_models, is_model_configured, load_runtime_settings
+from .config import (
+    get_ai_contract_diagnostics,
+    get_available_models,
+    is_model_configured,
+    load_ai_contract_snapshot,
+    load_runtime_settings,
+)
+from . import contract_cache
 from .graph import stream_agent
 from .mcp_server import build_mcp_server
 from .protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
@@ -35,8 +42,8 @@ from .schemas import AGUIActorPayload, AGUIRunAgentInput
 
 mcp_server = build_mcp_server()
 
-# Dedicated logger + handler for the contract-source startup diagnostic
-# (ADR-0031 п.3 шаг 1). A dedicated handler is used, rather than relying
+# Dedicated logger + handler for the aggregate contract-delivery diagnostic.
+# A dedicated handler is used, rather than relying
 # on root logging config, because this process has none: uvicorn only
 # configures its own "uvicorn*" loggers (disable_existing_loggers=False),
 # and an unconfigured root logger silently drops INFO records and only
@@ -52,30 +59,37 @@ if not _startup_logger.handlers:
     _startup_logger.propagate = False
 
 
-def _log_contract_sources_at_startup() -> None:
-    """Log the actual path and source (runtime copy vs packaged default)
-    used for each AI contract file. Emits a WARNING per contract that
-    fell back to the packaged default, since that means the Settings
-    Center runtime copy under data/contracts/ai/ is not reachable from
-    this process (missing ./data mount, or Django has not created the
-    working copy yet)."""
-    for entry in describe_contract_sources():
-        if entry["source"] == "default":
-            _startup_logger.warning(
-                "Contract '%s' is falling back to the packaged default at %s; "
-                "the Settings Center runtime copy under data/contracts/ai/ was "
-                "not found. Verify ./data is mounted read-only into this "
-                "container (docker-compose*.yml, ADR-0031).",
-                entry["name"],
-                entry["path"],
-            )
-        else:
-            _startup_logger.info(
-                "Contract '%s' resolved from %s copy: %s",
-                entry["name"],
-                entry["source"],
-                entry["path"],
-            )
+def _log_contract_delivery_at_startup() -> None:
+    """Log only bounded aggregate delivery diagnostics.
+
+    Paths, payloads, secrets and document enumeration are intentionally not
+    part of runtime diagnostics.  A failed initial fetch is still visible as
+    a safe exception class/error code and leaves the cache fail-closed.
+    """
+    try:
+        load_ai_contract_snapshot()
+    except Exception as exc:  # noqa: BLE001 - startup boundary is fail-closed
+        diagnostics = get_ai_contract_diagnostics()
+        _startup_logger.warning(
+            "AI contract delivery unavailable: source=%s age=%s revisions=%s hashes=%s "
+            "error_type=%s error_code=%s",
+            diagnostics.get("source"),
+            diagnostics.get("age"),
+            diagnostics.get("revisions"),
+            diagnostics.get("hashes"),
+            exc.__class__.__name__,
+            diagnostics.get("error") or contract_cache._error_code(exc),
+        )
+        return
+    diagnostics = get_ai_contract_diagnostics()
+    _startup_logger.info(
+        "AI contract delivery ready: source=%s age=%s revisions=%s hashes=%s error=%s",
+        diagnostics.get("source"),
+        diagnostics.get("age"),
+        diagnostics.get("revisions"),
+        diagnostics.get("hashes"),
+        diagnostics.get("error") or "",
+    )
 
 
 def _prompt_hash(prompt: str) -> str:
@@ -84,10 +98,10 @@ def _prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
 
-def _model_is_configured(model_id: str = "") -> bool:
+def _model_is_configured(model_id: str = "", *, snapshot=None) -> bool:
     """Проверяет, что выбранная модель и ее ключ доступны agent runtime."""
     try:
-        return is_model_configured(model_id)
+        return is_model_configured(model_id, snapshot=snapshot)
     except Exception as exc:
         logging.getLogger(__name__).error(
             "Agent runtime model configuration could not be resolved: model_id=%s error_type=%s",
@@ -145,7 +159,7 @@ def _agui_signature_is_valid(payload: AGUIActorPayload) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _log_contract_sources_at_startup()
+    _log_contract_delivery_at_startup()
     async with mcp_server.session_manager.run():
         yield
 
@@ -162,12 +176,15 @@ def health():
 @app.get("/health/details")
 def health_details():
     settings = load_runtime_settings()
-    contracts = describe_contract_sources()
+    contracts = get_ai_contract_diagnostics(refresh=True)
+    contracts_healthy = (
+        contracts.get("source") == "gateway" and not contracts.get("error")
+    )
     return {
-        "status": "ok",
+        "status": "ok" if contracts_healthy else "degraded",
         "model": settings.model,
         "contracts": contracts,
-        "contracts_degraded": any(entry["source"] == "default" for entry in contracts),
+        "contracts_degraded": contracts.get("source") != "gateway",
     }
 
 
@@ -269,7 +286,12 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                     driver=actor_payload.ui_driver or actor_payload.origin_channel
                 )
             )
-            if not _model_is_configured(actor_payload.model_id):
+            # Freeze the complete contract aggregate once for this operation;
+            # preflight and the graph must not observe mixed revisions.
+            contract_snapshot = load_ai_contract_snapshot()
+            if not _model_is_configured(
+                actor_payload.model_id, snapshot=contract_snapshot
+            ):
                 yield sse_event(
                     run_error_event(
                         AI_CHAT_UNAVAILABLE_MESSAGE,
@@ -294,6 +316,7 @@ async def ag_ui_run(run_input: AGUIRunAgentInput):
                 origin_channel=actor_payload.origin_channel,
                 actor_version=actor_payload.actor_version,
                 model_id=actor_payload.model_id,
+                contract_snapshot=contract_snapshot,
             ):
                 if isinstance(chunk, str):
                     yield sse_event(event(EVENT_TEXT_MESSAGE_CONTENT, messageId=message_id, delta=chunk))

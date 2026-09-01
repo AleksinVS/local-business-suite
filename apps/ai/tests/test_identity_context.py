@@ -338,7 +338,12 @@ class IdentityContextPropagationTests(TestCase):
         from apps.memory.models import MemoryAccessAudit, MemorySearchDocument, MemorySource, MemorySourceObject
         from apps.memory.vector_backends import MemoryIndexRecord, SQLiteFTSMemoryBackend
 
-        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir),
+            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=(
+                "ai_untrusted_prompt_source",
+            ),
+        ):
             source = MemorySource.objects.create(
                 code="ai_untrusted_prompt_source",
                 title="AI untrusted prompt source",
@@ -430,7 +435,12 @@ class IdentityContextPropagationTests(TestCase):
         from apps.memory.models import MemoryAccessAudit, MemorySearchDocument, MemorySource, MemorySourceObject
         from apps.memory.vector_backends import MemoryIndexRecord, SQLiteFTSMemoryBackend
 
-        with TemporaryDirectory() as tmpdir, self.settings(DATA_DIR=Path(tmpdir)):
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir),
+            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=(
+                "ai_corpus_source_data",
+            ),
+        ):
             source = MemorySource.objects.create(
                 code="ai_corpus_source_data",
                 title="AI corpus source_data",
@@ -623,21 +633,23 @@ class IdentityContextPropagationTests(TestCase):
         workorder.refresh_from_db()
         self.assertEqual(workorder.status, WorkOrderStatus.IN_PROGRESS)
 
-        open_result = execute_tool(
-            tool_code="ui.open_right_panel",
-            actor_context={"user_id": self.manager.id, "channel": "internal"},
-            session_external_id=session.external_id,
-            payload={
-                "source_code": "workorders",
-                "object_type": "workorder",
-                "object_id": str(workorder_id),
-                "mode": "view",
-            },
-            request_id="req-ai-journey-open",
-        )
-        self.assertTrue(open_result["ok"], open_result)
-        self.assertEqual(open_result["result"]["ui_command"]["type"], "open_right_panel")
-        self.assertEqual(open_result["result"]["ui_command"]["object_id"], str(workorder_id))
+        # UI commands are not executable merely because they exist in the
+        # static Python registry.  This delivered task snapshot does not
+        # authorize ``ui.open_right_panel``, so the gateway must reject it
+        # before creating a session/audit or dispatching any handler.
+        with self.assertRaisesMessage(ValidationError, "outside delivered"):
+            execute_tool(
+                tool_code="ui.open_right_panel",
+                actor_context={"user_id": self.manager.id, "channel": "internal"},
+                session_external_id=session.external_id,
+                payload={
+                    "source_code": "workorders",
+                    "object_type": "workorder",
+                    "object_id": str(workorder_id),
+                    "mode": "view",
+                },
+                request_id="req-ai-journey-open",
+            )
 
         list_result = execute_tool(
             tool_code="workorders.list",
@@ -702,6 +714,9 @@ class IdentityContextPropagationTests(TestCase):
         with TemporaryDirectory() as tmpdir, self.settings(
             DATA_DIR=Path(tmpdir) / "data",
             LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled",
+            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=(
+                "ai_file_fts_journey",
+            ),
         ):
             root = Path(tmpdir) / "source"
             root.mkdir()
@@ -748,6 +763,9 @@ class IdentityContextPropagationTests(TestCase):
             DATA_DIR=Path(tmpdir) / "data",
             LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="lancedb",
             LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE="local_hash_test_v1",
+            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=(
+                "ai_file_vector_journey",
+            ),
         ):
             root = Path(tmpdir) / "source"
             root.mkdir()

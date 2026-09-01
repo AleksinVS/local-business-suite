@@ -159,6 +159,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     access_workspace.py: file # Prefetched read model for the canonical unified access workspace
     admin.py: file # Django Admin registration for Settings Center audit models
     apps.py: file # Django AppConfig for Settings Center
+    architecture_validation.py: file # Production-проверка запрета прямого file I/O мигрированных документов вне централизованных адаптеров
     checks.py: file # Privacy-safe Django checks и health состояния хранилища и миграции настроек
     contract_services.py: file # Восстанавливаемый staged-протокол runtime contracts: authorization, lock/CAS, audit, reconcile и rollback
     descriptors.py: file # Dataclass contract for setting descriptors and safe context masking
@@ -498,11 +499,11 @@ services: # Автономные сервисы (вне Django)
     protocols: # Версионируемые AI UI protocol adapters agent runtime
       __init__.py: file # Инициализация пакета protocol adapters
     app.py: file # FastAPI/ASGI приложение (health, health/details, канонический AG-UI /ag-ui и MCP)
-    config.py: file # Конфигурация runtime (из переменных окружения); резолвер и источник AI-контрактов (ADR-0031)
-    contract_cache.py: file # Кэш JSON-контрактов с инвалидацией по (st_mtime_ns, st_size, st_ino) — перечитывание без перезапуска (ADR-0031)
+    config.py: file # Конфигурация runtime и проверка доставленной Django gateway политики AI-инструментов/задач
+    contract_cache.py: file # Gateway-only кэш снимков AI-контрактов с ETag, last-known-good и проверкой revision/hash
     gateway_client.py: file # HTTP-клиент для связи с Django tool gateway
     graph.py: file # LangGraph graph — логика агента, активация skills и вызов инструментов
-    mcp_server.py: file # MCP-сервер с gateway tools и read-only resources по tools/skills/capabilities
+    mcp_server.py: file # MCP-сервер только для безопасных read-only metadata resources по tools/skills/capabilities
     prompting.py: file # Системные промпты для агента
     requirements.lock: file # Lock-файл зависимостей этого сервиса (pip-compile), отдельный от корневого requirements.lock
     requirements.txt: file # Зависимости этого сервиса (человекочитаемый вход pip-compile)
@@ -755,10 +756,19 @@ workflow: # Исполнительные workflow-пакеты для сложн
       EXECUTOR_REPORT.02-postgresql-document-store.md: file # Отчёт реализации PostgreSQL-хранилища и транзакционной записи
       EXECUTOR_REPORT.03-migration-planner-and-operations.md: file # Отчёт безопасного планирования, переноса и экспорта legacy-настроек
       EXECUTOR_REPORT.04-status-colors-pilot.md: file # Отчёт dev/test реализации DB-пилота палитры листа ожидания
+      EXECUTOR_REPORT.05-access-workflow-security-cutover.md: file # Отчёт реализации access/workflow DB-среза; production cutover ожидает решения владельца
+      EXECUTOR_REPORT.06-ai-agent-runtime-delivery.md: file # Отчёт реализации AI gateway и aggregate-кэша agent-runtime
+      EXECUTOR_REPORT.07-memory-filehub-and-static-classification.md: file # Отчёт реализации memory/FileHub snapshot-среза и статической классификации
+      EXECUTOR_REPORT.08-cleanup-recovery-and-final-acceptance.md: file # Отчёт cleanup/recovery и финальной cross-domain приёмки без production cutover
+      RETROSPECTIVE.md: file # Ретроспектива реализации, live e2e и recovery drill
       TASK_ACCEPTANCE.01-inventory-and-document-registry.md: file # Приёмка пакета 01 после независимого ревью и тестов
       TASK_ACCEPTANCE.02-postgresql-document-store.md: file # Приёмка пакета 02 после Sol high database/concurrency review
       TASK_ACCEPTANCE.03-migration-planner-and-operations.md: file # Приёмка безопасного контура миграции после независимых correction cycles
       TASK_ACCEPTANCE.04-status-colors-pilot.md: file # Приёмка dev/test-пилота без production cutover
+      TASK_ACCEPTANCE.05-access-workflow-security-cutover.md: file # Техническая приёмка access/workflow среза без production cutover
+      TASK_ACCEPTANCE.06-ai-agent-runtime-delivery.md: file # Техническая приёмка AI gateway и доставки agent-runtime
+      TASK_ACCEPTANCE.07-memory-filehub-and-static-classification.md: file # Техническая приёмка memory/FileHub и классификации документов
+      TASK_ACCEPTANCE.08-cleanup-recovery-and-final-acceptance.md: file # Техническая приёмка cleanup/recovery на тестовом хосте без production cutover
     warehouse-management-system: # Workflow: общий раздел Склад, права, отчёты и миграция legacy-баз
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок и состав исполнительных пакетов

@@ -9,6 +9,11 @@ from apps.core.contract_drift import (
     has_reportable_drift,
 )
 from apps.core.json_utils import load_json_file
+from apps.settings_center.document_repository import ConfigDocumentRepository
+from apps.settings_center.architecture_validation import (
+    validate_contract_registry_coverage,
+    validate_migrated_document_file_access,
+)
 from apps.core.contracts import (
     validate_change_plan_payload,
     validate_integration_registry_payload,
@@ -54,7 +59,36 @@ from apps.workorders.contracts import (
     validate_workorder_status_colors_payload,
 )
 from apps.waiting_list.contracts import validate_waiting_list_status_colors_payload
-from services.agent_runtime.task_types import STATUS_ALIASES
+EFFECTIVE_SNAPSHOT_DOCUMENT_IDS = (
+    "ai.contract.registry",
+    "ai.contract.tools",
+    "ai.contract.task_types",
+    "ai.contract.chat_settings",
+    "core.contract.role_rules",
+    "core.contract.workflow_rules",
+    "core.integration.registry",
+    "workorders.contract.status_colors",
+    "waiting_list.contract.status_colors",
+    "analytics.contract.analysis_scope_rules",
+    "analytics.contract.business_facts",
+    "analytics.contract.datasets",
+    "analytics.contract.dedup_rules",
+    "analytics.contract.diagnostic_playbooks",
+    "analytics.contract.metrics",
+    "analytics.contract.monitors",
+    "analytics.contract.retention_profiles",
+    "analytics.contract.sources",
+    "analytics.contract.workflow_routes",
+    "memory.contract.sources",
+    "memory.contract.profiles",
+    "memory.contract.routing",
+    "memory.contract.trust_policy",
+    "memory.contract.claims_policy",
+    "memory.contract.retrieval_budget",
+    "memory.contract.ingestion_profiles",
+    "memory.contract.file_organization_profiles",
+    "memory.contract.graph_schema",
+)
 
 
 class Command(BaseCommand):
@@ -73,73 +107,116 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        validate_contract_registry_coverage()
+        # Keep the repository boundary enforceable outside pytest as well:
+        # production consumers must not reintroduce direct migrated-file I/O.
+        validate_migrated_document_file_access()
         min_stream_timeout = int(settings.LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT) + 30
         if getattr(settings, "GUNICORN_TIMEOUT", 600) < min_stream_timeout:
             raise ValidationError(
                 "GUNICORN_TIMEOUT must be at least LOCAL_BUSINESS_AGENT_RUNTIME_TIMEOUT + 30 seconds "
                 "to avoid killing AI chat streaming requests before memory/tool calls finish."
             )
-        workflow_payload = load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE)
+        contract_snapshots = ConfigDocumentRepository().get_snapshot(
+            EFFECTIVE_SNAPSHOT_DOCUMENT_IDS
+        )
+        workflow_payload = contract_snapshots["core.contract.workflow_rules"].payload
         validate_workflow_rules_payload(workflow_payload)
-        role_payload = load_json_file(settings.LOCAL_BUSINESS_ROLE_RULES_FILE)
+        role_payload = contract_snapshots["core.contract.role_rules"].payload
         validate_role_rules_payload(role_payload, workflow_payload=workflow_payload)
         validate_workorder_status_colors_payload(
-            load_json_file(settings.LOCAL_BUSINESS_WORKORDER_STATUS_COLORS_FILE),
+            contract_snapshots["workorders.contract.status_colors"].payload,
             workflow_payload=workflow_payload,
         )
         validate_waiting_list_status_colors_payload(
-            load_json_file(settings.LOCAL_BUSINESS_WAITING_LIST_STATUS_COLORS_FILE)
+            contract_snapshots["waiting_list.contract.status_colors"].payload
         )
-        validate_integration_registry_payload(load_json_file(settings.LOCAL_BUSINESS_INTEGRATION_REGISTRY_FILE))
-        validate_dataset_registry_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DATASETS_FILE))
-        validate_analytics_sources_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SOURCES_FILE))
-        validate_analytics_scope_rules_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_SCOPE_RULES_FILE))
-        validate_analytics_business_facts_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_BUSINESS_FACTS_FILE))
-        validate_analytics_metrics_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_METRICS_FILE))
-        validate_analytics_monitors_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_MONITORS_FILE))
+        validate_integration_registry_payload(
+            contract_snapshots["core.integration.registry"].payload
+        )
+        validate_dataset_registry_payload(
+            contract_snapshots["analytics.contract.datasets"].payload
+        )
+        validate_analytics_sources_payload(
+            contract_snapshots["analytics.contract.sources"].payload
+        )
+        validate_analytics_scope_rules_payload(
+            contract_snapshots["analytics.contract.analysis_scope_rules"].payload
+        )
+        validate_analytics_business_facts_payload(
+            contract_snapshots["analytics.contract.business_facts"].payload
+        )
+        validate_analytics_metrics_payload(
+            contract_snapshots["analytics.contract.metrics"].payload
+        )
+        validate_analytics_monitors_payload(
+            contract_snapshots["analytics.contract.monitors"].payload
+        )
         validate_analytics_diagnostic_playbooks_payload(
-            load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DIAGNOSTIC_PLAYBOOKS_FILE)
+            contract_snapshots["analytics.contract.diagnostic_playbooks"].payload
         )
-        validate_analytics_workflow_routes_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_WORKFLOW_ROUTES_FILE))
-        validate_analytics_dedup_rules_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_DEDUP_RULES_FILE))
-        validate_analytics_retention_profiles_payload(load_json_file(settings.LOCAL_BUSINESS_ANALYTICS_RETENTION_PROFILES_FILE))
+        validate_analytics_workflow_routes_payload(
+            contract_snapshots["analytics.contract.workflow_routes"].payload
+        )
+        validate_analytics_dedup_rules_payload(
+            contract_snapshots["analytics.contract.dedup_rules"].payload
+        )
+        validate_analytics_retention_profiles_payload(
+            contract_snapshots["analytics.contract.retention_profiles"].payload
+        )
         validate_task_brief_payload(load_json_file(settings.LOCAL_BUSINESS_TASK_BRIEF_TEMPLATE_FILE))
         validate_change_plan_payload(load_json_file(settings.LOCAL_BUSINESS_CHANGE_PLAN_TEMPLATE_FILE))
-        registry_payload = load_json_file(settings.LOCAL_BUSINESS_AI_REGISTRY_FILE)
+        registry_payload = contract_snapshots["ai.contract.registry"].payload
         validate_ai_registry_payload(registry_payload)
         validate_ai_identity_model_alignment(registry_payload)
-        tools_payload = load_json_file(settings.LOCAL_BUSINESS_AI_TOOLS_FILE)
+        tools_payload = contract_snapshots["ai.contract.tools"].payload
         validate_ai_tools_payload(tools_payload)
         validate_ai_tools_drift(tools_payload, TOOLS)
-        task_types_payload = load_json_file(settings.LOCAL_BUSINESS_AI_TASK_TYPES_FILE)
+        task_types_payload = contract_snapshots["ai.contract.task_types"].payload
         validate_ai_task_types_payload(task_types_payload)
-        validate_ai_chat_settings_payload(load_json_file(settings.LOCAL_BUSINESS_AI_CHAT_SETTINGS_FILE))
+        validate_ai_chat_settings_payload(
+            contract_snapshots["ai.contract.chat_settings"].payload
+        )
         # Semantic cross-cut validators — catch contract drift before runtime.
         validate_ai_task_types_tool_alignment(task_types_payload, tools_payload)
         validate_ai_write_confirmation_alignment(task_types_payload, tools_payload)
         validate_ai_task_types_slot_coverage(task_types_payload)
-        memory_profiles_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_PROFILES_FILE)
+        memory_profiles_payload = contract_snapshots["memory.contract.profiles"].payload
         validate_memory_profiles_payload(memory_profiles_payload)
-        memory_routing_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE)
+        memory_routing_payload = contract_snapshots["memory.contract.routing"].payload
         validate_memory_routing_payload(memory_routing_payload)
-        validate_memory_trust_policy_payload(load_json_file(settings.LOCAL_BUSINESS_MEMORY_TRUST_POLICY_FILE))
-        validate_memory_claims_policy_payload(load_json_file(settings.LOCAL_BUSINESS_MEMORY_CLAIMS_POLICY_FILE))
-        validate_memory_retrieval_budget_payload(load_json_file(settings.LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET_FILE))
-        memory_ingestion_profiles_payload = load_json_file(settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE)
+        validate_memory_trust_policy_payload(
+            contract_snapshots["memory.contract.trust_policy"].payload
+        )
+        validate_memory_claims_policy_payload(
+            contract_snapshots["memory.contract.claims_policy"].payload
+        )
+        validate_memory_retrieval_budget_payload(
+            contract_snapshots["memory.contract.retrieval_budget"].payload
+        )
+        memory_ingestion_profiles_payload = contract_snapshots[
+            "memory.contract.ingestion_profiles"
+        ].payload
         validate_memory_ingestion_profiles_payload(memory_ingestion_profiles_payload)
         validate_memory_file_organization_profiles_payload(
-            load_json_file(settings.LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES_FILE)
+            contract_snapshots["memory.contract.file_organization_profiles"].payload
         )
-        validate_memory_graph_schema_payload(load_json_file(settings.LOCAL_BUSINESS_MEMORY_GRAPH_SCHEMA_FILE))
+        validate_memory_graph_schema_payload(
+            contract_snapshots["memory.contract.graph_schema"].payload
+        )
         validate_memory_sources_payload(
-            load_json_file(settings.LOCAL_BUSINESS_MEMORY_SOURCES_FILE),
+            contract_snapshots["memory.contract.sources"].payload,
             profiles_payload=memory_profiles_payload,
             routing_payload=memory_routing_payload,
             ingestion_profiles_payload=memory_ingestion_profiles_payload,
         )
-        # Validate STATUS_ALIASES keys align with workflow_rules statuses.
+        # Validate delivered task-type status aliases against workflow statuses.
         workflow_statuses = set(workflow_payload.get("statuses", []))
-        alias_keys = set(STATUS_ALIASES.keys())
+        alias_keys = {
+            status
+            for task in task_types_payload.get("task_types", [])
+            for status in (task.get("status_aliases") or {})
+        }
         if alias_keys != workflow_statuses:
             missing_in_aliases = workflow_statuses - alias_keys
             extra_in_aliases = alias_keys - workflow_statuses

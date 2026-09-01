@@ -1,4 +1,6 @@
 from apps.core.contract_store import get_contract
+from django.core.exceptions import ValidationError
+from django.db import DatabaseError
 
 from .contracts import capability_values, resolve_capability_values_source
 
@@ -104,10 +106,29 @@ def workflow_rules():
     return get_contract("workflow_rules")
 
 
-def status_transitions():
+def access_rules_snapshot():
+    """Прочитать роль и workflow как один согласованный снимок решения доступа."""
+
+    from apps.settings_center.document_repository import get_snapshot
+
+    snapshots = get_snapshot(
+        ("core.contract.role_rules", "core.contract.workflow_rules")
+    )
+    return {
+        "role_rules": snapshots["core.contract.role_rules"].payload,
+        "workflow_rules": snapshots["core.contract.workflow_rules"].payload,
+    }
+
+
+def status_transitions(workflow_payload=None):
+    payload = (
+        workflow_payload
+        if isinstance(workflow_payload, dict)
+        else workflow_rules()
+    )
     return {
         status: set(targets)
-        for status, targets in workflow_rules().get("transitions", {}).items()
+        for status, targets in payload.get("transitions", {}).items()
     }
 
 
@@ -207,8 +228,11 @@ def superuser_rules(rules_payload=None):
     return _populate_capability_type_defaults(rules, rules_payload=payload, superuser=True)
 
 
-def has_role_capability(user, capability):
-    return any(rule.get(capability) for rule in active_role_rules(user))
+def has_role_capability(user, capability, *, rules_payload=None):
+    return any(
+        rule.get(capability)
+        for rule in active_role_rules(user, rules_payload=rules_payload)
+    )
 
 
 def user_department_branch_ids(user):
@@ -222,13 +246,13 @@ def user_department_branch_ids(user):
     return getattr(user, cache_key)
 
 
-def scope_matches(user, workorder, scope):
+def scope_matches(user, workorder, scope, rules_payload=None):
     if scope in {None, "none"}:
         return False
     if scope == "all":
         return True
     if scope == "visible":
-        return can_view(user, workorder)
+        return can_view(user, workorder, rules_payload=rules_payload)
     if scope == "authored":
         return workorder.author_id == user.id
     if scope == "assigned":
@@ -242,8 +266,11 @@ def scope_matches(user, workorder, scope):
     return False
 
 
-def allowed_view_scopes(user):
-    return {rule.get("view_scope", "none") for rule in active_role_rules(user)}
+def allowed_view_scopes(user, rules_payload=None):
+    return {
+        rule.get("view_scope", "none")
+        for rule in active_role_rules(user, rules_payload=rules_payload)
+    }
 
 
 def is_manager(user):
@@ -301,8 +328,8 @@ def can_manage_departments(user):
     return has_role_capability(user, "manage_departments")
 
 
-def can_manage_roles(user):
-    return has_role_capability(user, "manage_roles")
+def can_manage_roles(user, *, rules_payload=None):
+    return has_role_capability(user, "manage_roles", rules_payload=rules_payload)
 
 
 def board_access_role_names():
@@ -319,18 +346,24 @@ def board_access_role_names():
     )
 
 
-def can_manage_board_access(user):
+def can_manage_board_access(user, *, rules_payload=None):
     return bool(
         getattr(user, "is_authenticated", False)
         and getattr(user, "is_active", False)
-        and (getattr(user, "is_superuser", False) or can_manage_roles(user))
+        and (
+            getattr(user, "is_superuser", False)
+            or can_manage_roles(user, rules_payload=rules_payload)
+        )
     )
 
 
-def can_view(user, workorder: WorkOrder) -> bool:
+def can_view(user, workorder: WorkOrder, rules_payload=None) -> bool:
     if not user.is_authenticated:
         return False
-    return any(scope_matches(user, workorder, scope) for scope in allowed_view_scopes(user))
+    return any(
+        scope_matches(user, workorder, scope, rules_payload=rules_payload)
+        for scope in allowed_view_scopes(user, rules_payload=rules_payload)
+    )
 
 
 def can_create(user) -> bool:
@@ -359,12 +392,20 @@ def can_upload_attachment(user, workorder: WorkOrder) -> bool:
     return any(scope_matches(user, workorder, rule.get("upload_attachment_scope")) for rule in active_role_rules(user))
 
 
-def can_confirm_closure(user, workorder: WorkOrder) -> bool:
+def can_confirm_closure(user, workorder: WorkOrder, rules_payload=None) -> bool:
     if workorder.status != WorkOrderStatus.RESOLVED:
         return False
-    if not can_view(user, workorder):
+    if not can_view(user, workorder, rules_payload=rules_payload):
         return False
-    return any(scope_matches(user, workorder, rule.get("confirm_closure_scope")) for rule in active_role_rules(user))
+    return any(
+        scope_matches(
+            user,
+            workorder,
+            rule.get("confirm_closure_scope"),
+            rules_payload=rules_payload,
+        )
+        for rule in active_role_rules(user, rules_payload=rules_payload)
+    )
 
 
 def can_rate(user, workorder: WorkOrder) -> bool:
@@ -376,17 +417,46 @@ def can_rate(user, workorder: WorkOrder) -> bool:
 
 
 def can_transition(user, workorder: WorkOrder, target_status: str) -> bool:
-    if not can_view(user, workorder):
+    if not getattr(user, "is_authenticated", False) or not getattr(
+        user, "is_active", False
+    ):
         return False
-    allowed = status_transitions().get(workorder.status, set())
+    from apps.settings_center.document_repository import DocumentRepositoryError
+
+    try:
+        access_snapshot = access_rules_snapshot()
+    except (
+        DatabaseError,
+        DocumentRepositoryError,
+        OSError,
+        ValueError,
+        ValidationError,
+    ):
+        return False
+    rules_payload = access_snapshot["role_rules"]
+    if not can_view(user, workorder, rules_payload=rules_payload):
+        return False
+    allowed = status_transitions(access_snapshot["workflow_rules"]).get(
+        workorder.status,
+        set(),
+    )
     if target_status not in allowed:
         return False
     if target_status == WorkOrderStatus.CLOSED:
-        return can_confirm_closure(user, workorder)
-    for rule in active_role_rules(user):
+        return can_confirm_closure(
+            user,
+            workorder,
+            rules_payload=rules_payload,
+        )
+    for rule in active_role_rules(user, rules_payload=rules_payload):
         targets = rule.get("transition_targets", [])
         if targets != "*" and target_status not in targets:
             continue
-        if scope_matches(user, workorder, rule.get("transition_scope")):
+        if scope_matches(
+            user,
+            workorder,
+            rule.get("transition_scope"),
+            rules_payload=rules_payload,
+        ):
             return True
     return False

@@ -36,27 +36,30 @@
         <span class="muted">Удобный режим для настройки цветов без ручного JSON.</span>
       </div>
     {% endif %}
-    <form method="post" class="settings-form">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
-      {{ form.base_hash }}
-      {{ form.base_revision }}
-      <label for="{{ form.payload.id_for_label }}">JSON-содержимое</label>
-      {{ form.payload }}
-      <label class="checkbox-row">{{ form.confirm }} Подтверждаю применение изменения</label>
-      <div class="table-actions">
-        <button class="button-link" name="action" value="preview" type="submit">Проверить изменения</button>
-        {% if can_edit %}
+    {% if can_edit %}
+      <form method="post" class="settings-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {{ form.base_hash }}
+        {{ form.base_revision }}
+        <label for="{{ form.payload.id_for_label }}">JSON-содержимое</label>
+        {{ form.payload }}
+        <label class="checkbox-row">{{ form.confirm }} Подтверждаю применение изменения</label>
+        <div class="table-actions">
+          <button class="button-link" name="action" value="preview" type="submit">Проверить изменения</button>
           <button class="button" name="action" value="apply" type="submit">Применить</button>
-        {% endif %}
-      </div>
-    </form>
+        </div>
+      </form>
+    {% else %}
+      <p class="muted">Git-статический документ доступен только для просмотра.</p>
+      <pre class="json-viewer" data-settings-json-viewer>{{ read_only_json }}</pre>
+    {% endif %}
   {% else %}
     <p class="description">Эта настройка управляется доменным процессом или отображается только как статус.</p>
   {% endif %}
 </section>
 
-{% if preview %}
+{% if preview and can_edit %}
   <section class="panel">
     <div class="section-head">
       <div>
@@ -76,5 +79,6 @@
   .structured-setting-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .checkbox-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
   .json-preview { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow: auto; }
+  .json-viewer { white-space: pre-wrap; background: #f3f4f6; color: #111827; padding: 1rem; border-radius: 8px; overflow: auto; max-height: 70vh; }
 </style>
 {% endblock %}

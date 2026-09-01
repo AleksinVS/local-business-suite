@@ -41,6 +41,21 @@ class Command(BaseCommand):
         )
         parser.add_argument("--actor-id", type=int)
         parser.add_argument("--backup-root")
+        parser.add_argument(
+            "--approve-role-runtime-document-hash",
+            help=(
+                "Явно подтвердить точный compact document hash рабочего role_rules "
+                "для preserve-runtime security import."
+            ),
+        )
+        parser.add_argument(
+            "--approve-role-default-document-hash",
+            help="Ожидаемый compact document hash Git-default role_rules.",
+        )
+        parser.add_argument(
+            "--security-review-reason",
+            help="Обязательная причина явного security import role_rules.",
+        )
         parser.add_argument("--output")
         parser.add_argument("--format", choices=("json", "table"), default="json")
 
@@ -48,6 +63,13 @@ class Command(BaseCommand):
         applying = bool(options.get("apply"))
         document_ids = options.get("document_ids") or []
         output_path = None
+        security_options = (
+            options.get("approve_role_runtime_document_hash"),
+            options.get("approve_role_default_document_hash"),
+            options.get("security_review_reason"),
+        )
+        if not applying and any(security_options):
+            raise CommandError("Параметры security review допустимы только вместе с --apply.")
         if applying and not document_ids:
             raise CommandError("--apply требует хотя бы один повторяемый --document-id.")
         if applying and not options.get("actor_id"):
@@ -71,6 +93,13 @@ class Command(BaseCommand):
                     document_ids,
                     actor=actor,
                     backup_root=options["backup_root"],
+                    approved_role_runtime_document_hash=options.get(
+                        "approve_role_runtime_document_hash"
+                    ),
+                    approved_role_default_document_hash=options.get(
+                        "approve_role_default_document_hash"
+                    ),
+                    security_review_reason=options.get("security_review_reason") or "",
                 )
                 mode = "apply"
             else:

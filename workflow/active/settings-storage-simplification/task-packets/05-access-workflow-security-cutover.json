@@ -1,14 +1,14 @@
 {
   "task_id": "05-access-workflow-security-cutover",
   "title": "Security-cutover ролей, workflow и палитры заявок",
-  "status": "planned",
+  "status": "accepted",
   "risk": "critical",
   "objective": "Перевести role_rules, workflow_rules и зависимую палитру заявок на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
   "start_gate": [
     "Пакет 04 accepted и observation не выявил дефектов backend.",
     "ADR-0048 Accepted.",
     "Согласован полный role/access acceptance matrix.",
-    "Нет пересекающегося write с workflow/active/access-administration-ux-unification.",
+    "Во время cutover старый access workflow и все пересекающиеся writers явно заморожены.",
     "Cutover freeze/backup/rollback разрешены отдельно."
   ],
   "dependencies": [
@@ -85,7 +85,7 @@
     "Workflow transition matrix до/после совпадает; stale edit не перезаписывает изменения.",
     "Два worker видят новую роль/revision без restart.",
     "Corrupt/unknown schema даёт fail-closed и health signal.",
-    "Rollback восстанавливает capabilities и transitions новой revision.",
+    "Обычный rollback роли сохраняет текущие Git-authoritative $capabilities/$administration и набор ролей; возврат capability catalog выполняет только deployment-команда. Workflow rollback создаёт новую revision.",
     "rg/architecture test не находит запрещённых role/workflow file/settings reads."
   ],
   "verification_commands": [

@@ -9,6 +9,7 @@ from apps.memory.services import (
     set_memory_source_status,
     upsert_memory_projection_from_envelope,
 )
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 class Command(BaseCommand):
@@ -47,6 +48,15 @@ class Command(BaseCommand):
         if not adapters:
             raise CommandError("No source adapters are registered.")
 
+        # A reconcile invocation is one immutable operation.  In particular,
+        # do not let the per-envelope projection helpers reread the profiles
+        # repository while the adapter loop is running.
+        memory_snapshots = (
+            get_memory_document_snapshots(document_ids=("memory.contract.profiles",))
+            if target in {"memory", "all"}
+            else None
+        )
+
         total = {
             "sources": 0,
             "seen": 0,
@@ -64,6 +74,7 @@ class Command(BaseCommand):
                 target=target,
                 index_backends=index_backends,
                 dry_run=dry_run,
+                memory_snapshots=memory_snapshots,
             )
             total["sources"] += 1
             for key in ("seen", "memory_upserted", "analytics_upserted", "deleted", "blocked", "failed"):
@@ -77,7 +88,16 @@ class Command(BaseCommand):
             f"dry_run={total['dry_run']}"
         )
 
-    def _reconcile_adapter(self, *, adapter_code, adapter, target, index_backends, dry_run):
+    def _reconcile_adapter(
+        self,
+        *,
+        adapter_code,
+        adapter,
+        target,
+        index_backends,
+        dry_run,
+        memory_snapshots=None,
+    ):
         result = {
             "seen": 0,
             "memory_upserted": 0,
@@ -97,6 +117,7 @@ class Command(BaseCommand):
                         envelope,
                         index_backends=index_backends,
                         dry_run=dry_run,
+                        snapshots=memory_snapshots,
                     )
                     if memory_result.get("blocked"):
                         result["blocked"] += 1
@@ -120,10 +141,20 @@ class Command(BaseCommand):
                 index_backends=index_backends,
                 target=target,
                 dry_run=dry_run,
+                snapshots=memory_snapshots,
             )
         return result
 
-    def _delete_missing_memory_objects(self, *, adapter_code, seen_object_ids, index_backends, target, dry_run):
+    def _delete_missing_memory_objects(
+        self,
+        *,
+        adapter_code,
+        seen_object_ids,
+        index_backends,
+        target,
+        dry_run,
+        snapshots=None,
+    ):
         source = MemorySource.objects.filter(code=adapter_code).first()
         if source is None:
             return 0
@@ -148,7 +179,12 @@ class Command(BaseCommand):
                 privacy_profile=(source_object.metadata or {}).get("privacy_profile", "pii_off"),
                 access_policy=(source_object.metadata or {}).get("access_policy", {}),
             )
-            delete_memory_projection_from_envelope(envelope, index_backends=index_backends, dry_run=False)
+            delete_memory_projection_from_envelope(
+                envelope,
+                index_backends=index_backends,
+                dry_run=False,
+                snapshots=snapshots,
+            )
             if target == "all":
                 delete_analytics_projection_from_envelope(envelope, dry_run=False)
         return count

@@ -1,7 +1,7 @@
 {
   "task_id": "07-memory-filehub-and-static-classification",
   "title": "Memory/FileHub snapshots и классификация статических документов",
-  "status": "planned",
+  "status": "accepted",
   "risk": "high",
   "objective": "Убрать startup payload constants из memory/FileHub операций и определить явный storage policy для analytics/integrations без изменения knowledge canon.",
   "start_gate": [

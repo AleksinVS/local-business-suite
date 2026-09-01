@@ -1,7 +1,7 @@
 {
   "task_id": "08-cleanup-recovery-and-final-acceptance",
   "title": "Legacy cleanup, recovery и финальная приёмка",
-  "status": "planned",
+  "status": "accepted",
   "risk": "high",
   "objective": "Удалить только доказанно неиспользуемые legacy пути, завершить backup/restore и выполнить полную cross-domain приемку архитектуры.",
   "start_gate": [
@@ -113,7 +113,7 @@
     "generated file regressions",
     "documentation/backlog/archive readiness"
   ],
-  "rollback": "Cleanup выполняется только после backup and observation. Если выявлен consumer, вернуть минимальный compatibility adapter из версии до cleanup без изменения DB rows/audit. Destructive deletion runtime data запрещена.",
+  "rollback": "Cleanup выполняется только после backup and observation. Если выявлен consumer, вернуть минимальный compatibility adapter из версии до cleanup без изменения DB rows/audit. Удаление production runtime data запрещено; тестовые legacy-файлы могут быть удалены без экспорта только по прямому разрешению владельца.",
   "deliverables": [
     "legacy cleanup report",
     "recovery drill report",

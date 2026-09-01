@@ -30,6 +30,7 @@ from .policies import (
 from .review_safety import safe_review_metadata, safe_review_text
 from .review_selectors import PRIVACY_ISSUE_KINDS, index_stale_deletion_allowed
 from .services import enqueue_memory_queue_task, MemoryQueueJobKind
+from .config_documents import get_memory_document_snapshots
 
 # ADR-0030 decision 4: MemoryReviewAction (a per-click action-log table) is
 # removed. Issue/index review actions now mutate the target row directly
@@ -161,7 +162,14 @@ def _apply_index_review_action_locked(*, actor, document: MemorySearchDocument, 
     elif action == IndexReviewAction.DELETE_STALE_INDEX:
         if not index_stale_deletion_allowed(document):
             raise ValidationError("Поисковый документ не устарел, не завершился ошибкой и не удален.")
-        result = delete_search_document_indexes([document.document_id], index_backends=("fulltext", "vector"))
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
+        result = delete_search_document_indexes(
+            [document.document_id],
+            index_backends=("fulltext", "vector"),
+            snapshots=snapshots,
+        )
         if document.index_status != MemorySearchDocument.IndexStatus.DELETED:
             document.index_status = MemorySearchDocument.IndexStatus.DELETED
         extra = {**extra, "delete_result": result}
@@ -193,6 +201,9 @@ def _accept_pending_item_locked(*, item: MemoryKnowledgeItem, actor) -> MemoryKn
     item = _lock_pending_item(item)
     parsed = _read_pending_file(item)
     _require_pending_item_access(actor, item=item, parsed=parsed)
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.profiles",)
+    )
     meta = parsed.metadata or {}
 
     item.sensitivity = str(meta.get("sensitivity") or item.sensitivity)
@@ -212,9 +223,13 @@ def _accept_pending_item_locked(*, item: MemoryKnowledgeItem, actor) -> MemoryKn
         body=parsed.body,
         commit_message=f"Accept pending knowledge {item.memory_id} (actor={_actor_label(actor)})",
     )
-    rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
+    rebuild_memory_projection(
+        scope=item.scope,
+        owner_user=item.owner_user,
+        snapshots=snapshots,
+    )
     if item.status == MemoryKnowledgeItem.Status.ACTIVE:
-        _index_knowledge_item_locked(item)
+        _index_knowledge_item_locked(item, snapshots=snapshots)
     return item
 
 
@@ -240,6 +255,9 @@ def _reject_pending_item_locked(*, item: MemoryKnowledgeItem, actor, reason: str
     is_candidate = bool((item.metadata or {}).get("candidate_source_memory_id"))
     parsed = _read_pending_file(item)
     _require_pending_item_access(actor, item=item, parsed=parsed)
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.profiles",)
+    )
 
     updated_metadata = dict(item.metadata or {})
     updated_metadata.pop("pending_reason", None)
@@ -264,7 +282,11 @@ def _reject_pending_item_locked(*, item: MemoryKnowledgeItem, actor, reason: str
         body=parsed.body,
         commit_message=f"{commit_verb} {item.memory_id} (actor={_actor_label(actor)})",
     )
-    rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
+    rebuild_memory_projection(
+        scope=item.scope,
+        owner_user=item.owner_user,
+        snapshots=snapshots,
+    )
     return item
 
 
@@ -376,26 +398,42 @@ def _lock_active_actor(actor):
 
 
 def _lock_issue(issue):
-    locked = (
-        MemoryIngestionIssue.objects.select_for_update()
-        .select_related("source", "source_object", "source_object__source", "assigned_to")
-        .get(pk=issue.pk)
-    )
+    # ``source_object`` and ``assigned_to`` are nullable. PostgreSQL rejects
+    # locking their outer joins, so lock the issue row and load relations in a
+    # separate read.
+    locked_ref = MemoryIngestionIssue.objects.select_for_update().filter(pk=issue.pk).first()
+    if locked_ref is None:
+        raise PermissionDenied("Проблема ревью больше не существует.")
+    locked = MemoryIngestionIssue.objects.select_related(
+        "source", "source_object", "source_object__source", "assigned_to"
+    ).get(pk=locked_ref.pk)
     if not issue_source_is_consistent(locked):
         raise PermissionDenied("Проблема содержит несогласованный источник и объект источника.")
     return locked
 
 
 def _lock_document(document):
-    return (
-        MemorySearchDocument.objects.select_for_update()
-        .select_related("knowledge_item", "source_object", "source_object__source")
-        .get(pk=document.pk)
-    )
+    # Both target relations may be absent for source-backed documents. Keep
+    # the lock on the base row only, then fetch nullable relations normally.
+    locked_ref = MemorySearchDocument.objects.select_for_update().filter(pk=document.pk).first()
+    if locked_ref is None:
+        raise PermissionDenied("Документ ревью больше не существует.")
+    return MemorySearchDocument.objects.select_related(
+        "knowledge_item", "source_object", "source_object__source"
+    ).get(pk=locked_ref.pk)
 
 
 def _lock_pending_item(item):
-    locked = MemoryKnowledgeItem.objects.select_for_update().select_related("owner_user", "created_by").filter(pk=item.pk).first()
+    # ``owner_user``/``created_by`` are nullable; do not combine their joins
+    # with PostgreSQL's FOR UPDATE clause.
+    locked_ref = MemoryKnowledgeItem.objects.select_for_update().filter(pk=item.pk).first()
+    locked = (
+        MemoryKnowledgeItem.objects.select_related("owner_user", "created_by")
+        .filter(pk=locked_ref.pk)
+        .first()
+        if locked_ref is not None
+        else None
+    )
     if locked is None or (locked.metadata or {}).get("lifecycle") != "pending":
         raise ValidationError("Элемент памяти уже не находится в очереди ревью.")
     return locked

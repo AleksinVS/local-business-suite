@@ -1,18 +1,24 @@
 from __future__ import annotations
 
-import copy
 from typing import Any
 
-from django.conf import settings
+from .config_documents import get_ai_document_payloads
 
 
 CHAT_SURFACE_FULL_PAGE = "full_page"
 CHAT_SURFACE_SIDEBAR = "sidebar"
 
 
-def get_chat_settings(surface: str = CHAT_SURFACE_FULL_PAGE) -> dict[str, Any]:
-    """Return effective chat settings for one UI surface."""
-    payload = copy.deepcopy(getattr(settings, "LOCAL_BUSINESS_AI_CHAT_SETTINGS", {}) or {})
+def get_chat_settings(
+    surface: str = CHAT_SURFACE_FULL_PAGE,
+    *,
+    request=None,
+    snapshot=None,
+) -> dict[str, Any]:
+    """Return effective settings from the request-local AI repository snapshot."""
+    payload = get_ai_document_payloads(request=request, snapshot=snapshot).get(
+        "ai.contract.chat_settings", {}
+    )
     defaults = payload.get("defaults", {}) if isinstance(payload, dict) else {}
     surfaces = payload.get("surfaces", {}) if isinstance(payload, dict) else {}
     effective = dict(defaults)
@@ -23,8 +29,8 @@ def get_chat_settings(surface: str = CHAT_SURFACE_FULL_PAGE) -> dict[str, Any]:
     return effective
 
 
-def get_recent_message_limit(surface: str = CHAT_SURFACE_FULL_PAGE) -> int:
-    value = get_chat_settings(surface).get("recent_message_limit", 20)
+def get_recent_message_limit(surface: str = CHAT_SURFACE_FULL_PAGE, *, request=None, snapshot=None) -> int:
+    value = get_chat_settings(surface, request=request, snapshot=snapshot).get("recent_message_limit", 20)
     try:
         return min(max(int(value), 4), 50)
     except (TypeError, ValueError):

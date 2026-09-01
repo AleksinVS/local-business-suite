@@ -93,6 +93,7 @@ class RoleDefinitionForm(forms.Form):
         help_text="Изменять и назначать эту роль может только активный суперпользователь.",
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
     active_group = forms.CharField(widget=forms.HiddenInput, required=False)
 
     def __init__(self, *args, role_read_model, actor=None, **kwargs):
@@ -250,6 +251,7 @@ class RoleCreateForm(forms.Form):
     )
     protected = forms.BooleanField(label="Защищённая роль", required=False)
     base_hash = forms.CharField(widget=forms.HiddenInput)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
 
     def __init__(self, *args, actor=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -276,12 +278,16 @@ class RoleCopyForm(forms.Form):
     )
     source_role_code = forms.CharField(widget=forms.HiddenInput)
     base_hash = forms.CharField(widget=forms.HiddenInput)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
 
     def __init__(self, *args, role_read_model=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.role_read_model = role_read_model or {}
         self.fields["source_role_code"].initial = self.role_read_model.get("code", "")
         self.fields["base_hash"].initial = self.role_read_model.get("base_hash", "")
+        self.fields["base_revision"].initial = self.role_read_model.get(
+            "base_revision", 0
+        )
         self.fields["display_name"].initial = self.role_read_model.get("label", "")
         self.fields["description"].initial = self.role_read_model.get("description", "")
 
@@ -294,6 +300,7 @@ class RoleDescriptionForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 5}),
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
 
     def __init__(self, *args, role_read_model, **kwargs):
         super().__init__(*args, **kwargs)
@@ -315,6 +322,7 @@ class DefaultNewUserRoleForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2, "id": "id_default_new_user_role_comment"}),
     )
     base_hash = forms.CharField(widget=forms.HiddenInput)
+    base_revision = forms.IntegerField(widget=forms.HiddenInput, required=False, min_value=0)
 
     def __init__(self, *args, rules_payload=None, **kwargs):
         super().__init__(*args, **kwargs)

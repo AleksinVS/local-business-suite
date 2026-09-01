@@ -5,7 +5,7 @@ import hmac
 import hashlib
 import time
 import re
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -24,6 +24,12 @@ from django.views.decorators.csrf import csrf_exempt
 from services.agent_runtime.protocols.common import AI_CHAT_UNAVAILABLE_MESSAGE
 
 from .commands import get_predefined_commands, resolve_command, resolve_custom_command
+from .config_documents import (
+    AI_RUNTIME_DOCUMENT_IDS,
+    get_ai_document_payloads,
+    get_ai_document_snapshots,
+    validate_ai_runtime_document_ids,
+)
 from .models import AgentActionLog, ChatMessage, ChatRun, ChatSession, ChatAttachment, SlashCommand
 from .chat_settings import CHAT_SURFACE_FULL_PAGE, CHAT_SURFACE_SIDEBAR, get_chat_settings
 from .page_context import (
@@ -49,6 +55,12 @@ from .tooling import UnknownToolError, execute_pending_action, execute_tool
 from .ui_runtime.actor import build_actor_payload, sign_actor_payload, signature_payload
 from .ui_runtime.config import build_full_page_ai_ui_config, build_sidebar_ai_ui_config
 from .ui_runtime.drivers import DRIVER_COPILOTKIT, DRIVER_NATIVE, configured_ai_ui_driver
+
+from apps.settings_center.document_repository import (
+    ConfigDocumentRepository,
+    DocumentRepositoryError,
+)
+from apps.settings_center.document_hashes import document_hash
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +226,53 @@ def reject_invalid_gateway_token(request):
     if not gateway_token_is_valid(request):
         return HttpResponseForbidden("Токен шлюза ИИ недействителен.")
     return None
+
+
+def _parse_ai_document_ids(request):
+    """Parse only explicit query ids; never turn this endpoint into a listing."""
+    values = (
+        request.GET.getlist("ids")
+        + request.GET.getlist("document_ids")
+        + request.GET.getlist("id")
+    )
+    if len(values) == 1 and "," in values[0]:
+        values = [item.strip() for item in values[0].split(",")]
+    return validate_ai_runtime_document_ids(values)
+
+
+def aggregate_ai_contract_etag(documents):
+    """Build a strong aggregate ETag from sorted document metadata."""
+    pairs = sorted(
+        [
+            str(document["document_id"]),
+            int(document["schema_version"]),
+            int(document["revision"]),
+            str(document["content_hash"]),
+        ]
+        for document in documents
+    )
+    return '"' + document_hash(pairs) + '"'
+
+
+def build_ai_contract_snapshot(*, document_ids, request=None, repository=None):
+    """Serialize one repository snapshot without exposing settings metadata."""
+    document_ids = validate_ai_runtime_document_ids(document_ids)
+    repository = repository or getattr(request, "_config_document_repository", None)
+    repository = repository or ConfigDocumentRepository()
+    snapshots = repository.get_snapshot(document_ids, request=request)
+    documents = []
+    for document_id in document_ids:
+        snapshot = snapshots[document_id]
+        documents.append(
+            {
+                "document_id": snapshot.document_id,
+                "schema_version": snapshot.schema_version,
+                "revision": snapshot.revision,
+                "content_hash": snapshot.content_hash,
+                "payload": snapshot.payload,
+            }
+        )
+    return documents
 
 
 def validate_gateway_actor(actor_context, session_id=None):
@@ -607,13 +666,21 @@ class AIChatPrepareTurnView(LoginRequiredMixin, View):
             ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
             external_id=external_id,
         )
+        # Freeze the complete AI repository aggregate for this operation;
+        # history limits and all downstream consumers use this same set.
+        ai_snapshot = get_ai_document_snapshots(request=request)
         try:
             run_id = _validate_chat_run_id(request.POST.get("run_id"))
             prompt = str(request.POST.get("prompt", "") or "").strip()
             requested_surface = request.POST.get("surface") or ""
             default_surface = CHAT_SURFACE_SIDEBAR if session.channel == ChatSession.Channel.SIDEBAR else CHAT_SURFACE_FULL_PAGE
             surface = requested_surface if requested_surface in {CHAT_SURFACE_SIDEBAR, CHAT_SURFACE_FULL_PAGE} else default_surface
-            max_prompt_chars = int(get_chat_settings(surface).get("max_prompt_chars") or 10000)
+            max_prompt_chars = int(
+                get_chat_settings(surface, request=request, snapshot=ai_snapshot).get(
+                    "max_prompt_chars"
+                )
+                or 10000
+            )
             if len(prompt) > max_prompt_chars:
                 raise ValidationError("Сообщение слишком длинное.")
 
@@ -795,6 +862,9 @@ class AIChatRunView(LoginRequiredMixin, View):
 
         # The model is frozen at prepare time.  Session settings may change
         # while a prepared turn waits in the client queue.
+        # Freeze one complete repository aggregate for the admitted runtime
+        # operation; history and all downstream consumers share its revisions.
+        ai_snapshot = get_ai_document_snapshots(request=request)
         model_id = (run.metadata or {}).get("model_id", "")
         actor_payload = build_actor_payload(
             user=request.user,
@@ -819,6 +889,8 @@ class AIChatRunView(LoginRequiredMixin, View):
                     session,
                     final_user_message=run.user_message,
                     surface=(run.metadata or {}).get("surface"),
+                    request=request,
+                    snapshot=ai_snapshot,
                 )
             ),
             "tools": [],
@@ -1100,7 +1172,10 @@ class AIHubView(AIManagementMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         mode_labels = {"read": "Чтение", "write": "Запись", "admin": "Администрирование"}
         tool_registry = []
-        for tool in settings.LOCAL_BUSINESS_AI_TOOLS["tools"]:
+        ai_payloads = get_ai_document_payloads(
+            snapshot=get_ai_document_snapshots(request=self.request)
+        )
+        for tool in ai_payloads["ai.contract.tools"]["tools"]:
             tool_registry.append(
                 {
                     **tool,
@@ -1110,7 +1185,7 @@ class AIHubView(AIManagementMixin, TemplateView):
                 }
             )
         context["tool_registry"] = tool_registry
-        context["task_types"] = settings.LOCAL_BUSINESS_AI_TASK_TYPES["task_types"]
+        context["task_types"] = ai_payloads["ai.contract.task_types"]["task_types"]
         context["recent_sessions"] = ChatSession.objects.all()[:10]
         context["recent_actions"] = AgentActionLog.objects.select_related("session")[:20]
         return context
@@ -1167,7 +1242,10 @@ class AIChatDetailView(LoginRequiredMixin, DetailView):
             user=self.request.user,
             status=ChatSession.Status.ACTIVE,
         ).order_by("-updated_at", "-id")[:20]
-        context["ai_models"] = settings.LOCAL_BUSINESS_AI_MODELS
+        ai_snapshot = get_ai_document_payloads(
+            snapshot=get_ai_document_snapshots(request=self.request)
+        )
+        context["ai_models"] = ai_snapshot["ai.contract.models"]
         context["current_model_id"] = self.object.metadata.get("model_id", "")
         return context
 
@@ -1182,7 +1260,11 @@ class AIChatSessionConfigView(LoginRequiredMixin, View):
             ChatSession.objects.filter(user=request.user, status=ChatSession.Status.ACTIVE),
             external_id=external_id,
         )
-        return JsonResponse(build_full_page_ai_ui_config(user=request.user, session=session))
+        return JsonResponse(
+            build_full_page_ai_ui_config(
+                user=request.user, session=session, request=request
+            )
+        )
 
 
 class AIPageContextUpdateView(LoginRequiredMixin, View):
@@ -1231,6 +1313,7 @@ class AIUIConfigView(LoginRequiredMixin, View):
                 user=request.user,
                 driver=driver,
                 runtime_url=runtime_url,
+                request=request,
             )
         )
 
@@ -1248,6 +1331,7 @@ class AICopilotKitConfigView(LoginRequiredMixin, View):
                 driver=DRIVER_COPILOTKIT,
                 runtime_url=settings.LOCAL_BUSINESS_COPILOTKIT_RUNTIME_URL,
                 agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+                request=request,
             )
         )
 
@@ -1271,6 +1355,7 @@ class AIUISidebarSessionNewView(LoginRequiredMixin, View):
                 driver=driver,
                 runtime_url=runtime_url,
                 agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+                request=request,
             )
         )
 
@@ -1294,6 +1379,7 @@ class AIUISidebarSessionClearView(LoginRequiredMixin, View):
                 driver=driver,
                 runtime_url=runtime_url,
                 agent_id=settings.LOCAL_BUSINESS_COPILOTKIT_AGENT_ID,
+                request=request,
             )
         )
 
@@ -1313,7 +1399,9 @@ class AIChatUpdateModelView(LoginRequiredMixin, View):
         model_id = body.get("model_id", "")
         if not isinstance(model_id, str):
             return JsonResponse({"error": "model_id должен быть строкой."}, status=400)
-        valid_ids = {m["id"] for m in settings.LOCAL_BUSINESS_AI_MODELS}
+        ai_snapshot = get_ai_document_snapshots(request=request)
+        ai_payloads = get_ai_document_payloads(snapshot=ai_snapshot)
+        valid_ids = {m["id"] for m in ai_payloads["ai.contract.models"]}
         if model_id and model_id not in valid_ids:
             return JsonResponse({"error": "Некорректный model_id."}, status=400)
         with transaction.atomic():
@@ -1367,7 +1455,11 @@ class AIChatGenerateTitleView(LoginRequiredMixin, View):
         if session.title and session.title != DEFAULT_CHAT_TITLE:
             return JsonResponse({"status": "ok", "title": session.title, "generated": False})
 
-        new_title = generate_session_title(session)
+        new_title = generate_session_title(
+            session,
+            request=request,
+            snapshot=get_ai_document_snapshots(request=request),
+        )
         if new_title:
             with transaction.atomic():
                 session = ChatSession.objects.select_for_update().filter(
@@ -1429,6 +1521,7 @@ class AIToolExecuteView(View):
         request_id = body.get("request_id", str(uuid.uuid4()))
         origin_channel = body.get("origin_channel", "")
         actor_version = body.get("actor_version", "")
+        ai_snapshot = get_ai_document_snapshots(request=request)
         try:
             result = execute_tool(
                 tool_code=tool_code,
@@ -1439,6 +1532,7 @@ class AIToolExecuteView(View):
                 request_id=request_id,
                 origin_channel=origin_channel,
                 actor_version=actor_version,
+                contract_snapshot=ai_snapshot,
             )
         except UnknownToolError:
             return JsonResponse({"error": "Неизвестный инструмент."}, status=404)
@@ -1468,7 +1562,12 @@ class AIToolConfirmView(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Некорректное тело JSON."}, status=400)
 
-        confirmed = body.get("confirmed", False)
+        confirmed = body.get("confirmed")
+        if type(confirmed) is not bool:
+            return JsonResponse(
+                {"error": "Поле confirmed должно быть логическим значением."},
+                status=400,
+            )
         actor_context = body.get("actor", {})
         session_id = body.get("session_id")
         actor_error = validate_gateway_actor(actor_context, session_id)
@@ -1478,6 +1577,7 @@ class AIToolConfirmView(View):
         request_id = body.get("request_id", str(uuid.uuid4()))
         origin_channel = body.get("origin_channel", "")
         actor_version = body.get("actor_version", "")
+        ai_snapshot = get_ai_document_snapshots(request=request)
 
         result = execute_pending_action(
             token=token,
@@ -1488,6 +1588,7 @@ class AIToolConfirmView(View):
             request_id=request_id,
             origin_channel=origin_channel,
             actor_version=actor_version,
+            contract_snapshot=ai_snapshot,
         )
 
         if result.get("ok"):
@@ -1516,6 +1617,49 @@ class AISkillLoadView(View):
         if content:
             return JsonResponse({"id": skill_id, "instructions": content})
         return JsonResponse({"error": "Навык не найден."}, status=404)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class AIContractSnapshotView(View):
+    """Authenticated, read-only delivery of the fixed AI document set."""
+
+    http_method_names = ["get"]
+
+    def get(self, request):
+        # Missing and incorrect identities intentionally share this exact
+        # response.  Do this before parsing ids to avoid an unauthenticated
+        # information oracle.
+        token_error = reject_invalid_gateway_token(request)
+        if token_error:
+            return token_error
+        try:
+            document_ids = _parse_ai_document_ids(request)
+        except ValueError:
+            # Unknown ids and non-allowlisted ids have the same result.  Do not
+            # include the submitted value in the response or logs.
+            return JsonResponse({"error": "Недопустимый набор AI-документов."}, status=404)
+        try:
+            documents = build_ai_contract_snapshot(
+                document_ids=document_ids,
+                request=request,
+            )
+        except (DatabaseError, DocumentRepositoryError, LookupError, ValueError, OSError) as exc:
+            logger.warning(
+                "AI contract snapshot unavailable: error_type=%s error_code=config_unavailable",
+                exc.__class__.__name__,
+            )
+            return JsonResponse({"error": "AI-конфигурация временно недоступна."}, status=503)
+
+        etag = aggregate_ai_contract_etag(documents)
+        if request.headers.get("If-None-Match", "") == etag:
+            response = JsonResponse({}, status=304)
+            response.content = b""
+            response["ETag"] = etag
+            return response
+        response = JsonResponse({"documents": documents, "etag": etag.strip('"')})
+        response["ETag"] = etag
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 class SlashCommandListView(LoginRequiredMixin, View):

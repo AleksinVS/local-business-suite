@@ -1,5 +1,8 @@
 """Тесты пайплайна индексирования (FTS/vector)."""
+from dataclasses import replace
+
 from apps.memory.tests._common import *  # noqa: F401,F403
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
@@ -226,7 +229,15 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
         from ..retrieval import memory_search
 
         user = User.objects.create_user(username="memory-source-fallback-user", password="pass")
-        source = self.create_source(code="source_data_fallback", source_kind="file_share")
+        source = self.create_source(
+            code="source_data_fallback",
+            source_kind="file_share",
+            trust_status=MemorySource.TrustStatus.TRUSTED,
+            authority_class=MemorySource.AuthorityClass.APPROVED_CORPUS,
+            trusted_for_context=True,
+            requires_source_review=False,
+            trusted_context_kinds=["retrieved_chunk", "citation"],
+        )
         MemorySourceObject.objects.create(
             source=source,
             object_id="file-1",
@@ -257,6 +268,66 @@ class MemoryIndexingPipelineTests(MemoryModelFactoryMixin, TestCase):
             MemoryAccessAudit.objects.get(request_id="req-source-fallback").retrieval_trace["search_channels"]["graph"]["status"],
             "disabled",
         )
+
+    def test_empty_sources_snapshot_closes_source_data_fallback(self):
+        """A removed source stays invisible before its cleanup job runs."""
+        from ..retrieval import memory_search
+
+        user = User.objects.create_user(username="memory-empty-sources-user", password="pass")
+        source = self.create_source(code="source_removed_from_contract")
+        MemorySourceObject.objects.create(
+            source=source,
+            object_id="stale-file-1",
+            object_uri="file://share/stale-reglament.txt",
+            relative_path="docs/stale-reglament.txt",
+            file_name="stale-reglament.txt",
+            content_hash="stale-hash",
+            ingestion_status=MemorySourceObject.IngestionStatus.PENDING,
+            metadata={"scope_tokens": [f"user:{user.id}"]},
+        )
+
+        class EmptyVectorBackend:
+            def search(self, *args, **kwargs):
+                return []
+
+        # This explicit captured snapshot models a source removed from the
+        # contract while the database projection/cleanup worker is still
+        # stale. Do not use the fixture source allowlist for this case: that
+        # allowlist intentionally admits synthetic sources in other tests.
+        base_snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.profiles",
+                "memory.contract.routing",
+                "memory.contract.retrieval_budget",
+                "memory.contract.trust_policy",
+                "memory.contract.ingestion_profiles",
+                "memory.contract.sources",
+            )
+        )
+        snapshots = dict(base_snapshots)
+        snapshots["memory.contract.sources"] = replace(
+            base_snapshots["memory.contract.sources"], payload=[]
+        )
+        with patch(
+            "apps.memory.retrieval.get_memory_document_snapshots",
+            return_value=snapshots,
+        ), patch(
+            "apps.memory.retrieval.get_memory_test_source_allowlist",
+            return_value=frozenset(),
+        ):
+            result = memory_search(
+                actor=user,
+                query="stale reglament",
+                sensitivity="internal",
+                vector_backend=EmptyVectorBackend(),
+                request_id="req-empty-sources-fence",
+                search_mode="source_explicit",
+                include_source_data=True,
+                source_codes=[source.code],
+            )
+
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["citations"], [])
 
     def test_single_default_ranking_profile_blends_fulltext_and_vector_via_rrf(self):
         """ADR-0030 decision 6: exactly one default ranking profile remains at

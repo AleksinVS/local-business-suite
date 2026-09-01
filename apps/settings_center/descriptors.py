@@ -47,22 +47,47 @@ SECRET_STORAGE_KINDS = frozenset({"secret_handle"})
 
 def runtime_validators() -> dict[str, Any]:
     """Build the single registry of editable runtime-contract validators."""
-    from django.conf import settings
-
     from apps.ai import contracts as ai_contracts
-    from apps.core.json_utils import load_json_file
     from apps.memory import contracts as memory_contracts
     from apps.waiting_list import contracts as waiting_list_contracts
     from apps.workorders import contracts as workorder_contracts
 
+    def effective_workflow_payload():
+        # Lazy import avoids a cycle: contract_store imports domain validators,
+        # while the settings registry resolves these validator names.
+        from apps.core.contract_store import get_contract
+
+        return get_contract("workflow_rules")
+
+    def validate_memory_sources_with_effective_snapshot(payload):
+        # Source validation is cross-document validation.  Obtain the related
+        # profiles/routing/ingestion documents through one repository snapshot
+        # so this compatibility validator cannot silently read legacy files.
+        from apps.settings_center.document_repository import ConfigDocumentRepository
+
+        snapshots = ConfigDocumentRepository().get_snapshot(
+            (
+                "memory.contract.sources",
+                "memory.contract.profiles",
+                "memory.contract.routing",
+                "memory.contract.ingestion_profiles",
+            )
+        )
+        memory_contracts.validate_memory_sources_payload(
+            payload,
+            profiles_payload=snapshots["memory.contract.profiles"].payload,
+            routing_payload=snapshots["memory.contract.routing"].payload,
+            ingestion_profiles_payload=snapshots["memory.contract.ingestion_profiles"].payload,
+        )
+
     return {
         "validate_role_rules_payload": lambda payload: workorder_contracts.validate_role_rules_payload(
             payload,
-            workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
+            workflow_payload=effective_workflow_payload(),
         ),
         "validate_workorder_status_colors_payload": lambda payload: workorder_contracts.validate_workorder_status_colors_payload(
             payload,
-            workflow_payload=load_json_file(settings.LOCAL_BUSINESS_WORKFLOW_RULES_FILE),
+            workflow_payload=effective_workflow_payload(),
         ),
         "validate_waiting_list_status_colors_payload": waiting_list_contracts.validate_waiting_list_status_colors_payload,
         "validate_workflow_rules_payload": workorder_contracts.validate_workflow_rules_payload,
@@ -75,14 +100,7 @@ def runtime_validators() -> dict[str, Any]:
         "validate_memory_ingestion_profiles_payload": memory_contracts.validate_memory_ingestion_profiles_payload,
         "validate_memory_file_organization_profiles_payload": memory_contracts.validate_memory_file_organization_profiles_payload,
         "validate_memory_graph_schema_payload": memory_contracts.validate_memory_graph_schema_payload,
-        "validate_memory_sources_payload": lambda payload: memory_contracts.validate_memory_sources_payload(
-            payload,
-            profiles_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_PROFILES_FILE),
-            routing_payload=load_json_file(settings.LOCAL_BUSINESS_MEMORY_ROUTING_FILE),
-            ingestion_profiles_payload=load_json_file(
-                settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES_FILE
-            ),
-        ),
+        "validate_memory_sources_payload": validate_memory_sources_with_effective_snapshot,
         "validate_memory_trust_policy_payload": memory_contracts.validate_memory_trust_policy_payload,
         "validate_memory_claims_policy_payload": memory_contracts.validate_memory_claims_policy_payload,
         "validate_memory_retrieval_budget_payload": memory_contracts.validate_memory_retrieval_budget_payload,

@@ -1,8 +1,25 @@
 from mcp.server.fastmcp import FastMCP
 
-from .config import load_json, load_runtime_settings
+from .config import (
+    load_ai_contract_snapshot,
+    load_runtime_settings,
+    normalize_priority,
+    normalize_status,
+)
 from .gateway_client import DjangoGatewayClient
-from .task_types import normalize_status, normalize_priority
+
+
+def _disabled_project_tool(function):
+    """Keep legacy implementations out of the unauthenticated MCP surface.
+
+    The deployed streamable HTTP transport has one shared gateway credential,
+    not a verified per-request user subject.  Registering a business tool
+    would therefore let a client choose ``user_id``/roles and have Django
+    create or reuse that user's session.  Until the transport is bound to a
+    trusted principal, project tools are deliberately not MCP tools; the
+    authenticated Django/AG-UI route remains the execution surface.
+    """
+    return function
 
 
 def build_mcp_server() -> FastMCP:
@@ -20,9 +37,12 @@ def build_mcp_server() -> FastMCP:
             token=settings.django_gateway_token,
         )
 
-    def tool_catalog() -> dict:
-        settings = load_runtime_settings()
-        return load_json(settings.ai_tools_path)
+    def tool_catalog(snapshot=None) -> dict:
+        snapshot = load_ai_contract_snapshot() if snapshot is None else snapshot
+        entry = snapshot["ai.contract.tools"]
+        if hasattr(entry, "payload"):
+            return entry.payload
+        return entry.get("payload", entry)
 
     def skills_catalog() -> list[dict]:
         return gateway_client().get_skills_catalog().get("skills", [])
@@ -58,7 +78,8 @@ def build_mcp_server() -> FastMCP:
         mime_type="application/json",
     )
     def tool_resource(tool_code: str):
-        for item in tool_catalog().get("tools", []):
+        snapshot = load_ai_contract_snapshot()
+        for item in tool_catalog(snapshot).get("tools", []):
             if item.get("id") == tool_code:
                 return {
                     key: item.get(key)
@@ -84,6 +105,7 @@ def build_mcp_server() -> FastMCP:
         mime_type="application/json",
     )
     def module_capabilities_resource(source_code: str):
+        snapshot = load_ai_contract_snapshot()
         tools = [
             {
                 "id": item.get("id"),
@@ -91,7 +113,7 @@ def build_mcp_server() -> FastMCP:
                 "mode": item.get("mode"),
                 "requires_confirmation": item.get("requires_confirmation", False),
             }
-            for item in tool_catalog().get("tools", [])
+            for item in tool_catalog(snapshot).get("tools", [])
             if item.get("domain") == source_code or str(item.get("id", "")).startswith(f"{source_code}.")
         ]
         skills = [
@@ -107,7 +129,7 @@ def build_mcp_server() -> FastMCP:
         ]
         return {"source_code": source_code, "tools": tools, "skills": skills}
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_list(
         user_id: int,
         username: str,
@@ -117,8 +139,9 @@ def build_mcp_server() -> FastMCP:
         limit: int = 20,
     ):
         """List work orders visible to the current user."""
+        snapshot = load_ai_contract_snapshot()
         if status:
-            status = normalize_status(status)
+            status = normalize_status(status, snapshot=snapshot)
         result = gateway_client().execute_tool(
             tool_code="workorders.list",
             actor={
@@ -133,7 +156,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_get(
         user_id: int,
         username: str,
@@ -157,7 +180,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_create(
         user_id: int,
         username: str,
@@ -169,7 +192,8 @@ def build_mcp_server() -> FastMCP:
         priority: str = "medium",
     ):
         """Create a work order for the current user."""
-        priority = normalize_priority(priority)
+        snapshot = load_ai_contract_snapshot()
+        priority = normalize_priority(priority, snapshot=snapshot)
         result = gateway_client().execute_tool(
             tool_code="workorders.create",
             actor={
@@ -189,7 +213,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_transition(
         user_id: int,
         username: str,
@@ -199,7 +223,8 @@ def build_mcp_server() -> FastMCP:
         target_status: str,
     ):
         """Transition a work order to a target status."""
-        target_status = normalize_status(target_status)
+        snapshot = load_ai_contract_snapshot()
+        target_status = normalize_status(target_status, snapshot=snapshot)
         result = gateway_client().execute_tool(
             tool_code="workorders.transition",
             actor={
@@ -214,7 +239,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_comment(
         user_id: int,
         username: str,
@@ -238,7 +263,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def departments_list(
         user_id: int, username: str, roles: list[str], session_id: str, query: str = ""
     ):
@@ -257,7 +282,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def devices_list(
         user_id: int,
         username: str,
@@ -281,7 +306,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_confirm_closure(
         user_id: int,
         username: str,
@@ -304,7 +329,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def workorders_rate(
         user_id: int,
         username: str,
@@ -328,7 +353,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def inventory_devices_create(
         user_id: int,
         username: str,
@@ -359,7 +384,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def inventory_devices_update(
         user_id: int,
         username: str,
@@ -395,7 +420,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def inventory_devices_archive(
         user_id: int,
         username: str,
@@ -418,7 +443,7 @@ def build_mcp_server() -> FastMCP:
         )
         return result
 
-    @mcp.tool()
+    @_disabled_project_tool
     def analytics_summary(
         user_id: int,
         username: str,

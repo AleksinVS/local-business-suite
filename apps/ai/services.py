@@ -4,7 +4,6 @@ import re
 import uuid
 import hashlib
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import transaction
@@ -35,6 +34,7 @@ from apps.inventory.services import (
 
 from .models import AgentActionLog, ChatMessage, ChatSession
 from .chat_settings import CHAT_SURFACE_SIDEBAR, get_chat_settings, get_recent_message_limit
+from .config_documents import get_ai_document_payloads
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def validate_chat_attachment(upload):
     }
 
 
-def generate_session_title(session):
+def generate_session_title(session, *, request=None, snapshot=None):
     """Generate a concise title for a chat session using the configured LLM.
 
     Sends the first few messages of the conversation to the model with a
@@ -118,7 +118,9 @@ def generate_session_title(session):
     if not messages:
         return None
 
-    model_config = _resolve_model_config(session.metadata.get("model_id", ""))
+    model_config = _resolve_model_config(
+        session.metadata.get("model_id", ""), request=request, snapshot=snapshot
+    )
     if not model_config:
         return None
 
@@ -164,9 +166,11 @@ def generate_session_title(session):
     return None
 
 
-def _resolve_model_config(model_id):
+def _resolve_model_config(model_id, *, request=None, snapshot=None):
     """Find the model config dict matching *model_id*, or the default model."""
-    models = getattr(settings, "LOCAL_BUSINESS_AI_MODELS", [])
+    models = get_ai_document_payloads(request=request, snapshot=snapshot).get(
+        "ai.contract.models", []
+    )
     if model_id:
         for m in models:
             if m.get("id") == model_id:
@@ -316,7 +320,9 @@ def append_chat_message(*, session, role, content, tool_name="", metadata=None):
     return message
 
 
-def serialize_session_history(session, *, final_user_message=None, surface=None):
+def serialize_session_history(
+    session, *, final_user_message=None, surface=None, request=None, snapshot=None
+):
     """Build bounded, server-owned history for one runtime turn.
 
     Prepared/running user turns are intentionally excluded.  A run receives
@@ -341,10 +347,17 @@ def serialize_session_history(session, *, final_user_message=None, surface=None)
         if session.channel == ChatSession.Channel.SIDEBAR
         else CHAT_SURFACE_FULL_PAGE
     )
-    recent_limit = get_recent_message_limit(effective_surface)
+    snapshot = (
+        get_ai_document_payloads(request=request) if snapshot is None else snapshot
+    )
+    recent_limit = get_recent_message_limit(
+        effective_surface, request=request, snapshot=snapshot
+    )
     messages = list(messages_qs)
     if effective_surface == CHAT_SURFACE_SIDEBAR:
-        settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+        settings_payload = get_chat_settings(
+            CHAT_SURFACE_SIDEBAR, request=request, snapshot=snapshot
+        )
         sidebar_summary = (session.metadata or {}).get("sidebar_summary") or {}
         if settings_payload.get("summary_enabled", True) and sidebar_summary.get("text"):
             history.append(
@@ -374,13 +387,20 @@ def serialize_session_history(session, *, final_user_message=None, surface=None)
     return history
 
 
-def compact_sidebar_session(session):
+def compact_sidebar_session(session, *, request=None, snapshot=None):
     if session.channel != ChatSession.Channel.SIDEBAR:
         return False
-    settings_payload = get_chat_settings(CHAT_SURFACE_SIDEBAR)
+    snapshot = (
+        get_ai_document_payloads(request=request) if snapshot is None else snapshot
+    )
+    settings_payload = get_chat_settings(
+        CHAT_SURFACE_SIDEBAR, request=request, snapshot=snapshot
+    )
     if not settings_payload.get("summary_enabled", True):
         return False
-    recent_limit = get_recent_message_limit(CHAT_SURFACE_SIDEBAR)
+    recent_limit = get_recent_message_limit(
+        CHAT_SURFACE_SIDEBAR, request=request, snapshot=snapshot
+    )
     trigger = int(settings_payload.get("summary_trigger_messages") or 24)
     messages = list(session.messages.order_by("created_at", "id"))
     if len(messages) <= recent_limit + trigger:

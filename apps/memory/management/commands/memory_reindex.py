@@ -17,6 +17,7 @@ from apps.memory.services import MemoryQueueJobKind, enqueue_memory_queue_task
 from apps.memory.source_text_extraction import PARSER_VERSION
 from apps.memory.source_lifecycle import enabled_source_operation
 from apps.memory.vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 def backend_versions():
@@ -175,6 +176,15 @@ class Command(BaseCommand):
             )
 
     def _run_reindex_locked(self, *, source, corpus, backends, force, dry_run, source_fenced):
+        # Capture the ingestion policy once for this complete job.  The
+        # document loop below must never observe a second policy revision.
+        ingestion_snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.sources",
+                "memory.contract.ingestion_profiles",
+                "memory.contract.profiles",
+            )
+        )
         documents = MemorySearchDocument.objects.select_related("knowledge_item", "source_object", "source_object__source").filter(
             index_status=MemorySearchDocument.IndexStatus.READY
         )
@@ -209,7 +219,11 @@ class Command(BaseCommand):
             "sensitivity_counts": {},
         }
         if not dry_run and corpus in {"source_data", "all"}:
-            result["deleted_document_count"] = _delete_missing_source_documents(source=source, backends=backends)
+            result["deleted_document_count"] = _delete_missing_source_documents(
+                source=source,
+                backends=backends,
+                snapshots=ingestion_snapshots,
+            )
 
         for document in documents.order_by("corpus_type", "document_id"):
             result["eligible_document_count"] += 1
@@ -217,7 +231,9 @@ class Command(BaseCommand):
             sensitivity = search_document_sensitivity(document)
             result["sensitivity_counts"][sensitivity] = result["sensitivity_counts"].get(sensitivity, 0) + 1
 
-            if not force and not _needs_reindex(document, backends=backends):
+            if not force and not _needs_reindex(
+                document, backends=backends, snapshots=ingestion_snapshots
+            ):
                 result["skipped_current_count"] += 1
                 continue
             result["would_index_count"] += 1
@@ -228,23 +244,38 @@ class Command(BaseCommand):
                     if document.knowledge_item_id is None:
                         raise CommandError(f"Knowledge document {document.document_id} has no knowledge item.")
                     if source_fenced:
-                        _index_knowledge_item_locked(document.knowledge_item, index_backends=backends)
+                        _index_knowledge_item_locked(
+                            document.knowledge_item,
+                            index_backends=backends,
+                            snapshots=ingestion_snapshots,
+                        )
                     else:
-                        index_knowledge_item(document.knowledge_item, index_backends=backends)
+                        index_knowledge_item(
+                            document.knowledge_item,
+                            index_backends=backends,
+                            snapshots=ingestion_snapshots,
+                        )
                 else:
                     if document.source_object_id is None:
                         raise CommandError(f"Source document {document.document_id} has no source object.")
                     source_object = document.source_object
                     if not source_object.object_uri:
                         raise CommandError(f"Source object {source_object.object_id} has no object_uri.")
-                    profile = get_source_ingestion_profile(source_object.source)
+                    profile = get_source_ingestion_profile(
+                        source_object.source, snapshots=ingestion_snapshots
+                    )
                     outcome = inspect_source_object_for_ingestion(source_object=source_object, profile=profile)
                     if outcome["status"] in {
                         source_object.IngestionStatus.SKIPPED,
                         source_object.IngestionStatus.FAILED,
                     }:
                         if outcome["issue_kind"] == MemoryIngestionIssue.IssueKind.SECRET_BLOCKED:
-                            _block_secret_document(document=document, outcome=outcome, backends=backends)
+                            _block_secret_document(
+                                document=document,
+                                outcome=outcome,
+                                backends=backends,
+                                snapshots=ingestion_snapshots,
+                            )
                             result["blocked_secret_count"] += 1
                             result["failed_document_count"] += 1
                             continue
@@ -259,6 +290,8 @@ class Command(BaseCommand):
                         partial_reason=outcome["partial_reason"],
                         extraction_metadata=outcome["metadata"].get("extraction"),
                         index_backends=backends,
+                        profile=profile,
+                        snapshots=ingestion_snapshots,
                     )
                 result["indexed_document_count"] += 1
             except Exception:
@@ -267,7 +300,7 @@ class Command(BaseCommand):
         return result
 
 
-def _needs_reindex(document: MemorySearchDocument, *, backends) -> bool:
+def _needs_reindex(document: MemorySearchDocument, *, backends, snapshots=None) -> bool:
     metadata = document.metadata or {}
     versions = metadata.get("index_versions") or {}
     expected_versions = backend_versions()
@@ -290,7 +323,7 @@ def _needs_reindex(document: MemorySearchDocument, *, backends) -> bool:
         if extraction.get("parser") != PARSER_VERSION:
             return True
         embedding = metadata.get("embedding") or {}
-        if "vector" in backends and embedding.get("version") != _current_embedding_version():
+        if "vector" in backends and embedding.get("version") != _current_embedding_version(snapshots=snapshots):
             return True
     if document.corpus_type == MemorySearchDocument.CorpusType.KNOWLEDGE and document.knowledge_item_id:
         if document.body_hash != document.knowledge_item.text_hash:
@@ -298,20 +331,16 @@ def _needs_reindex(document: MemorySearchDocument, *, backends) -> bool:
     return False
 
 
-def _current_embedding_version() -> str:
-    vector_backend = None
-    try:
-        from apps.memory.vector_backends import get_default_vector_backend
+def _current_embedding_version(*, snapshots=None) -> str:
+    from apps.memory.vector_backends import get_default_vector_backend
 
-        vector_backend = get_default_vector_backend()
-    except Exception:
-        return ""
+    vector_backend = get_default_vector_backend(snapshots=snapshots)
     if vector_backend is None:
         return ""
     return vector_backend.embedding_provider.metadata.version
 
 
-def _delete_missing_source_documents(*, source, backends) -> int:
+def _delete_missing_source_documents(*, source, backends, snapshots=None) -> int:
     queryset = MemorySearchDocument.objects.filter(
         corpus_type=MemorySearchDocument.CorpusType.SOURCE_DATA,
         source_object__discovery_status=MemorySourceObject.DiscoveryStatus.MISSING,
@@ -322,13 +351,21 @@ def _delete_missing_source_documents(*, source, backends) -> int:
     document_ids = list(queryset.values_list("document_id", flat=True))
     if not document_ids:
         return 0
-    delete_search_document_indexes(document_ids, index_backends=backends)
+    delete_search_document_indexes(
+        document_ids,
+        index_backends=backends,
+        snapshots=snapshots,
+    )
     queryset.update(index_status=MemorySearchDocument.IndexStatus.DELETED)
     return len(document_ids)
 
 
-def _block_secret_document(*, document: MemorySearchDocument, outcome: dict, backends) -> None:
-    delete_search_document_indexes([document.document_id], index_backends=backends)
+def _block_secret_document(*, document: MemorySearchDocument, outcome: dict, backends, snapshots=None) -> None:
+    delete_search_document_indexes(
+        [document.document_id],
+        index_backends=backends,
+        snapshots=snapshots,
+    )
     _create_reindex_issue(document=document, outcome=outcome)
     document.index_status = MemorySearchDocument.IndexStatus.FAILED
     metadata = dict(document.metadata or {})

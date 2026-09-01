@@ -11,5 +11,14 @@
   "TASK_ACCEPTANCE.03-migration-planner-and-operations.md": "Приёмка безопасного контура миграции после независимых correction cycles",
   "EXECUTOR_REPORT.04-status-colors-pilot.md": "Отчёт dev/test реализации DB-пилота палитры листа ожидания",
   "TASK_ACCEPTANCE.04-status-colors-pilot.md": "Приёмка dev/test-пилота без production cutover",
+  "EXECUTOR_REPORT.05-access-workflow-security-cutover.md": "Отчёт реализации access/workflow DB-среза; production cutover ожидает решения владельца",
+  "EXECUTOR_REPORT.06-ai-agent-runtime-delivery.md": "Отчёт реализации AI gateway и aggregate-кэша agent-runtime",
+  "EXECUTOR_REPORT.07-memory-filehub-and-static-classification.md": "Отчёт реализации memory/FileHub snapshot-среза и статической классификации",
+  "EXECUTOR_REPORT.08-cleanup-recovery-and-final-acceptance.md": "Отчёт cleanup/recovery и финальной cross-domain приёмки без production cutover",
+  "TASK_ACCEPTANCE.05-access-workflow-security-cutover.md": "Техническая приёмка access/workflow среза без production cutover",
+  "TASK_ACCEPTANCE.06-ai-agent-runtime-delivery.md": "Техническая приёмка AI gateway и доставки agent-runtime",
+  "TASK_ACCEPTANCE.07-memory-filehub-and-static-classification.md": "Техническая приёмка memory/FileHub и классификации документов",
+  "TASK_ACCEPTANCE.08-cleanup-recovery-and-final-acceptance.md": "Техническая приёмка cleanup/recovery на тестовом хосте без production cutover",
+  "RETROSPECTIVE.md": "Ретроспектива реализации, live e2e и recovery drill",
   "task-packets": "Исполнительные пакеты 01-08"
 }

@@ -13,7 +13,6 @@ from django.db import IntegrityError, transaction
 from django.utils.crypto import salted_hmac
 from django.utils import timezone
 
-from apps.core.contract_store import current_contract_hash
 from apps.core.file_locks import (
     FileLockTimeoutError,
     access_control_write_lock_path,
@@ -89,16 +88,19 @@ def assignable_role_names_for_actor(*, actor, target_user):
     """Роли, которые UI может предложить, не заменяя серверную apply-проверку."""
 
     current_actor = _current_access_actor(actor)
-    _require_role_manager(current_actor)
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_role_manager(current_actor, rules_payload=role_rules)
+    configs = contract_role_configs(rules_payload=role_rules)
     if current_actor.is_superuser:
-        return tuple(contract_role_configs())
+        return tuple(configs)
     if current_actor.pk == target_user.pk:
         return ()
-    catalog = capability_catalog()
+    catalog = capability_catalog(rules_payload=role_rules)
     return tuple(
         sorted(
             role
-            for role, config in contract_role_configs().items()
+            for role, config in configs.items()
             if not role_is_protected(config, catalog=catalog)
         )
     )
@@ -117,19 +119,23 @@ def preview_role_assignment(
     """Строит канонический diff и подписывает его для последующего применения."""
 
     actor = _current_access_actor(actor)
-    _require_role_manager(actor)
     source, reason, is_break_glass = _validate_assignment_context(
         actor=actor,
         source=source,
         reason=reason,
     )
-    after = _validate_role_names(selected_role_names)
-    before = selected_role_names_for_user(target_user)
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_role_manager(actor, rules_payload=role_rules)
+    configs = contract_role_configs(rules_payload=role_rules)
+    after = _validate_role_names(selected_role_names, rules_payload=role_rules)
+    before = selected_role_names_for_user(target_user, rules_payload=role_rules)
     _validate_role_assignment_authority(
         actor=actor,
         target_user=target_user,
         before=before,
         after=after,
+        rules_payload=role_rules,
     )
     flags_before = _technical_flags_for_user(target_user)
     flags_after = _requested_technical_flags(
@@ -143,13 +149,17 @@ def preview_role_assignment(
         before=flags_before,
         after=flags_after,
     )
-    configs = contract_role_configs()
+    catalog = capability_catalog(rules_payload=role_rules)
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
     risk_markers = [
         marker
         for role_name in added
-        for marker in role_risk_markers(role_name, configs[role_name])
+        for marker in role_risk_markers(
+            role_name,
+            configs[role_name],
+            catalog=catalog,
+        )
     ]
     risk_markers.extend(_technical_flag_risk_markers(flags_before, flags_after))
     risk_markers.extend(
@@ -169,8 +179,9 @@ def preview_role_assignment(
         "after": after,
         "flags_before": flags_before,
         "flags_after": flags_after,
-        "actor_state": _actor_access_state(actor),
-        "role_contract_hash": current_contract_hash("role_rules"),
+        "actor_state": _actor_access_state(actor, rules_payload=role_rules),
+        "role_contract_hash": role_snapshot.content_hash,
+        "role_contract_revision": role_snapshot.revision,
         "source": source,
         "reason": reason,
         "is_break_glass": is_break_glass,
@@ -278,8 +289,10 @@ def preview_role_membership_change(
     """
 
     actor = _current_access_actor(actor)
-    _require_role_manager(actor)
-    role_name = _single_role_name(role_name)
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_role_manager(actor, rules_payload=role_rules)
+    role_name = _single_role_name(role_name, rules_payload=role_rules)
     reason = _normalize_membership_reason(reason)
     selected_ids = _validate_membership_user_ids(selected_user_ids)
     User = get_user_model()
@@ -311,7 +324,8 @@ def preview_role_membership_change(
     target_states = []
     preview_rows = []
     requires_confirmation = False
-    configs = contract_role_configs()
+    configs = contract_role_configs(rules_payload=role_rules)
+    catalog = capability_catalog(rules_payload=role_rules)
     for user_id in changed_ids:
         target = changed_users[user_id]
         before = _selected_role_names_from_loaded_user(target, configs)
@@ -325,6 +339,7 @@ def preview_role_membership_change(
             target_user=target,
             before=before,
             after=after,
+            rules_payload=role_rules,
         )
         flags = _technical_flags_for_user(target)
         risk_markers = _role_membership_risk_markers(
@@ -334,6 +349,7 @@ def preview_role_membership_change(
             before=before,
             after=after,
             configs=configs,
+            catalog=catalog,
         )
         requires_confirmation = requires_confirmation or bool(risk_markers)
         target_states.append(
@@ -355,12 +371,13 @@ def preview_role_membership_change(
         )
     payload = {
         "actor_id": actor.pk,
-        "actor_state": _actor_access_state(actor),
+        "actor_state": _actor_access_state(actor, rules_payload=role_rules),
         "role_name": role_name,
         "member_ids_before": current_member_ids,
         "member_ids_after": selected_ids,
         "target_states": target_states,
-        "role_contract_hash": current_contract_hash("role_rules"),
+        "role_contract_hash": role_snapshot.content_hash,
+        "role_contract_revision": role_snapshot.revision,
         "reason": reason,
         "nonce": str(uuid.uuid4()),
     }
@@ -436,7 +453,6 @@ def _apply_role_membership_change_locked(
     risk_confirmed=False,
     reason="",
 ):
-    role_name = _single_role_name(role_name)
     selected_ids = _validate_membership_user_ids(selected_user_ids)
     reason = _normalize_membership_reason(reason)
     signed = _load_role_membership_preview_token(preview_token)
@@ -451,10 +467,18 @@ def _apply_role_membership_change_locked(
 
     User = get_user_model()
     locked_actor = User.objects.select_for_update().get(pk=actor.pk)
-    _require_role_manager(locked_actor)
-    if signed.get("actor_state") != _actor_access_state(locked_actor):
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    role_name = _single_role_name(role_name, rules_payload=role_rules)
+    _require_role_manager(locked_actor, rules_payload=role_rules)
+    if signed.get("actor_state") != _actor_access_state(
+        locked_actor, rules_payload=role_rules
+    ):
         raise ValidationError("Права администратора изменились после предпросмотра.")
-    if signed.get("role_contract_hash") != current_contract_hash("role_rules"):
+    if (
+        signed.get("role_contract_hash") != role_snapshot.content_hash
+        or signed.get("role_contract_revision") != role_snapshot.revision
+    ):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
 
     current_member_ids = sorted(
@@ -489,7 +513,8 @@ def _apply_role_membership_change_locked(
     if set(locked_targets) != set(changed_ids):
         raise ValidationError("Один из пользователей больше не существует.")
 
-    configs = contract_role_configs()
+    configs = contract_role_configs(rules_payload=role_rules)
+    catalog = capability_catalog(rules_payload=role_rules)
     changes = []
     any_risk = False
     for signed_state in signed_states:
@@ -515,6 +540,7 @@ def _apply_role_membership_change_locked(
             target_user=target,
             before=before,
             after=after,
+            rules_payload=role_rules,
         )
         risk_markers = _role_membership_risk_markers(
             actor=locked_actor,
@@ -523,6 +549,7 @@ def _apply_role_membership_change_locked(
             before=before,
             after=after,
             configs=configs,
+            catalog=catalog,
         )
         any_risk = any_risk or bool(risk_markers)
         fingerprint = hashlib.sha256(
@@ -831,15 +858,17 @@ def _apply_role_assignment_locked(
 ):
     """Меняет контрактные роли и технические флаги в одной транзакции."""
 
-    after = _validate_role_names(selected_role_names)
     signed_preview = _load_preview_token(preview_token)
     if signed_preview.get("actor_id") != actor.pk or signed_preview.get("target_id") != target_user.pk:
         raise ValidationError("Предпросмотр относится к другому пользователю или администратору.")
-    if signed_preview.get("after") != after:
-        raise ValidationError("Выбранные роли изменились после предпросмотра. Выполните предпросмотр снова.")
     User = get_user_model()
     locked_actor = User.objects.select_for_update().get(pk=actor.pk)
-    _require_role_manager(locked_actor)
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_role_manager(locked_actor, rules_payload=role_rules)
+    after = _validate_role_names(selected_role_names, rules_payload=role_rules)
+    if signed_preview.get("after") != after:
+        raise ValidationError("Выбранные роли изменились после предпросмотра. Выполните предпросмотр снова.")
     source, reason, is_break_glass = _validate_assignment_context(
         actor=locked_actor,
         source=source,
@@ -849,9 +878,14 @@ def _apply_role_assignment_locked(
         raise ValidationError("Источник или комментарий изменились после предпросмотра.")
     if signed_preview.get("is_break_glass") is not is_break_glass:
         raise ValidationError("Контекст резервного изменения не совпадает с предпросмотром.")
-    if signed_preview.get("actor_state") != _actor_access_state(locked_actor):
+    if signed_preview.get("actor_state") != _actor_access_state(
+        locked_actor, rules_payload=role_rules
+    ):
         raise ValidationError("Права администратора изменились после предпросмотра. Повторите проверку.")
-    if signed_preview.get("role_contract_hash") != current_contract_hash("role_rules"):
+    if (
+        signed_preview.get("role_contract_hash") != role_snapshot.content_hash
+        or signed_preview.get("role_contract_revision") != role_snapshot.revision
+    ):
         raise ValidationError("Контракт ролей изменился после предпросмотра. Повторите проверку.")
 
     locked_target = (
@@ -866,7 +900,7 @@ def _apply_role_assignment_locked(
     )
     if signed_preview.get("flags_after") != flags_after:
         raise ValidationError("Технические флаги изменились после предпросмотра. Выполните предпросмотр снова.")
-    before = selected_role_names_for_user(locked_target)
+    before = selected_role_names_for_user(locked_target, rules_payload=role_rules)
     flags_before = _technical_flags_for_user(locked_target)
     if signed_preview.get("before") != before:
         raise ValidationError("Роли пользователя уже изменены. Выполните предпросмотр снова.")
@@ -877,6 +911,7 @@ def _apply_role_assignment_locked(
         target_user=locked_target,
         before=before,
         after=after,
+        rules_payload=role_rules,
     )
     _validate_technical_flag_change(
         actor=locked_actor,
@@ -885,13 +920,14 @@ def _apply_role_assignment_locked(
         after=flags_after,
     )
 
-    configs = contract_role_configs()
+    configs = contract_role_configs(rules_payload=role_rules)
+    catalog = capability_catalog(rules_payload=role_rules)
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
     risk_markers = [
         marker
         for role_name in added
-        for marker in role_risk_markers(role_name, configs[role_name])
+        for marker in role_risk_markers(role_name, configs[role_name], catalog=catalog)
     ]
     risk_markers.extend(_technical_flag_risk_markers(flags_before, flags_after))
     risk_markers.extend(
@@ -967,12 +1003,30 @@ def _current_access_actor(actor):
     return get_user_model().objects.get(pk=actor.pk)
 
 
-def _actor_access_state(actor):
+def _fresh_role_snapshot():
+    """Read the role contract outside the HTTP request cache.
+
+    The compatibility deployment still has a legacy-file backend.  Route the
+    read through the same backend-aware boundary as the writers so a fresh
+    access decision does not accidentally require the PostgreSQL/Git-default
+    repository before that deployment has been cut over.
+    """
+
+    from apps.settings_center.contract_services import read_contract_snapshot
+    from apps.settings_center.registry import get_registry
+
+    return read_contract_snapshot(
+        get_registry().get("core.contract.role_rules"),
+        fresh=True,
+    )
+
+
+def _actor_access_state(actor, *, rules_payload=None):
     return {
         "is_active": bool(actor.is_active),
         "is_staff": bool(actor.is_staff),
         "is_superuser": bool(actor.is_superuser),
-        "roles": selected_role_names_for_user(actor),
+        "roles": selected_role_names_for_user(actor, rules_payload=rules_payload),
     }
 
 
@@ -996,7 +1050,9 @@ def _validate_assignment_context(*, actor, source, reason):
     return source, normalized_reason, is_break_glass
 
 
-def _validate_role_assignment_authority(*, actor, target_user, before, after):
+def _validate_role_assignment_authority(
+    *, actor, target_user, before, after, rules_payload=None
+):
     changed_roles = set(before) ^ set(after)
     if not changed_roles:
         return
@@ -1005,8 +1061,8 @@ def _validate_role_assignment_authority(*, actor, target_user, before, after):
     if target_user.pk == actor.pk:
         raise PermissionDenied("Назначать роли самому себе может только суперпользователь.")
 
-    configs = contract_role_configs()
-    catalog = capability_catalog()
+    configs = contract_role_configs(rules_payload=rules_payload)
+    catalog = capability_catalog(rules_payload=rules_payload)
     protected_roles = sorted(
         role
         for role in changed_roles
@@ -1142,10 +1198,12 @@ def _create_local_user_locked(*, actor, cleaned_data, password, audit_callback=N
 def _assign_default_role_to_new_user(*, user, actor, source):
     """Назначить контрактную роль создания в текущей транзакции и записать аудит."""
 
-    role_name = default_new_user_role_name()
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    role_name = default_new_user_role_name(rules_payload=role_rules)
     if not role_name:
         return None
-    configs = contract_role_configs()
+    configs = contract_role_configs(rules_payload=role_rules)
     config = configs.get(role_name)
     if not isinstance(config, dict):
         raise ValidationError("Настроенная роль новых пользователей отсутствует в контракте.")
@@ -1156,7 +1214,11 @@ def _assign_default_role_to_new_user(*, user, actor, source):
         )
     user.groups.add(group)
     flags = _technical_flags_for_user(user)
-    risk_markers = role_risk_markers(role_name, config)
+    risk_markers = role_risk_markers(
+        role_name,
+        config,
+        catalog=capability_catalog(rules_payload=role_rules),
+    )
     return AccessAssignmentAudit.objects.create(
         actor=actor,
         target_user=user,
@@ -1312,7 +1374,9 @@ def initialize_demo_user_access(
 def _initialize_demo_user_access_locked(
     *, user, role_name, is_staff, reason, profile_updates
 ):
-    roles_after = _validate_role_names([role_name])
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    roles_after = _validate_role_names([role_name], rules_payload=role_rules)
     if not str(reason or "").strip():
         raise ValidationError("Для bootstrap-назначения требуется причина.")
     locked_user = get_user_model().objects.select_for_update().get(pk=user.pk)
@@ -1322,7 +1386,9 @@ def _initialize_demo_user_access_locked(
         setattr(locked_user, field, value)
     if password:
         locked_user.set_password(password)
-    roles_before = selected_role_names_for_user(locked_user)
+    roles_before = selected_role_names_for_user(
+        locked_user, rules_payload=role_rules
+    )
     flags_before = _technical_flags_for_user(locked_user)
     flags_after = {"is_staff": bool(is_staff), "is_superuser": False}
     profile_changed = bool(profile_updates or password)
@@ -1334,7 +1400,9 @@ def _initialize_demo_user_access_locked(
     if role_group is None:
         raise ValidationError(f"Группа роли '{role_name}' не создана.")
     current_role_groups = list(
-        locked_user.groups.filter(name__in=contract_role_configs())
+        locked_user.groups.filter(
+            name__in=contract_role_configs(rules_payload=role_rules)
+        )
     )
     if current_role_groups:
         locked_user.groups.remove(*current_role_groups)
@@ -1732,7 +1800,7 @@ def scope_tokens_for_group_names(group_names):
     return tokens
 
 
-def _validate_role_names(role_names):
+def _validate_role_names(role_names, *, rules_payload=None):
     requested = []
     for value in role_names or []:
         name = getattr(value, "name", value)
@@ -1740,7 +1808,9 @@ def _validate_role_names(role_names):
             raise ValidationError("Передан недопустимый идентификатор роли.")
         requested.append(name)
     canonical = sorted(set(requested))
-    unknown = sorted(set(canonical) - set(contract_role_configs()))
+    unknown = sorted(
+        set(canonical) - set(contract_role_configs(rules_payload=rules_payload))
+    )
     if unknown:
         raise ValidationError("Неизвестные роли: " + ", ".join(unknown))
     return canonical
@@ -1782,8 +1852,8 @@ def _load_role_membership_preview_token(preview_token):
     return payload
 
 
-def _single_role_name(role_name):
-    roles = _validate_role_names([role_name])
+def _single_role_name(role_name, *, rules_payload=None):
+    roles = _validate_role_names([role_name], rules_payload=rules_payload)
     if len(roles) != 1:
         raise ValidationError("Нужно выбрать одну контрактную роль.")
     return roles[0]
@@ -1936,11 +2006,13 @@ def _load_account_data_preview(preview_token, *, salt, label):
 
 
 def _role_membership_risk_markers(
-    *, actor, target_user, role_name, before, after, configs
+    *, actor, target_user, role_name, before, after, configs, catalog=None
 ):
     markers = []
     if role_name not in before and role_name in after:
-        markers.extend(role_risk_markers(role_name, configs[role_name]))
+        markers.extend(
+            role_risk_markers(role_name, configs[role_name], catalog=catalog)
+        )
     markers.extend(
         _assignment_context_risk_markers(
             actor=actor,
@@ -1953,11 +2025,11 @@ def _role_membership_risk_markers(
     return markers
 
 
-def _require_role_manager(actor):
+def _require_role_manager(actor, *, rules_payload=None):
     if (
         not getattr(actor, "is_authenticated", False)
         or not getattr(actor, "is_active", False)
-        or not can_manage_roles(actor)
+        or not can_manage_roles(actor, rules_payload=rules_payload)
     ):
         raise PermissionDenied("Требуется право управления ролями.")
 

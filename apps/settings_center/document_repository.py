@@ -7,8 +7,10 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from copy import deepcopy
 from dataclasses import dataclass, replace
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -48,6 +50,61 @@ class DocumentHashMismatch(DocumentRepositoryError):
     pass
 
 
+class ExplicitLegacyPathUnavailable(DocumentRepositoryError):
+    """An explicitly configured legacy path is missing and cannot fallback."""
+
+
+def _canonical_legacy_path(spec) -> Path:
+    if spec.default_path is None:
+        raise UnsupportedDocumentBackend(
+            f"У документа '{spec.document_id}' нет legacy path."
+        )
+    relative = Path(spec.default_path).relative_to("contracts")
+    return Path(settings.RUNTIME_CONTRACTS_DIR) / relative
+
+
+def _legacy_path(spec) -> Path:
+    if spec.legacy_settings_path:
+        value = getattr(settings, spec.legacy_settings_path, None)
+        if value:
+            return Path(value)
+    return _canonical_legacy_path(spec)
+
+
+def _is_explicit_legacy_override(spec) -> bool:
+    setting_name = spec.legacy_settings_path
+    return bool(setting_name and os.environ.get(setting_name, "").strip())
+
+
+def _is_canonical_legacy_path(spec, path: Path) -> bool:
+    try:
+        return Path(path).resolve() == _canonical_legacy_path(spec).resolve()
+    except (OSError, ValueError):
+        return False
+
+
+def load_legacy_document(spec, *, default_payload, path: Path | None = None):
+    """Read a legacy document, using the validated Git default only when safe.
+
+    A missing canonical ``data/contracts`` file means a clean runtime has not
+    bootstrapped a mutable mirror yet, so the already-loaded Git default is a
+    valid read-only starting point.  An explicit environment path (or any
+    non-canonical override) is an operator assertion and therefore fails
+    closed when missing.  Existing files are always read as-is; their hash and
+    CAS semantics are unchanged.
+    """
+
+    path = Path(path) if path is not None else _legacy_path(spec)
+    try:
+        return load_json_file(path), "legacy_file"
+    except FileNotFoundError as exc:
+        if _is_canonical_legacy_path(spec, path) and not _is_explicit_legacy_override(spec):
+            return deepcopy(default_payload), "git_default"
+        raise ExplicitLegacyPathUnavailable(
+            f"Legacy path for '{spec.document_id}' is unavailable."
+        ) from exc
+
+
 @dataclass(frozen=True)
 class RuntimeSettingSnapshot:
     document_id: str
@@ -68,6 +125,14 @@ class RuntimeSettingSnapshot:
 
 _degradation_state: dict[str, dict[str, Any]] = {}
 
+# Middleware binds one repository to the lifetime of an HTTP request. A
+# ContextVar is safe for threaded WSGI and async execution and cannot leak a
+# request snapshot into another concurrent task.
+_active_repository: ContextVar["ConfigDocumentRepository | None"] = ContextVar(
+    "settings_center_active_repository",
+    default=None,
+)
+
 
 def get_document_degradation_state() -> dict[str, Any]:
     documents = deepcopy(_degradation_state)
@@ -87,9 +152,38 @@ def reset_document_degradation_state_for_tests() -> None:
 class ConfigDocumentRepository:
     def __init__(self, registry: ConfigDocumentRegistry | None = None):
         self.registry = registry or get_document_registry()
+        active = _active_repository.get()
+        self._request_snapshots: dict[str, RuntimeSettingSnapshot] = (
+            active._request_snapshots if active is not None else {}
+        )
 
     def get_document(self, document_id: str, *, request=None) -> RuntimeSettingSnapshot:
         return self.get_snapshot((document_id,), request=request)[document_id]
+
+    def get_fresh_document(self, document_id: str) -> RuntimeSettingSnapshot:
+        """Read one document without using the request-local snapshot.
+
+        Access writers call this only after acquiring their access lock.  The
+        regular ``get_document`` path intentionally keeps the connected
+        request snapshot stable, while this explicit API makes a writer's
+        optimistic hash/revision check observe the current database row.
+        """
+
+        return self.get_fresh_snapshot((document_id,))[document_id]
+
+    def get_fresh_snapshot(
+        self, document_ids: Iterable[str]
+    ) -> dict[str, RuntimeSettingSnapshot]:
+        """Read a complete connected component, bypassing request cache."""
+
+        requested = tuple(dict.fromkeys(str(item) for item in document_ids))
+        if not requested:
+            return {}
+        for document_id in requested:
+            self.registry.get(document_id)
+        scope = self._connected_validation_scope(requested)
+        loaded = self._load_scope(scope)
+        return {document_id: loaded[document_id].copy() for document_id in requested}
 
     def get_snapshot(
         self,
@@ -118,6 +212,12 @@ class ConfigDocumentRepository:
             cache.update(self._load_scope(scope))
         return {document_id: cache[document_id].copy() for document_id in requested}
 
+    def invalidate(self, document_ids: Iterable[str]) -> None:
+        """Удалить из локального снимка всю связанную компоненту документов."""
+
+        for document_id in self._connected_validation_scope(document_ids):
+            self._request_snapshots.pop(document_id, None)
+
     def _load_scope(self, document_ids: Iterable[str]) -> dict[str, RuntimeSettingSnapshot]:
         specs = [self.registry.get(document_id) for document_id in sorted(document_ids)]
         generated = [
@@ -131,7 +231,20 @@ class ConfigDocumentRepository:
             )
 
         database_ids = [spec.document_id for spec in specs if spec.active_backend == "database"]
-        rows = RuntimeSettingDocument.objects.filter(document_id__in=database_ids).in_bulk()
+        try:
+            rows = RuntimeSettingDocument.objects.filter(
+                document_id__in=database_ids
+            ).in_bulk()
+        except DatabaseError as exc:
+            for document_id in database_ids:
+                self._mark_degraded(
+                    document_id,
+                    code="database_unavailable",
+                    fallback=False,
+                )
+            raise ConfigurationUnavailable(
+                "Настройки временно недоступны."
+            ) from exc
 
         snapshots: dict[str, RuntimeSettingSnapshot] = {}
         defaults: dict[str, Any] = {}
@@ -271,16 +384,22 @@ class ConfigDocumentRepository:
                 default_hash=default_hash,
             )
         if spec.active_backend == "legacy_file":
-            payload = load_json_file(self._legacy_path(spec))
+            payload, source = load_legacy_document(
+                spec,
+                default_payload=default_payload,
+                path=self._legacy_path(spec),
+            )
             return RuntimeSettingSnapshot(
                 document_id=spec.document_id,
                 payload=payload,
-                source="legacy_file",
+                source=source,
                 schema_version=spec.schema_version,
                 revision=0,
                 content_hash=document_hash(payload),
                 default_hash=default_hash,
-                migration_required=document_hash(payload) != default_hash,
+                migration_required=(
+                    source == "legacy_file" and document_hash(payload) != default_hash
+                ),
             )
         if spec.active_backend != "database":
             raise UnsupportedDocumentBackend(spec.active_backend)
@@ -320,6 +439,11 @@ class ConfigDocumentRepository:
 
     def _handle_failure(self, *, spec, default_payload, default_hash, exc):
         code = self._error_code(exc)
+        if isinstance(exc, ExplicitLegacyPathUnavailable):
+            self._mark_degraded(spec.document_id, code="explicit_path_unavailable", fallback=False)
+            raise ConfigurationUnavailable(
+                f"Настройки '{spec.document_id}' недоступны."
+            ) from exc
         if spec.failure_policy != "visible_default_fallback":
             self._mark_degraded(spec.document_id, code=code, fallback=False)
             raise ConfigurationUnavailable(
@@ -367,23 +491,18 @@ class ConfigDocumentRepository:
 
     @staticmethod
     def _legacy_path(spec) -> Path:
-        if spec.legacy_settings_path:
-            value = getattr(settings, spec.legacy_settings_path, None)
-            if value:
-                return Path(value)
-        if spec.default_path is None:
-            raise UnsupportedDocumentBackend(
-                f"У документа '{spec.document_id}' нет legacy path."
-            )
-        relative = Path(spec.default_path).relative_to("contracts")
-        return Path(settings.RUNTIME_CONTRACTS_DIR) / relative
+        return _legacy_path(spec)
 
     def _connected_validation_scope(self, document_ids: Iterable[str]) -> tuple[str, ...]:
         return self.registry.connected_validation_scope(document_ids)
 
-    @staticmethod
-    def _request_cache(request) -> dict[str, RuntimeSettingSnapshot]:
+    def _request_cache(self, request) -> dict[str, RuntimeSettingSnapshot]:
+        active = _active_repository.get()
+        if active is self:
+            return self._request_snapshots
         if request is None:
+            if active is not None:
+                return active._request_snapshots
             return {}
         cache = getattr(request, "_config_document_snapshots", None)
         if cache is None:
@@ -435,12 +554,54 @@ class ConfigDocumentRepository:
         return "validation_failed"
 
 
+def activate_repository(repository: ConfigDocumentRepository) -> Token:
+    """Bind ``repository`` to the current request/task context."""
+
+    return _active_repository.set(repository)
+
+
+def reset_repository(token: Token) -> None:
+    """Restore the repository context active before a request."""
+
+    _active_repository.reset(token)
+
+
+def get_active_repository() -> ConfigDocumentRepository | None:
+    """Return the request-local repository, if middleware bound one."""
+
+    return _active_repository.get()
+
+
 def get_document(document_id: str, *, request=None) -> RuntimeSettingSnapshot:
-    return ConfigDocumentRepository().get_document(document_id, request=request)
+    repository = get_active_repository()
+    if repository is None and request is not None:
+        repository = getattr(request, "_config_document_repository", None)
+    repository = repository or ConfigDocumentRepository()
+    return repository.get_document(document_id, request=request)
+
+
+def get_fresh_document(document_id: str) -> RuntimeSettingSnapshot:
+    """Read one document outside the request-local cache."""
+
+    repository = get_active_repository() or ConfigDocumentRepository()
+    return repository.get_fresh_document(document_id)
 
 
 def get_snapshot(document_ids: Iterable[str], *, request=None) -> Mapping[str, RuntimeSettingSnapshot]:
-    return ConfigDocumentRepository().get_snapshot(document_ids, request=request)
+    repository = get_active_repository()
+    if repository is None and request is not None:
+        repository = getattr(request, "_config_document_repository", None)
+    repository = repository or ConfigDocumentRepository()
+    return repository.get_snapshot(document_ids, request=request)
+
+
+def get_fresh_snapshot(
+    document_ids: Iterable[str],
+) -> Mapping[str, RuntimeSettingSnapshot]:
+    """Read a connected snapshot outside the request-local cache."""
+
+    repository = get_active_repository() or ConfigDocumentRepository()
+    return repository.get_fresh_snapshot(document_ids)
 
 
 def probe_settings_document_health() -> dict[str, Any]:

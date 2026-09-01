@@ -1,16 +1,14 @@
-"""Диагностика дрейфа между дефолтными контрактами (`contracts/`, git) и их
-рабочими копиями (`data/contracts/`, редактируются через Settings Center и
-AI-инструменты).
+"""Legacy-диагностика дрейфа файловых копий относительно Git-дефолтов.
 
-Проблема (ADR-0031, п.4 "Диагностика дрейфа default<->runtime"): `get_contract_path`
-(``config/settings.py``) копирует дефолт в `data/contracts/` один раз, при первом
-обращении к настройке. Дальнейшие изменения дефолта в git (разработчик обновил
-контракт) никак не долетают до уже развернутой установки — рабочая копия просто
-лежит и не «знает», что дефолт ушел вперед. До этого модуля такой дрейф не был
-виден вообще ни для одного контракта: единственная существовавшая проверка,
-``validate_ai_tools_drift`` (``apps/core/json_utils.py``), сверяет не файлы, а
-Python-каталог инструментов (``apps.ai.tool_definitions.TOOLS``) с JSON-каталогом
-``tools.json`` — это другой вид дрейфа (код vs JSON), не default-файл vs runtime-файл.
+Модуль обслуживает только переходный файловый контур. Для документов
+``database_override`` актуальные версии, хеши и аудит находятся в PostgreSQL и
+проверяются через repository/команды Settings Center.
+
+Историческая проблема ADR-0031 заключалась в том, что однажды созданная рабочая
+копия не получала последующие изменения Git-дефолта. До полного перевода хоста
+на PostgreSQL этот модуль оставляет такой дрейф видимым для legacy-файлов.
+Отдельная ``validate_ai_tools_drift`` сверяет Python-каталог инструментов с
+``tools.json`` и решает другую задачу: контроль кода относительно контракта.
 
 Модуль только ДИАГНОСТИРУЕТ дрейф — никогда не сливает и не перезаписывает файлы
 (non-goal этого пакета: перенос обновленных дефолтов в рабочую копию остается
@@ -186,19 +184,26 @@ def _iter_registered_contracts():
     Источник — ``apps.settings_center.registry.get_registry()``: он уже
     перечисляет все контракты, которыми управляет Settings Center (имя,
     ``storage_kind``, ``metadata.settings_path`` — атрибут ``settings.*`` с
-    рабочим путем, — и валидатор), и обслуживает 17 файловых контрактов
-    (core/workorders/ai/memory). Отдельный реестр ``apps.core.contract_store``
-    сейчас обслуживает только 3 контракта (role_rules, workflow_rules,
-    workorder_status_colors) — он уже беднее, чем settings_center.registry, и
-    не несет пути дефолта. Поэтому именно settings_center.registry выбран как
+    рабочим путем, — и валидатор). Отдельный реестр
+    ``apps.core.contract_store`` сейчас обслуживает только несколько legacy
+    контрактов (role_rules, workflow_rules, workorder_status_colors) — он
+    беднее, чем settings_center.registry, и не несет полного маппинга пути.
+    Поэтому именно settings_center.registry выбран как
     единственный источник маппинга "имя -> путь", а не заведен третий список.
-    Дескрипторы без ``metadata.settings_path`` (например,
-    `memory.secret.external_vault_link`) не привязаны к JSON-файлу и
-    пропускаются. Режим ACL памяти хранится в составе
+    DB-active документы также пропускаются: их authoritative value находится в
+    ``RuntimeSettingDocument``, поэтому старый compatibility path нельзя
+    читать даже если он остался в исходном дескрипторе. Дескрипторы без
+    ``metadata.settings_path`` (например, `memory.secret.external_vault_link`)
+    не привязаны к JSON-файлу и пропускаются. Режим ACL памяти хранится в составе
     цельного контракта источников, а не отдельным дескриптором.
     """
     for descriptor in get_registry().all():
         if descriptor.storage_kind != "runtime_contract":
+            continue
+        if descriptor.metadata.get("active_backend") == "database":
+            # A DB-active document has no authoritative legacy file.  Reading
+            # its compatibility setting here would report a false drift and
+            # could expose stale pre-cutover data.
             continue
         settings_path = descriptor.metadata.get("settings_path")
         if not settings_path:

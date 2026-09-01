@@ -5,6 +5,11 @@ from django.utils import timezone
 from apps.workorders.models import WorkOrder
 
 from .models import AgentActionLog, ChatMessage, ChatRun, ChatSession, PendingAction
+from .config_documents import (
+    get_ai_document_payloads,
+    get_ai_document_snapshots,
+    resolve_effective_tool_policy,
+)
 from .page_context import get_bound_page_context_for_actor
 from .services import (
     append_chat_message,
@@ -58,42 +63,52 @@ def _normalize_memory_search_corpus(value) -> str:
     return corpus
 
 
-# Bounded-scope task type registry imported lazily to avoid circular imports.
-_task_type_catalog = None
-
-
-def _get_task_type_catalog():
-    global _task_type_catalog
-    if _task_type_catalog is None:
-        from services.agent_runtime.task_types import get_all_bounded_task_types
-        _task_type_catalog = get_all_bounded_task_types()
-    return _task_type_catalog
-
-
 def tool_registry():
     return get_tool_registry()
 
 
-def _build_task_type_report(tool_code: str, payload: dict) -> dict:
+def _build_task_type_report(tool_code: str, payload: dict, *, snapshot=None) -> dict:
     """
     Build a machine-readable task_type_report for the bounded scope.
     Returns an empty dict if the tool is outside the bounded scope.
     """
-    catalog = _get_task_type_catalog()
-    for contract in catalog.values():
-        if tool_code in contract.allowed_tools:
-            missing = contract.get_missing_required_slots(payload)
-            return {
-                "task_type_id": contract.id,
-                "task_type_title": contract.title,
-                "task_type_mode": contract.mode.value,
-                "required_slots": list(contract.required_slots),
-                "fulfilled_slots": list(contract.get_fulfilled_slots(payload).keys()),
-                "missing_required_slots": missing,
-                "all_slots_fulfilled": len(missing) == 0,
-                "requires_confirmation": contract.requires_confirmation,
-            }
-    return {}
+    snapshot = get_ai_document_snapshots() if snapshot is None else snapshot
+    policy = resolve_effective_tool_policy(tool_code, snapshot=snapshot)
+    task_payload = get_ai_document_payloads(snapshot=snapshot).get(
+        "ai.contract.task_types", {}
+    )
+    task = next(
+        item
+        for item in task_payload.get("task_types", [])
+        if item.get("id") == policy["task_type_id"]
+    )
+    required_slots = task.get("required_slots") or []
+    report_payload = dict(payload or {})
+    # The delivered task contract calls the list filter ``status_or_scope``
+    # while the gateway tool carries it as ``status``.  Normalize that stable
+    # wire-field alias locally without changing the delivered policy.
+    if (
+        "status_or_scope" in required_slots
+        and report_payload.get("status") not in (None, "")
+    ):
+        report_payload["status_or_scope"] = report_payload["status"]
+    missing = [
+        slot
+        for slot in required_slots
+        if report_payload.get(slot) is None or report_payload.get(slot) == ""
+    ]
+    return {
+        "task_type_id": task.get("id", ""),
+        "task_type_title": task.get("title", ""),
+        "task_type_mode": task.get("mode", ""),
+        "required_slots": list(required_slots),
+        "fulfilled_slots": [
+            key for key, value in report_payload.items() if value is not None and value != ""
+        ],
+        "missing_required_slots": missing,
+        "all_slots_fulfilled": len(missing) == 0,
+        "requires_confirmation": policy["requires_confirmation"],
+    }
 
 
 def _build_command_context(*, tool_code, action_kind, actor, session, payload, trace_context, confirmation_state):
@@ -304,6 +319,7 @@ def execute_tool(
     request_id="",
     origin_channel="",
     actor_version="",
+    contract_snapshot=None,
 ):
     # Confirmation is an explicit state transition handled by
     # execute_pending_action().  This legacy argument is retained only for
@@ -314,10 +330,19 @@ def execute_tool(
         raise ValidationError(
             "Подтверждение выполняется только через сохранённое ожидающее действие."
         )
+    # Freeze one request-local AI aggregate for all task-policy reporting.
+    contract_snapshot = (
+        get_ai_document_snapshots() if contract_snapshot is None else contract_snapshot
+    )
 
     registry = tool_registry()
     if tool_code not in registry:
         raise UnknownToolError(tool_code)
+    # The delivered task snapshot is an execution policy, not merely trace
+    # metadata.  Resolve it before actor/session creation so a tool outside
+    # the effective static∩delivered policy cannot create audit or pending
+    # rows, let alone dispatch a domain side effect.
+    policy = resolve_effective_tool_policy(tool_code, snapshot=contract_snapshot)
     tool = registry[tool_code]
     actor = resolve_actor(
         user_id=actor_context.get("user_id"),
@@ -370,7 +395,7 @@ def execute_tool(
             metadata={**{"source": actor_context.get("source", "chat")}, **trace_context},
         )
 
-    requires_confirmation = tool.get("requires_confirmation", False)
+    requires_confirmation = policy["requires_confirmation"]
     confirmation_preview = None
 
     confirmation_state = "not_required"
@@ -431,7 +456,9 @@ def execute_tool(
             session=session,
             message=user_message,
         )
-        task_report = _build_task_type_report(tool_code, payload)
+        task_report = _build_task_type_report(
+            tool_code, payload, snapshot=contract_snapshot
+        )
         return {
             "ok": True,
             "tool": tool_code,
@@ -492,7 +519,9 @@ def execute_tool(
             session=session,
             message=user_message,
         )
-        task_report = _build_task_type_report(tool_code, payload)
+        task_report = _build_task_type_report(
+            tool_code, payload, snapshot=contract_snapshot
+        )
         return {
             "ok": True,
             "tool": tool_code,
@@ -516,7 +545,9 @@ def execute_tool(
             message=user_message,
             error_message=str(exc),
         )
-        task_report = _build_task_type_report(tool_code, payload)
+        task_report = _build_task_type_report(
+            tool_code, payload, snapshot=contract_snapshot
+        )
         return {
             "ok": False,
             "tool": tool_code,
@@ -540,7 +571,9 @@ def execute_tool(
             message=user_message,
             error_message=str(exc),
         )
-        task_report = _build_task_type_report(tool_code, payload)
+        task_report = _build_task_type_report(
+            tool_code, payload, snapshot=contract_snapshot
+        )
         return {
             "ok": False,
             "tool": tool_code,
@@ -564,7 +597,9 @@ def execute_tool(
             message=user_message,
             error_message=str(exc),
         )
-        task_report = _build_task_type_report(tool_code, payload)
+        task_report = _build_task_type_report(
+            tool_code, payload, snapshot=contract_snapshot
+        )
         return {
             "ok": False,
             "tool": tool_code,
@@ -588,6 +623,7 @@ def execute_pending_action(
     request_id="",
     origin_channel="",
     actor_version="",
+    contract_snapshot=None,
 ):
     """
     Execute or cancel a pending action by token.
@@ -598,12 +634,26 @@ def execute_pending_action(
 
     Identity/correlation fields are propagated into the audit trail.
     """
+    # Confirmation is a typed state transition.  Treat JSON strings such as
+    # ``"false"`` as invalid rather than relying on Python truthiness, which
+    # could otherwise execute a write while the caller intended cancellation.
+    # Validate before looking up the pending row so malformed requests cannot
+    # mutate its status or create an audit record.
+    if type(confirmed) is not bool:
+        raise ValidationError("Поле confirmed должно быть логическим значением.")
+
     # Use the token parameter directly (from URL in confirm flow).
     # This is the primary lookup key when called from the confirm endpoint.
     if not token:
         # Fallback: try to get from actor_context for replay scenarios
         # where execute_tool calls this with token=None
         token = actor_context.get("token")
+
+    # Keep confirmation/reporting on the same complete aggregate for this
+    # operation; do not fall back to the legacy in-code task catalog.
+    contract_snapshot = (
+        get_ai_document_snapshots() if contract_snapshot is None else contract_snapshot
+    )
 
     pending = None
     dispatch_succeeded = False
@@ -698,6 +748,48 @@ def execute_pending_action(
                     "meta": {"pending_action_status": pending.status},
                 }
             else:
+                # A confirmation is valid only for the current delivered
+                # policy.  Re-resolve it immediately before claiming the
+                # action; a changed snapshot must not turn an old pending row
+                # into an executable bypass.
+                try:
+                    policy = resolve_effective_tool_policy(
+                        pending.tool_code,
+                        snapshot=contract_snapshot,
+                    )
+                    if policy["mode"] != pending.action_kind or not policy["requires_confirmation"]:
+                        raise ValidationError("Confirmation policy no longer matches the action.")
+                except Exception as exc:
+                    now = timezone.now()
+                    claimed = PendingAction.objects.filter(
+                        pk=pending.pk,
+                        status=PendingAction.Status.PENDING,
+                    ).update(status=PendingAction.Status.FAILED, updated_at=now)
+                    if claimed != 1:
+                        pending.refresh_from_db()
+                        return _pending_action_status_conflict(pending)
+                    pending.status = PendingAction.Status.FAILED
+                    record_action(
+                        actor=pending.actor,
+                        tool_code=pending.tool_code,
+                        action_kind=pending.action_kind,
+                        status=AgentActionLog.Status.FAILED,
+                        request_payload=audit_request_payload,
+                        response_payload={
+                            "error": "Confirmation policy unavailable.",
+                            **trace_context,
+                        },
+                        session=pending.session,
+                        message=None,
+                        error_message=str(exc),
+                    )
+                    return {
+                        "ok": False,
+                        "tool": pending.tool_code,
+                        "result": None,
+                        "errors": ["Confirmation policy is unavailable."],
+                        "meta": {"pending_action_status": pending.status},
+                    }
                 now = timezone.now()
                 processing_expires_at = now + timezone.timedelta(hours=1)
                 claimed = PendingAction.objects.filter(
@@ -722,6 +814,7 @@ def execute_pending_action(
                 trace_context=trace_context,
                 ok=True,
                 result=None,
+                snapshot=contract_snapshot,
             )
 
         try:
@@ -771,6 +864,7 @@ def execute_pending_action(
                 ok=False,
                 result=None,
                 errors=[str(exc)],
+                snapshot=contract_snapshot,
             )
 
         _finalize_pending_action_success(
@@ -785,6 +879,7 @@ def execute_pending_action(
             trace_context=trace_context,
             ok=True,
             result=result,
+            snapshot=contract_snapshot,
         )
     except Exception as exc:
         if dispatch_succeeded and pending is not None:
@@ -954,8 +1049,12 @@ def _validate_pending_action_owner(*, pending, actor_context, session_external_i
     return None
 
 
-def _pending_action_response(*, pending, trace_context, ok, result, errors=None):
-    task_report = _build_task_type_report(pending.tool_code, pending.payload)
+def _pending_action_response(
+    *, pending, trace_context, ok, result, errors=None, snapshot=None
+):
+    task_report = _build_task_type_report(
+        pending.tool_code, pending.payload, snapshot=snapshot
+    )
     return {
         "ok": ok,
         "tool": pending.tool_code,

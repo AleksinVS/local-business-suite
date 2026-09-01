@@ -7,7 +7,7 @@
   <input type="hidden" name="filter_q" value="{{ access_filter_state.query }}">
   <input type="hidden" name="filter_role" value="{{ access_filter_state.role }}">
   <input type="hidden" name="filter_department" value="{{ access_filter_state.department_id|default:'' }}">
-  {{ field_form.base_hash }}{{ field_form.active_group }}
+  {{ field_form.base_hash }}{{ field_form.base_revision }}{{ field_form.active_group }}
   {{ field_form.non_field_errors }}
   <div class="role-capability-editor-layout">
     <aside class="role-capability-groups" aria-label="Редактор роли">

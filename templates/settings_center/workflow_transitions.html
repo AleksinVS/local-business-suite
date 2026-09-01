@@ -19,6 +19,7 @@
   <form method="post" class="transition-matrix-form">
     {% csrf_token %}
     <input type="hidden" name="base_hash" value="{{ base_hash }}">
+    <input type="hidden" name="base_revision" value="{{ base_revision }}">
     <div class="matrix-summary">
       <span>Разрешено: {{ allowed_count }} из {{ possible_count }}</span>
       <label class="checkbox-row"><input type="checkbox" name="confirm"> Подтверждаю применение изменения</label>

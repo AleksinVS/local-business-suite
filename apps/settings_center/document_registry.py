@@ -23,9 +23,25 @@ SPEC_MODULES = (
 # Документы попадают сюда только после отдельной приемки consumer/writer среза.
 # Deployment allowlist не может включить ещё не выпущенный backend.
 DATABASE_BACKEND_RELEASED_DOCUMENT_IDS = frozenset(
-    {"waiting_list.contract.status_colors"}
+    {
+        "core.contract.role_rules",
+        "core.contract.workflow_rules",
+        "waiting_list.contract.status_colors",
+        "workorders.contract.status_colors",
+        "ai.contract.chat_settings",
+        # Memory/FileHub consumers and their domain writers are released as a
+        # complete database-override slice.  The private deployment allowlist
+        # remains empty until a deployment explicitly opts into this slice.
+        "memory.contract.sources",
+        "memory.contract.profiles",
+        "memory.contract.routing",
+        "memory.contract.trust_policy",
+        "memory.contract.retrieval_budget",
+        "memory.contract.ingestion_profiles",
+        "memory.contract.file_organization_profiles",
+        "memory.contract.graph_schema",
+    }
 )
-
 
 class ConfigDocumentRegistry:
     def __init__(self, specs, *, validate_default_paths=True):
@@ -142,6 +158,16 @@ def get_document_registry():
         module = import_module(module_name)
         specs.extend(module.get_document_specs())
     base_registry = ConfigDocumentRegistry(specs)
+    database_override_ids = frozenset(
+        spec.document_id
+        for spec in base_registry.all()
+        if spec.storage_policy == "database_override"
+    )
+    if DATABASE_BACKEND_RELEASED_DOCUMENT_IDS != database_override_ids:
+        raise ValueError(
+            "Database backend release set must cover exactly every database_override document: "
+            + ", ".join(sorted(database_override_ids ^ DATABASE_BACKEND_RELEASED_DOCUMENT_IDS))
+        )
     allowlist = tuple(
         getattr(settings, "LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST", ())
     )

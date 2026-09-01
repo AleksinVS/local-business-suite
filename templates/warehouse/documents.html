@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel"><div class="section-head"><h1>Складские документы</h1>{% if can_operate_warehouse %}<a class="btn btn-primary" href="{% url 'warehouse:document_new' %}">Новый документ</a>{% endif %}</div>
+<div class="table-container"><table><thead><tr><th>Дата</th><th>Подразделение</th><th>Тип</th><th>Номер</th><th>Статус</th></tr></thead><tbody>
+{% for document in documents %}<tr><td><a href="{% url 'warehouse:document_detail' document.pk %}">{{ document.operation_date }}</a></td><td>{{ document.department }}</td><td>{{ document.get_document_type_display }}</td><td>{{ document.number|default:"—" }}</td><td>{{ document.get_status_display }}</td></tr>
+{% empty %}<tr><td colspan="5" class="empty-state">Нет документов.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

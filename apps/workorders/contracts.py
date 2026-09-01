@@ -30,6 +30,12 @@ ROLE_SCOPE_VALUES = {
 # here, next to the role-contract validator, so the editor and future domain
 # policies cannot silently invent a second vocabulary.
 WAITING_LIST_SCOPE_VALUES = ("none", "authored", "all")
+WAREHOUSE_SCOPE_VALUES = (
+    "none",
+    "own_department",
+    "department_branch",
+    "all",
+)
 WAITING_LIST_STATUS_VALUES = ("waiting", "scheduled", "confirmed", "cancelled")
 WORKORDER_STATUS_VALUES = (
     "new",
@@ -43,6 +49,7 @@ WORKORDER_STATUS_VALUES = (
 CAPABILITY_VALUES_SOURCES = {
     "workorder_scopes",
     "waiting_list_scopes",
+    "warehouse_scopes",
     "workorder_statuses",
     "waiting_list_statuses",
 }
@@ -84,7 +91,14 @@ REQUIRED_WORKFLOW_KEYS = {
 CAPABILITY_METADATA_KEY = "$capabilities"
 DEFAULTS_METADATA_KEY = "$defaults"
 CAPABILITY_TYPES = {"flag", "scope", "targets"}
-CAPABILITY_SECTIONS = {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"}
+CAPABILITY_SECTIONS = {
+    "workorders",
+    "organization",
+    "ai_memory",
+    "personal_data",
+    "waiting_list",
+    "warehouse",
+}
 CAPABILITY_RISKS = {"normal", "elevated", "critical"}
 LEGACY_CAPABILITY_SOURCES = {
     "view_scope": "workorder_scopes",
@@ -182,6 +196,8 @@ def capability_values(source, *, workflow_payload=None):
         return tuple(sorted(ROLE_SCOPE_VALUES))
     if source == "waiting_list_scopes":
         return WAITING_LIST_SCOPE_VALUES
+    if source == "warehouse_scopes":
+        return WAREHOUSE_SCOPE_VALUES
     if source == "waiting_list_statuses":
         return (*WAITING_LIST_STATUS_VALUES, "*")
     if source == "workorder_statuses":

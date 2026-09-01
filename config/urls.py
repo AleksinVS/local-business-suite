@@ -26,6 +26,7 @@ urlpatterns = [
     path("ai/", include("apps.ai.urls")),
     path("analytics/", include("apps.analytics.urls")),
     path("inventory/", include("apps.inventory.urls")),
+    path("warehouse/", include("apps.warehouse.urls")),
     path("memory/", include("apps.memory.urls")),
     path("memory/", include("apps.filehub.urls")),
     path("settings/", include("apps.settings_center.urls")),

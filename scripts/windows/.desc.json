@@ -3,6 +3,7 @@
   "backup_postgresql.ps1": "Безопасный pg_dump + zip контрактов под dedicated identity, вне runtime data, с ACL/reparse guards и ограниченной ротацией",
   "check_agent_runtime_autostart.ps1": "Диагностика задач планировщика и процессов Agent Runtime",
   "export_portal.ps1": "Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост",
+  "export_warehouse_access.ps1": "Read-only ACE-выгрузка схемы, малой выборки или JSONL legacy-базы склада",
   "import_portal.ps1": "Восстановление Portal из бандла на новом хосте: IIS-фичи, файрвол, код, venv, AppPool+сайт, wfastcgi, scheduled task, health-check",
   "iis_web_config.ps1": "Общие проверки безопасности web.config для Windows/IIS deployment-скриптов",
   "init_project.ps1": "Инициализация каталогов и прав для IIS deployment",

@@ -3,8 +3,8 @@
 - Статус: Accepted
 - Дата: 2026-08-31
 - Связанное решение: `docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md`
-- Активный план: `docs/planning/active/warehouse-management-system.md`
-- Исполнительный пакет: `workflow/active/warehouse-management-system/`
+- Архивный план: `docs/planning/archive/2026/warehouse-management-system.md`
+- Исполнительный пакет: `workflow/archive/2026/warehouse-management-system/`
 
 ## 1. Цель и граница
 
@@ -398,8 +398,9 @@ Access-вариант, CSV или другую локальную базу бе�
 - `apps.core.Department` — единственная организационная иерархия;
 - `contracts/role_rules.json` — декларативные права и роли.
 - `contracts/warehouse/settings.json` — Git-дефолты точности новых единиц и
-  порогов срока годности; рабочая копия изменяется атомарно в
-  `data/contracts/warehouse/settings.json` через Центр настроек.
+  порогов срока годности; изменённая рабочая версия хранится как типизированный
+  документ `warehouse.settings` в PostgreSQL и изменяется транзакционно через
+  Центр настроек.
 
 На первом этапе не вводится новый runtime-сервис, очередь или отдельная база.
 PostgreSQL остаётся основным хранилищем.

@@ -1,6 +1,6 @@
 {
   ".": "Task packets блока упрощения хранения и доставки настроек",
-  "01-inventory-and-document-registry.json": "Инвентарь 29 документов и единый ConfigDocumentSpec registry без смены backend",
+  "01-inventory-and-document-registry.json": "Инвентарь 30 документов и единый ConfigDocumentSpec registry без смены backend",
   "02-postgresql-document-store.json": "RuntimeSettingDocument, repository, транзакционный writer, revision/hash CAS и audit",
   "03-migration-planner-and-operations.json": "Идемпотентный plan/apply импорт legacy JSON, diagnostics, backup и rollback",
   "04-status-colors-pilot.json": "Pilot двух раздельных status color документов в PostgreSQL и общий UX",

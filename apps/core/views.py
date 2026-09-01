@@ -17,6 +17,8 @@ from .forms import DepartmentForm
 from .models import Department
 from apps.workorders.models import WorkOrder, WorkOrderStatus
 from apps.inventory.selectors import visible_devices_queryset
+from apps.warehouse.policies import can_access_warehouse
+from apps.warehouse.selectors import visible_stock_balances_queryset
 from apps.workorders.selectors import (
     resolve_active_actor,
     visible_departments_queryset,
@@ -33,13 +35,19 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         actor = resolve_active_actor(self.request.user, force_refresh=True)
         show_inventory = actor is not None and can_access_inventory(actor)
         show_workorders = actor is not None and can_access_workorders(actor)
+        show_warehouse = actor is not None and can_access_warehouse(actor)
         context["show_inventory"] = show_inventory
         context["show_workorders"] = show_workorders
+        context["show_warehouse"] = show_warehouse
         context["can_create_workorder"] = actor is not None and can_create(actor)
         context["can_manage_inventory"] = actor is not None and can_manage_inventory(actor)
 
         if show_inventory:
             context["device_count"] = visible_devices_queryset(actor).count()
+        if show_warehouse:
+            context["warehouse_balance_count"] = visible_stock_balances_queryset(actor).filter(
+                quantity__gt=0
+            ).count()
         if show_workorders:
             visible_workorders = visible_workorders_queryset(actor)
             context["open_workorder_count"] = visible_workorders.exclude(

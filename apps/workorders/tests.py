@@ -2427,7 +2427,14 @@ class CapabilityRegistryTests(TestCase):
         for key, metadata in capabilities.items():
             self.assertIn(
                 metadata.get("section"),
-                {"workorders", "organization", "ai_memory", "personal_data", "waiting_list"},
+                {
+                    "workorders",
+                    "organization",
+                    "ai_memory",
+                    "personal_data",
+                    "waiting_list",
+                    "warehouse",
+                },
                 f"{key}: неизвестный section",
             )
             self.assertIn(
@@ -2595,9 +2602,10 @@ class CapabilityRegistryTests(TestCase):
             "waiting_list_transition_from_statuses",
             "waiting_list_transition_targets",
         )
+        role_names = [key for key in legacy if not key.startswith("$")]
         for code in waiting_codes:
             legacy["$capabilities"].pop(code)
-            for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
+            for role in role_names:
                 legacy[role].pop(code)
         legacy["$capabilities"]["view_waiting_list"] = {
             "type": "flag",
@@ -2606,7 +2614,7 @@ class CapabilityRegistryTests(TestCase):
             "label": "Просмотр листа ожидания",
             "description": "Совместимый старый флаг просмотра листа ожидания.",
         }
-        for role in ("viewer", "customer", "technician", "manager", "admin", "doctor"):
+        for role in role_names:
             legacy[role]["view_waiting_list"] = role == "doctor"
         for code in (
             "view_scope",
@@ -2651,9 +2659,20 @@ class CapabilityRegistryTests(TestCase):
 class ExplicitViewerPolicyPhaseTests(TestCase):
     def test_runtime_viewer_presence_disables_legacy_fallback(self):
         payload = copy.deepcopy(get_contract("role_rules"))
-        payload["viewer"] = copy.deepcopy(
-            json_utils.load_json_file(Path(settings.BASE_DIR) / "contracts" / "role_rules.json")["viewer"]
-        )
+        default_viewer = json_utils.load_json_file(
+            Path(settings.BASE_DIR) / "contracts" / "role_rules.json"
+        )["viewer"]
+        supported_fields = {
+            "display_name",
+            "description",
+            "protected",
+            *payload["$capabilities"],
+        }
+        payload["viewer"] = {
+            key: copy.deepcopy(value)
+            for key, value in default_viewer.items()
+            if key in supported_fields
+        }
         user = User.objects.create_user(username="runtime-viewer-phase")
         with _override_contract_file("LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", payload):
             self.assertFalse(default_board_access_applies(user))

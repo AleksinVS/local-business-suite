@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}<section class="panel"><div class="section-head"><h1>{{ title }}</h1><a href="{% url 'warehouse:overview' %}">К складу</a></div>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}{{ form.as_p }}<button class="btn btn-primary" type="submit">{% if edit_object %}Обновить{% else %}Добавить{% endif %}</button></form>
+<ul>{% for object in objects %}<li>{% if edit_route_name %}<a href="{% url edit_route_name object.pk %}">{{ object }}</a>{% else %}{{ object }}{% endif %}{% if object.is_active == False %} — архив{% endif %}</li>{% empty %}<li>Нет данных</li>{% endfor %}</ul></section>{% endblock %}

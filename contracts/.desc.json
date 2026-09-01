@@ -7,5 +7,6 @@
   "role_rules.json": "Default правила ролей и capabilities",
   "workflow_rules.json": "Default workflow статусы и переходы",
   "workorder_status_colors.json": "Default палитра цветов статусов заявок для интерфейса",
-  "waiting_list_status_colors.json": "Default палитра цветов статусов листа ожидания"
+  "waiting_list_status_colors.json": "Default палитра цветов статусов листа ожидания",
+  "warehouse/": "Default runtime-настройки складского учёта"
 }

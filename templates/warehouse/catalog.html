@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}<section class="panel"><div class="section-head"><h1>{{ title }}</h1><a href="{% url 'warehouse:overview' %}">К складу</a></div>
+<nav class="table-actions">{% for section_kind, section_title in catalog_navigation %}<a href="{% url 'warehouse:catalog' section_kind %}">{{ section_title }}</a>{% endfor %}</nav>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}{{ form.as_p }}<button class="btn btn-primary" type="submit">{% if edit_object %}Обновить{% else %}Добавить{% endif %}</button></form>
+<div class="table-container"><table><thead><tr><th>Код</th><th>Наименование</th><th>Состояние</th></tr></thead><tbody>
+{% for object in objects %}<tr><td><a href="{% url 'warehouse:catalog_edit' kind object.pk %}">{{ object.code }}</a></td><td>{{ object.name }}</td><td>{% if object.is_active %}Активно{% else %}Архив{% endif %}</td></tr>{% empty %}<tr><td colspan="3">Нет данных</td></tr>{% endfor %}
+</tbody></table></div></section>{% endblock %}

@@ -23,6 +23,7 @@ DOMAIN_LABELS = {
     "accounts": "Учетные записи",
     "workorders": "Заявки",
     "waiting_list": "Лист ожидания",
+    "warehouse": "Склад",
     "settings_center": "Центр настроек",
 }
 
@@ -50,6 +51,7 @@ def runtime_validators() -> dict[str, Any]:
     from apps.ai import contracts as ai_contracts
     from apps.memory import contracts as memory_contracts
     from apps.waiting_list import contracts as waiting_list_contracts
+    from apps.warehouse import contracts as warehouse_contracts
     from apps.workorders import contracts as workorder_contracts
 
     def effective_workflow_payload():
@@ -104,6 +106,7 @@ def runtime_validators() -> dict[str, Any]:
         "validate_memory_trust_policy_payload": memory_contracts.validate_memory_trust_policy_payload,
         "validate_memory_claims_policy_payload": memory_contracts.validate_memory_claims_policy_payload,
         "validate_memory_retrieval_budget_payload": memory_contracts.validate_memory_retrieval_budget_payload,
+        "validate_warehouse_settings_payload": warehouse_contracts.validate_warehouse_settings_payload,
     }
 
 

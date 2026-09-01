@@ -57,11 +57,11 @@ class DocumentRegistryTests(SimpleTestCase):
         }
         registered_paths = {spec.default_path for spec in registry.all()}
 
-        self.assertEqual(len(registry.all()), 29)
+        self.assertEqual(len(registry.all()), 30)
         self.assertEqual(registered_paths, expected_paths)
-        self.assertEqual(len({spec.document_id for spec in registry.all()}), 29)
+        self.assertEqual(len({spec.document_id for spec in registry.all()}), 30)
 
-    def test_database_override_release_gate_covers_all_thirteen_documents(self):
+    def test_database_override_release_gate_covers_all_fourteen_documents(self):
         registry = get_document_registry()
         database_ids = {
             spec.document_id
@@ -69,7 +69,7 @@ class DocumentRegistryTests(SimpleTestCase):
             if spec.storage_policy == "database_override"
         }
         self.assertEqual(database_ids, DATABASE_BACKEND_RELEASED_DOCUMENT_IDS)
-        self.assertEqual(len(database_ids), 13)
+        self.assertEqual(len(database_ids), 14)
         self.assertTrue(
             all(
                 spec.active_backend in {"legacy_file", "database"}
@@ -228,6 +228,7 @@ class DocumentRegistryTests(SimpleTestCase):
             "memory.contract.ingestion_profiles",
             "memory.contract.file_organization_profiles",
             "memory.contract.graph_schema",
+            "warehouse.settings",
         }
         documents = {spec.document_id: spec for spec in get_document_registry().all()}
         runtime_descriptors = [
@@ -235,7 +236,7 @@ class DocumentRegistryTests(SimpleTestCase):
             for descriptor in get_registry().all()
             if descriptor.storage_kind == "runtime_contract"
         ]
-        self.assertEqual(len(runtime_descriptors), 18)
+        self.assertEqual(len(runtime_descriptors), 19)
         self.assertEqual({item.setting_id for item in runtime_descriptors}, expected_ids)
         self.assertTrue(expected_ids <= set(documents))
         for descriptor in runtime_descriptors:

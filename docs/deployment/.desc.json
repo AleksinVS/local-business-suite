@@ -9,5 +9,6 @@
   "SETTINGS_DOCUMENTS_MIGRATION.md": "Runbook безопасного plan/apply/export переноса legacy JSON overrides в RuntimeSettingDocument",
   "WINDOWS_RUN.md": "Запуск на Windows (разработка)",
   "COPILOTKIT_AG_UI_DEPLOYMENT.md": "Deployment note для CopilotKit Runtime, AG-UI endpoint и React island",
-  "POSTGRESQL_MIGRATION.md": "Runbook миграции основного репозитория с SQLite на одну PostgreSQL database"
+  "POSTGRESQL_MIGRATION.md": "Runbook миграции основного репозитория с SQLite на одну PostgreSQL database",
+  "WAREHOUSE_DEPLOYMENT.md": "Техническое включение склада, зависимости, smoke-проверка и откат"
 }

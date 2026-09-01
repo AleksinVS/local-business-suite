@@ -467,6 +467,19 @@ class SeedRolesCommandTests(TestCase):
 @pytest.mark.integration
 class AccessAssignmentServiceTests(TestCase):
     def setUp(self):
+        from apps.core.contract_store import _reset_for_tests
+
+        base_role_rules = json_utils.load_json_file("contracts/role_rules.json")
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        role_file = Path(self._tmpdir.name) / "role_rules.json"
+        role_file.write_text(json.dumps(base_role_rules, ensure_ascii=False), encoding="utf-8")
+        self._override = override_settings(LOCAL_BUSINESS_ROLE_RULES_FILE=role_file)
+        self._override.enable()
+        self.addCleanup(self._override.disable)
+        _reset_for_tests()
+        self.addCleanup(_reset_for_tests)
+
         User = get_user_model()
         self.manager_group, _ = Group.objects.get_or_create(name="manager")
         self.customer_group, _ = Group.objects.get_or_create(name="customer")

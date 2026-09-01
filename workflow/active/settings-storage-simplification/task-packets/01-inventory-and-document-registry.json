@@ -40,7 +40,7 @@
     "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.01-inventory-and-document-registry.md"
   ],
   "requirements": [
-    "Пересчитать и зафиксировать baseline: 29 JSON value documents, 18 runtime descriptors, 17 editable runtime descriptors и текущие consumers каждого документа. Сравнить со snapshot 2026-08-31: 10 identical, 7 runtime changed, role_rules missing default-only $defaults/viewer.",
+    "Пересчитать и зафиксировать baseline: 30 JSON value documents, включая warehouse.settings, 19 runtime descriptors, 18 editable runtime descriptors и текущие consumers каждого документа. Сравнить 29 исходных документов со snapshot 2026-08-31: 10 identical, 7 runtime changed, role_rules missing default-only $defaults/viewer; новый warehouse.settings отдельно классифицировать как default/runtime-bootstrap.",
     "Команда settings_documents_inventory должна выдавать JSON/табличный отчет с document_id, default path, runtime path, descriptor, validator, write policy, consumer classes, owner, proposed storage policy, secret scan result и migration ambiguity.",
     "Если задан --output, разрешать путь только внутри .local/; по умолчанию писать stdout и не менять data/contracts/.",
     "Ввести frozen ConfigDocumentSpec с полями из проектной архитектуры. Validator хранится callable/импортируемой ссылкой спецификации, а не дублирующим строковым switch в generic writer.",
@@ -48,7 +48,7 @@
     "Settings Center runtime descriptors должны ссылаться на document spec или строиться из неё; env/model/secret descriptors не менять.",
     "На этом пакете legacy settings_path и validator metadata можно сохранить как compatibility projection, но source of truth должен быть один и это доказывается тестом.",
     "Fail-fast проверки: duplicate document_id/default path, unknown storage/failure policy, editable document without validator/schema, secret-like document, critical document with soft fallback, missing domain owner.",
-    "Классифицировать каждый из 29 документов как database_override candidate, git_static, generated_file или unresolved. Unresolved не угадывать и вынести в решения владельца.",
+    "Классифицировать каждый из 30 документов как database_override candidate, git_static, generated_file или unresolved. Unresolved не угадывать и вынести в решения владельца.",
     "Отдельно перечислить runtime AI skills и другие не-JSON artifacts; не включать их в document row migration.",
     "Обновить комментарии/документацию, которые утверждают устаревшее число обслуживаемых контрактов, но не менять runtime behavior."
   ],
@@ -60,8 +60,8 @@
     "Добавлять универсальную x-ui schema."
   ],
   "acceptance_checks": [
-    "Inventory содержит ровно все 29 текущих JSON value documents и явно отмечает документы без Settings Center descriptor.",
-    "Все 18 runtime descriptors сопоставлены ровно одной document spec или явно отмечены legacy compatibility до следующего пакета.",
+    "Inventory содержит ровно все 30 текущих JSON value documents и явно отмечает документы без Settings Center descriptor, включая warehouse.settings до его cutover.",
+    "Все 19 runtime descriptors сопоставлены ровно одной document spec или явно отмечены legacy compatibility до следующего пакета.",
     "Registry отказывается стартовать при duplicate id/path и небезопасных metadata.",
     "Команда inventory read-only: hashes data/contracts до/после совпадают.",
     "Ни один secret raw value не попадает в report.",

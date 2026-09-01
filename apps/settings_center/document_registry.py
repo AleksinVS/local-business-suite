@@ -18,6 +18,7 @@ SPEC_MODULES = (
     "apps.ai.config_documents",
     "apps.memory.config_documents",
     "apps.analytics.config_documents",
+    "apps.warehouse.config_documents",
 )
 
 # Документы попадают сюда только после отдельной приемки consumer/writer среза.
@@ -40,6 +41,7 @@ DATABASE_BACKEND_RELEASED_DOCUMENT_IDS = frozenset(
         "memory.contract.ingestion_profiles",
         "memory.contract.file_organization_profiles",
         "memory.contract.graph_schema",
+        "warehouse.settings",
     }
 )
 

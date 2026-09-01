@@ -456,6 +456,12 @@ class AccessWorkspaceTests(TestCase):
             "manage_ai_skills": "ai",
             "memory_organization_write": "memory",
             "memory_organization_review": "memory",
+            "warehouse_view_scope": "warehouse",
+            "warehouse_operate_scope": "warehouse",
+            "warehouse_adjust_scope": "warehouse",
+            "warehouse_manage_locations_scope": "warehouse",
+            "warehouse_manage_report_profiles_scope": "warehouse",
+            "warehouse_manage_catalog": "warehouse",
         }
         self.assertEqual(CAPABILITY_GROUP_BY_CAPABILITY, expected)
         # Runtime role_rules may intentionally lag the code-first default until
@@ -4054,6 +4060,13 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
         unknown_type_catalog = copy.deepcopy(catalog)
         unknown_type_catalog["manage_roles"]["type"] = "future"
         self.assertTrue(role_is_protected(ordinary, catalog=unknown_type_catalog))
+
+        legacy_catalog = copy.deepcopy(catalog)
+        legacy_ordinary = copy.deepcopy(ordinary)
+        for code in ("warehouse_adjust_scope", "warehouse_manage_catalog"):
+            legacy_catalog.pop(code)
+            legacy_ordinary.pop(code)
+        self.assertFalse(role_is_protected(legacy_ordinary, catalog=legacy_catalog))
 
     def test_generic_writer_cannot_create_or_delete_roles(self):
         for operation in ("create", "delete"):

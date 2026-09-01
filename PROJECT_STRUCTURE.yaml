@@ -57,6 +57,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты аналитики
     views.py: file # Представления дашбордов
   core: # Общие словари, дашборд, формы настроек и AI-утилиты
+    integrations: directory... # Общие транспортные интеграции без знаний о бизнес-моделях
     management: # Пакет management-команд core
       commands: file
     admin.py: file # Регистрация моделей в Django Admin
@@ -205,6 +206,38 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты
     views.py: file # Представления листа ожидания
+  warehouse: # Домен количественного складского учёта по подразделениям, партиям и адресам
+    legacy_import: # Версионированная подготовка и миграция legacy-складов
+      access_v1.py: file # Предметное преобразование таблиц Access v1
+      landing.py: file # Проверяемый неизменяемый landing package
+      services.py: file # Dry-run, commit через доменные проводки и строгая сверка
+    management: directory... # Операторские команды обслуживания склада
+    migrations: directory... # Миграции схемы склада
+    reports: # Единые наборы данных и безопасные табличные выгрузки
+      datasets.py: file # Расход, стеллажная карта и наличие на дату
+      exports.py: file # CSV UTF-8 BOM и XLSX с защитой от formula injection
+    services: # Транзакционные actor-aware команды склада
+      master_data.py: file # Аудируемое управление адресами, профилями и каталогом
+      posting.py: file # Проведение, FEFO, сторно и атомарное обновление остатков
+      rebuilding.py: file # Проверочная пересборка проекции из журнала
+    tests: # Тесты складского домена, прав, интерфейса, отчётов и миграции
+      test_access.py: file # Матрица складских ролей и областей подразделений
+      test_legacy_import.py: file # Целостность landing package, идемпотентность и сверка legacy-импорта
+      test_posting.py: file # Проведение, FEFO, запрет отрицательных остатков, сторно и пересборка
+      test_reports_exports.py: file # Наборы данных и защита CSV/XLSX от формул
+      test_runtime_settings.py: file # Проверка и совместимое чтение warehouse.settings
+      test_views_security.py: file # Сквозная матрица URL, подразделений, CSRF и экспортов
+    admin.py: file # Резервный superuser-only просмотр и обслуживание
+    config_documents.py: file # Спецификация PostgreSQL-документа настроек склада
+    contracts.py: file # Доменная проверка настроек склада
+    forms.py: file # Закрытые по области доступа формы документов и справочников
+    models.py: file # Справочники, документы, проводки, остатки, отчётные профили и импорт
+    policies.py: file # Складские права и области доступа
+    runtime_settings.py: file # Чтение warehouse.settings через единый repository
+    selectors.py: file # Серверные области чтения и наборы данных остатков
+    settings_descriptors.py: file # Descriptor warehouse.settings для Центра настроек
+    urls.py: file # Маршруты раздела Склад
+    views.py: file # Серверный интерфейс остатков, документов, отчётов и справочников
   workorders: # Модуль заявок с workflow (наряды-заказы)
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills заявок для открытия карточек и workflow-инструкций
@@ -304,7 +337,10 @@ contracts: # Версионируемые default-контракты; runtime-к
     memory_sources.schema.json: file # Schema для каталога источников сервиса памяти
     memory_trust_policy.schema.json: file # Schema для политики надежных источников памяти
     status_colors.schema.json: file # Общая schema палитры цветов статусов
+    warehouse_settings.schema.json: file # Schema точности количества и порогов срока годности склада
     workorder_status_colors.schema.json: file # Совместимая ссылка старого адреса на общую schema палитры
+  warehouse: # Git-дефолты runtime-настроек складского учёта
+    settings.json: file # Точность новых единиц и пороги предупреждения об истечении срока
   role_rules.json: file # Default правила ролей и capabilities
   waiting_list_status_colors.json: file # Default палитра цветов статусов листа ожидания
   workflow_rules.json: file # Default workflow статусы и переходы
@@ -359,7 +395,7 @@ docs: # Документация проекта
     ADR-0044-unified-native-ai-chat-execution.md: file # Принятый ADR: единый путь выполнения бокового и полноэкранного самописного ИИ-чата
     ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md: file # Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию
     ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md: file # Предлагаемый ADR: копирование ролей сейчас и ограниченная аддитивная иерархия после отдельного подтверждения
-    ADR-0047-warehouse-ledger-and-department-scoped-access.md: file # Предлагаемый ADR: складской журнал, адресное хранение и доступ по подразделениям
+    ADR-0047-warehouse-ledger-and-department-scoped-access.md: file # Принятый ADR: складской журнал, адресное хранение и доступ по подразделениям
     ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
@@ -410,6 +446,7 @@ docs: # Документация проекта
     POSTGRESQL_MIGRATION.md: file # Runbook миграции основного репозитория с SQLite на одну PostgreSQL database
     SETTINGS_CENTER_DEPLOYMENT.md: file # Deployment note для Settings Center, env proposals, migrations и restart semantics
     SETTINGS_DOCUMENTS_MIGRATION.md: file # Runbook безопасного plan/apply/export переноса legacy JSON overrides в RuntimeSettingDocument
+    WAREHOUSE_DEPLOYMENT.md: file # Техническое включение склада, зависимости, smoke-проверка и откат
     WINDOWS_RUN.md: file # Запуск на Windows (разработка)
   guides: # Руководства разработчика
     ACCESS_CONTROL_REVIEW_2026-07-30.md: file # Ревью системы прав 2026-07-30: находки, сверка с лучшими практиками, анализ row-level доступа и план закрытия пробелов
@@ -434,6 +471,7 @@ docs: # Документация проекта
     TEST_ACCELERATION.md: file # Практический guide по ускорению тестов без снижения покрытия
     TESTING_POLICY.md: file # Политика тестирования, матрица обязательных проверок и независимая проверка субагентом
     WAITING_LIST_DATA_OPERATIONS.md: file # Руководство по безопасному импорту и полной очистке данных листа ожидания
+    WAREHOUSE_OPERATIONS.md: file # Эксплуатация склада, роли, отчёты, проверка журнала и legacy-миграция
     WORKER_AND_QUEUE_OPERATIONS.md: file # Операционный guide по worker-командам, очередям, retry, idempotency и наблюдаемости
   legacy: # Устаревшая документация (MVP)
     MVP_Architecture.md: file # Архитектура MVP
@@ -453,7 +491,6 @@ docs: # Документация проекта
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
       settings-storage-simplification.md: file # Активный план упрощения хранения и доставки настроек
-      warehouse-management-system.md: file # Активный план общего раздела Склад и миграции старых баз
     archive: # Архив закрытых или остановленных планов
       2026: file
       README.md: file # Описание архива planning-файлов
@@ -485,6 +522,7 @@ scripts: # Скрипты и инструменты разработки
     backup_postgresql.ps1: file # Безопасный pg_dump + zip контрактов под dedicated identity, вне runtime data, с ACL/reparse guards и ограниченной ротацией
     check_agent_runtime_autostart.ps1: file # Диагностика задач планировщика и процессов Agent Runtime
     export_portal.ps1: file # Выгрузка конфигурации Portal (IIS, scheduled task, файрвол, сертификаты, код) в zip-бандл для миграции на другой хост
+    export_warehouse_access.ps1: file # Read-only ACE-выгрузка схемы, малой выборки или JSONL legacy-базы склада
     iis_web_config.ps1: file # Общие проверки безопасности web.config для Windows/IIS deployment-скриптов
     import_portal.ps1: file # Восстановление Portal из бандла на новом хосте: IIS-фичи, файрвол, код, venv, AppPool+сайт, wfastcgi, scheduled task, health-check
     init_project.ps1: file # Инициализация каталогов и прав для IIS deployment
@@ -592,6 +630,14 @@ templates: # HTML-шаблоны Django (server-rendered frontend, HTMX)
     dashboard.html: file # Дашборд листа ожидания
     entry_detail.html: file # Детали записи
     entry_form.html: file # Форма записи
+  warehouse: # Серверные шаблоны раздела складского учёта
+    catalog.html: file # Управление складскими справочниками
+    crud.html: file # Управление складами, адресами и профилями отчётов
+    document_detail.html: file # Просмотр, проведение, отмена и сторно документа
+    document_form.html: file # Создание многострочного черновика
+    documents.html: file # Список складских документов
+    overview.html: file # Остатки и вход в складские сценарии
+    report.html: file # Общее табличное представление отчётов
   workorders: # Шаблоны нарядов-заказов (Kanban, детали, формы)
     partials: # HTMX-фрагменты заявок: канбан, фильтр подразделений, детали, формы и действия
       attachments.html: file # Вложения заявки
@@ -769,10 +815,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.06-ai-agent-runtime-delivery.md: file # Техническая приёмка AI gateway и доставки agent-runtime
       TASK_ACCEPTANCE.07-memory-filehub-and-static-classification.md: file # Техническая приёмка memory/FileHub и классификации документов
       TASK_ACCEPTANCE.08-cleanup-recovery-and-final-acceptance.md: file # Техническая приёмка cleanup/recovery на тестовом хосте без production cutover
-    warehouse-management-system: # Workflow: общий раздел Склад, права, отчёты и миграция legacy-баз
-      task-packets: file
-      ARCHITECT_PLAN.json: file # Порядок и состав исполнительных пакетов
-      BLOCK_BRIEF.md: file # Цель, границы и критерии приёмки складского блока
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков
@@ -812,6 +854,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       universal-source-adapters-memory-analytics: file
       waiting-list-cards-and-access-flags: file
       waiting-list-inline-editing: file
+      warehouse-management-system: file
       workorder-tree-view: file
     README.md: file # Правила и описание архива workflow-блоков
   templates: directory... # Шаблоны workflow-артефактов

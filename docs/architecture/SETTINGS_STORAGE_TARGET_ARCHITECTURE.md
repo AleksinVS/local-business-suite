@@ -16,7 +16,7 @@ cutover и recovery drill; production cutover ожидает отдельног�
 
 ## 1. Результат реализации
 
-Реестр содержит 29 value-документов: 13 `database_override`, 16
+Реестр содержит 30 value-документов: 14 `database_override`, 16
 `git_static`; generated-файлы не являются value-документами. PostgreSQL-срез
 описан одним reviewed release set. На тестовом хосте его приватный allowlist
 включён полностью; production deployment остаётся отдельным операционным окном.
@@ -129,7 +129,7 @@ production cutover и пользовательскому решению об а�
 продолжают использовать свои дескрипторы.
 
 Не следует в первом срезе строить универсальный генератор форм из `x-ui`.
-Существующих 18 document-level дескрипторов недостаточно много, чтобы окупить
+Существующих 19 document-level дескрипторов недостаточно много, чтобы окупить
 новый UI-язык. JSON Schema остаётся источником структурной проверки, а сложные
 редакторы — явным доменным кодом. Генерацию простых полей можно оценить после
 устранения storage-дублирования.
@@ -344,15 +344,16 @@ editor то, что должно проходить code review.
 | `analytics/sources.json` | `git_static` | до появления управляемого source workflow |
 | `analytics/workflow_routes.json` | `git_static` | нет runtime writer |
 | `integrations/registry.json` | `git_static` | канонический общий registry по правилам репозитория |
+| `warehouse/settings.json` (`warehouse.settings`) | `database_override` | точность новых единиц и пороги срока годности; доменный валидатор склада |
 
-Итого: 13 `database_override` и 16 `git_static`; unresolved-документов среди
-29 JSON-документов значений нет. Все 13 database_override ID проходят единый
+Итого: 14 `database_override` и 16 `git_static`; unresolved-документов среди
+30 JSON-документов значений нет. Все 14 database_override ID проходят единый
 release gate в `ConfigDocumentRegistry`; приватный deployment allowlist не
 меняется автоматически. `bootstrap_runtime` не создаёт для этих двух классов
 новые runtime-копии.
 
 Runtime AI skills (`SKILL.md` и связанные директории) остаются `generated_file`
-и не входят в список 29 JSON-документов.
+и не входят в список 30 JSON-документов.
 
 ## 13. Миграционная классификация legacy-файлов
 

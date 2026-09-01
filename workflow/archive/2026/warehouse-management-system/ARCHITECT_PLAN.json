@@ -1,10 +1,10 @@
 {
   "block_id": "warehouse-management-system",
   "title": "Общий раздел Склад, права, отчёты и legacy-миграция",
-  "status": "ready-for-implementation",
+  "status": "implemented",
   "adr": "docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md",
   "architecture_doc": "docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md",
-  "planning_doc": "docs/planning/active/warehouse-management-system.md",
+  "planning_doc": "docs/planning/archive/2026/warehouse-management-system.md",
   "execution_order": [
     "01-domain-model-and-app-skeleton",
     "02-department-scoped-access",

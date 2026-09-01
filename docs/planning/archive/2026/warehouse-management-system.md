@@ -1,10 +1,10 @@
 # Раздел «Склад»
 
-- Статус: ADR принят, план готов к реализации
+- Статус: реализовано и технически принято 2026-08-31
 - Дата: 2026-08-31
 - ADR: `docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md`
 - Архитектура: `docs/architecture/WAREHOUSE_SYSTEM_ARCHITECTURE.md`
-- Workflow: `workflow/active/warehouse-management-system/`
+- Workflow: `workflow/archive/2026/warehouse-management-system/`
 
 ## Цель и ценность
 
@@ -78,7 +78,7 @@
    на приватной копии VOB3.
 
 Порядок и точные границы задач заданы в
-`workflow/active/warehouse-management-system/ARCHITECT_PLAN.json`.
+`workflow/archive/2026/warehouse-management-system/ARCHITECT_PLAN.json`.
 
 ## Миграционная стратегия VOB3
 
@@ -146,7 +146,7 @@ python manage.py makemigrations --check --dry-run
 Складские проверки после реализации:
 
 ```bash
-python manage.py warehouse_rebuild_balances --check
+python manage.py warehouse_rebuild_balances --actor <username> --check
 python manage.py warehouse_acceptance_e2e
 python manage.py warehouse_legacy_inspect --adapter access-v1 --source <private-mdb> --sample-size 5 --dry-run
 python manage.py warehouse_legacy_import --run-id <run-id> --dry-run
@@ -199,3 +199,14 @@ ADR-0047 принят. Дополнительный ADR потребуется,
 межподразделенческие перемещения со согласованием, автоматические межединичные
 конверсии, регуляторный специальный контур или интеграция с внешней системой
 закупок/маркировки.
+
+## Итог реализации
+
+Реализованы модели и миграции, транзакционное проведение и сторно, проекция
+остатков, регистрация партий, адреса, роли и область подразделений, три отчёта
+в HTML/CSV/XLSX, настройки, аудит и общий read-only контур миграции Access.
+
+Приватный импорт VOB3 не выполнялся: это отдельная операция внедрения с
+локальными сопоставлениями. В ходе разработки использованы только ранее
+разрешённые схема, счётчики и ограниченные образцы; полный набор legacy-строк не
+прочитан.

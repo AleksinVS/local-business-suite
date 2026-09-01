@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
@@ -86,9 +87,14 @@ class Command(BaseCommand):
             raise CommandError("Тестовые логины уже заняты; существующие данные не изменены.")
 
         role_snapshot = get_fresh_document("core.contract.role_rules")
-        role_rules = role_snapshot.payload
         role_spec = get_document_registry().get("core.contract.role_rules")
         database_backend = role_spec.active_backend == "database"
+        active_role_rules = role_snapshot.payload
+        # This is an isolated acceptance fixture, not a migration of the
+        # operator's role catalog.  Build it from the current validated Git
+        # schema so a reviewed legacy catalog may lag newly released
+        # capabilities without making the HTTP scenario order-dependent.
+        role_rules = load_json_file(Path(settings.BASE_DIR) / role_spec.default_path)
         source_role_code = "technician"
         role_code = "e2e_access_technician"
         copy_role_code = "e2e_access_technician_copy"
@@ -102,7 +108,9 @@ class Command(BaseCommand):
             raise CommandError("E2E ожидает исходную контрактную роль manager.")
         temporary_role_codes = (role_code, control_role_code, copy_role_code)
         if any(
-            code in role_rules or Group.objects.filter(name=code).exists()
+            code in active_role_rules
+            or code in role_rules
+            or Group.objects.filter(name=code).exists()
             for code in temporary_role_codes
         ):
             raise CommandError("Временная роль E2E уже занята; существующие данные не изменены.")

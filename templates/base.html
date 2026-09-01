@@ -40,6 +40,9 @@
                 {% if show_inventory_nav %}
                   <div class="all-functions-item"><a href="{% url 'inventory:list' %}"><span class="nav-icon">📦</span><span class="nav-text">Медизделия</span></a><button type="button" class="favorite-toggle" data-favorite-label="Медизделия" aria-label="Добавить в избранное: Медизделия" aria-pressed="false" onclick="toggleFavorite(event, 'inventory', 'Медизделия', '📦', '{% url 'inventory:list' %}')">☆</button></div>
                 {% endif %}
+                {% if show_warehouse_nav %}
+                  <div class="all-functions-item"><a href="{% url 'warehouse:overview' %}"><span class="nav-icon">🏥</span><span class="nav-text">Склад</span></a><button type="button" class="favorite-toggle" data-favorite-label="Склад" aria-label="Добавить в избранное: Склад" aria-pressed="false" onclick="toggleFavorite(event, 'warehouse', 'Склад', '🏥', '{% url 'warehouse:overview' %}')">☆</button></div>
+                {% endif %}
                 {% if show_department_nav %}
                   <div class="all-functions-item"><a href="{% url 'core:department_list' %}"><span class="nav-icon">🏢</span><span class="nav-text">Подразделения</span></a><button type="button" class="favorite-toggle" data-favorite-label="Подразделения" aria-label="Добавить в избранное: Подразделения" aria-pressed="false" onclick="toggleFavorite(event, 'departments', 'Подразделения', '🏢', '{% url 'core:department_list' %}')">☆</button></div>
                 {% endif %}

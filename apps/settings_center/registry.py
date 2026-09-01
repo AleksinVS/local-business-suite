@@ -34,6 +34,7 @@ EXPECTED_RUNTIME_DOCUMENT_IDS = frozenset(
         "memory.contract.ingestion_profiles",
         "memory.contract.file_organization_profiles",
         "memory.contract.graph_schema",
+        "warehouse.settings",
     }
 )
 
@@ -45,6 +46,7 @@ DESCRIPTOR_MODULES = (
     "apps.waiting_list.settings_descriptors",
     "apps.ai.settings_descriptors",
     "apps.memory.settings_descriptors",
+    "apps.warehouse.settings_descriptors",
 )
 
 

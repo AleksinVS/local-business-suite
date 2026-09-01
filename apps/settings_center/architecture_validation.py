@@ -41,6 +41,7 @@ CENTRALIZED_DOCUMENT_FILE_ADAPTERS = frozenset(
         Path("apps/memory/config_documents.py"),
         Path("apps/waiting_list/config_documents.py"),
         Path("apps/workorders/config_documents.py"),
+        Path("apps/warehouse/config_documents.py"),
     }
 )
 

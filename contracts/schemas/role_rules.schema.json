@@ -31,10 +31,10 @@
           "type": { "enum": ["flag", "scope", "targets"] },
           "label": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
-          "section": { "enum": ["workorders", "organization", "ai_memory", "personal_data", "waiting_list"] },
+          "section": { "enum": ["workorders", "organization", "ai_memory", "personal_data", "waiting_list", "warehouse"] },
           "risk": { "enum": ["normal", "elevated", "critical"] },
           "values_source": {
-            "enum": ["workorder_scopes", "waiting_list_scopes", "workorder_statuses", "waiting_list_statuses"]
+            "enum": ["workorder_scopes", "waiting_list_scopes", "warehouse_scopes", "workorder_statuses", "waiting_list_statuses"]
           }
         },
         "required": ["type", "label", "description", "section", "risk"],
@@ -124,7 +124,13 @@
             },
             { "enum": ["*"] }
           ]
-        }
+        },
+        "warehouse_view_scope": { "enum": ["none", "own_department", "department_branch", "all"] },
+        "warehouse_operate_scope": { "enum": ["none", "own_department", "department_branch", "all"] },
+        "warehouse_adjust_scope": { "enum": ["none", "own_department", "department_branch", "all"] },
+        "warehouse_manage_locations_scope": { "enum": ["none", "own_department", "department_branch", "all"] },
+        "warehouse_manage_report_profiles_scope": { "enum": ["none", "own_department", "department_branch", "all"] },
+        "warehouse_manage_catalog": { "type": "boolean" }
       },
       "required": [
         "view_scope",
@@ -152,7 +158,13 @@
         "waiting_list_edit_statuses",
         "waiting_list_transition_scope",
         "waiting_list_transition_from_statuses",
-        "waiting_list_transition_targets"
+        "waiting_list_transition_targets",
+        "warehouse_view_scope",
+        "warehouse_operate_scope",
+        "warehouse_adjust_scope",
+        "warehouse_manage_locations_scope",
+        "warehouse_manage_report_profiles_scope",
+        "warehouse_manage_catalog"
       ],
       "allOf": [
         {

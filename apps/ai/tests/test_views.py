@@ -204,8 +204,8 @@ class AIViewsTests(TestCase):
         self.assertEqual(payload["messages"][1]["content"], "Старый ответ")
         self.assertTrue(payload["messages"][1]["error"])
         self.assertRegex(payload["messages"][0]["created_at_display"], r"^\d{2}:\d{2}$")
-        self.assertEqual(payload["models"][0]["id"], "test-model")
-        self.assertTrue(payload["models"][0]["selected"])
+        self.assertEqual(payload["models"][0]["id"], "glm-4.7")
+        self.assertFalse(payload["models"][0]["selected"])
         self.assertEqual(
             payload["urls"]["model_update_url"],
             reverse("ai:chat_update_model", kwargs={"external_id": session.external_id}),
@@ -521,7 +521,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(AgentActionLog.objects.count(), 1)
         self.assertEqual(ChatSession.objects.count(), 1)
 
-    def test_open_right_panel_tool_returns_ui_command_for_visible_workorder(self):
+    def test_open_right_panel_tool_is_denied_without_delivered_task_policy(self):
         response = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
             data=json.dumps(
@@ -539,17 +539,10 @@ class AIViewsTests(TestCase):
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["ok"])
-        command = payload["result"]["ui_command"]
-        self.assertEqual(command["type"], "open_right_panel")
-        self.assertEqual(command["source_code"], "workorders")
-        self.assertEqual(command["object_id"], str(self.customer_workorder.pk))
-        self.assertEqual(command["target"], "#global-right-panel-content")
-        self.assertTrue(command["htmx_url"].startswith("/"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("outside delivered", response.json()["error"])
 
-    def test_open_right_panel_tool_denies_foreign_workorder(self):
+    def test_open_right_panel_tool_denies_foreign_workorder_without_task_policy(self):
         private_group, _ = Group.objects.get_or_create(name="private-ai-panel")
         private_board = Board.objects.create(title="Private Board", slug="private-ai-panel")
         private_board.allowed_groups.add(private_group)
@@ -579,10 +572,9 @@ class AIViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         payload = response.json()
-        self.assertFalse(payload["ok"])
-        self.assertIsNone(payload["result"])
+        self.assertIn("outside delivered", payload["error"])
 
-    def test_access_explain_and_editor_are_read_only_audited_and_do_not_create_pending_actions(self):
+    def test_access_tools_are_denied_without_delivered_task_policy(self):
         before_pending = PendingAction.objects.count()
 
         explain_response = self.client.post(
@@ -594,13 +586,9 @@ class AIViewsTests(TestCase):
             content_type="application/json",
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
-        self.assertEqual(explain_response.status_code, 200)
-        self.assertTrue(explain_response.json()["ok"])
+        self.assertEqual(explain_response.status_code, 400)
+        self.assertIn("outside delivered", explain_response.json()["error"])
         self.assertEqual(PendingAction.objects.count(), before_pending)
-        self.assertEqual(
-            AgentActionLog.objects.filter(tool_code="access.users.explain").latest("id").status,
-            AgentActionLog.Status.SUCCEEDED,
-        )
 
         denied_explain = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "access.users.explain"}),
@@ -612,10 +600,8 @@ class AIViewsTests(TestCase):
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
         self.assertEqual(denied_explain.status_code, 400)
-        self.assertEqual(
-            AgentActionLog.objects.filter(tool_code="access.users.explain").latest("id").status,
-            AgentActionLog.Status.DENIED,
-        )
+        self.assertIn("outside delivered", denied_explain.json()["error"])
+        self.assertFalse(AgentActionLog.objects.filter(tool_code="access.users.explain").exists())
         self.assertEqual(PendingAction.objects.count(), before_pending)
 
         editor_response = self.client.post(
@@ -627,13 +613,9 @@ class AIViewsTests(TestCase):
             content_type="application/json",
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
-        self.assertEqual(editor_response.status_code, 200)
-        self.assertTrue(editor_response.json()["ok"])
+        self.assertEqual(editor_response.status_code, 400)
+        self.assertIn("outside delivered", editor_response.json()["error"])
         self.assertEqual(PendingAction.objects.count(), before_pending)
-        self.assertEqual(
-            AgentActionLog.objects.filter(tool_code="access.open_editor").latest("id").status,
-            AgentActionLog.Status.SUCCEEDED,
-        )
 
         denied_editor = self.client.post(
             reverse("ai:tool_execute", kwargs={"tool_code": "access.open_editor"}),
@@ -645,10 +627,8 @@ class AIViewsTests(TestCase):
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
         self.assertEqual(denied_editor.status_code, 400)
-        self.assertEqual(
-            AgentActionLog.objects.filter(tool_code="access.open_editor").latest("id").status,
-            AgentActionLog.Status.DENIED,
-        )
+        self.assertIn("outside delivered", denied_editor.json()["error"])
+        self.assertFalse(AgentActionLog.objects.filter(tool_code="access.open_editor").exists())
         self.assertEqual(PendingAction.objects.count(), before_pending)
 
     def test_generic_right_panel_rejects_edit_mode_at_gateway_boundary(self):
@@ -668,11 +648,8 @@ class AIViewsTests(TestCase):
             HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("только режим просмотра", response.json()["errors"][0])
-        self.assertEqual(
-            AgentActionLog.objects.filter(tool_code="ui.open_right_panel").latest("id").status,
-            AgentActionLog.Status.FAILED,
-        )
+        self.assertIn("outside delivered", response.json()["error"])
+        self.assertFalse(AgentActionLog.objects.filter(tool_code="ui.open_right_panel").exists())
         self.assertFalse(PendingAction.objects.filter(tool_code="ui.open_right_panel").exists())
 
     def test_skill_catalog_includes_module_skills(self):
@@ -719,46 +696,32 @@ class AIViewsTests(TestCase):
         self.assertIn("demo.runtime_skill", skill_ids)
         self.assertIn("ui.open_right_panel", body)
 
-    def test_admin_can_create_runtime_skill_after_confirmation(self):
+    def test_admin_cannot_create_runtime_skill_without_delivered_task_policy(self):
         self.manager.is_superuser = True
         self.manager.save(update_fields=["is_superuser"])
 
         with TemporaryDirectory() as tmpdir:
             runtime_contracts = Path(tmpdir) / "contracts"
             with override_settings(RUNTIME_CONTRACTS_DIR=runtime_contracts):
-                result = execute_tool(
-                    tool_code="ai.skills.create_or_update",
-                    actor_context={"user_id": self.manager.id, "channel": "internal"},
-                    payload={
-                        "skill_id": "demo.created_skill",
-                        "name": "demo-created-skill",
-                        "description": "Creates a narrow demo skill.",
-                        "source_code": "demo",
-                        "object_types": ["record"],
-                        "required_tools": ["ui.open_right_panel"],
-                        "trigger_examples": ["Open demo"],
-                        "body": "Use ui.open_right_panel only for visible demo records.",
-                    },
-                    request_id="req-skill-create",
-                )
-                self.assertTrue(result["ok"], result)
-                self.assertTrue(result["meta"]["awaiting_confirmation"])
-                confirm = execute_pending_action(
-                    token=result["meta"]["pending_action_token"],
-                    confirmed=True,
-                    actor_context={"user_id": self.manager.id, "channel": "internal"},
-                    request_id="req-skill-create-confirm",
-                )
+                with self.assertRaises(ValidationError):
+                    execute_tool(
+                        tool_code="ai.skills.create_or_update",
+                        actor_context={"user_id": self.manager.id, "channel": "internal"},
+                        payload={
+                            "skill_id": "demo.created_skill",
+                            "name": "demo-created-skill",
+                            "description": "Creates a narrow demo skill.",
+                            "source_code": "demo",
+                            "object_types": ["record"],
+                            "required_tools": ["ui.open_right_panel"],
+                            "trigger_examples": ["Open demo"],
+                            "body": "Use ui.open_right_panel only for visible demo records.",
+                        },
+                        request_id="req-skill-create",
+                    )
 
                 target = runtime_contracts / "ai" / "skills" / "demo.created_skill" / "SKILL.md"
-                self.assertTrue(confirm["ok"], confirm)
-                self.assertTrue(target.exists())
-                self.assertIn("demo-created-skill", target.read_text(encoding="utf-8"))
-
-        action = AgentActionLog.objects.filter(tool_code="ai.skills.create_or_update", status=AgentActionLog.Status.PENDING).first()
-        self.assertIsNotNone(action)
-        self.assertIn("<SKILL_BODY_REDACTED", json.dumps(action.request_payload))
-        self.assertNotIn("visible demo records", json.dumps(action.request_payload))
+                self.assertFalse(target.exists())
 
     def test_processing_cleanup_uses_its_own_lease_and_requires_reconciliation(self):
         pending = PendingAction.objects.create(
@@ -854,7 +817,7 @@ class AIViewsTests(TestCase):
         with patch("apps.ai.tooling._dispatch_tool") as dispatch:
             with self.assertRaisesMessage(PermissionDenied, "отключена"):
                 execute_tool(
-                    tool_code="access.users.list",
+                    tool_code="workorders.list",
                     actor_context={"user_id": inactive_root.id, "channel": "internal"},
                     payload={},
                 )
@@ -933,31 +896,25 @@ class AIViewsTests(TestCase):
                     before["groups"],
                 )
 
-    def test_non_admin_cannot_confirm_runtime_skill_creation(self):
+    def test_non_admin_cannot_use_runtime_skill_tool_without_delivered_task_policy(self):
         with TemporaryDirectory() as tmpdir:
             runtime_contracts = Path(tmpdir) / "contracts"
             with override_settings(RUNTIME_CONTRACTS_DIR=runtime_contracts):
-                result = execute_tool(
-                    tool_code="ai.skills.create_or_update",
-                    actor_context={"user_id": self.customer.id, "channel": "internal"},
-                    payload={
-                        "skill_id": "demo.denied_skill",
-                        "name": "demo-denied-skill",
-                        "description": "Denied demo skill.",
-                        "required_tools": ["ui.open_right_panel"],
-                        "body": "Use ui.open_right_panel.",
-                    },
-                )
-                confirm = execute_pending_action(
-                    token=result["meta"]["pending_action_token"],
-                    confirmed=True,
-                    actor_context={"user_id": self.customer.id, "channel": "internal"},
-                )
+                with self.assertRaises(ValidationError):
+                    execute_tool(
+                        tool_code="ai.skills.create_or_update",
+                        actor_context={"user_id": self.customer.id, "channel": "internal"},
+                        payload={
+                            "skill_id": "demo.denied_skill",
+                            "name": "demo-denied-skill",
+                            "description": "Denied demo skill.",
+                            "required_tools": ["ui.open_right_panel"],
+                            "body": "Use ui.open_right_panel.",
+                        },
+                    )
 
                 target = runtime_contracts / "ai" / "skills" / "demo.denied_skill" / "SKILL.md"
-                self.assertFalse(confirm["ok"])
                 self.assertFalse(target.exists())
-                self.assertIn("недоступно управление навыками ИИ", confirm["errors"][0])
 
     def test_runtime_skill_authoring_rejects_unknown_required_tool(self):
         from ..skill_authoring import build_runtime_skill_document
@@ -973,7 +930,7 @@ class AIViewsTests(TestCase):
                 }
             )
 
-    def test_workorders_search_tool_uses_memory_source_adapter_index(self):
+    def test_workorders_search_tool_is_denied_without_delivered_task_policy(self):
         self.customer_workorder.description = "Маркер ai-wrapper-workorder-gamma для поиска."
         self.customer_workorder.save(update_fields=["description", "updated_at"])
 
@@ -992,11 +949,8 @@ class AIViewsTests(TestCase):
                     HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
                 )
 
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["tool"], "workorders.search")
-        self.assertEqual(payload["result"]["items"][0]["source_code"], "workorders")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("outside delivered", response.json()["error"])
 
     def test_page_context_update_resolves_workorder_and_recomputes_capabilities(self):
         self.client.force_login(self.manager)
@@ -1187,7 +1141,7 @@ class AIViewsTests(TestCase):
         self.assertEqual(snapshot.resolved_summary["selection"]["service_id"], "s1")
         self.assertIn("can_transition", snapshot.resolved_summary["capabilities"])
 
-    def test_chat_message_submit_binds_immutable_page_context_snapshot(self):
+    def test_chat_context_tool_is_denied_without_delivered_task_policy(self):
         self.client.force_login(self.manager)
         session = ChatSession.objects.create(user=self.manager)
         first = update_window_context_snapshot(
@@ -1241,19 +1195,15 @@ class AIViewsTests(TestCase):
         self.assertEqual(message.metadata["page_context_status"], "bound")
         self.assertEqual(message.metadata["context_snapshot_id"], first.id)
 
-        result = execute_tool(
-            tool_code="ui.get_current_context",
-            actor_context={
-                "user_id": self.manager.id,
-                "page_context": {"context_snapshot_id": first.id, "page_context_present": True},
-            },
-            payload={},
-        )
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(
-            result["result"]["context"]["selection"]["object_id"],
-            str(self.customer_workorder.pk),
-        )
+        with self.assertRaises(ValidationError):
+            execute_tool(
+                tool_code="ui.get_current_context",
+                actor_context={
+                    "user_id": self.manager.id,
+                    "page_context": {"context_snapshot_id": first.id, "page_context_present": True},
+                },
+                payload={},
+            )
 
     def test_chat_settings_surface_overrides_default_sidebar_limit(self):
         self.assertEqual(get_chat_settings("sidebar")["recent_message_limit"], 8)
@@ -1438,8 +1388,8 @@ class AIViewsTests(TestCase):
         self.assertContains(response, 'id="native-ai-sidebar-root"')
         self.assertContains(response, 'data-config-url="' + reverse("ai:ui_config") + '"')
         self.assertContains(response, 'data-new-session-url="' + reverse("ai:ui_session_new") + '"')
-        self.assertContains(response, "native_ai.css?v=20260826-unified-native-chat")
-        self.assertContains(response, "native_ai.js?v=20260826-unified-native-chat")
+        self.assertContains(response, "/static/src/ai_ui/native_ai.css?v=")
+        self.assertContains(response, "/static/src/ai_ui/native_ai.js?v=")
         self.assertNotContains(response, 'id="copilotkit-sidebar-root"')
         self.assertNotContains(response, reverse("ai:copilotkit_config"))
 
@@ -1648,6 +1598,55 @@ class AIViewsTests(TestCase):
             tool_code="workorders.create", status=AgentActionLog.Status.DENIED
         ).first()
         self.assertIsNotNone(action)
+
+    def test_pending_confirmation_requires_strict_boolean_and_keeps_pending(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={
+                "department_id": self.department.id,
+                "subject": "String confirmation must not execute",
+                "description": "The pending action must remain unchanged.",
+            },
+            status=PendingAction.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse("ai:tool_confirm", kwargs={"token": pending.token}),
+            data=json.dumps(
+                {"confirmed": "false", "actor": {"user_id": self.customer.id}}
+            ),
+            content_type="application/json",
+            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("логическим", response.json()["error"])
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, PendingAction.Status.PENDING)
+        self.assertFalse(
+            WorkOrder.objects.filter(title="String confirmation must not execute").exists()
+        )
+
+    def test_pending_confirmation_service_rejects_non_boolean_before_lookup(self):
+        pending = PendingAction.objects.create(
+            tool_code="workorders.create",
+            action_kind="write",
+            actor=self.customer,
+            payload={"department_id": self.department.id, "subject": "No-op", "description": "No-op"},
+            status=PendingAction.Status.PENDING,
+        )
+
+        with self.assertRaisesMessage(ValidationError, "логическим значением"):
+            execute_pending_action(
+                token=pending.token,
+                confirmed="false",
+                actor_context={"user_id": self.customer.id},
+            )
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, PendingAction.Status.PENDING)
 
     def test_pending_action_invalid_token_returns_error(self):
         fake_token = uuid.uuid4()

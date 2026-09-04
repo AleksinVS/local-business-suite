@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -310,3 +311,4 @@ class WarehouseAccessPolicyTests(TestCase):
         self.assertEqual(
             department_ids_for_warehouse_scope(unassigned, WAREHOUSE_VIEW_SCOPE), set()
         )
+pytestmark = pytest.mark.integration

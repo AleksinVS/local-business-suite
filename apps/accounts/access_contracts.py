@@ -125,6 +125,33 @@ CAPABILITY_GROUP_BY_CAPABILITY = {
 }
 
 
+def _role_rules_snapshot(*, fresh=False):
+    """Вернуть единый transport-снимок роли для CAS hash + revision."""
+
+    from apps.settings_center.contract_services import read_contract_snapshot
+    from apps.settings_center.registry import get_registry
+
+    return read_contract_snapshot(
+        get_registry().get("core.contract.role_rules"),
+        fresh=fresh,
+    )
+
+
+def _assert_role_form_version(*, snapshot, base_hash, base_revision=None):
+    if snapshot.content_hash != str(base_hash or "").removeprefix("sha256:"):
+        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    if snapshot.source not in {"database_override", "git_default"}:
+        return
+    if base_revision is None:
+        raise ValidationError("Не указана ревизия контракта ролей. Перезагрузите страницу.")
+    try:
+        requested_revision = int(base_revision)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Ревизия контракта ролей имеет неверный формат.") from exc
+    if requested_revision != snapshot.revision:
+        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+
+
 def can_edit_role_definitions(actor, *, rules_snapshot=None):
     """Return whether an active actor has product role-definition authority."""
     if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
@@ -135,11 +162,25 @@ def can_edit_role_definitions(actor, *, rules_snapshot=None):
     if current.is_superuser:
         return True
     try:
-        rules = (
-            rules_snapshot
-            if isinstance(rules_snapshot, dict)
-            else get_contract("role_rules")
-        )
+        if isinstance(rules_snapshot, dict):
+            rules = rules_snapshot
+        else:
+            from apps.settings_center.document_registry import get_document_registry
+
+            if (
+                get_document_registry()
+                .get("core.contract.role_rules")
+                .active_backend
+                == "database"
+            ):
+                from apps.settings_center.document_repository import get_fresh_document
+
+                rules = get_fresh_document("core.contract.role_rules").payload
+            else:
+                # A legacy sandbox may intentionally contain only the role
+                # file; loading a connected DB scope here would manufacture a
+                # false repository failure for the legacy backend.
+                rules = get_contract("role_rules")
         return any(
             rule.get("manage_roles") is True
             for rule in active_role_rules(current, rules_payload=rules)
@@ -167,6 +208,14 @@ def role_is_protected(config, *, catalog=None) -> bool:
         return True
     for code in PROTECTED_CAPABILITIES:
         metadata = catalog.get(code)
+        # A validated legacy catalog may predate a newly released capability.
+        # Such a capability is absent from every role and its consumer resolves
+        # to the safe default, so it must not turn all legacy roles into
+        # protected roles during the reviewed catalog migration.  Once the
+        # catalog declares the capability, a missing or malformed role value
+        # remains fail-closed.
+        if metadata is None and code not in catalog:
+            continue
         if not isinstance(metadata, dict) or code not in config:
             return True
         effective = _strict_capability_effective(
@@ -262,7 +311,8 @@ def role_catalog_rows():
 
 
 def role_definition_read_model(role_code):
-    rules = get_contract("role_rules")
+    snapshot = _role_rules_snapshot()
+    rules = snapshot.payload
     config = rules.get(role_code)
     if not isinstance(config, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
@@ -303,15 +353,22 @@ def role_definition_read_model(role_code):
         "config": copy.deepcopy(config),
         "sections": sections,
         "member_count": get_user_model().objects.filter(groups__name=role_code).distinct().count(),
-        "base_hash": normalized_hash(rules),
+        "base_hash": snapshot.content_hash,
+        "base_revision": snapshot.revision,
     }
 
 
-def preview_role_definition_change(*, actor, role_code, proposed_config, base_hash):
-    rules = get_contract("role_rules")
+def preview_role_definition_change(
+    *, actor, role_code, proposed_config, base_hash, base_revision=None
+):
+    snapshot = _role_rules_snapshot()
+    rules = snapshot.payload
     actor = _require_role_definition_editor(actor, rules_snapshot=rules)
-    if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
-        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    _assert_role_form_version(
+        snapshot=snapshot,
+        base_hash=base_hash,
+        base_revision=base_revision,
+    )
     before = rules.get(role_code)
     if not isinstance(before, dict) or role_code.startswith("$"):
         raise ValidationError("Роль не найдена.")
@@ -357,7 +414,9 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
         "actor_id": actor.pk,
         "actor_state": _role_editor_actor_state(actor, rules_snapshot=rules),
         "role_code": role_code,
-        "base_hash": normalized_hash(rules),
+        "base_hash": snapshot.content_hash,
+        "payload_hash": normalized_hash(rules),
+        "base_revision": snapshot.revision,
         "after": after,
         "member_fingerprint": _role_member_fingerprint(role_code),
         "impact_hash": normalized_hash(impact),
@@ -365,7 +424,8 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
     }
     return {
         "role": {"code": role_code, "label": after.get("display_name", role_code)},
-        "base_hash": normalized_hash(rules),
+        "base_hash": snapshot.content_hash,
+        "base_revision": snapshot.revision,
         "changes": changes,
         "impact": impact,
         "risk_markers": risk_markers,
@@ -380,10 +440,18 @@ def preview_role_definition_change(*, actor, role_code, proposed_config, base_ha
 
 
 def apply_role_definition_change(
-    *, actor, role_code, proposed_config, base_hash, preview_token, risk_confirmed=False
+    *,
+    actor,
+    role_code,
+    proposed_config,
+    base_hash,
+    preview_token,
+    risk_confirmed=False,
+    base_revision=None,
 ):
     signed = _load_role_definition_preview(preview_token)
-    rules = get_contract("role_rules")
+    snapshot = _role_rules_snapshot(fresh=True)
+    rules = snapshot.payload
     actor = _require_role_definition_editor(actor, rules_snapshot=rules)
     if signed.get("actor_id") != actor.pk or signed.get("role_code") != role_code:
         raise ValidationError("Предпросмотр относится к другой роли или администратору.")
@@ -391,7 +459,16 @@ def apply_role_definition_change(
         raise ValidationError("Права администратора изменились после предпросмотра.")
     if signed.get("base_hash") != str(base_hash or "").removeprefix("sha256:"):
         raise ValidationError("Версия формы не совпадает с предпросмотром.")
-    if normalized_hash(rules) != signed.get("base_hash"):
+    if signed.get("base_revision", 0) != snapshot.revision:
+        raise ValidationError("Ревизия контракта изменилась после предпросмотра.")
+    if snapshot.source in {"database_override", "git_default"}:
+        try:
+            requested_revision = int(base_revision)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия контракта ролей имеет неверный формат.") from exc
+        if requested_revision != snapshot.revision:
+            raise ValidationError("Версия формы не совпадает с предпросмотром.")
+    if normalized_hash(rules) != signed.get("payload_hash", signed.get("base_hash")):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
     before = rules.get(role_code)
     catalog = rules.get("$capabilities", {})
@@ -435,7 +512,9 @@ def apply_role_definition_change(
     preview_fingerprint = hashlib.sha256(preview_token.encode("utf-8")).hexdigest()
 
     def locked_precondition(current_actor, current_rules):
-        if normalized_hash(current_rules) != signed.get("base_hash"):
+        if normalized_hash(current_rules) != signed.get(
+            "payload_hash", signed.get("base_hash")
+        ):
             raise ValidationError("Контракт ролей изменился после предпросмотра.")
         current_actor = _require_role_definition_editor(
             current_actor,
@@ -504,6 +583,7 @@ def apply_role_definition_change(
         role_code=role_code,
         confirmed=True,
         base_hash=signed["base_hash"],
+        base_revision=signed.get("base_revision", 0),
         preview_token=preview_token,
         risk_confirmed=risk_confirmed,
         operation_fingerprint=preview_fingerprint,
@@ -522,7 +602,9 @@ def apply_role_definition_change(
     )
 
 
-def save_role_definition_change(*, actor, role_code, proposed_config, base_hash):
+def save_role_definition_change(
+    *, actor, role_code, proposed_config, base_hash, base_revision=None
+):
     """Проверить и сразу применить определение одной роли.
 
     ``base_hash`` остаётся optimistic-lock открытой формы. Подписанный
@@ -535,19 +617,28 @@ def save_role_definition_change(*, actor, role_code, proposed_config, base_hash)
         role_code=role_code,
         proposed_config=proposed_config,
         base_hash=base_hash,
+        base_revision=base_revision,
     )
     return apply_role_definition_change(
         actor=actor,
         role_code=role_code,
         proposed_config=proposed_config,
         base_hash=preview["base_hash"],
+        base_revision=preview["base_revision"],
         preview_token=preview["preview_token"],
         risk_confirmed=True,
     )
 
 
 def save_role_creation(
-    *, actor, role_code, display_name, description="", protected=False, base_hash
+    *,
+    actor,
+    role_code,
+    display_name,
+    description="",
+    protected=False,
+    base_hash,
+    base_revision=None,
 ):
     """Create one least-privilege role after reserving its Django group.
 
@@ -557,10 +648,14 @@ def save_role_creation(
     an unrelated technical or AD group.
     """
 
-    rules = get_contract("role_rules")
+    snapshot = _role_rules_snapshot()
+    rules = snapshot.payload
     actor = _require_role_definition_editor(actor, rules_snapshot=rules)
-    if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
-        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    _assert_role_form_version(
+        snapshot=snapshot,
+        base_hash=base_hash,
+        base_revision=base_revision,
+    )
     role_code = _normalize_new_role_code(role_code)
     catalog = rules.get("$capabilities")
     if not isinstance(catalog, dict):
@@ -586,7 +681,8 @@ def save_role_creation(
                 actor=actor,
                 role_code=role_code,
                 expected_config=after,
-                expected_hash=normalized_hash(rules),
+                expected_hash=snapshot.content_hash,
+                expected_revision=snapshot.revision,
             )
             return None
         raise ValidationError("Роль с таким кодом уже существует.")
@@ -607,7 +703,9 @@ def save_role_creation(
         "actor_id": actor.pk,
         "actor_state": _role_editor_actor_state(actor, rules_snapshot=rules),
         "role_code": role_code,
-        "base_hash": normalized_hash(rules),
+        "base_hash": snapshot.content_hash,
+        "payload_hash": normalized_hash(rules),
+        "base_revision": snapshot.revision,
         "after": after,
         "member_fingerprint": _role_member_fingerprint(role_code),
         "nonce": str(uuid.uuid4()),
@@ -619,7 +717,7 @@ def save_role_creation(
     )
 
     def locked_precondition(current_actor, current_rules):
-        if normalized_hash(current_rules) != signed_payload["base_hash"]:
+        if normalized_hash(current_rules) != signed_payload["payload_hash"]:
             raise ValidationError("Контракт ролей изменился после предпросмотра.")
         current_actor = _require_role_definition_editor(
             current_actor, rules_snapshot=current_rules
@@ -661,6 +759,7 @@ def save_role_creation(
         role_code=role_code,
         confirmed=True,
         base_hash=signed_payload["base_hash"],
+        base_revision=signed_payload["base_revision"],
         preview_token=preview_token,
         risk_confirmed=True,
         operation_fingerprint=hashlib.sha256(preview_token.encode("utf-8")).hexdigest(),
@@ -677,13 +776,24 @@ def save_role_creation(
 
 
 def save_role_copy(
-    *, actor, source_role_code, target_role_code, display_name, description="", base_hash
+    *,
+    actor,
+    source_role_code,
+    target_role_code,
+    display_name,
+    description="",
+    base_hash,
+    base_revision=None,
 ):
     """Create a flat copy of one role definition, without assignments."""
-    rules = get_contract("role_rules")
+    snapshot = _role_rules_snapshot()
+    rules = snapshot.payload
     actor = _require_role_definition_editor(actor, rules_snapshot=rules)
-    if normalized_hash(rules) != str(base_hash or "").removeprefix("sha256:"):
-        raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    _assert_role_form_version(
+        snapshot=snapshot,
+        base_hash=base_hash,
+        base_revision=base_revision,
+    )
     source_role_code = str(source_role_code or "").strip()
     source = rules.get(source_role_code)
     if source_role_code.startswith("$") or not isinstance(source, dict):
@@ -719,7 +829,9 @@ def save_role_copy(
         "role_code": target_role_code,
         "source_role_code": source_role_code,
         "source_role_hash": source_hash,
-        "base_hash": normalized_hash(rules),
+        "base_hash": snapshot.content_hash,
+        "payload_hash": normalized_hash(rules),
+        "base_revision": snapshot.revision,
         "after": copied,
         "member_fingerprint": _role_member_fingerprint(target_role_code),
         "nonce": str(uuid.uuid4()),
@@ -729,7 +841,7 @@ def save_role_copy(
     )
 
     def locked_precondition(current_actor, current_rules):
-        if normalized_hash(current_rules) != signed_payload["base_hash"]:
+        if normalized_hash(current_rules) != signed_payload["payload_hash"]:
             raise ValidationError("Контракт ролей изменился после предпросмотра.")
         current_actor = _require_role_definition_editor(
             current_actor, rules_snapshot=current_rules
@@ -779,6 +891,7 @@ def save_role_copy(
         role_code=target_role_code,
         confirmed=True,
         base_hash=signed_payload["base_hash"],
+        base_revision=signed_payload["base_revision"],
         preview_token=preview_token,
         risk_confirmed=True,
         operation_fingerprint=hashlib.sha256(preview_token.encode("utf-8")).hexdigest(),
@@ -914,12 +1027,35 @@ def _materialize_role_group(
     return group
 
 
-def _repair_role_materialization(*, actor, role_code, expected_config, expected_hash):
+def _repair_role_materialization(
+    *, actor, role_code, expected_config, expected_hash, expected_revision
+):
     try:
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
-            rules = get_contract("role_rules")
+            # The request-local snapshot is deliberately not authoritative once
+            # the access lock is acquired.  A concurrent DB writer may have
+            # advanced the role document between the initial read and this
+            # repair path; materialising the stale role would create an
+            # untracked access definition.
+            from apps.settings_center.document_repository import get_fresh_document
+            from apps.settings_center.document_registry import get_document_registry
+
+            role_spec = get_document_registry().get("core.contract.role_rules")
+            if role_spec.active_backend == "database":
+                current = get_fresh_document("core.contract.role_rules")
+            else:
+                # Legacy deployments can intentionally provide only the role
+                # file (for example during deployment migration).  Keep the
+                # same no-cache semantics without forcing a connected DB
+                # scope whose Git dependency is absent in that sandbox.
+                current = _role_rules_snapshot(fresh=True)
+            rules = current.payload
             actor = _require_role_definition_editor(actor, rules_snapshot=rules)
-            if normalized_hash(rules) != expected_hash or rules.get(role_code) != expected_config:
+            if (
+                current.content_hash != expected_hash
+                or current.revision != expected_revision
+                or rules.get(role_code) != expected_config
+            ):
                 raise ValidationError("Контракт роли изменился; повторите операцию.")
             _assert_role_definition_target_policy(
                 actor=actor,
@@ -998,7 +1134,7 @@ def _validate_role_definition_transport_request(
     signed = _load_role_definition_preview(preview_token)
     if signed.get("actor_id") != actor.pk or signed.get("role_code") != role_code:
         raise PermissionDenied("Предпросмотр относится к другой роли или администратору.")
-    if signed.get("base_hash") != normalized_hash(before):
+    if signed.get("payload_hash", signed.get("base_hash")) != normalized_hash(before):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
     action = signed.get("action", "edit")
     current_before = before.get(role_code)

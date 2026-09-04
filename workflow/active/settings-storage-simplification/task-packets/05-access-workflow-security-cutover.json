@@ -1,14 +1,14 @@
 {
   "task_id": "05-access-workflow-security-cutover",
-  "title": "Security-cutover ролей и workflow",
-  "status": "planned",
+  "title": "Security-cutover ролей, workflow и палитры заявок",
+  "status": "accepted",
   "risk": "critical",
-  "objective": "Перевести role_rules и workflow_rules на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
+  "objective": "Перевести role_rules, workflow_rules и зависимую палитру заявок на один PostgreSQL repository/writer, сохранив существующую модель полномочий, кросс-валидацию и закрытый отказ.",
   "start_gate": [
     "Пакет 04 accepted и observation не выявил дефектов backend.",
     "ADR-0048 Accepted.",
     "Согласован полный role/access acceptance matrix.",
-    "Нет пересекающегося write с workflow/active/access-administration-ux-unification.",
+    "Во время cutover старый access workflow и все пересекающиеся writers явно заморожены.",
     "Cutover freeze/backup/rollback разрешены отдельно."
   ],
   "dependencies": [
@@ -54,7 +54,8 @@
     "workflow/active/settings-storage-simplification/EXECUTOR_REPORT.05-access-workflow-security-cutover.md"
   ],
   "requirements": [
-    "Зарегистрировать role_rules и workflow_rules как отдельные database_override документы с fail_closed policy.",
+    "Зарегистрировать role_rules и workflow_rules как отдельные database_override документы с fail_closed policy, а workorders status colors — как отдельный presentation-документ в том же dependency closure.",
+    "Writer затрагивающий workflow или палитру заявок блокирует отсортированный набор role_rules, workflow_rules и workorders.contract.status_colors до кросс-валидации.",
     "Для одного access decision использовать согласованный request snapshot; один запрос не видит разные revisions role/workflow.",
     "При cross-validation получать transaction-level advisory locks для role/workflow document ids в детерминированном порядке, затем блокировать существующие rows. Это обязательно и когда один override отсутствует, чтобы исключить first-create race и промежуточную пару.",
     "Сохранить active superuser gate полного role catalog writer, delegated single-role writer, signed preview, privilege ceiling, operation fingerprint и audit context.",
@@ -84,7 +85,7 @@
     "Workflow transition matrix до/после совпадает; stale edit не перезаписывает изменения.",
     "Два worker видят новую роль/revision без restart.",
     "Corrupt/unknown schema даёт fail-closed и health signal.",
-    "Rollback восстанавливает capabilities и transitions новой revision.",
+    "Обычный rollback роли сохраняет текущие Git-authoritative $capabilities/$administration и набор ролей; возврат capability catalog выполняет только deployment-команда. Workflow rollback создаёт новую revision.",
     "rg/architecture test не находит запрещённых role/workflow file/settings reads."
   ],
   "verification_commands": [

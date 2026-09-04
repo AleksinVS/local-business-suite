@@ -2,7 +2,7 @@
 
 ## Add a new role
 
-1. Update `contracts/role_rules.json` for defaults or `data/contracts/role_rules.json` for runtime changes.
+1. Update `contracts/role_rules.json` for defaults; apply runtime changes through Settings Center so the active backend writes the versioned PostgreSQL document (or the legacy adapter before cutover).
 2. Validate contracts.
 3. Add or adjust tests.
 

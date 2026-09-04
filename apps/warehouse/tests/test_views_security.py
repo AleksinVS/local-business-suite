@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -618,3 +619,4 @@ class WarehouseViewSecurityTests(TestCase):
         self.assertEqual(accepted.status_code, 302)
         document.refresh_from_db()
         self.assertEqual(document.status, StockDocument.Status.CANCELLED)
+pytestmark = pytest.mark.integration

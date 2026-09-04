@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -253,3 +254,4 @@ class WarehousePostingTests(TestCase):
         reversal.refresh_from_db()
         self.assertEqual(reversal.status, StockDocument.Status.DRAFT)
         self.assertEqual(StockBalance.objects.get().quantity, Decimal("5"))
+pytestmark = pytest.mark.integration

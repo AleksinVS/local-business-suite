@@ -26,6 +26,7 @@ from .vector_backends import MemoryIndexRecord
 from .vector_backends import LANCEDB_VECTOR_SCHEMA_VERSION, get_default_fulltext_schema_version
 from .vector_backends import get_default_backend
 from .vector_backends import get_default_vector_backend
+from .config_documents import get_memory_document_snapshots
 
 
 CHAT_MEMORY_PERSONAL_SOURCE = "ai_chat_personal"
@@ -63,6 +64,13 @@ def remember_knowledge(*, actor, session, payload, request_id=""):
         if not can_write_organization_memory(actor):
             raise PermissionDenied("Organization memory write is not allowed for this user.")
 
+    # The write and its inline index are one operation.  Capture the profile
+    # once before touching the knowledge item so a repository revision cannot
+    # change between the file write and vector/embedding work.
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.profiles",)
+    )
+
     message_ids = _normalize_message_ids(payload.get("message_ids"))
     if not message_ids:
         latest = session.messages.filter(role=ChatMessage.Role.USER).order_by("-created_at", "-id").first()
@@ -85,11 +93,12 @@ def remember_knowledge(*, actor, session, payload, request_id=""):
         message_ids=message_ids,
         user_note=user_note,
         importance=importance,
+        snapshots=snapshots,
     )
 
     index_status = "ready"
     try:
-        index_knowledge_item(knowledge_item)
+        index_knowledge_item(knowledge_item, snapshots=snapshots)
     except Exception as exc:
         knowledge_item.refresh_from_db(fields=["index_status"])
         index_status = knowledge_item.index_status
@@ -113,7 +122,9 @@ def remember_knowledge(*, actor, session, payload, request_id=""):
 
 
 @transaction.atomic
-def _write_knowledge_item_and_file(*, actor, session, target_scope, message_ids, user_note, importance):
+def _write_knowledge_item_and_file(
+    *, actor, session, target_scope, message_ids, user_note, importance, snapshots=None
+):
     source_messages = _load_messages(session=session, message_ids=message_ids)
     raw_text = _build_raw_memory_text(messages=source_messages, user_note=user_note)
     if not raw_text.strip():
@@ -141,7 +152,11 @@ def _write_knowledge_item_and_file(*, actor, session, target_scope, message_ids,
         body=_normalize_memory_text(sanitized.text),
         commit_message=f"Remember knowledge {knowledge_item.memory_id}",
     )
-    rebuild_memory_projection(scope=knowledge_item.scope, owner_user=knowledge_item.owner_user)
+    rebuild_memory_projection(
+        scope=knowledge_item.scope,
+        owner_user=knowledge_item.owner_user,
+        snapshots=snapshots,
+    )
     return knowledge_item, file_result, sanitized
 
 
@@ -247,7 +262,7 @@ def create_knowledge_item_for_remember(
     return item
 
 
-def rebuild_memory_projection(*, scope: str, owner_user=None):
+def rebuild_memory_projection(*, scope: str, owner_user=None, snapshots=None):
     """Regenerate the OKF ``index.md`` for a scope from the knowledge files on disk.
 
     ADR-0030 decision 4: the git commit is now the write journal; there is no
@@ -260,14 +275,32 @@ def rebuild_memory_projection(*, scope: str, owner_user=None):
     return rebuild_knowledge_index(scope=scope, owner_user_id=owner_user_id)
 
 
-def index_knowledge_item(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
+def index_knowledge_item(
+    item: MemoryKnowledgeItem,
+    *,
+    index_backends=("fulltext", "vector"),
+    snapshots=None,
+):
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
     # Keep source status stable for the complete index update, not only while
     # obtaining the source row.  The lock is intentionally acquired once.
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
-        return _index_knowledge_item_locked(item, index_backends=index_backends)
+        return _index_knowledge_item_locked(
+            item,
+            index_backends=index_backends,
+            snapshots=snapshots,
+        )
 
 
-def _index_knowledge_item_locked(item: MemoryKnowledgeItem, *, index_backends=("fulltext", "vector")):
+def _index_knowledge_item_locked(
+    item: MemoryKnowledgeItem,
+    *,
+    index_backends=("fulltext", "vector"),
+    snapshots=None,
+):
     lifecycle = str((item.metadata or {}).get("lifecycle") or "current")
     if lifecycle != "current":
         # ADR-0030 decisions 4 & 8: a page proposed via the git
@@ -283,7 +316,11 @@ def _index_knowledge_item_locked(item: MemoryKnowledgeItem, *, index_backends=("
     source = _chat_memory_source_locked(item.scope)
     selected_backends = set(index_backends or ())
     fulltext_backend = get_default_backend() if "fulltext" in selected_backends else None
-    vector_backend = get_default_vector_backend() if "vector" in selected_backends else None
+    vector_backend = (
+        get_default_vector_backend(snapshots=snapshots)
+        if "vector" in selected_backends
+        else None
+    )
     document_id = _knowledge_document_id(item)
     body = read_knowledge_item_file(item).body
     stale_document_ids = list(
@@ -353,6 +390,9 @@ def _index_knowledge_item_locked(item: MemoryKnowledgeItem, *, index_backends=("
 
 def edit_personal_memory(*, actor, memory_id: str, new_text: str):
     item = _get_owned_personal_memory(actor=actor, memory_id=memory_id)
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.profiles",)
+    )
     sanitized = sanitize_memory_text(new_text, actor=actor, scope=MemoryKnowledgeItem.Scope.PERSONAL)
     body = _normalize_memory_text(sanitized.text)
     item.text_hash = _sha256(body)
@@ -361,9 +401,13 @@ def edit_personal_memory(*, actor, memory_id: str, new_text: str):
     item.index_status = "indexing_pending"
     item.save(update_fields=["text_hash", "kind", "metadata", "index_status", "updated_at"])
     file_result = write_knowledge_item_file(item, body=body, commit_message=f"Edit knowledge {item.memory_id}")
-    rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
+    rebuild_memory_projection(
+        scope=item.scope,
+        owner_user=item.owner_user,
+        snapshots=snapshots,
+    )
     try:
-        index_knowledge_item(item)
+        index_knowledge_item(item, snapshots=snapshots)
     except Exception as exc:
         enqueue_memory_queue_task(
             job_kind=MemoryQueueJobKind.REINDEX,
@@ -380,18 +424,25 @@ def edit_personal_memory(*, actor, memory_id: str, new_text: str):
 
 def delete_personal_memory(*, actor, memory_id: str):
     item = _get_owned_personal_memory(actor=actor, memory_id=memory_id)
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.profiles",)
+    )
     body = read_knowledge_item_file(item).body
     item.status = MemoryKnowledgeItem.Status.DELETED
     item.index_status = "deleted"
     item.save(update_fields=["status", "index_status", "updated_at"])
     file_result = write_knowledge_item_file(item, body=body, commit_message=f"Delete knowledge {item.memory_id}")
-    rebuild_memory_projection(scope=item.scope, owner_user=item.owner_user)
+    rebuild_memory_projection(
+        scope=item.scope,
+        owner_user=item.owner_user,
+        snapshots=snapshots,
+    )
     document_ids = list(MemorySearchDocument.objects.filter(knowledge_item=item).values_list("document_id", flat=True))
     if document_ids:
         fulltext_backend = get_default_backend()
         if hasattr(fulltext_backend, "deactivate"):
             fulltext_backend.deactivate(document_ids)
-        vector_backend = get_default_vector_backend()
+        vector_backend = get_default_vector_backend(snapshots=snapshots)
         if vector_backend is not None and hasattr(vector_backend, "deactivate"):
             vector_backend.deactivate(document_ids)
         MemorySearchDocument.objects.filter(document_id__in=document_ids).update(

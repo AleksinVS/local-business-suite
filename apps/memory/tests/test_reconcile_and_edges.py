@@ -1,4 +1,7 @@
 """Тесты reconcile канона, repo lock и словаря рёбер."""
+from copy import deepcopy
+from dataclasses import replace
+
 from apps.memory.tests._common import *  # noqa: F401,F403
 
 
@@ -98,6 +101,83 @@ class MemoryReconcileTests(TestCase):
             out2 = StringIO()
             call_command("memory_reconcile", stdout=out2)
             self.assertIn("reconciled=0", out2.getvalue())
+
+    def test_reconcile_holds_profiles_and_graph_snapshot_across_item_loop(self):
+        """A mid-run repository change must affect only the next operation."""
+        from types import SimpleNamespace
+
+        with TemporaryDirectory() as tmpdir, self.settings(
+            DATA_DIR=Path(tmpdir), LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE=True
+        ):
+            _user, item = self._make_item()
+            self._rewrite_file(item, body="snapshot loop marker 2026")
+            from apps.memory.config_documents import get_memory_document_snapshots
+
+            base = get_memory_document_snapshots(
+                document_ids=(
+                    "memory.contract.profiles",
+                    "memory.contract.graph_schema",
+                )
+            )
+            profiles_v1 = replace(
+                base["memory.contract.profiles"],
+                payload={**deepcopy(base["memory.contract.profiles"].payload), "test_revision": "v1"},
+            )
+            graph_v1 = replace(
+                base["memory.contract.graph_schema"],
+                payload={**deepcopy(base["memory.contract.graph_schema"].payload), "test_revision": "v1"},
+            )
+            profiles_v2 = replace(
+                profiles_v1,
+                revision=profiles_v1.revision + 1,
+                payload={**deepcopy(profiles_v1.payload), "test_revision": "v2"},
+            )
+            graph_v2 = replace(
+                graph_v1,
+                revision=graph_v1.revision + 1,
+                payload={**deepcopy(graph_v1.payload), "test_revision": "v2"},
+            )
+            current = {"snapshots": {"memory.contract.profiles": profiles_v1, "memory.contract.graph_schema": graph_v1}}
+            reader_calls = []
+            indexed = []
+            materialized = []
+
+            def read_snapshots(*, document_ids=None, request=None):
+                reader_calls.append(tuple(document_ids or ()))
+                return current["snapshots"]
+
+            def index_with_mutation(indexed_item, *, snapshots=None):
+                indexed.append(snapshots)
+                current["snapshots"] = {
+                    "memory.contract.profiles": profiles_v2,
+                    "memory.contract.graph_schema": graph_v2,
+                }
+
+            fake_edges = SimpleNamespace(created=0, updated=0, deleted=0, skipped=[])
+            with patch(
+                "apps.memory.management.commands.memory_reconcile.get_memory_document_snapshots",
+                side_effect=read_snapshots,
+            ), patch(
+                "apps.memory.management.commands.memory_reconcile.index_knowledge_item",
+                side_effect=index_with_mutation,
+            ), patch(
+                "apps.memory.management.commands.memory_reconcile.materialize_knowledge_edges",
+                side_effect=lambda **kwargs: materialized.append(kwargs.get("snapshots")) or fake_edges,
+            ), patch(
+                "apps.memory.management.commands.memory_reconcile.rebuild_all_knowledge_indexes",
+                return_value=[],
+            ), patch(
+                "apps.memory.management.commands.memory_reconcile.rebuild_all_knowledge_logs",
+                return_value=[],
+            ):
+                call_command("memory_reconcile", verbosity=0)
+                self.assertEqual(len(reader_calls), 1)
+                self.assertEqual(indexed[0]["memory.contract.profiles"].payload["test_revision"], "v1")
+                self.assertEqual(materialized[0]["memory.contract.graph_schema"].payload["test_revision"], "v1")
+
+                call_command("memory_reconcile", verbosity=0)
+            self.assertEqual(len(reader_calls), 2)
+            self.assertEqual(materialized[1]["memory.contract.graph_schema"].payload["test_revision"], "v2")
 
     def test_manual_sensitivity_downgrade_is_held_pending(self):
         with TemporaryDirectory() as tmpdir, self.settings(

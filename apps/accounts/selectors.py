@@ -74,8 +74,8 @@ def ad_identity_read_model(user):
     }
 
 
-def contract_role_configs() -> OrderedDict[str, dict]:
-    rules = get_contract("role_rules")
+def contract_role_configs(*, rules_payload=None) -> OrderedDict[str, dict]:
+    rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
     return OrderedDict(
         (name, dict(config))
         for name, config in rules.items()
@@ -87,24 +87,25 @@ def contract_role_names() -> tuple[str, ...]:
     return tuple(contract_role_configs())
 
 
-def default_new_user_role_name() -> str:
+def default_new_user_role_name(*, rules_payload=None) -> str:
     """Вернуть настроенную роль новых пользователей или пустое значение."""
 
-    rules = get_contract("role_rules")
+    rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
     defaults = rules.get("$defaults", {})
     role_name = defaults.get("new_user_role") if isinstance(defaults, dict) else None
-    if isinstance(role_name, str) and role_name in contract_role_configs():
+    if isinstance(role_name, str) and role_name in contract_role_configs(rules_payload=rules):
         return role_name
     return ""
 
 
-def capability_catalog() -> dict[str, dict]:
-    metadata = get_contract("role_rules").get("$capabilities", {})
+def capability_catalog(*, rules_payload=None) -> dict[str, dict]:
+    rules = rules_payload if isinstance(rules_payload, dict) else get_contract("role_rules")
+    metadata = rules.get("$capabilities", {})
     return metadata if isinstance(metadata, dict) else {}
 
 
-def role_risk_markers(role_name: str, config: dict) -> list[str]:
-    catalog = capability_catalog()
+def role_risk_markers(role_name: str, config: dict, *, catalog=None) -> list[str]:
+    catalog = catalog if isinstance(catalog, dict) else capability_catalog()
     markers = []
     for capability, value in config.items():
         metadata = catalog.get(capability)
@@ -136,8 +137,8 @@ def split_user_groups(user) -> tuple[list, list]:
     )
 
 
-def selected_role_names_for_user(user) -> list[str]:
-    role_names = set(contract_role_names())
+def selected_role_names_for_user(user, *, rules_payload=None) -> list[str]:
+    role_names = set(contract_role_configs(rules_payload=rules_payload))
     return sorted(user.groups.filter(name__in=role_names).values_list("name", flat=True))
 
 

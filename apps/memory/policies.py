@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -260,7 +259,7 @@ def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
     return bool(set(required_tokens) & set(allowed_tokens))
 
 
-def can_access_search_document(user, document: MemorySearchDocument) -> bool:
+def can_access_search_document(user, document: MemorySearchDocument, *, snapshots=None, profile=None) -> bool:
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None:
         return False
@@ -270,7 +269,12 @@ def can_access_search_document(user, document: MemorySearchDocument) -> bool:
             return False
         from .services import can_access_source_object
 
-        if not can_access_source_object(actor, document.source_object):
+        if not can_access_source_object(
+            actor,
+            document.source_object,
+            snapshots=snapshots,
+            profile=profile,
+        ):
             return False
     if getattr(actor, "is_superuser", False):
         return True
@@ -291,31 +295,53 @@ def can_access_knowledge_item(user, item) -> bool:
     return scope_tokens_match(item.scope_tokens, user_scope_tokens(actor))
 
 
-def source_object_scope_tokens(source_object, *, source=None) -> list[str]:
+def source_object_scope_tokens(
+    source_object,
+    *,
+    source=None,
+    snapshots=None,
+    profile=None,
+) -> list[str]:
     source = source or getattr(source_object, "source", None)
     metadata = source_object.metadata or {}
     acl = metadata.get("acl") or {}
     acl_status = str(acl.get("status") or "").strip().lower()
     if acl_status in {"unresolved", "blocked", "unreadable", "disabled"}:
         legacy_profile_policy = ""
-        if not acl.get("unresolved_policy"):
-            # Objects discovered before the policy snapshot was introduced
-            # must retain the policy of their configured ingestion profile.
-            # Any malformed/missing profile still falls through to the
-            # fail-closed process setting below.
-            try:
-                from .document_ingestion import get_source_ingestion_profile
+        if not acl.get("unresolved_policy") and profile is None and snapshots is not None:
+            # A caller that already captured the operation snapshot may opt in
+            # to resolving legacy objects against that exact profile.  Without
+            # an explicit snapshot/profile this path remains fail-closed and
+            # never performs a repository read per object.
+            from .document_ingestion import get_source_ingestion_profile
 
-                legacy_profile_policy = get_source_ingestion_profile(
-                    source
-                ).unresolved_acl_policy
-            except Exception:
-                legacy_profile_policy = ""
+            profile = get_source_ingestion_profile(source, snapshots=snapshots)
+        if not acl.get("unresolved_policy") and profile is None and snapshots is None:
+            # Legacy test fixtures may explicitly override the old payload
+            # attribute.  Resolve that fixture without touching the repository;
+            # production objects without persisted policy remain blocked.
+            from .config_documents import get_memory_test_override_payload
+
+            test_payload = get_memory_test_override_payload(
+                "memory.contract.ingestion_profiles"
+            ) or {}
+            source_config = getattr(source, "config", {}) or {}
+            profile_id = (
+                source_config.get("ingestion_profile")
+                or (source_config.get("ingestion") or {}).get("profile")
+                or "corporate_docs_windows_v1"
+            )
+            configured_profile = (test_payload.get("profiles") or {}).get(profile_id) or {}
+            legacy_profile_policy = (
+                configured_profile.get("acl_policy") or {}
+            ).get("unresolved_policy", "")
+        if profile is not None:
+            legacy_profile_policy = profile.unresolved_acl_policy
         unresolved_policy = (
             acl.get("unresolved_policy")
             or (getattr(source, "config", {}) or {}).get("acl_policy", {}).get("unresolved_policy")
             or legacy_profile_policy
-            or getattr(settings, "MEMORY_ACL_UNRESOLVED_POLICY", "block")
+            or "block"
         )
         if unresolved_policy in {"admin_only", "root_only"}:
             return ["role:superuser"]
@@ -330,7 +356,7 @@ def source_object_scope_tokens(source_object, *, source=None) -> list[str]:
     return tokens or source_scope_tokens(source)
 
 
-def can_access_source_object_scope(user, source_object) -> bool:
+def can_access_source_object_scope(user, source_object, *, snapshots=None, profile=None) -> bool:
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None or source_object is None or not getattr(source_object, "source_id", None):
         return False
@@ -339,7 +365,12 @@ def can_access_source_object_scope(user, source_object) -> bool:
     source = MemorySource.objects.filter(pk=source_object.source_id).first()
     if source is None or source.status != MemorySource.Status.ENABLED:
         return False
-    required = source_object_scope_tokens(source_object, source=source)
+    required = source_object_scope_tokens(
+        source_object,
+        source=source,
+        snapshots=snapshots,
+        profile=profile,
+    )
     if not required:
         return False
     if not getattr(actor, "is_superuser", False) and not scope_tokens_match(required, user_scope_tokens(actor)):
@@ -360,7 +391,7 @@ def issue_source_is_consistent(issue) -> bool:
     return source_object is not None and source_object.source_id == issue.source_id
 
 
-def effective_source_trust(source: MemorySource | None) -> SourceTrustDecision:
+def effective_source_trust(source: MemorySource | None, *, snapshots=None) -> SourceTrustDecision:
     if source is None:
         return SourceTrustDecision(
             trust_status=REVIEW_REQUIRED_STATUS,
@@ -373,7 +404,7 @@ def effective_source_trust(source: MemorySource | None) -> SourceTrustDecision:
             untrusted_handling=REVIEW_REQUIRED_STATUS,
         )
 
-    defaults = _trust_defaults_for_source_kind(source.source_kind)
+    defaults = _trust_defaults_for_source_kind(source.source_kind, snapshots=snapshots)
     raw_trust_status = source.trust_status or defaults.get("trust_status", REVIEW_REQUIRED_STATUS)
     trust_status = normalize_trust_status(raw_trust_status)
     authority_class = source.authority_class or defaults.get("authority_class", "candidate_input")
@@ -405,8 +436,8 @@ def effective_source_trust(source: MemorySource | None) -> SourceTrustDecision:
     )
 
 
-def source_allows_direct_context(source: MemorySource | None, context_kind: str = "") -> bool:
-    decision = effective_source_trust(source)
+def source_allows_direct_context(source: MemorySource | None, context_kind: str = "", *, snapshots=None) -> bool:
+    decision = effective_source_trust(source, snapshots=snapshots)
     if not decision.direct_context_allowed:
         return False
     if context_kind and decision.trusted_context_kinds:
@@ -465,8 +496,12 @@ def _user_has_role_flag(user, flag: str) -> bool:
     return any(bool((role_rules.get(role_name) or {}).get(flag)) for role_name in role_names)
 
 
-def _trust_defaults_for_source_kind(source_kind: str) -> dict:
-    payload = getattr(settings, "LOCAL_BUSINESS_MEMORY_TRUST_POLICY", {}) or {}
+def _trust_defaults_for_source_kind(source_kind: str, *, snapshots=None) -> dict:
+    from .config_documents import get_memory_document_payload
+
+    payload = get_memory_document_payload(
+        "memory.contract.trust_policy", snapshots=snapshots
+    ) or {}
     defaults = payload.get("defaults_by_source_kind") or {}
     return dict(defaults.get(source_kind) or defaults.get("*") or {})
 

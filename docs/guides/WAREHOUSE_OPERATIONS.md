@@ -20,8 +20,10 @@ python manage.py seed_roles
 python manage.py check
 ```
 
-`bootstrap_runtime` добавляет `data/contracts/warehouse/settings.json`, не
-перезаписывая существующие рабочие контракты. `seed_roles` создаёт группы
+`warehouse.settings` читается через единый репозиторий настроек: Git-файл задаёт
+дефолт, а изменённая рабочая версия хранится в PostgreSQL. Файловое runtime-зеркало
+не создаётся. В deployment allowlist должен присутствовать `warehouse.settings`.
+`seed_roles` создаёт группы
 `warehouse_operator`, `warehouse_controller` и `warehouse_administrator` из
 актуального `role_rules`.
 
@@ -39,8 +41,8 @@ python manage.py check
 
 ## 3. Обновление действующей установки
 
-`bootstrap_runtime` безопасно добавляет отсутствующий `warehouse.settings`, но
-не сливает `role_rules.json`. Для действующей рабочей копии ролей применяется
+Регистрация `warehouse.settings` не сливает `role_rules.json`. Для действующей
+рабочей версии ролей применяется
 существующий защищённый процесс:
 
 1. Сформировать проверяемый candidate на основе текущего runtime `role_rules`:

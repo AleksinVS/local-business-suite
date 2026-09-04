@@ -20,6 +20,7 @@ from apps.core.file_locks import (
 from apps.memory.document_ingestion import sha256_file
 from apps.memory.models import MemorySource, MemorySourceObject
 from apps.memory.policies import can_review_organization_memory, can_view_memory_review_queue, is_active_actor
+from apps.memory.config_documents import get_memory_document_snapshots
 from apps.memory.storage_backends import ManagedFSStorageBackend
 
 from .file_organization import (
@@ -27,6 +28,7 @@ from .file_organization import (
     normalize_relative_path,
     require_enabled_file_source,
     sanitize_path_segment,
+    validate_locked_current_file_state,
 )
 from .models import (
     MemoryFileMoveJob,
@@ -51,12 +53,18 @@ def _create_system_planned_move_job(
     proposal: MemoryFileOrganizationProposal | None = None,
 ) -> MemoryFileMoveJob:
     """Explicit bootstrap API: create only a PLANNED job."""
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.file_organization_profiles",)
+    )
+    profile = get_file_organization_profile(file_object.source, snapshots=snapshots)
     return _create_move_job_for_file(
         file_object=file_object,
         target_relative_path=target_relative_path,
         proposal=proposal,
         approved_by=None,
         approve=False,
+        profile=profile,
+        snapshots=snapshots,
     )
 
 
@@ -66,6 +74,8 @@ def _create_approved_move_job_for_file(
     target_relative_path: str,
     proposal: MemoryFileOrganizationProposal,
     approved_by,
+    profile=None,
+    snapshots=None,
 ) -> MemoryFileMoveJob:
     return _create_move_job_for_file(
         file_object=file_object,
@@ -73,6 +83,8 @@ def _create_approved_move_job_for_file(
         proposal=proposal,
         approved_by=approved_by,
         approve=True,
+        profile=profile,
+        snapshots=snapshots,
     )
 
 
@@ -83,22 +95,64 @@ def _create_move_job_for_file(
     proposal: MemoryFileOrganizationProposal | None,
     approved_by,
     approve: bool,
+    profile=None,
+    snapshots=None,
 ) -> MemoryFileMoveJob:
     source = MemorySource.objects.select_for_update().get(pk=file_object.source_id)
-    file_object = (
-        MemoryFileObject.objects.select_for_update()
-        .select_related("source", "current_version", "current_physical_placement")
-        .get(pk=file_object.pk)
+    # Lock the base row first; nullable current relations are locked
+    # separately so PostgreSQL never sees a FOR UPDATE outer join.
+    file_object = MemoryFileObject.objects.select_for_update().get(pk=file_object.pk)
+    pointer = {
+        "current_version_id": file_object.current_version_id,
+        "current_physical_placement_id": file_object.current_physical_placement_id,
+    }
+    version = (
+        MemoryFileObjectVersion.objects.select_for_update()
+        .filter(pk=pointer["current_version_id"])
+        .first()
+        if pointer["current_version_id"]
+        else None
     )
-    if file_object.source_id != source.pk:
-        raise ValidationError("Источник файла изменился во время блокировки.")
-    profile = get_file_organization_profile(file_object.source)
+    # Lock the independently mutable placement row as well. The parent row
+    # lock prevents most races; this lock plus the pointer check protects a
+    # concurrent version/placement update that did not follow that protocol.
+    locked_placement = (
+        MemoryFilePhysicalPlacement.objects.select_for_update()
+        .filter(pk=pointer["current_physical_placement_id"])
+        .first()
+        if pointer["current_physical_placement_id"]
+        else None
+    )
+    source_object = (
+        MemorySourceObject.objects.select_for_update()
+        .filter(pk=locked_placement.source_object_id)
+        .first()
+        if locked_placement is not None and locked_placement.source_object_id is not None
+        else None
+    )
+    latest_pointer = MemoryFileObject.objects.filter(pk=file_object.pk).values(
+        "current_version_id", "current_physical_placement_id"
+    ).get()
+    if (
+        latest_pointer["current_version_id"] != pointer["current_version_id"]
+        or latest_pointer["current_physical_placement_id"] != pointer["current_physical_placement_id"]
+    ):
+        raise ValidationError("Текущая версия файла изменилась во время блокировки.")
+    validate_locked_current_file_state(
+        file_object=file_object,
+        source=source,
+        version=version,
+        placement=locked_placement,
+        source_object=source_object,
+    )
+    profile = profile or get_file_organization_profile(
+        source, snapshots=snapshots
+    )
     if profile.storage_backend != MemoryFilePhysicalPlacement.StorageBackend.MANAGED_FS:
         raise ValidationError("Физический перенос поддерживает только managed_fs.")
-    version = file_object.current_version
     if version is None or not version.sha256:
         raise ValueError("File object has no current version with SHA-256.")
-    source_placement = _current_source_placement(file_object)
+    source_placement = locked_placement
     if source_placement is None:
         raise ValueError("File object has no current source placement.")
     target_relative_path = normalize_relative_path(target_relative_path)
@@ -107,9 +161,10 @@ def _create_move_job_for_file(
             file_object=file_object,
             proposal=proposal,
             target_relative_path=target_relative_path,
+            version=version,
         )
     idempotency_key = _move_idempotency_key(
-        source_code=file_object.source.code,
+        source_code=source.code,
         file_id=file_object.file_id,
         target_relative_path=target_relative_path,
         expected_sha256=version.sha256,
@@ -119,8 +174,7 @@ def _create_move_job_for_file(
         MemoryFilePhysicalPlacement.objects.select_for_update()
         .filter(
             pk=source_placement.pk,
-            file_object=file_object,
-            source_object__source_id=source.pk,
+            file_object_id=file_object.pk,
             is_current=True,
             placement_status=MemoryFilePhysicalPlacement.PlacementStatus.ACTIVE,
             path_role=MemoryFilePhysicalPlacement.PathRole.SOURCE_CURRENT,
@@ -164,7 +218,7 @@ def _create_move_job_for_file(
     status = MemoryFileMoveJob.Status.APPROVED if approve else MemoryFileMoveJob.Status.PLANNED
     return MemoryFileMoveJob.objects.create(
         idempotency_key=idempotency_key,
-        source=file_object.source,
+        source=source,
         file_object=file_object,
         proposal=proposal,
         source_placement=source_placement,
@@ -179,7 +233,9 @@ def _create_move_job_for_file(
     )
 
 
-def create_move_jobs_for_accepted_proposal(*, proposal: MemoryFileOrganizationProposal, approved_by) -> dict:
+def create_move_jobs_for_accepted_proposal(
+    *, proposal: MemoryFileOrganizationProposal, approved_by, snapshots=None
+) -> dict:
     # This is an actor-aware, source-sensitive decision.  Keep the fresh
     # actor/policy/snapshot checks in the helper and acquire fences in the
     # canonical access -> memory order.
@@ -187,15 +243,22 @@ def create_move_jobs_for_accepted_proposal(*, proposal: MemoryFileOrganizationPr
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
             with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
                 with transaction.atomic():
+                    if snapshots is None:
+                        snapshots = get_memory_document_snapshots(
+                            document_ids=("memory.contract.file_organization_profiles",)
+                        )
                     return _create_move_jobs_for_accepted_proposal_locked(
                         proposal=proposal,
                         approved_by=approved_by,
+                        snapshots=snapshots,
                     )
     except FileLockTimeoutError as exc:
         raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
 
 
-def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrganizationProposal, approved_by) -> dict:
+def _create_move_jobs_for_accepted_proposal_locked(
+    *, proposal: MemoryFileOrganizationProposal, approved_by, snapshots=None
+) -> dict:
     """Create the complete, exact job set for one approved proposal.
 
     Missing, foreign, stale, or unauthorized membership rejects the whole
@@ -237,13 +300,84 @@ def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrgani
     if (proposal.metadata or {}).get("membership_fingerprint") != expected_fingerprint:
         raise ValidationError("Состав файлов предложения устарел или не имеет контрольного отпечатка.")
     file_queryset = MemoryFileObject.objects.filter(source=proposal.source, file_id__in=file_ids)
+    locked_files = list(file_queryset.select_for_update().order_by("id"))
+    # Optional current_version/current_physical_placement are deliberately
+    # fetched after locking the base rows to avoid a nullable outer join in
+    # PostgreSQL's SELECT ... FOR UPDATE.
     files = list(
-        file_queryset.select_for_update()
-        .select_related("current_version", "source", "current_physical_placement")
-        .order_by("id")
+        MemoryFileObject.objects.filter(pk__in=[item.pk for item in locked_files]).order_by("id")
     )
     if {file.file_id for file in files} != set(file_ids) or len(files) != len(file_ids):
         raise ValidationError("Список файлов предложения содержит отсутствующий или чужой файл.")
+    version_ids = [file.current_version_id for file in files if file.current_version_id]
+    placement_ids = [
+        file.current_physical_placement_id
+        for file in files
+        if file.current_physical_placement_id
+    ]
+    # Lock independently mutable children in stable order after locking every
+    # base file row. Parent pointers are checked again below, so a writer that
+    # changed a pointer without following the lock protocol is rejected.
+    locked_versions = {
+        version.pk: version
+        for version in MemoryFileObjectVersion.objects.select_for_update()
+        .filter(pk__in=version_ids)
+        .order_by("pk")
+    }
+    locked_placements = {
+        placement.pk: placement
+        for placement in MemoryFilePhysicalPlacement.objects.select_for_update()
+        .filter(pk__in=placement_ids)
+        .order_by("pk")
+    }
+    source_object_ids = sorted(
+        {
+            item.source_object_id
+            for item in (*locked_versions.values(), *locked_placements.values())
+            if item.source_object_id is not None
+        }
+    )
+    locked_source_objects = {
+        source_object.pk: source_object
+        for source_object in MemorySourceObject.objects.select_for_update()
+        .filter(pk__in=source_object_ids)
+        .order_by("pk")
+    }
+    pointers = {
+        row["id"]: row
+        for row in MemoryFileObject.objects.filter(pk__in=[file.pk for file in files]).values(
+            "id", "current_version_id", "current_physical_placement_id"
+        )
+    }
+    for file in files:
+        pointer = pointers[file.pk]
+        if (
+            pointer["current_version_id"] != file.current_version_id
+            or pointer["current_physical_placement_id"] != file.current_physical_placement_id
+            or (
+                file.current_version_id
+                and file.current_version_id not in locked_versions
+            )
+            or (
+                file.current_physical_placement_id
+                and file.current_physical_placement_id not in locked_placements
+            )
+        ):
+            raise ValidationError("Текущая версия файла изменилась во время блокировки.")
+        version = locked_versions.get(file.current_version_id)
+        placement = locked_placements.get(file.current_physical_placement_id)
+        source_object = (
+            locked_source_objects.get(placement.source_object_id)
+            if placement is not None and placement.source_object_id is not None
+            else None
+        )
+        validate_locked_current_file_state(
+            file_object=file,
+            source=source,
+            version=version,
+            placement=placement,
+            source_object=source_object,
+        )
     approved_decision = (
         MemoryFileOrganizationDecision.objects.filter(
             proposal=proposal,
@@ -268,8 +402,8 @@ def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrgani
         raise ValidationError("Снимок согласованного состава файлов неполон.")
     for file_object in files:
         item = snapshot_objects[file_object.file_id]
-        version = file_object.current_version
-        placement = file_object.current_physical_placement
+        version = locked_versions.get(file_object.current_version_id)
+        placement = locked_placements.get(file_object.current_physical_placement_id)
         if (
             item.get("file_object_id") != file_object.pk
             or item.get("version_id") != getattr(version, "pk", None)
@@ -280,15 +414,28 @@ def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrgani
             raise ValidationError("Текущая версия файла не совпадает с immutable approved snapshot.")
     if any(not can_access_file_object(approved_by, file_object) for file_object in files):
         raise PermissionDenied("Один из файлов находится вне текущей области доступа.")
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.file_organization_profiles",)
+        )
+    profile = get_file_organization_profile(source, snapshots=snapshots)
     metrics = {"planned": 0, "skipped": 0}
     for file_object in files:
         target = _target_path_for_file(proposal=proposal, file_object=file_object)
-        _assert_no_conflicting_move_job(file_object=file_object, proposal=proposal, target_relative_path=target)
+        version = locked_versions[file_object.current_version_id]
+        _assert_no_conflicting_move_job(
+            file_object=file_object,
+            proposal=proposal,
+            target_relative_path=target,
+            version=version,
+        )
         _create_approved_move_job_for_file(
             file_object=file_object,
             target_relative_path=target,
             proposal=proposal,
             approved_by=approved_by,
+            profile=profile,
+            snapshots=snapshots,
         )
         metrics["planned"] += 1
     if metrics["planned"] != len(file_ids):
@@ -296,7 +443,9 @@ def _create_move_jobs_for_accepted_proposal_locked(*, proposal: MemoryFileOrgani
     return metrics
 
 
-def _assert_no_conflicting_move_job(*, file_object, proposal, target_relative_path: str) -> None:
+def _assert_no_conflicting_move_job(
+    *, file_object, proposal, target_relative_path: str, version=None
+) -> None:
     unresolved = {
         MemoryFileMoveJob.Status.PLANNED,
         MemoryFileMoveJob.Status.APPROVED,
@@ -311,7 +460,7 @@ def _assert_no_conflicting_move_job(*, file_object, proposal, target_relative_pa
         source_code=file_object.source.code,
         file_id=file_object.file_id,
         target_relative_path=target_relative_path,
-        expected_sha256=file_object.current_version.sha256,
+        expected_sha256=(version or file_object.current_version).sha256,
     )
     conflicts = MemoryFileMoveJob.objects.select_for_update().filter(
         file_object=file_object,
@@ -327,13 +476,20 @@ def run_move_worker(
     dry_run: bool = False,
     limit: int | None = None,
     require_enabled: bool = True,
+    snapshots=None,
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         source = MemorySource.objects.get(pk=source.pk)
         require_enabled_file_source(source)
-        return _run_move_worker_locked(source=source, dry_run=dry_run, limit=limit)
+        if snapshots is None:
+            snapshots = get_memory_document_snapshots(
+                document_ids=("memory.contract.file_organization_profiles",)
+            )
+        return _run_move_worker_locked(
+            source=source, dry_run=dry_run, limit=limit, snapshots=snapshots
+        )
 
 
 def _run_move_worker_locked(
@@ -341,9 +497,11 @@ def _run_move_worker_locked(
     source: MemorySource,
     dry_run: bool = False,
     limit: int | None = None,
+    profile=None,
+    snapshots=None,
 ) -> dict:
     try:
-        profile = get_file_organization_profile(source)
+        profile = profile or get_file_organization_profile(source, snapshots=snapshots)
     except (TypeError, ValueError) as exc:
         if dry_run:
             eligible = MemoryFileMoveJob.objects.filter(source=source, status=MemoryFileMoveJob.Status.APPROVED).count()
@@ -367,7 +525,12 @@ def _run_move_worker_locked(
         if claimed is None:
             continue
         job, claim_token = claimed
-        result = _execute_move_job_locked(job_id=job.pk, claim_token=claim_token)
+        result = _execute_move_job_locked(
+            job_id=job.pk,
+            claim_token=claim_token,
+            profile=profile,
+            snapshots=snapshots,
+        )
         metrics[result] += 1
     return metrics
 
@@ -448,10 +611,25 @@ _recover_stale_copy_staged_jobs = _recover_stale_move_jobs
 
 def execute_move_job(*, job_id: int | None = None, claim_token: str = "", job: MemoryFileMoveJob | None = None) -> str:
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
-        return _execute_move_job_locked(job_id=job_id, claim_token=claim_token, job=job)
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.file_organization_profiles",)
+        )
+        return _execute_move_job_locked(
+            job_id=job_id,
+            claim_token=claim_token,
+            job=job,
+            snapshots=snapshots,
+        )
 
 
-def _execute_move_job_locked(*, job_id: int | None = None, claim_token: str = "", job: MemoryFileMoveJob | None = None) -> str:
+def _execute_move_job_locked(
+    *,
+    job_id: int | None = None,
+    claim_token: str = "",
+    job: MemoryFileMoveJob | None = None,
+    profile=None,
+    snapshots=None,
+) -> str:
     if job_id is None:
         job_id = getattr(job, "pk", None)
     if not job_id or not claim_token:
@@ -486,7 +664,7 @@ def _execute_move_job_locked(*, job_id: int | None = None, claim_token: str = ""
     except ValidationError as exc:
         return _mark_job_needs_review(job, str(exc), claim_token=claim_token)
     try:
-        profile = get_file_organization_profile(source)
+        profile = profile or get_file_organization_profile(source, snapshots=snapshots)
     except (TypeError, ValueError) as exc:
         return _mark_job_needs_review(job, str(exc), claim_token=claim_token)
     if profile.source_code != source.code or profile.storage_backend != MemoryFilePhysicalPlacement.StorageBackend.MANAGED_FS:
@@ -670,14 +848,20 @@ def purge_ready_source_files(
     backup_checkpoint_ref: str = "",
     dry_run: bool = False,
     require_enabled: bool = True,
+    snapshots=None,
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
+        if snapshots is None:
+            snapshots = get_memory_document_snapshots(
+                document_ids=("memory.contract.file_organization_profiles",)
+            )
         return _purge_ready_source_files_locked(
             source=source,
             backup_checkpoint_ref=backup_checkpoint_ref,
             dry_run=dry_run,
+            snapshots=snapshots,
         )
 
 
@@ -686,11 +870,12 @@ def _purge_ready_source_files_locked(
     source: MemorySource,
     backup_checkpoint_ref: str = "",
     dry_run: bool = False,
+    snapshots=None,
 ) -> dict:
     source = MemorySource.objects.get(pk=source.pk)
     require_enabled_file_source(source)
     try:
-        profile = get_file_organization_profile(source)
+        profile = get_file_organization_profile(source, snapshots=snapshots)
     except (TypeError, ValueError) as exc:
         eligible = MemoryFileMoveJob.objects.filter(
             source=source,
@@ -1049,17 +1234,48 @@ def _validate_job_source_state(job: MemoryFileMoveJob):
     job = next((candidate for candidate in locked_jobs if candidate.pk == job.pk), None)
     if job is None:
         raise ValidationError("Задание переноса больше не существует.")
-    source_object = None
+    pointer = MemoryFileObject.objects.filter(pk=file_object.pk).values(
+        "current_version_id", "current_physical_placement_id"
+    ).get()
+    version = (
+        MemoryFileObjectVersion.objects.select_for_update()
+        .filter(pk=pointer["current_version_id"])
+        .first()
+        if pointer["current_version_id"]
+        else None
+    )
     source_placement = (
         MemoryFilePhysicalPlacement.objects.select_for_update()
-        .filter(pk=job_ref["source_placement_id"], file_object=file_object)
+        .filter(pk=pointer["current_physical_placement_id"])
         .first()
+        if pointer["current_physical_placement_id"]
+        else None
     )
-    if source_placement is not None and source_placement.source_object_id:
-        source_object = MemorySourceObject.objects.select_for_update().get(pk=source_placement.source_object_id)
-    if file_object.source_id != job.source_id or source_placement is None or source_object is None:
+    source_object = (
+        MemorySourceObject.objects.select_for_update()
+        .filter(pk=source_placement.source_object_id)
+        .first()
+        if source_placement is not None and source_placement.source_object_id is not None
+        else None
+    )
+    latest_pointer = MemoryFileObject.objects.filter(pk=file_object.pk).values(
+        "current_version_id", "current_physical_placement_id"
+    ).get()
+    if latest_pointer != pointer:
+        raise ValidationError("Текущая версия файла изменилась во время блокировки.")
+    validate_locked_current_file_state(
+        file_object=file_object,
+        source=source,
+        version=version,
+        placement=source_placement,
+        source_object=source_object,
+    )
+    if (
+        file_object.source_id != job.source_id
+        or source_placement is None
+        or source_placement.pk != job_ref["source_placement_id"]
+    ):
         raise ValidationError("Связи задания с источником или файлом устарели.")
-    version = MemoryFileObjectVersion.objects.select_for_update().filter(pk=file_object.current_version_id).first()
     if (
         version is None
         or version.version_status != MemoryFileObjectVersion.VersionStatus.CURRENT

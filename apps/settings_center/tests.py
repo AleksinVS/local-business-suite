@@ -38,6 +38,7 @@ from apps.waiting_list.models import WaitingListEntry
 from .contract_services import (
     _assert_deployment_catalog_candidate_delta,
     apply_contract_payload,
+    preview_contract_payload,
     migrate_role_administration_metadata,
     migrate_role_capability_catalog,
     preview_contract_rollback,
@@ -200,7 +201,10 @@ def _write_role_catalog_sandbox(root, *, runtime_payload, git_payload, candidate
     runtime_root = root / "data" / "contracts"
     git_root = root / "contracts"
     runtime_root.mkdir(parents=True, exist_ok=True)
-    git_root.mkdir(parents=True, exist_ok=True)
+    # The document registry validates the complete Git-default set, even when
+    # this helper changes only role_rules.  Keep the sandbox representative of
+    # a real checkout and then replace the one fixture under test.
+    shutil.copytree(Path(settings.BASE_DIR) / "contracts", git_root)
     runtime_path = runtime_root / "role_rules.json"
     git_path = git_root / "role_rules.json"
     runtime_path.write_text(json.dumps(runtime_payload, ensure_ascii=False), encoding="utf-8")
@@ -1760,6 +1764,42 @@ class SettingsCenterRegistryTests(TestCase):
         self.assertContains(response, "Режим входа Django")
         self.assertContains(response, "settings_center.env.DJANGO_AUTH_MODE")
 
+    def test_git_static_contract_detail_is_json_viewer_only(self):
+        root = User.objects.create_superuser(username="settings-static-viewer", password="pass")
+        self.client.force_login(root)
+        response = self.client.get(
+            reverse(
+                "settings_center:setting_detail",
+                kwargs={"setting_id": "ai.contract.tools"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-settings-json-viewer")
+        self.assertContains(response, "&quot;tools&quot;", html=False)
+        self.assertNotContains(response, "<textarea", html=False)
+        self.assertNotContains(response, "Проверить изменения")
+        self.assertNotContains(response, "Применить")
+
+    def test_git_static_contract_post_is_forbidden_without_settings_change(self):
+        root = User.objects.create_superuser(username="settings-static-post", password="pass")
+        self.client.force_login(root)
+        url = reverse(
+            "settings_center:setting_detail",
+            kwargs={"setting_id": "ai.contract.tools"},
+        )
+        before = SettingsChange.objects.filter(setting_id="ai.contract.tools").count()
+        response = self.client.post(
+            url,
+            {"action": "preview", "payload": "{}", "confirm": "on"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            SettingsChange.objects.filter(setting_id="ai.contract.tools").count(),
+            before,
+        )
+
     def test_role_rules_generic_editor_redirects_to_protected_card_editor(self):
         root = User.objects.create_superuser(username="settings-role-root", password="pass")
         self.client.force_login(root)
@@ -2104,6 +2144,22 @@ class SettingsCenterRegistryTests(TestCase):
 
 
 class SettingsCenterContractTests(TestCase):
+    def test_static_contract_preview_service_fails_closed_without_audit_row(self):
+        actor = User.objects.create_superuser(username="settings-static-preview", password="pass")
+        before = SettingsChange.objects.filter(setting_id="ai.contract.tools").count()
+
+        with self.assertRaises(ValidationError):
+            preview_contract_payload(
+                actor=actor,
+                setting_id="ai.contract.tools",
+                raw_payload="{}",
+            )
+
+        self.assertEqual(
+            SettingsChange.objects.filter(setting_id="ai.contract.tools").count(),
+            before,
+        )
+
     def test_role_contract_service_rejects_non_superuser_direct_call(self):
         actor = User.objects.create_user(username="settings-role-manager")
         manager_group, _ = Group.objects.get_or_create(name="manager")
@@ -3597,14 +3653,22 @@ class ProductSettingsAuthorityTests(TestCase):
         lock_mock.assert_called_once_with(access_control_write_lock_path(), timeout=10.0)
 
     def test_editable_runtime_descriptors_have_resolvable_validators(self):
-        from apps.settings_center.contract_services import VALIDATORS
+        from apps.settings_center.document_registry import get_document_registry
 
         for descriptor in get_registry().all():
             if descriptor.write_policy != "editable":
                 continue
             self.assertEqual(descriptor.required_permission, "manage_settings", descriptor.setting_id)
-            self.assertIn(descriptor.metadata.get("validator"), VALIDATORS, descriptor.setting_id)
-            self.assertTrue(descriptor.metadata.get("settings_path"), descriptor.setting_id)
+            spec = get_document_registry().get(descriptor.setting_id)
+            self.assertTrue(callable(spec.validator), descriptor.setting_id)
+            self.assertIs(descriptor.metadata.get("validator_callable"), spec.validator)
+            if spec.active_backend == "legacy_file":
+                self.assertTrue(descriptor.metadata.get("settings_path"), descriptor.setting_id)
+            else:
+                # DB-active documents have no authoritative compatibility
+                # path; publishing the raw descriptor path would make drift
+                # and old writers read stale legacy state.
+                self.assertNotIn("settings_path", descriptor.metadata, descriptor.setting_id)
 
     def test_preview_resolves_canonical_descriptor_from_setting_id(self):
         from apps.settings_center.contract_services import preview_contract_payload
@@ -3996,6 +4060,13 @@ class LeanRoleAdministrationAuthorityTests(TestCase):
         unknown_type_catalog = copy.deepcopy(catalog)
         unknown_type_catalog["manage_roles"]["type"] = "future"
         self.assertTrue(role_is_protected(ordinary, catalog=unknown_type_catalog))
+
+        legacy_catalog = copy.deepcopy(catalog)
+        legacy_ordinary = copy.deepcopy(ordinary)
+        for code in ("warehouse_adjust_scope", "warehouse_manage_catalog"):
+            legacy_catalog.pop(code)
+            legacy_ordinary.pop(code)
+        self.assertFalse(role_is_protected(legacy_ordinary, catalog=legacy_catalog))
 
     def test_generic_writer_cannot_create_or_delete_roles(self):
         for operation in ("create", "delete"):
@@ -4484,6 +4555,31 @@ class RoleAdministrationMigrationTests(TestCase):
 
 
 class ExplicitViewerMigrationReportTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        from apps.core.contract_store import _reset_for_tests
+
+        self.viewer_runtime = TemporaryDirectory()
+        root = Path(self.viewer_runtime.name)
+        payload = load_json_file("contracts/role_rules.json")
+        payload.pop("viewer", None)
+        payload.pop("$defaults", None)
+        runtime_path = root / "role_rules.json"
+        runtime_path.write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        self.viewer_settings = override_settings(
+            DATA_DIR=root,
+            RUNTIME_CONTRACTS_DIR=root,
+            LOCAL_BUSINESS_ROLE_RULES_FILE=runtime_path,
+        )
+        self.viewer_settings.enable()
+        _reset_for_tests()
+        self.addCleanup(self.viewer_runtime.cleanup)
+        self.addCleanup(self.viewer_settings.disable)
+        self.addCleanup(_reset_for_tests)
+
     def test_report_is_explicit_and_read_only(self):
         target = User.objects.create_user(username="viewer-report-target")
         before_groups = set(target.groups.values_list("name", flat=True))

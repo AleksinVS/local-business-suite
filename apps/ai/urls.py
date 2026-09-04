@@ -19,6 +19,7 @@ from .views import (
     AIHubView,
     AISkillCatalogView,
     AISkillLoadView,
+    AIContractSnapshotView,
     AIToolConfirmView,
     AIToolExecuteView,
     SlashCommandCreateView,
@@ -85,6 +86,7 @@ urlpatterns = [
     ),
     path("", AIHubView.as_view(), name="hub"),
     path("gateway/skills/catalog/", AISkillCatalogView.as_view(), name="skill_catalog"),
+    path("gateway/contracts/", AIContractSnapshotView.as_view(), name="contract_snapshot"),
     path("gateway/skills/<str:skill_id>/load/", AISkillLoadView.as_view(), name="skill_load"),
     path(
         "gateway/tools/<str:tool_code>/execute/",

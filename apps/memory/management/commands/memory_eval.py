@@ -10,6 +10,7 @@ from apps.memory.deidentification import redact_text
 from apps.memory.policies import normalize_trust_status, scope_tokens_match
 from apps.memory.routing import resolve_retrieval_route
 from apps.memory.security import scan_for_secrets
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 class Command(BaseCommand):
@@ -46,13 +47,20 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(message))
 
     def _run_checks(self):
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.routing",
+                "memory.contract.trust_policy",
+                "memory.contract.retrieval_budget",
+            )
+        )
         checks = [
             _check_pii_detector(),
             _check_secret_bait(),
             _check_forbidden_scope(),
-            _check_secret_route_denied(),
-            _check_trust_policy_blocks_external_by_default(),
-            _check_retrieval_budget_hot_path_has_no_llm(),
+            _check_secret_route_denied(snapshots=snapshots),
+            _check_trust_policy_blocks_external_by_default(snapshots=snapshots),
+            _check_retrieval_budget_hot_path_has_no_llm(snapshots=snapshots),
         ]
         return {
             "suite": "memory_smoke_security",
@@ -115,10 +123,10 @@ def _check_forbidden_scope():
     }
 
 
-def _check_secret_route_denied():
+def _check_secret_route_denied(*, snapshots=None):
     denied = False
     try:
-        resolve_retrieval_route("secret")
+        resolve_retrieval_route("secret", snapshots=snapshots)
     except PermissionDenied:
         denied = True
     return {
@@ -131,8 +139,12 @@ def _check_secret_route_denied():
     }
 
 
-def _check_trust_policy_blocks_external_by_default():
-    policy = getattr(settings, "LOCAL_BUSINESS_MEMORY_TRUST_POLICY", {}) or {}
+def _check_trust_policy_blocks_external_by_default(*, snapshots=None):
+    from apps.memory.config_documents import get_memory_document_payload
+
+    policy = get_memory_document_payload(
+        "memory.contract.trust_policy", snapshots=snapshots
+    ) or {}
     defaults = policy.get("defaults_by_source_kind") or {}
     external_default = defaults.get("external_api_snapshot") or {}
     effective_trust_status = normalize_trust_status(external_default.get("trust_status"))
@@ -151,8 +163,12 @@ def _check_trust_policy_blocks_external_by_default():
     }
 
 
-def _check_retrieval_budget_hot_path_has_no_llm():
-    budget = getattr(settings, "LOCAL_BUSINESS_MEMORY_RETRIEVAL_BUDGET", {}) or {}
+def _check_retrieval_budget_hot_path_has_no_llm(*, snapshots=None):
+    from apps.memory.config_documents import get_memory_document_payload
+
+    budget = get_memory_document_payload(
+        "memory.contract.retrieval_budget", snapshots=snapshots
+    ) or {}
     hot_path = budget.get("hot_path") or {}
     rerank = budget.get("optional_llm_rerank") or {}
     passed = hot_path.get("llm_required") is False and rerank.get("enabled") is False

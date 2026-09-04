@@ -8,7 +8,6 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from apps.core.contract_store import current_contract_hash
 from apps.core.contract_store import get_degradation_state
 from apps.core.contract_store import normalized_hash
 from apps.core.file_locks import (
@@ -66,13 +65,17 @@ def preview_board_access(
     reason="",
     source=BoardAccessAudit.Source.SETTINGS_CENTER,
 ):
-    actor = _current_board_access_actor(actor)
+    actor = _current_board_access_actor(actor, require_manager=False)
     source, reason = _validate_board_access_context(actor=actor, source=source, reason=reason)
+    _require_role_contract_healthy()
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_board_access_manager(actor, rules_payload=role_rules)
     board = Board.objects.get(pk=board.pk)
     before = _board_group_names(board)
-    after = _validate_board_group_names(selected_group_names)
+    after = _validate_board_group_names(selected_group_names, rules_payload=role_rules)
     _require_role_contract_healthy()
-    _require_existing_groups_are_contract_roles(before)
+    _require_existing_groups_are_contract_roles(before, rules_payload=role_rules)
     if before == after:
         raise ValidationError("Доступ к доске не изменился.")
     added = sorted(set(after) - set(before))
@@ -85,7 +88,7 @@ def preview_board_access(
     )
     impact = _board_access_impact(before=before, after=after)
     population_fingerprint = _board_access_population_fingerprint(before=before, after=after)
-    role_contract_hash = current_contract_hash("role_rules")
+    role_contract_hash = role_snapshot.content_hash
     _require_role_contract_healthy()
     payload = {
         "actor_id": actor.pk,
@@ -96,6 +99,7 @@ def preview_board_access(
         "source": source,
         "reason": reason,
         "role_contract_hash": role_contract_hash,
+        "role_contract_revision": role_snapshot.revision,
         "impact_hash": normalized_hash(impact),
         "population_fingerprint": population_fingerprint,
         "nonce": str(uuid.uuid4()),
@@ -184,16 +188,18 @@ def _apply_board_access_locked(
     reason="",
     source=BoardAccessAudit.Source.SETTINGS_CENTER,
 ):
-    after = _validate_board_group_names(selected_group_names)
     signed_preview = _load_board_access_preview(preview_token)
     if signed_preview.get("actor_id") != actor.pk or signed_preview.get("board_id") != board.pk:
         raise ValidationError("Предпросмотр относится к другой доске или администратору.")
-    if signed_preview.get("after") != after:
-        raise ValidationError("Выбранные роли изменились после предпросмотра.")
-
     User = get_user_model()
     locked_actor = User.objects.select_for_update().get(pk=actor.pk)
-    _require_board_access_manager(locked_actor)
+    _require_role_contract_healthy()
+    role_snapshot = _fresh_role_snapshot()
+    role_rules = role_snapshot.payload
+    _require_board_access_manager(locked_actor, rules_payload=role_rules)
+    after = _validate_board_group_names(selected_group_names, rules_payload=role_rules)
+    if signed_preview.get("after") != after:
+        raise ValidationError("Выбранные роли изменились после предпросмотра.")
     if signed_preview.get("actor_state") != _board_access_actor_state(locked_actor):
         raise ValidationError("Права администратора изменились после предпросмотра.")
     source, reason = _validate_board_access_context(
@@ -203,14 +209,17 @@ def _apply_board_access_locked(
     )
     if signed_preview.get("source") != source or signed_preview.get("reason") != reason:
         raise ValidationError("Источник или комментарий изменились после предпросмотра.")
-    role_contract_hash = current_contract_hash("role_rules")
+    role_contract_hash = role_snapshot.content_hash
     _require_role_contract_healthy()
-    if signed_preview.get("role_contract_hash") != role_contract_hash:
+    if (
+        signed_preview.get("role_contract_hash") != role_contract_hash
+        or signed_preview.get("role_contract_revision") != role_snapshot.revision
+    ):
         raise ValidationError("Контракт ролей изменился после предпросмотра.")
 
     locked_board = Board.objects.select_for_update().get(pk=board.pk)
     before = _board_group_names(locked_board)
-    _require_existing_groups_are_contract_roles(before)
+    _require_existing_groups_are_contract_roles(before, rules_payload=role_rules)
     if signed_preview.get("before") != before:
         raise ValidationError("Доступ к доске уже изменился. Выполните предпросмотр снова.")
     removed = sorted(set(before) - set(after))
@@ -316,8 +325,12 @@ def initialize_board_access_for_bootstrap(
 def _initialize_board_access_for_bootstrap_locked(
     *, board, selected_group_names, reason, board_was_created
 ):
-    after = _validate_board_group_names(selected_group_names)
     _require_role_contract_healthy()
+    role_snapshot = _fresh_role_snapshot()
+    after = _validate_board_group_names(
+        selected_group_names,
+        rules_payload=role_snapshot.payload,
+    )
     locked = Board.objects.select_for_update().get(pk=board.pk)
     before = _board_group_names(locked)
     if before:
@@ -346,21 +359,22 @@ def _initialize_board_access_for_bootstrap_locked(
         risk_confirmed=False,
         source=BoardAccessAudit.Source.SYSTEM_BOOTSTRAP,
         reason=str(reason).strip(),
-        role_contract_hash=current_contract_hash("role_rules"),
+        role_contract_hash=role_snapshot.content_hash,
     )
     return locked, audit
 
 
-def _current_board_access_actor(actor):
+def _current_board_access_actor(actor, *, require_manager=True, rules_payload=None):
     if not getattr(actor, "is_authenticated", False) or not getattr(actor, "pk", None):
         raise PermissionDenied("Требуется вход в систему.")
     current = get_user_model().objects.get(pk=actor.pk)
-    _require_board_access_manager(current)
+    if require_manager:
+        _require_board_access_manager(current, rules_payload=rules_payload)
     return current
 
 
-def _require_board_access_manager(actor):
-    if not can_manage_board_access(actor):
+def _require_board_access_manager(actor, *, rules_payload=None):
+    if not can_manage_board_access(actor, rules_payload=rules_payload):
         raise PermissionDenied("Недостаточно прав для управления доступом к доскам.")
 
 
@@ -390,21 +404,24 @@ def _validate_board_access_context(*, actor, source, reason):
     return source, reason
 
 
-def _validate_board_group_names(group_names):
+def _validate_board_group_names(group_names, *, rules_payload=None):
     if not isinstance(group_names, (list, tuple, set)) or not all(
         isinstance(name, str) and name.strip() for name in group_names
     ):
         raise ValidationError("Роли доски должны быть списком.")
     normalized = tuple(sorted({name.strip() for name in group_names}))
-    unknown = sorted(set(normalized) - set(board_access_role_names()))
+    allowed = _board_access_role_names_from_rules(rules_payload)
+    unknown = sorted(set(normalized) - set(allowed))
     if unknown:
         raise ValidationError("Для доски недопустимы группы: " + ", ".join(unknown) + ".")
     _require_seeded_board_groups(normalized)
     return list(normalized)
 
 
-def _require_existing_groups_are_contract_roles(group_names):
-    unknown = sorted(set(group_names) - set(board_access_role_names()))
+def _require_existing_groups_are_contract_roles(group_names, *, rules_payload=None):
+    unknown = sorted(
+        set(group_names) - set(_board_access_role_names_from_rules(rules_payload))
+    )
     if unknown:
         raise ValidationError(
             "Доска содержит устаревшие или технические группы: "
@@ -420,6 +437,29 @@ def _require_seeded_board_groups(group_names):
         raise ValidationError(
             "Группы ролей ещё не созданы: " + ", ".join(missing) + ". Выполните seed_roles."
         )
+
+
+def _board_access_role_names_from_rules(rules_payload=None):
+    rules = rules_payload if isinstance(rules_payload, dict) else None
+    if rules is None:
+        return board_access_role_names()
+    return tuple(
+        sorted(
+            key
+            for key, config in rules.items()
+            if not key.startswith("$")
+            and isinstance(config, dict)
+            and config.get("view_scope", "none") != "none"
+        )
+    )
+
+
+def _fresh_role_snapshot():
+    """Read the role contract outside the HTTP request cache."""
+
+    from apps.settings_center.document_repository import get_fresh_document
+
+    return get_fresh_document("core.contract.role_rules")
 
 
 def _board_group_names(board):
@@ -927,6 +967,7 @@ def apply_viewer_migration_board_acl_locked(
     actor = User.objects.filter(pk=getattr(actor, "pk", None), is_active=True, is_superuser=True).first()
     if actor is None:
         raise PermissionDenied("Требуется активный суперпользователь.")
+    role_snapshot = _fresh_role_snapshot()
     locked = Board.objects.select_for_update().filter(pk=board.pk).first()
     if locked is None:
         raise ValidationError("Доска отсутствует.")
@@ -948,7 +989,7 @@ def apply_viewer_migration_board_acl_locked(
             or existing.groups_removed != sorted(set(expected_before) - set(expected_after))
             or existing.risk_markers != [expected_marker]
             or not existing.risk_confirmed
-            or existing.role_contract_hash != current_contract_hash("role_rules")
+            or existing.role_contract_hash != role_snapshot.content_hash
         ):
             raise ValidationError("Детерминированный board audit не совпадает с повтором.")
         if before != sorted(expected_after):
@@ -978,6 +1019,6 @@ def apply_viewer_migration_board_acl_locked(
         risk_confirmed=True,
         source=BoardAccessAudit.Source.SETTINGS_CENTER,
         reason=reason,
-        role_contract_hash=current_contract_hash("role_rules"),
+        role_contract_hash=role_snapshot.content_hash,
         preview_fingerprint=fingerprint,
     )

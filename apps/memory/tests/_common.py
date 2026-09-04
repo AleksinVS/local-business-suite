@@ -20,7 +20,7 @@ from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command, get_commands
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -53,6 +53,7 @@ from ..models import (
     SecretHandle,
 )
 from ..policies import can_access_search_document, can_manage_memory, effective_source_trust, user_scope_tokens
+from ..config_documents import get_memory_document_payload
 from ..review_selectors import index_document_queryset, issue_to_review_queue_item, pending_knowledge_queryset, review_issue_queryset
 from ..review_services import apply_index_review_action, apply_issue_review_action
 from ..knowledge_files import read_knowledge_item_file
@@ -72,7 +73,9 @@ pytestmark = pytest.mark.integration
 
 
 def _memory_ingestion_profiles_with_acl(*, acl_mode, unresolved_policy):
-    payload = json.loads(json.dumps(settings.LOCAL_BUSINESS_MEMORY_INGESTION_PROFILES))
+    payload = json.loads(
+        json.dumps(get_memory_document_payload("memory.contract.ingestion_profiles"))
+    )
     profile_id = "corporate_docs_acl_test_v1"
     payload["profiles"][profile_id] = {
         **payload["profiles"]["corporate_docs_windows_v1"],
@@ -141,7 +144,29 @@ def get_optional_memory_model(model_name):
 
 
 class MemoryModelFactoryMixin:
+    def setUp(self):
+        super().setUp()
+        # Keep the compatibility allowlist on a disposable UserSettingsHolder;
+        # production settings and the process-wide Settings object are never
+        # mutated by fixture creation.
+        self._memory_test_settings = override_settings(
+            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=()
+        )
+        self._memory_test_settings.enable()
+
+    def tearDown(self):
+        try:
+            super().tearDown()
+        finally:
+            if getattr(self, "_memory_test_settings", None) is not None:
+                self._memory_test_settings.disable()
+
     def create_source(self, code="workorders_public_timeline", **overrides):
+        if getattr(self, "_memory_test_settings", None) is None:
+            self._memory_test_settings = override_settings(
+                LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=()
+            )
+            self._memory_test_settings.enable()
         defaults = {
             "code": code,
             "title": "Work orders public timeline",
@@ -153,7 +178,23 @@ class MemoryModelFactoryMixin:
             "index_profiles": ["fulltext_default"],
         }
         defaults.update(overrides)
-        return MemorySource.objects.create(**defaults)
+        source = MemorySource.objects.create(**defaults)
+        # Every fixture source is explicitly opted into the compatibility
+        # hook. Production settings never define this holder attribute, so a
+        # source absent from the captured contract remains fail-closed there.
+        wrapped = getattr(settings, "_wrapped", None)
+        if wrapped is not None:
+            allowlist = set(
+                getattr(wrapped, "__dict__", {}).get(
+                    "LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST", ()
+                )
+                or ()
+            )
+            allowlist.add(code)
+            wrapped.__dict__["LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST"] = tuple(
+                sorted(allowlist)
+            )
+        return source
 
     def create_search_document(self, source=None, document_id="doc-1", **overrides):
         source = source or self.create_source()

@@ -1,8 +1,8 @@
 import json
 
 from django import forms
-from django.conf import settings
 
+from .contract_store import get_contract
 from .json_utils import pretty_json
 from apps.workorders.contracts import validate_role_rules_payload
 from .models import Department
@@ -39,7 +39,7 @@ class RoleRulesForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.is_bound:
-            self.initial["rules_json"] = settings.LOCAL_BUSINESS_ROLE_RULES_FILE.read_text(encoding="utf-8")
+            self.initial["rules_json"] = pretty_json(get_contract("role_rules"))
 
     def clean_rules_json(self):
         raw = self.cleaned_data["rules_json"]
@@ -47,6 +47,9 @@ class RoleRulesForm(forms.Form):
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Некорректный JSON: {exc.msg}.") from exc
-        validate_role_rules_payload(payload, workflow_payload=settings.LOCAL_BUSINESS_WORKFLOW_RULES)
+        validate_role_rules_payload(
+            payload,
+            workflow_payload=get_contract("workflow_rules"),
+        )
         self.cleaned_data["rules_payload"] = payload
         return pretty_json(payload)

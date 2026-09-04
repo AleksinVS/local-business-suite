@@ -14,8 +14,9 @@ Policy decisions follow four rules:
 1. **Capability-роли из контракта** — основной механизм для бизнес-прав.
    Роль = группа Django (`django.contrib.auth.Group`) с тем же именем, что ключ
    роли в контракте. Дефолт контракта: [contracts/role_rules.json](../../contracts/role_rules.json),
-   рабочая копия: `data/contracts/role_rules.json` (читается через
-   `apps.core.contract_store`, ADR-0031). Проверки — `apps/workorders/policies.py`
+   рабочая версия после DB cutover: `RuntimeSettingDocument` в PostgreSQL
+   (до cutover поддерживается legacy-файл `data/contracts/role_rules.json`).
+   Чтение идёт через централизованный repository. Проверки — `apps/workorders/policies.py`
    (`has_role_capability`, `scope_matches`) и доменные `policies.py` приложений.
 2. **Флаги `is_staff` / `is_superuser`** — только «жёсткие» технические гейты:
    Django-админка, settings_center, health-детали. Суперпользователь получает

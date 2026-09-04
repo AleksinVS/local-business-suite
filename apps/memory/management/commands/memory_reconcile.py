@@ -35,6 +35,7 @@ from apps.memory.knowledge_files import (
 )
 from apps.memory.models import MemoryKnowledgeItem
 from apps.memory.routing import FALLBACK_SENSITIVITY_LEVELS
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 def _reconcile_state_path() -> Path:
@@ -95,6 +96,12 @@ class Command(BaseCommand):
 
         items = MemoryKnowledgeItem.objects.exclude(knowledge_file_path="").filter(
             status=MemoryKnowledgeItem.Status.ACTIVE
+        )
+        snapshots = get_memory_document_snapshots(
+            document_ids=(
+                "memory.contract.profiles",
+                "memory.contract.graph_schema",
+            )
         )
         scanned = 0
         reconciled = 0
@@ -169,7 +176,7 @@ class Command(BaseCommand):
                 ]
             )
             if item.status == MemoryKnowledgeItem.Status.ACTIVE:
-                index_knowledge_item(item)
+                index_knowledge_item(item, snapshots=snapshots)
 
         # DEBT(ADR-0030-5a): dataset registry materialization from `type: Dataset`
         # concept pages will be added here in stage 5a (data store), building the
@@ -184,7 +191,9 @@ class Command(BaseCommand):
         # loop above, since edges depend on the whole corpus (a target may
         # live in an unrelated file). `--dry-run` reports the projected
         # create/update/delete counts without writing.
-        edges_result = materialize_knowledge_edges(dry_run=dry_run)
+        edges_result = materialize_knowledge_edges(
+            dry_run=dry_run, snapshots=snapshots
+        )
 
         indexes_written = []
         logs_written = []

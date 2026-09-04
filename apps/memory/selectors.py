@@ -10,6 +10,7 @@ from .policies import (
     source_scope_tokens,
     user_scope_tokens,
 )
+from .config_documents import get_memory_document_snapshots
 
 
 def memory_sources_queryset(actor=None):
@@ -51,7 +52,14 @@ def search_documents_for_source_queryset(source, actor=None):
         return queryset.none()
     if getattr(actor, "is_superuser", False):
         return queryset
-    visible_ids = [document.pk for document in queryset if can_access_search_document(actor, document)]
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.ingestion_profiles",)
+    )
+    visible_ids = [
+        document.pk
+        for document in queryset
+        if can_access_search_document(actor, document, snapshots=snapshots)
+    ]
     return queryset.filter(pk__in=visible_ids)
 
 
@@ -67,7 +75,14 @@ def active_search_documents_queryset(actor=None):
         return queryset.none()
     if getattr(actor, "is_superuser", False):
         return queryset
-    visible_ids = [document.pk for document in queryset if can_access_search_document(actor, document)]
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.ingestion_profiles",)
+    )
+    visible_ids = [
+        document.pk
+        for document in queryset
+        if can_access_search_document(actor, document, snapshots=snapshots)
+    ]
     return queryset.filter(pk__in=visible_ids)
 
 
@@ -78,10 +93,13 @@ def recent_index_jobs_queryset(actor=None, limit=50):
     if actor is None:
         return []
     jobs = MemoryExternalConnectorJob.objects.exclude(source_code="").order_by("-created_at", "-id")[:limit]
-    return [job for job in jobs if _job_visible_to_actor(job, actor)]
+    snapshots = get_memory_document_snapshots(
+        document_ids=("memory.contract.ingestion_profiles",)
+    )
+    return [job for job in jobs if _job_visible_to_actor(job, actor, snapshots=snapshots)]
 
 
-def _job_visible_to_actor(job, actor) -> bool:
+def _job_visible_to_actor(job, actor, *, snapshots=None) -> bool:
     source = MemorySource.objects.filter(
         code=job.source_code,
         status=MemorySource.Status.ENABLED,
@@ -99,14 +117,18 @@ def _job_visible_to_actor(job, actor) -> bool:
             return False
         from .services import can_access_source_object
 
-        return can_access_source_object(actor, source_object)
+        return can_access_source_object(actor, source_object, snapshots=snapshots)
     document_id = payload.get("document_id")
     if document_id:
         document = MemorySearchDocument.objects.select_related("source_object", "source_object__source").filter(
             document_id=str(document_id),
             source_object__source=source,
         ).first()
-        return document is not None and can_access_search_document(actor, document)
+        return document is not None and can_access_search_document(
+            actor,
+            document,
+            snapshots=snapshots,
+        )
     if getattr(actor, "is_superuser", False):
         return True
     if (source.config or {}).get("access_policy", {}).get("mode") == "adapter_check":

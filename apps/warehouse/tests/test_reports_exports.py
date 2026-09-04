@@ -5,6 +5,8 @@ from unittest import TestCase
 from io import BytesIO
 from zipfile import ZipFile
 
+import pytest
+
 from apps.warehouse.models import StockDocument
 from apps.warehouse.reports.datasets import build_expense_report
 from apps.warehouse.reports.exports import export_csv, export_xlsx
@@ -49,3 +51,4 @@ class WarehouseReportExportTests(TestCase):
         self.assertIn("'=SUM(A1)", shared_strings)
         self.assertIn("'@example", shared_strings)
         self.assertNotIn("<f>", worksheet)
+pytestmark = pytest.mark.unit

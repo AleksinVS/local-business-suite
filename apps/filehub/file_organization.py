@@ -24,6 +24,7 @@ from .models import (
     MemoryFileVirtualView,
 )
 from apps.memory.policies import is_active_actor
+from apps.memory.config_documents import get_memory_document_payload, get_memory_document_snapshots
 from apps.core.file_locks import (
     FileLockTimeoutError,
     access_control_write_lock_path,
@@ -78,7 +79,12 @@ class FileOrganizationProfile:
         return settings.BASE_DIR / root
 
 
-def get_file_organization_profile(source: MemorySource, *, require_enabled: bool = True) -> FileOrganizationProfile:
+def get_file_organization_profile(
+    source: MemorySource,
+    *,
+    require_enabled: bool = True,
+    snapshots=None,
+) -> FileOrganizationProfile:
     # The old flag was exposed by management commands as an escape hatch for
     # disabled sources.  File organization is a write-capable contour, so a
     # caller must never be able to weaken this invariant.  Keep the keyword
@@ -87,7 +93,9 @@ def get_file_organization_profile(source: MemorySource, *, require_enabled: bool
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     require_enabled_file_source(source)
-    payload = getattr(settings, "LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES", {}) or {}
+    payload = get_memory_document_payload(
+        "memory.contract.file_organization_profiles", snapshots=snapshots
+    ) or {}
     profile_id = (source.config or {}).get("file_organization_profile") or ""
     raw_profile = None
     if profile_id:
@@ -149,6 +157,53 @@ def stable_file_id_for_source_object(source_object: MemorySourceObject) -> str:
     else:
         basis = f"{source_object.source.code}:object:{source_object.object_id}:size:{size_value}"
     return "file:" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:40]
+
+
+def validate_locked_current_file_state(
+    *,
+    file_object: MemoryFileObject,
+    source: MemorySource,
+    version: MemoryFileObjectVersion | None,
+    placement: MemoryFilePhysicalPlacement | None,
+    source_object: MemorySourceObject | None,
+) -> tuple[MemoryFileObjectVersion, MemoryFilePhysicalPlacement, MemorySourceObject]:
+    """Fail closed unless one locked file has a coherent current chain.
+
+    Callers lock the base file first and then the nullable children in a
+    deterministic order.  This validator intentionally performs no relation
+    lookups: it validates the already-locked objects and their raw FK IDs,
+    avoiding PostgreSQL ``FOR UPDATE`` outer joins and hidden reads.
+    """
+
+    if source is None or file_object.source_id != source.pk:
+        raise ValidationError("Текущий файл принадлежит другому источнику.")
+    if file_object.current_version_id is None or file_object.current_physical_placement_id is None:
+        raise ValidationError("У файла отсутствуют указатели на текущую версию или placement.")
+    if version is None or version.pk != file_object.current_version_id:
+        raise ValidationError("У файла отсутствует согласованная текущая версия.")
+    if version.file_object_id != file_object.pk:
+        raise ValidationError("Текущая версия принадлежит другому файлу.")
+    if version.version_status != MemoryFileObjectVersion.VersionStatus.CURRENT:
+        raise ValidationError("Текущая версия файла не имеет статуса CURRENT.")
+    if placement is None or placement.pk != file_object.current_physical_placement_id:
+        raise ValidationError("У файла отсутствует согласованное текущее placement.")
+    if placement.file_object_id != file_object.pk:
+        raise ValidationError("Текущее placement принадлежит другому файлу.")
+    if not placement.is_current:
+        raise ValidationError("Текущее placement помечено неактуальным.")
+    if version.source_object_id is None or placement.source_object_id is None:
+        raise ValidationError("Текущая версия или placement не связаны с source object.")
+    if version.source_object_id != placement.source_object_id:
+        raise ValidationError("Версия и placement связаны с разными source object.")
+    if source_object is None or source_object.pk != version.source_object_id:
+        raise ValidationError("Текущий source object отсутствует или не совпадает с цепочкой файла.")
+    if source_object.source_id != source.pk:
+        raise ValidationError("Текущий source object принадлежит другому источнику.")
+    # ``MemorySourceObject`` has no direct FK to ``MemoryFileObject``: the
+    # model-backed ownership boundary is its source plus the version/placement
+    # links above.  Do not infer identity from content hash/size here because
+    # an existing source object may legitimately receive a new revision.
+    return version, placement, source_object
 
 
 def ensure_file_object_for_source_object(source_object: MemorySourceObject) -> MemoryFileObject:
@@ -331,7 +386,10 @@ def sync_file_objects_from_source_objects(*, source: MemorySource, dry_run: bool
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
-            get_file_organization_profile(source)
+            snapshots = get_memory_document_snapshots(
+                document_ids=("memory.contract.file_organization_profiles",)
+            )
+            get_file_organization_profile(source, snapshots=snapshots)
             return _sync_file_objects_from_source_objects_locked(source=source, dry_run=dry_run, limit=limit)
 
 
@@ -386,11 +444,13 @@ def _save_user_virtual_placement_locked(*, actor, file_object_id: int, virtual_p
     # Shared source lock serializes this write with source/access-sensitive
     # organization decisions and prevents a stale ACL snapshot.
     source = MemorySource.objects.select_for_update().get(pk=file_object.source_id)
-    file_object = (
-        MemoryFileObject.objects.select_for_update()
-        .select_related("source", "current_version", "current_version__source_object", "current_physical_placement")
-        .get(pk=file_object.pk)
-    )
+    locked_file = MemoryFileObject.objects.select_for_update().get(pk=file_object.pk)
+    # Nullable current_version/current_physical_placement are loaded only
+    # after the base row is locked; PostgreSQL cannot FOR UPDATE an outer join.
+    file_object = MemoryFileObject.objects.select_related(
+        "source", "current_version", "current_version__source_object",
+        "current_physical_placement",
+    ).get(pk=locked_file.pk)
     if not can_access_file_object(actor, file_object):
         raise PermissionDenied("Недостаточно прав на файл.")
     normalized_path = normalize_relative_path(virtual_path)

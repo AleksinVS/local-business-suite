@@ -1,8 +1,8 @@
 """``manage.py bootstrap_runtime`` — идемпотентная первичная подготовка runtime.
 
 Команда берёт на себя побочные эффекты, которые раньше выполнялись НА ИМПОРТЕ
-``config/settings.py`` (создание ~20 каталогов в ``data/`` и копирование дефолтных
-контрактов ``contracts/`` -> ``data/contracts/``). Импорт настроек теперь чистый
+``config/settings.py`` (создание ~20 каталогов в ``data/`` и копирование legacy
+дефолтных контрактов ``contracts/`` -> ``data/contracts/``). Импорт настроек теперь чистый
 (без записи на диск), а подготовку окружения выполняет эта явная команда:
 в проде — из ``docker/entrypoint.prod.sh`` перед ``migrate``, локально — при первом
 запуске (см. README и docs/deployment/DEPLOYMENT.md).
@@ -15,9 +15,11 @@ mkdir/копирование. Явная идемпотентная bootstrap-к
 единственную управляемую точку: её запускают один раз при развёртывании, повторный
 запуск безопасен, а импорт настроек снова становится дешёвым и без сюрпризов.
 
-Идемпотентность: каталоги создаются с ``exist_ok=True``; рабочая копия контракта
-копируется из дефолта ТОЛЬКО если её ещё нет — существующие рабочие копии (могли
-быть отредактированы через Settings Center) не затираются.
+Идемпотентность: каталоги создаются с ``exist_ok=True``; рабочая копия legacy
+контракта копируется из дефолта ТОЛЬКО если её ещё нет — существующие рабочие
+копии (могли быть отредактированы через Settings Center) не затираются.
+Документы ``git_static`` читаются из Git через repository и не зеркалируются в
+``data/contracts``; переведённые в ``database`` документы также не копируются.
 """
 from __future__ import annotations
 
@@ -70,10 +72,20 @@ def _runtime_directories():
 def _iter_default_contracts(default_dir: Path):
     """Пары (default_file, relative_path) для контрактов, подлежащих копированию.
 
-    Пропускает ``schemas/`` и ``.desc.json`` — это описания, а не рабочие данные;
-    так рабочая копия ``data/contracts/`` повторяет ровно тот состав, что давало
-    прежнее копирование на импорте.
+    Пропускает ``schemas/`` и ``.desc.json`` — это описания, а не рабочие данные.
+    ``git_static`` и все ``database_override`` документы не являются
+    runtime-копиями независимо от текущего deployment allowlist: их backend
+    определяется registry/spec, а рабочая DB-строка появляется только в
+    отдельном migration/cutover окне.
     """
+    from apps.settings_center.document_registry import get_document_registry
+
+    specs_by_path = {}
+    for spec in get_document_registry().all():
+        if spec.default_path is None:
+            continue
+        relative_spec_path = Path(spec.default_path).relative_to("contracts")
+        specs_by_path[relative_spec_path] = spec
     for default_file in sorted(default_dir.rglob("*.json")):
         if not default_file.is_file():
             continue
@@ -82,13 +94,20 @@ def _iter_default_contracts(default_dir: Path):
             continue
         if default_file.name in _SKIP_CONTRACT_NAMES:
             continue
+        spec = specs_by_path.get(relative)
+        if spec is not None and spec.storage_policy in {
+            "git_static",
+            "database_override",
+        }:
+            continue
         yield default_file, relative
 
 
 class Command(BaseCommand):
     help = (
         "Идемпотентно готовит runtime-окружение: создаёт каталоги data/ и копирует "
-        "дефолтные контракты в data/contracts/, если рабочей копии ещё нет. "
+        "legacy-контракты в data/contracts/, если рабочей копии ещё нет; "
+        "git_static/database документы через data/contracts не зеркалируются. "
         "Заменяет побочные эффекты, ранее выполнявшиеся на импорте config/settings.py."
     )
 

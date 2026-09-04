@@ -1,13 +1,22 @@
-import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest import TestCase
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import override_settings
+import pytest
+from django.test import TestCase, override_settings
 
+from apps.settings_center.document_hashes import document_hash
+from apps.settings_center.document_registry import get_document_registry
+from apps.settings_center.document_repository import get_document
+from apps.settings_center.models import RuntimeSettingDocument
+from apps.settings_center.registry import get_registry
 from apps.warehouse.contracts import validate_warehouse_settings_payload
-from apps.warehouse.runtime_settings import get_warehouse_runtime_settings
+from apps.warehouse.runtime_settings import (
+    WAREHOUSE_SETTINGS_DOCUMENT_ID,
+    get_warehouse_runtime_settings,
+)
+
+
+pytestmark = pytest.mark.unit
 
 
 class WarehouseSettingsValidationTests(TestCase):
@@ -22,46 +31,51 @@ class WarehouseSettingsValidationTests(TestCase):
 
 
 class WarehouseRuntimeSettingsTests(TestCase):
-    def test_reads_runtime_json_before_git_default(self):
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "settings.json"
-            path.write_text(json.dumps({"default_quantity_precision": 2, "expiry_warning_days": [10, 20]}), encoding="utf-8")
-            with override_settings(WAREHOUSE_RUNTIME_SETTINGS_FILE=path):
-                self.assertEqual(get_warehouse_runtime_settings()["default_quantity_precision"], 2)
-
-    def test_repository_is_preferred_without_writing(self):
-        fake = type("Repository", (), {"get_document": staticmethod(lambda document_id, request=None: {"payload": {"default_quantity_precision": 1, "expiry_warning_days": [7]}})})
-        with patch("apps.warehouse.runtime_settings.importlib.import_module", return_value=fake):
-            self.assertEqual(get_warehouse_runtime_settings()["expiry_warning_days"], [7])
-
-    def test_missing_repository_document_falls_back_to_file_contract(self):
-        fake = type(
-            "Repository",
-            (),
-            {
-                "get_document": staticmethod(
-                    lambda document_id, request=None: (_ for _ in ()).throw(
-                        LookupError(document_id)
-                    )
-                )
-            },
+    def test_reads_repository_snapshot_without_writing(self):
+        snapshot = SimpleNamespace(
+            payload={"default_quantity_precision": 1, "expiry_warning_days": [7]}
         )
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "settings.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "default_quantity_precision": 3,
-                        "expiry_warning_days": [15],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            with override_settings(WAREHOUSE_RUNTIME_SETTINGS_FILE=path), patch(
-                "apps.warehouse.runtime_settings.importlib.import_module",
-                return_value=fake,
-            ):
-                self.assertEqual(
-                    get_warehouse_runtime_settings()["default_quantity_precision"],
-                    3,
-                )
+        with patch("apps.warehouse.runtime_settings.get_document", return_value=snapshot) as getter:
+            self.assertEqual(get_warehouse_runtime_settings()["expiry_warning_days"], [7])
+        getter.assert_called_once_with("warehouse.settings", request=None)
+
+    def test_returns_a_copy_of_repository_payload(self):
+        payload = {
+            "default_quantity_precision": 3,
+            "expiry_warning_days": [15],
+        }
+        snapshot = SimpleNamespace(payload=payload)
+        with patch(
+            "apps.warehouse.runtime_settings.get_document", return_value=snapshot
+        ):
+            result = get_warehouse_runtime_settings()
+        result["expiry_warning_days"].append(30)
+        self.assertEqual(payload["expiry_warning_days"], [15])
+
+
+@override_settings(
+    LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST=(WAREHOUSE_SETTINGS_DOCUMENT_ID,)
+)
+class WarehouseRuntimeSettingsRepositoryTests(TestCase):
+    def setUp(self):
+        get_document_registry.cache_clear()
+        get_registry.cache_clear()
+        self.addCleanup(get_document_registry.cache_clear)
+        self.addCleanup(get_registry.cache_clear)
+
+    def test_reads_database_override_through_central_repository(self):
+        default = get_document(WAREHOUSE_SETTINGS_DOCUMENT_ID)
+        payload = {
+            "default_quantity_precision": 2,
+            "expiry_warning_days": [10, 20],
+        }
+        RuntimeSettingDocument.objects.create(
+            document_id=WAREHOUSE_SETTINGS_DOCUMENT_ID,
+            schema_version=default.schema_version,
+            payload=payload,
+            revision=1,
+            content_hash=document_hash(payload),
+            default_hash=default.default_hash,
+        )
+
+        self.assertEqual(get_warehouse_runtime_settings(), payload)

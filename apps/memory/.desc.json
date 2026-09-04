@@ -19,6 +19,7 @@
   "access_services.py": "Подписанный preview/apply-сервис экспертных назначений технических групп памяти с отдельным аудитом",
   "acl.py": "ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens",
   "settings_descriptors.py": "Доменные descriptors Settings Center для memory contracts, ACL и ingestion settings",
+  "config_documents.py": "Спецификации документов памяти и FileHub в типизированном реестре настроек",
   "retrieval.py": "Оркестрация memory.search с FTS/vector candidates, trusted-source gate, deterministic rank fusion, citations и audit",
   "routing.py": "Server-side routing decisions for memory retrieval by sensitivity level",
   "security.py": "DLP-guard для блокировки credential material перед попаданием в memory pipeline",

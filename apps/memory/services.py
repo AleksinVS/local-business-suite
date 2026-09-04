@@ -42,19 +42,29 @@ from .vector_backends import (
     get_default_fulltext_schema_version,
     get_default_vector_backend,
 )
+from .config_documents import get_memory_document_snapshots
 
 
-def sync_sources_from_contract(sources_payload):
+def sync_sources_from_contract(sources_payload, *, source_code: str | None = None):
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
-            return _sync_sources_from_contract_locked(sources_payload)
+            return _sync_sources_from_contract_locked(
+                sources_payload, source_code=source_code
+            )
 
 
-def _sync_sources_from_contract_locked(sources_payload):
+def _sync_sources_from_contract_locked(sources_payload, *, source_code=None):
     sources = []
+    payload_codes = set()
     for item in sources_payload:
+        code = str(item.get("code") or "").strip()
+        if not code:
+            raise ValidationError("Контракт источников содержит источник без code.")
+        if code in payload_codes:
+            raise ValidationError(f"Контракт источников содержит повторный code '{code}'.")
+        payload_codes.add(code)
         source, _ = MemorySource.objects.update_or_create(
-            code=item["code"],
+            code=code,
             defaults={
                 "title": item["title"],
                 "source_kind": item["source_kind"],
@@ -79,6 +89,27 @@ def _sync_sources_from_contract_locked(sources_payload):
             },
         )
         sources.append(source)
+    # A complete contract sync is authoritative for source lifecycle.  Any
+    # projected source omitted from the captured contract is disabled in the
+    # same transaction, closing retrieval and FileHub entry points atomically.
+    # A source-scoped sync deliberately leaves all other projections alone.
+    if source_code is None:
+        omitted = list(
+            MemorySource.objects.select_for_update()
+            .exclude(code__in=payload_codes)
+            .exclude(status=MemorySource.Status.DISABLED)
+        )
+        for source in omitted:
+            transition_token = source.updated_at.isoformat()
+            source.status = MemorySource.Status.DISABLED
+            source.error_message = "source_missing_from_contract"
+            source.save(update_fields=["status", "error_message", "updated_at"])
+            # The enqueue is in this same atomic block. A failed insert rolls
+            # back the lifecycle transition, while retries return the same
+            # idempotent cleanup row.
+            enqueue_memory_source_cleanup(
+                source_code=source.code, transition_token=transition_token
+            )
     return sources
 
 
@@ -87,12 +118,18 @@ def upsert_memory_projection_from_envelope(
     *,
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
+    snapshots=None,
 ):
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
     if dry_run:
         return _upsert_memory_projection_from_envelope_locked(
             envelope,
             index_backends=index_backends,
             dry_run=True,
+            snapshots=snapshots,
         )
     # An administrative source shutdown is a fence: it waits for an already
     # running projection and prevents a new one from starting with stale state.
@@ -101,6 +138,7 @@ def upsert_memory_projection_from_envelope(
             envelope,
             index_backends=index_backends,
             dry_run=False,
+            snapshots=snapshots,
         )
 
 
@@ -109,6 +147,7 @@ def _upsert_memory_projection_from_envelope_locked(
     *,
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
+    snapshots=None,
 ):
     """Create or refresh memory source-data projection from a normalized source envelope."""
     if envelope.operation == OPERATION_DELETE:
@@ -116,6 +155,7 @@ def _upsert_memory_projection_from_envelope_locked(
             envelope,
             index_backends=index_backends,
             dry_run=dry_run,
+            snapshots=snapshots,
         )
 
     if dry_run:
@@ -193,6 +233,7 @@ def _upsert_memory_projection_from_envelope_locked(
         source_object=source_object,
         safe_text=gate["safe_text"],
         pii_findings=gate["pii_findings"],
+        snapshots=snapshots,
     )
     if dry_run:
         return {
@@ -236,6 +277,7 @@ def _upsert_memory_projection_from_envelope_locked(
         safe_text=gate["safe_text"],
         metadata=document_metadata,
         index_backends=index_backends,
+        snapshots=snapshots,
     )
     return {
         "source_code": source.code,
@@ -252,13 +294,19 @@ def delete_memory_projection_from_envelope(
     *,
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
+    snapshots=None,
 ):
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
     with enabled_source_operation(source_code=envelope.source_code) as source:
         return _delete_memory_projection_from_envelope_locked(
             envelope,
             index_backends=index_backends,
             dry_run=dry_run,
             source=source,
+            snapshots=snapshots,
         )
 
 
@@ -268,6 +316,7 @@ def _delete_memory_projection_from_envelope_locked(
     index_backends: Iterable[str] = ("fulltext", "vector"),
     dry_run: bool = False,
     source: MemorySource | None = None,
+    snapshots=None,
 ):
     source = source or MemorySource.objects.filter(code=envelope.source_code).first()
     if source is None:
@@ -281,7 +330,11 @@ def _delete_memory_projection_from_envelope_locked(
     if dry_run:
         return {"source_code": source.code, "deleted": len(documents), "dry_run": True}
     if documents:
-        delete_search_document_indexes(documents, index_backends=index_backends)
+        delete_search_document_indexes(
+            documents,
+            index_backends=index_backends,
+            snapshots=snapshots,
+        )
         MemorySearchDocument.objects.filter(document_id__in=documents).update(
             index_status=MemorySearchDocument.IndexStatus.DELETED,
             indexed_at=timezone.now(),
@@ -318,30 +371,45 @@ def can_access_source_object_via_adapter(user, source_object: MemorySourceObject
         return False
 
 
-def can_access_source_object(user, source_object: MemorySourceObject) -> bool:
+def can_access_source_object(user, source_object: MemorySourceObject, *, snapshots=None, profile=None) -> bool:
     """Final object policy: persisted scope plus adapter access when required."""
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None:
         return False
-    if not can_access_source_object_scope(actor, source_object):
+    if not can_access_source_object_scope(
+        actor,
+        source_object,
+        snapshots=snapshots,
+        profile=profile,
+    ):
         return False
     return can_access_source_object_via_adapter(actor, source_object)
 
 
-def render_source_object_text(source_object: MemorySourceObject, *, actor=None) -> str:
+def render_source_object_text(source_object: MemorySourceObject, *, actor=None, snapshots=None, profile=None) -> str:
     # Rendering is a user-visible read path.  Do not let a missing actor turn
     # the projection's cached safe_text into an anonymous data oracle.
     actor = resolve_active_actor(actor, force_refresh=True)
     if actor is None:
         return ""
-    if not can_access_source_object_scope(actor, source_object):
+    if not can_access_source_object_scope(
+        actor,
+        source_object,
+        snapshots=snapshots,
+        profile=profile,
+    ):
         return ""
     access_policy = (source_object.metadata or {}).get("access_policy") or {}
     if access_policy.get("mode") == ACCESS_MODE_ADAPTER_CHECK:
         adapter = get_source_adapter(source_object.source.code)
         if adapter is None:
             return ""
-        if not can_access_source_object(actor, source_object):
+        if not can_access_source_object(
+            actor,
+            source_object,
+            snapshots=snapshots,
+            profile=profile,
+        ):
             return ""
         try:
             source_record = adapter.get_object(source_object.object_id)
@@ -409,6 +477,7 @@ class MemoryQueueJobKind:
     RECONCILE = "reconcile"
     INGESTION = "ingestion"
     REINDEX = "reindex"
+    SOURCE_CLEANUP = "source_cleanup"
 
 
 class MemoryQueueStatus:
@@ -449,6 +518,89 @@ def enqueue_memory_queue_task(
         },
     )
     return job
+
+
+def enqueue_memory_reindex_for_document_revision(
+    *, document_id: str, revision: int, content_hash: str, change_id: int | None = None
+):
+    """Enqueue one reindex task for a committed memory document revision."""
+
+    setting_id = str(document_id or "")
+    if not setting_id.startswith("memory.contract.") or revision is None or not content_hash:
+        return None
+    return enqueue_memory_queue_task(
+        job_kind=MemoryQueueJobKind.REINDEX,
+        idempotency_key=(
+            f"settings-memory-reindex:{setting_id}:{int(revision)}:{content_hash}"
+        ),
+        payload={
+            "document_id": setting_id,
+            "document_revision": int(revision),
+            "document_hash": str(content_hash),
+            "settings_change_id": change_id,
+        },
+    )
+
+
+def enqueue_memory_source_cleanup(*, source_code: str, transition_token: str = ""):
+    """Queue one idempotent cleanup for a source disabled by a full sync."""
+
+    source_code = str(source_code or "").strip()
+    if not source_code:
+        return None
+    token = str(transition_token or "").strip() or "current"
+    return enqueue_memory_queue_task(
+        job_kind=MemoryQueueJobKind.SOURCE_CLEANUP,
+        source_code=source_code,
+        idempotency_key=f"memory-source-cleanup:{source_code}:{token}",
+        payload={"source_code": source_code, "transition_token": token},
+    )
+
+
+def cleanup_disabled_source_projection(*, source_code: str, snapshots=None) -> dict:
+    """Close search projections for a source already disabled by full sync.
+
+    The lifecycle transition is performed by ``sync_sources_from_contract``;
+    this queue handler only removes index visibility and marks source objects
+    missing. It never re-enables a source and is safe to retry.
+    """
+
+    source = MemorySource.objects.filter(code=str(source_code or "").strip()).first()
+    if source is None or source.status == MemorySource.Status.ENABLED:
+        return {"source_code": str(source_code or ""), "deleted": 0, "skipped": True}
+    if snapshots is None:
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
+    document_ids = list(
+        MemorySearchDocument.objects.filter(
+            source_object__source=source,
+            index_status__in=[
+                MemorySearchDocument.IndexStatus.READY,
+                MemorySearchDocument.IndexStatus.PENDING,
+                MemorySearchDocument.IndexStatus.FAILED,
+            ],
+        ).values_list("document_id", flat=True)
+    )
+    if document_ids:
+        delete_search_document_indexes(
+            document_ids, index_backends=("fulltext", "vector"), snapshots=snapshots
+        )
+        MemorySearchDocument.objects.filter(document_id__in=document_ids).update(
+            index_status=MemorySearchDocument.IndexStatus.DELETED,
+            indexed_at=timezone.now(),
+        )
+    updated = MemorySourceObject.objects.filter(source=source).update(
+        discovery_status=MemorySourceObject.DiscoveryStatus.MISSING,
+        ingestion_status=MemorySourceObject.IngestionStatus.SKIPPED,
+        updated_at=timezone.now(),
+    )
+    return {
+        "source_code": source.code,
+        "deleted": len(document_ids),
+        "objects_closed": updated,
+        "skipped": False,
+    }
 
 
 def lease_memory_queue_tasks(
@@ -719,8 +871,9 @@ def _memory_document_metadata(
     source_object: MemorySourceObject,
     safe_text: str,
     pii_findings,
+    snapshots=None,
 ) -> dict:
-    vector_backend = get_default_vector_backend()
+    vector_backend = get_default_vector_backend(snapshots=snapshots)
     embedding_metadata = vector_backend.embedding_provider.metadata if vector_backend is not None else None
     return {
         "source_adapter": dict(envelope.provenance or {}).get("adapter", envelope.source_code),
@@ -754,6 +907,7 @@ def _upsert_projection_indexes(
     safe_text: str,
     metadata: dict,
     index_backends: Iterable[str],
+    snapshots=None,
 ) -> None:
     selected_backends = set(index_backends or ())
     record = MemoryIndexRecord(
@@ -775,7 +929,7 @@ def _upsert_projection_indexes(
     if "fulltext" in selected_backends:
         get_default_backend().upsert(record)
     if "vector" in selected_backends:
-        vector_backend = get_default_vector_backend()
+        vector_backend = get_default_vector_backend(snapshots=snapshots)
         if vector_backend is not None:
             vector_backend.upsert(record)
 

@@ -3,7 +3,7 @@
   <input type="hidden" name="action" value="copy_role">
   <input type="hidden" name="view" value="roles">
   <input type="hidden" name="panel" value="inspector">
-  {{ field_form.source_role_code }}{{ field_form.base_hash }}
+  {{ field_form.source_role_code }}{{ field_form.base_hash }}{{ field_form.base_revision }}
   <p class="access-readonly-explanation">Источник: <strong>{{ field_form.role_read_model.label }}</strong> (<code>{{ field_form.role_read_model.code }}</code>). Копируются только права и настройки определения роли. Участники, доступ к доскам и другие назначения не копируются.</p>
   {% if field_form.non_field_errors %}<div class="message error" role="alert">{{ field_form.non_field_errors }}</div>{% endif %}
   <div class="access-form-field">{{ field_form.code.label_tag }}{{ field_form.code }}{{ field_form.code.errors }}</div>

@@ -1,27 +1,46 @@
-from .config import load_json, load_runtime_settings
-from .task_types import STATUS_ALIASES, PRIORITY_ALIASES, STATUS_TRANSITIONS
+from .config import load_runtime_settings
 
 
-def _build_alias_section() -> str:
-    """Generate a Russian-language status/priority/transition mapping section
-    for the system prompt, derived from the canonical alias data in task_types."""
+def _snapshot_payload(snapshot, document_id):
+    value = snapshot[document_id]
+    if hasattr(value, "payload"):
+        return value.payload
+    return value.get("payload", value) if isinstance(value, dict) else value
+
+
+def _build_alias_section(task_types_payload=None) -> str:
+    """Generate prompt aliases from the immutable delivered task snapshot."""
+    if task_types_payload is None:
+        from .config import load_ai_contract_snapshot
+
+        task_types_payload = _snapshot_payload(
+            load_ai_contract_snapshot(), "ai.contract.task_types"
+        )
+    status_aliases = {}
+    priority_aliases = {}
+    for task in task_types_payload.get("task_types", []):
+        if not isinstance(task, dict):
+            continue
+        for key, aliases in (task.get("status_aliases", {}) or {}).items():
+            if isinstance(aliases, list) and aliases:
+                status_aliases.setdefault(key, aliases)
+        for key, aliases in (task.get("priority_aliases", {}) or {}).items():
+            if isinstance(aliases, list) and aliases:
+                priority_aliases.setdefault(key, aliases)
     lines = [
         "",
         "## Статусы заявок (внутренние ключи для параметров инструментов):",
     ]
-    for key, aliases in STATUS_ALIASES.items():
+    for key, aliases in status_aliases.items():
         label = aliases[0]
         lines.append(f"- {key} → {label}")
     lines.append("")
     lines.append("## Приоритеты заявок (внутренние ключи для параметров инструментов):")
-    for key, aliases in PRIORITY_ALIASES.items():
+    for key, aliases in priority_aliases.items():
         label = aliases[0]
         lines.append(f"- {key} → {label}")
     lines.append("")
-    lines.append("## Допустимые переходы статусов:")
-    for from_status, to_statuses in STATUS_TRANSITIONS.items():
-        targets = ", ".join(to_statuses) if to_statuses else "(нет)"
-        lines.append(f"- {from_status} → {targets}")
+    lines.append("Допустимые переходы статусов проверяются серверной политикой инструмента.")
     lines.append("")
     lines.append(
         "Всегда используй внутренние ключи (латинские, с подчёркиваниями: "
@@ -76,8 +95,19 @@ def _build_ui_context_section() -> str:
     )
 
 
-def build_system_prompt(skills_catalog: list = None, active_skill_content: str = "") -> str:
+def build_system_prompt(
+    skills_catalog: list = None,
+    active_skill_content: str = "",
+    *,
+    contract_snapshot=None,
+) -> str:
     settings = load_runtime_settings()
+
+    if contract_snapshot is None:
+        from .config import load_ai_contract_snapshot
+
+        contract_snapshot = load_ai_contract_snapshot()
+    task_types_payload = _snapshot_payload(contract_snapshot, "ai.contract.task_types")
 
     # Skills sections
     catalog_text = ""
@@ -93,7 +123,7 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
     if active_skill_content:
         active_skill_text = f"\n## ТЕКУЩИЙ АКТИВНЫЙ НАВЫК:\n{active_skill_content}\n"
 
-    alias_section = _build_alias_section()
+    alias_section = _build_alias_section(task_types_payload)
     memory_section = _build_memory_section()
     ui_context_section = _build_ui_context_section()
 
@@ -101,8 +131,7 @@ def build_system_prompt(skills_catalog: list = None, active_skill_content: str =
         base_prompt = settings.system_prompt_path.read_text(encoding="utf-8")
         return f"{base_prompt}\n{alias_section}\n{memory_section}\n{ui_context_section}\n{catalog_text}{active_skill_text}"
 
-    tools_payload = load_json(settings.ai_tools_path)
-    task_types_payload = load_json(settings.ai_task_types_path)
+    tools_payload = _snapshot_payload(contract_snapshot, "ai.contract.tools")
 
     tool_lines = [
         f"- {tool['id']}: {tool['description']} (mode={tool['mode']}, confirmation={tool.get('requires_confirmation', False)})"

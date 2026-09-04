@@ -149,7 +149,7 @@ Agent runtime получает каталог skills через Django gateway, 
 Общие настройки полной страницы и sidebar-чата лежат в контракте:
 
 - default: `contracts/ai/chat_settings.json`;
-- runtime: `data/contracts/ai/chat_settings.json`;
+- runtime: PostgreSQL `RuntimeSettingDocument` после включения DB-среза; до cutover допускается существующий legacy-файл `data/contracts/ai/chat_settings.json`;
 - Settings Center id: `ai.contract.chat_settings`.
 
 Эффективные настройки строятся как `defaults` плюс override из `surfaces.full_page` или `surfaces.sidebar`.

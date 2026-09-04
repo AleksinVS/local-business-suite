@@ -9,7 +9,8 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.memory.models import MemorySource
+from apps.memory.models import MemorySource, MemorySourceObject
+from apps.memory.config_documents import get_memory_document_snapshots
 from apps.memory.policies import can_review_organization_memory, can_view_memory_review_queue, is_active_actor
 from apps.core.file_locks import (
     FileLockTimeoutError,
@@ -24,9 +25,12 @@ from .file_organization import (
     path_bucket,
     require_enabled_file_source,
     safe_path_hash,
+    validate_locked_current_file_state,
 )
 from .models import (
     MemoryFileObject,
+    MemoryFileObjectVersion,
+    MemoryFilePhysicalPlacement,
     MemoryFileOrganizationDecision,
     MemoryFileOrganizationProposal,
     MemoryFileUsageEvent,
@@ -85,14 +89,18 @@ def _record_file_usage_event_locked(
     source = MemorySource.objects.select_for_update().get(pk=source.pk)
     require_enabled_file_source(source)
     if file_object is not None:
-        file_object = (
-            MemoryFileObject.objects.select_for_update()
-            .select_related("source", "current_version", "current_version__source_object", "current_physical_placement")
-            .filter(pk=file_object.pk, source=source)
-            .first()
-        )
-        if file_object is None:
+        locked_file = MemoryFileObject.objects.select_for_update().filter(
+            pk=file_object.pk, source=source
+        ).first()
+        if locked_file is None:
             raise ValidationError("Файл события отсутствует или принадлежит другому источнику.")
+        # Lock the nullable base row first.  Loading nullable relations in the
+        # same SELECT ... FOR UPDATE would produce a PostgreSQL outer-join
+        # locking error and would not protect the file row as intended.
+        file_object = MemoryFileObject.objects.select_related(
+            "source", "current_version", "current_version__source_object",
+            "current_physical_placement",
+        ).get(pk=locked_file.pk)
     if view is not None:
         view = MemoryFileVirtualView.objects.select_for_update().filter(pk=view.pk, source=source).first()
         if view is None:
@@ -142,17 +150,24 @@ def build_organization_proposals(
     source: MemorySource,
     dry_run: bool = False,
     require_enabled: bool = True,
+    snapshots=None,
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
-            return _build_organization_proposals_locked(source=source, dry_run=dry_run)
+            if snapshots is None:
+                snapshots = get_memory_document_snapshots(
+                    document_ids=("memory.contract.file_organization_profiles",)
+                )
+            return _build_organization_proposals_locked(
+                source=source, dry_run=dry_run, snapshots=snapshots
+            )
 
 
-def _build_organization_proposals_locked(*, source: MemorySource, dry_run: bool = False) -> dict:
-    profile = get_file_organization_profile(source)
+def _build_organization_proposals_locked(*, source: MemorySource, dry_run: bool = False, snapshots=None) -> dict:
+    profile = get_file_organization_profile(source, snapshots=snapshots)
     thresholds = profile.proposal_thresholds
     metrics = {
         "source_code": source.code,
@@ -299,17 +314,23 @@ def apply_organization_proposal_decision(
     decision: str,
     comment: str = "",
     create_jobs: bool = False,
+    snapshots=None,
 ):
     try:
         with exclusive_file_lock(access_control_write_lock_path(), timeout=10.0):
             with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=10.0):
                 with transaction.atomic():
+                    if snapshots is None:
+                        snapshots = get_memory_document_snapshots(
+                            document_ids=("memory.contract.file_organization_profiles",)
+                        )
                     return _apply_organization_proposal_decision_locked(
                         proposal=proposal,
                         actor=actor,
                         decision=decision,
                         comment=comment,
                         create_jobs=create_jobs,
+                        snapshots=snapshots,
                     )
     except FileLockTimeoutError as exc:
         raise ValidationError("Файловый контур занят. Повторите сохранение через несколько секунд.") from exc
@@ -322,6 +343,7 @@ def _apply_organization_proposal_decision_locked(
     decision: str,
     comment: str = "",
     create_jobs: bool = False,
+    snapshots=None,
 ):
     """Apply a decision and optional move jobs under one authorization lock."""
 
@@ -341,7 +363,9 @@ def _apply_organization_proposal_decision_locked(
     _require_decision_access(actor, proposal)
     # Source-wide review is available only for an enabled organization profile;
     # disabled sources require an explicit private reconciliation path.
-    get_file_organization_profile(proposal.source, require_enabled=True)
+    get_file_organization_profile(
+        proposal.source, require_enabled=True, snapshots=snapshots
+    )
     if proposal.status not in {
         MemoryFileOrganizationProposal.Status.PROPOSED,
         MemoryFileOrganizationProposal.Status.NEEDS_MORE_DATA,
@@ -356,7 +380,7 @@ def _apply_organization_proposal_decision_locked(
         raise ValidationError("Предложение уже находится в состоянии редактирования.")
     approved_snapshot = None
     if decision == MemoryFileOrganizationDecision.Decision.ACCEPT_FOR_PHYSICAL_MOVE:
-        approved_snapshot = _build_approved_snapshot(proposal)
+        approved_snapshot = _build_approved_snapshot(proposal, snapshots=snapshots)
     before_state = {"status": proposal.status, "reviewed_by_id": proposal.reviewed_by_id}
     if decision == MemoryFileOrganizationDecision.Decision.ACCEPT_AS_VIRTUAL_RULE:
         proposal.status = MemoryFileOrganizationProposal.Status.ACCEPTED_VIRTUAL
@@ -395,11 +419,13 @@ def _apply_organization_proposal_decision_locked(
             raise ValidationError("Задания можно создать только для физического переноса.")
         from .file_organization_move import _create_move_jobs_for_accepted_proposal_locked
 
-        _create_move_jobs_for_accepted_proposal_locked(proposal=proposal, approved_by=actor)
+        _create_move_jobs_for_accepted_proposal_locked(
+            proposal=proposal, approved_by=actor, snapshots=snapshots
+        )
     return decision_record
 
 
-def _build_approved_snapshot(proposal: MemoryFileOrganizationProposal) -> dict:
+def _build_approved_snapshot(proposal: MemoryFileOrganizationProposal, *, snapshots=None) -> dict:
     """Capture immutable physical-move membership and object/version evidence."""
 
     raw_ids = (proposal.metadata or {}).get("file_ids")
@@ -417,20 +443,76 @@ def _build_approved_snapshot(proposal: MemoryFileOrganizationProposal) -> dict:
     )
     if (proposal.metadata or {}).get("membership_fingerprint") != expected_fingerprint:
         raise ValidationError("Состав предложения устарел до принятия решения.")
-    files = list(
+    locked_files = list(
         MemoryFileObject.objects.select_for_update()
-        .select_related("current_version", "current_physical_placement")
         .filter(source=proposal.source, file_id__in=file_ids)
         .order_by("id")
     )
+    # Lock the base rows first. Nullable relations are loaded and locked in
+    # separate, stable-ID queries below; PostgreSQL rejects locking their
+    # outer joins in the same SELECT ... FOR UPDATE statement.
+    files = locked_files
     if len(files) != len(file_ids) or {item.file_id for item in files} != set(file_ids):
         raise ValidationError("Состав физического решения содержит чужой или отсутствующий файл.")
+    version_ids = [item.current_version_id for item in files if item.current_version_id]
+    placement_ids = [
+        item.current_physical_placement_id
+        for item in files
+        if item.current_physical_placement_id
+    ]
+    locked_versions = {
+        item.pk: item
+        for item in MemoryFileObjectVersion.objects.select_for_update()
+        .filter(pk__in=version_ids)
+        .order_by("pk")
+    }
+    locked_placements = {
+        item.pk: item
+        for item in MemoryFilePhysicalPlacement.objects.select_for_update()
+        .filter(pk__in=placement_ids)
+        .order_by("pk")
+    }
+    source_object_ids = sorted(
+        {
+            item.source_object_id
+            for item in (*locked_versions.values(), *locked_placements.values())
+            if item.source_object_id is not None
+        }
+    )
+    locked_source_objects = {
+        item.pk: item
+        for item in MemorySourceObject.objects.select_for_update()
+        .filter(pk__in=source_object_ids)
+        .order_by("pk")
+    }
+    pointers = {
+        row["id"]: row
+        for row in MemoryFileObject.objects.filter(pk__in=[item.pk for item in files]).values(
+            "id", "current_version_id", "current_physical_placement_id"
+        )
+    }
     objects = []
     for file_object in files:
-        version = file_object.current_version
-        placement = file_object.current_physical_placement
-        if version is None or placement is None or not placement.is_current or placement.source_object_id is None:
-            raise ValidationError("Файл не имеет согласованной текущей версии и placement.")
+        pointer = pointers.get(file_object.pk)
+        if pointer is None or (
+            pointer["current_version_id"] != file_object.current_version_id
+            or pointer["current_physical_placement_id"] != file_object.current_physical_placement_id
+        ):
+            raise ValidationError("Текущая версия файла изменилась во время блокировки.")
+        version = locked_versions.get(file_object.current_version_id)
+        placement = locked_placements.get(file_object.current_physical_placement_id)
+        source_object = (
+            locked_source_objects.get(placement.source_object_id)
+            if placement is not None and placement.source_object_id is not None
+            else None
+        )
+        validate_locked_current_file_state(
+            file_object=file_object,
+            source=proposal.source,
+            version=version,
+            placement=placement,
+            source_object=source_object,
+        )
         objects.append({
             "file_id": file_object.file_id,
             "file_object_id": file_object.pk,

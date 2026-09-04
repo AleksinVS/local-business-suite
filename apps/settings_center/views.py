@@ -9,7 +9,7 @@ from django.contrib.messages import get_messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -57,9 +57,11 @@ from apps.waiting_list.models import SERVICE_CHOICES, WaitingListAuditLog, Waiti
 from .contract_services import (
     apply_contract_payload,
     preview_contract_payload,
+    read_contract_snapshot,
     read_contract_value,
     save_default_new_user_role,
 )
+from .document_repository import ConfigurationUnavailable, DocumentRepositoryError
 from .env_services import create_env_proposal, env_status_rows
 from .forms import (
     AccessExternalIdentityForm,
@@ -96,17 +98,32 @@ from .access_workspace import workspace_context
 logger = logging.getLogger(__name__)
 
 
-class SettingsManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+class SafeConfigurationViewMixin:
+    """Convert configuration read failures to a deliberately opaque 503."""
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except (ConfigurationUnavailable, DocumentRepositoryError):
+            logger.warning("Settings UI is unavailable while reading configuration.")
+            return HttpResponse(
+                "Конфигурация временно недоступна.",
+                status=503,
+                content_type="text/plain; charset=utf-8",
+            )
+
+
+class SettingsManagementMixin(SafeConfigurationViewMixin, LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_manage_settings(self.request.user)
 
 
-class UserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+class UserManagementMixin(SafeConfigurationViewMixin, LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_manage_roles(self.request.user)
 
 
-class SuperuserUserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+class SuperuserUserManagementMixin(SafeConfigurationViewMixin, LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return bool(
             self.request.user.is_authenticated
@@ -115,12 +132,12 @@ class SuperuserUserManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
         )
 
 
-class BoardAccessManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+class BoardAccessManagementMixin(SafeConfigurationViewMixin, LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_manage_board_access(self.request.user)
 
 
-class RoleDefinitionManagementMixin(LoginRequiredMixin, UserPassesTestMixin):
+class RoleDefinitionManagementMixin(SafeConfigurationViewMixin, LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return can_edit_role_definitions(self.request.user)
 
@@ -311,9 +328,13 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         context.update(workspace_context(query_params=self.request.GET))
         context["global_panel"] = self._hx_target(self.request) == "#global-right-panel-content"
         if context.get("creating_role"):
+            role_version = self._role_contract_version()
             context["field_form"] = RoleCreateForm(
                 actor=self.request.user,
-                initial={"base_hash": self._role_contract_hash()},
+                initial={
+                    "base_hash": role_version.content_hash,
+                    "base_revision": role_version.revision,
+                },
             )
         elif context.get("copying_role"):
             context["field_form"] = RoleCopyForm(
@@ -367,7 +388,11 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
     def _default_new_user_role_form(self, data=None):
         if not self.request.user.is_active or not self.request.user.is_superuser:
             return None
-        rules = read_contract_value(get_registry().get("core.contract.role_rules"))
+        snapshot = read_contract_snapshot(
+            get_registry().get("core.contract.role_rules"),
+            request=self.request,
+        )
+        rules = snapshot.payload
         defaults = rules.get("$defaults", {})
         initial_role = defaults.get("new_user_role", "") if isinstance(defaults, dict) else ""
         return DefaultNewUserRoleForm(
@@ -375,7 +400,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             rules_payload=rules,
             initial={
                 "role_name": initial_role or "",
-                "base_hash": normalized_hash(rules),
+                "base_hash": snapshot.content_hash,
+                "base_revision": snapshot.revision,
             },
         )
 
@@ -392,6 +418,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     role_name=form.cleaned_data["role_name"],
                     reason=form.cleaned_data["reason"],
                     base_hash=form.cleaned_data["base_hash"],
+                    base_revision=form.cleaned_data.get("base_revision"),
                 )
             except (PermissionDenied, ValidationError) as exc:
                 form.add_error(None, exc)
@@ -408,8 +435,8 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         return self.render_to_response(state)
 
     @staticmethod
-    def _role_contract_hash():
-        return normalized_hash(read_contract_value(get_registry().get("core.contract.role_rules")))
+    def _role_contract_version():
+        return read_contract_snapshot(get_registry().get("core.contract.role_rules"))
 
     def _post_role_create(self, request):
         form = RoleCreateForm(request.POST, actor=request.user)
@@ -426,6 +453,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                 description=form.cleaned_data["description"],
                 protected=form.cleaned_data.get("protected", False),
                 base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
             )
         except (PermissionDenied, ValidationError) as exc:
             form.add_error(None, exc)
@@ -454,7 +482,13 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
         try:
             source_model = role_definition_read_model(source_code)
         except ValidationError as exc:
-            source_model = {"code": source_code, "label": source_code, "description": "", "base_hash": request.POST.get("base_hash", "")}
+            source_model = {
+                "code": source_code,
+                "label": source_code,
+                "description": "",
+                "base_hash": request.POST.get("base_hash", ""),
+                "base_revision": request.POST.get("base_revision", "0"),
+            }
             form = RoleCopyForm(request.POST, role_read_model=source_model)
             form.add_error(None, exc)
         else:
@@ -469,6 +503,7 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     display_name=form.cleaned_data["display_name"],
                     description=form.cleaned_data["description"],
                     base_hash=form.cleaned_data["base_hash"],
+                    base_revision=form.cleaned_data.get("base_revision"),
                 )
             except (PermissionDenied, ValidationError) as exc:
                 form.add_error(None, exc)
@@ -689,7 +724,13 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
             proposed = form.proposed_config()
-            change = save_role_definition_change(actor=request.user, role_code=selected["code"], proposed_config=proposed, base_hash=form.cleaned_data["base_hash"])
+            change = save_role_definition_change(
+                actor=request.user,
+                role_code=selected["code"],
+                proposed_config=proposed,
+                base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
+            )
             messages.success(request, f"Роль изменена. Аудит #{change.pk}.")
             return self._success_response(request, "roles", selected["code"], field)
         if field == "users":
@@ -760,11 +801,21 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     bound_data,
                     role_read_model=model,
                     actor=request.user,
-                    initial={"base_hash": model["base_hash"]},
+                    initial={
+                        "base_hash": model["base_hash"],
+                        "base_revision": model["base_revision"],
+                    },
                 )
             if field == "description":
                 model = role_definition_read_model(selected["code"])
-                return RoleDescriptionForm(bound_data, role_read_model=model, initial={"base_hash": model["base_hash"]})
+                return RoleDescriptionForm(
+                    bound_data,
+                    role_read_model=model,
+                    initial={
+                        "base_hash": model["base_hash"],
+                        "base_revision": model["base_revision"],
+                    },
+                )
             if field == "users":
                 current = [user.pk for user in selected.get("user_objects", [])]
                 return AccessRoleMembershipForm(bound_data, role_name=selected["code"], initial={"selected_user_ids": current})
@@ -925,7 +976,10 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
         form = kwargs.get("form") or RoleDefinitionForm(
             role_read_model=self.role_read_model,
             actor=self.request.user,
-            initial={"base_hash": self.role_read_model["base_hash"]},
+            initial={
+                "base_hash": self.role_read_model["base_hash"],
+                "base_revision": self.role_read_model["base_revision"],
+            },
         )
         context.update(
             {
@@ -949,6 +1003,7 @@ class RoleDefinitionView(RoleDefinitionManagementMixin, TemplateView):
                 role_code=self.role_code,
                 proposed_config=proposed,
                 base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
             )
         except ValidationError as exc:
             form.add_error(None, exc)
@@ -968,9 +1023,12 @@ class RoleCreateView(RoleDefinitionManagementMixin, FormView):
 
     def get_initial(self):
         initial = super().get_initial()
-        initial["base_hash"] = normalized_hash(read_contract_value(
-            get_registry().get("core.contract.role_rules")
-        ))
+        snapshot = read_contract_snapshot(
+            get_registry().get("core.contract.role_rules"),
+            request=self.request,
+        )
+        initial["base_hash"] = snapshot.content_hash
+        initial["base_revision"] = snapshot.revision
         return initial
 
     def form_valid(self, form):
@@ -982,6 +1040,7 @@ class RoleCreateView(RoleDefinitionManagementMixin, FormView):
                 description=form.cleaned_data["description"],
                 protected=form.cleaned_data.get("protected", False),
                 base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
             )
         except (PermissionDenied, ValidationError) as exc:
             form.add_error(None, exc)
@@ -1006,19 +1065,37 @@ class SettingDetailView(SettingsManagementMixin, FormView):
     def get_initial(self):
         initial = super().get_initial()
         if self.descriptor.storage_kind == "runtime_contract":
-            try:
-                payload = read_contract_value(self.descriptor)
-                initial["payload"] = pretty_json(payload)
-                initial["base_hash"] = normalized_hash(payload)
-            except Exception as exc:
-                initial["payload"] = f'{{"error": "{exc}"}}'
+            snapshot = read_contract_snapshot(self.descriptor, request=self.request)
+            if self.descriptor.is_editable:
+                initial["payload"] = pretty_json(snapshot.payload)
+                initial["base_hash"] = snapshot.content_hash
+                initial["base_revision"] = snapshot.revision
+            else:
+                # Git-static contracts are intentionally rendered as a JSON
+                # viewer.  Keeping them out of the bound form also prevents a
+                # stale browser POST from becoming an accidental write path.
+                initial["read_only_json"] = pretty_json(snapshot.payload)
         return initial
+
+    def post(self, request, *args, **kwargs):
+        if (
+            getattr(self, "descriptor", None)
+            and self.descriptor.storage_kind == "runtime_contract"
+            and not self.descriptor.is_editable
+        ):
+            return HttpResponseForbidden("Эта конфигурация доступна только для чтения.")
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["descriptor"] = self.descriptor
         context["is_contract"] = self.descriptor.storage_kind == "runtime_contract"
         context["can_edit"] = self.descriptor.is_editable
+        context["read_only_json"] = (
+            context["form"].initial.get("read_only_json", "")
+            if context["is_contract"] and not self.descriptor.is_editable
+            else ""
+        )
         context["is_workflow_transition_matrix"] = self.descriptor.widget == "workflow_transition_matrix"
         context["is_status_color_palette"] = self.descriptor.widget == "status_color_palette"
         palette_route_name = self.descriptor.metadata.get("palette_route_name")
@@ -1033,6 +1110,8 @@ class SettingDetailView(SettingsManagementMixin, FormView):
         if self.descriptor.storage_kind != "runtime_contract":
             messages.error(self.request, "Эта настройка не редактируется как JSON-контракт.")
             return self.form_invalid(form)
+        if not self.descriptor.is_editable:
+            return HttpResponseForbidden("Эта конфигурация доступна только для чтения.")
         try:
             if self.request.POST.get("action") == "preview":
                 preview = preview_contract_payload(
@@ -1061,6 +1140,7 @@ class SettingDetailView(SettingsManagementMixin, FormView):
                 raw_payload=form.cleaned_data["payload"],
                 confirmed=form.cleaned_data["confirm"],
                 base_hash=form.cleaned_data["base_hash"],
+                base_revision=form.cleaned_data.get("base_revision"),
             )
         except ValidationError as exc:
             form.add_error(None, exc)
@@ -1076,13 +1156,14 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
     def get_descriptor(self):
         return get_registry().get(self.setting_id)
 
-    def get_payload(self):
-        return read_contract_value(self.get_descriptor())
+    def get_snapshot(self):
+        return read_contract_snapshot(self.get_descriptor(), request=self.request)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         descriptor = self.get_descriptor()
-        payload = self.get_payload()
+        snapshot = self.get_snapshot()
+        payload = snapshot.payload
         statuses = payload.get("statuses", [])
         transitions = payload.get("transitions", {})
         rows = []
@@ -1115,14 +1196,16 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
                 "allowed_count": allowed_count,
                 "possible_count": possible_count,
                 "raw_payload": pretty_json(payload),
-                "base_hash": normalized_hash(payload),
+                "base_hash": snapshot.content_hash,
+                "base_revision": snapshot.revision,
             }
         )
         return context
 
     def post(self, request, *args, **kwargs):
         descriptor = self.get_descriptor()
-        before = self.get_payload()
+        snapshot = self.get_snapshot()
+        before = snapshot.payload
         statuses = before.get("statuses", [])
         action = request.POST.get("action", "apply_matrix")
         after = {
@@ -1140,6 +1223,7 @@ class WorkflowTransitionMatrixView(SettingsManagementMixin, TemplateView):
                 raw_payload=json.dumps(after, ensure_ascii=False),
                 confirmed=request.POST.get("confirm") == "on",
                 base_hash=request.POST.get("base_hash"),
+                base_revision=request.POST.get("base_revision"),
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
@@ -1182,15 +1266,17 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
     def get_descriptor(self):
         return get_registry().get(self.get_setting_id())
 
-    def get_payload(self):
-        return read_contract_value(self.get_descriptor())
+    def get_snapshot(self):
+        return read_contract_snapshot(self.get_descriptor(), request=self.request)
 
     def get_context_data(self, **kwargs):
         payload = kwargs.pop("payload", None)
         base_hash = kwargs.pop("base_hash", None)
+        base_revision = kwargs.pop("base_revision", None)
         context = super().get_context_data(**kwargs)
         descriptor = self.get_descriptor()
-        payload = payload or self.get_payload()
+        snapshot = self.get_snapshot()
+        payload = payload or snapshot.payload
         rows = [
             {
                 "code": code,
@@ -1205,14 +1291,20 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 "descriptor": descriptor,
                 "rows": rows,
                 "raw_payload": pretty_json(payload),
-                "base_hash": base_hash or normalized_hash(payload),
+                "base_hash": base_hash or snapshot.content_hash,
+                "base_revision": (
+                    snapshot.revision if base_revision is None else base_revision
+                ),
+                "settings_degraded": snapshot.degraded,
+                "settings_degradation_code": snapshot.degradation_reason,
             }
         )
         return context
 
     def post(self, request, *args, **kwargs):
         descriptor = self.get_descriptor()
-        before = self.get_payload()
+        snapshot = self.get_snapshot()
+        before = snapshot.payload
         statuses = {}
         for code, config in before.get("statuses", {}).items():
             statuses[code] = {
@@ -1234,13 +1326,15 @@ class StatusColorSettingsView(SettingsManagementMixin, TemplateView):
                 raw_payload=json.dumps(after, ensure_ascii=False),
                 confirmed=request.POST.get("confirm") == "on",
                 base_hash=request.POST.get("base_hash"),
+                base_revision=request.POST.get("base_revision"),
             )
         except ValidationError as exc:
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else str(exc))
             return self.render_to_response(
                 self.get_context_data(
                     payload=after,
-                    base_hash=normalized_hash(before),
+                    base_hash=snapshot.content_hash,
+                    base_revision=snapshot.revision,
                 )
             )
         messages.success(request, f"Цвета статусов сохранены. Аудит #{change.pk}.")

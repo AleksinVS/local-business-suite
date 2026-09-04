@@ -1,6 +1,8 @@
 # Целевая архитектура хранения настроек
 
-Статус: проектное предложение, исполняемое поведение не изменено.
+Статус: реализовано и технически принято на тестовом хосте, включая PostgreSQL
+cutover и recovery drill; production cutover ожидает отдельного решения
+владельца.
 
 Дата анализа: 2026-08-31.
 
@@ -12,50 +14,29 @@
 - действующий файловый store: `docs/adr/ADR-0031-runtime-contract-store-and-delivery.md`;
 - Центр настроек: `docs/adr/ADR-0007-settings-center-and-contextual-help.md`.
 
-## 1. Резюме повторного анализа
+## 1. Результат реализации
 
-Предыдущее предложение правильно разделяло deployment, секреты, Git-дефолты и
-рабочие настройки, но слишком рано предлагало физически укрупнять документы и
-ориентировалось на их общее количество.
+Реестр содержит 30 value-документов: 14 `database_override`, 16
+`git_static`; generated-файлы не являются value-документами. PostgreSQL-срез
+описан одним reviewed release set. На тестовом хосте его приватный allowlist
+включён полностью; production deployment остаётся отдельным операционным окном.
 
-Повторный аудит показал:
+`ConfigDocumentRepository` выдаёт immutable snapshot. Для ещё не
+переключённого `legacy_file` каноническое отсутствие файла в
+`data/contracts/` означает validated Git-default; существующий файл остаётся
+authoritative. Явный отсутствующий env override завершается fail-closed.
 
-1. В `contracts/` есть 30 JSON-документов значений, не считая схем; столько же
-   рабочих копий создаётся в `data/contracts/`.
-2. Центр настроек знает о 19 runtime-контрактах, 18 из них редактируются.
-3. `apps.core.contract_store` обслуживает только четыре документа.
-4. Большинство AI/memory/FileHub/analytics потребителей читает значения из
-   `settings.LOCAL_BUSINESS_*`, то есть получает снимок времени старта процесса.
-5. Agent-runtime отдельно разрешает пути к трём AI-файлам и имеет собственный
-   кэш.
-6. Запись значения находится в файле, а audit — в PostgreSQL; из-за этого
-   существует staged-протокол `pending -> file write -> applied`, состояния
-   `inconsistent`, reconcile-команда и межпроцессная файловая блокировка.
+`bootstrap_runtime` создаёт каталоги, но не зеркалирует `git_static` и
+`database_override`; уже существующие legacy-артефакты сохраняются до
+отдельного migration/cutover решения. `validate_architecture_contracts`
+проверяет полноту `contracts/` относительно реестра и запрещает прямой
+доступ к migrated paths вне централизованных adapters. AST-гарантия покрывает
+литералы и простые строковые константы; полностью динамические пути требуют
+отдельного code review и не блокируются этой проверкой.
 
-Контрольный запуск `validate_architecture_contracts` на текущем хосте
-2026-08-31 дал такой снимок:
-
-- 10 из 18 зарегистрированных runtime-контрактов совпадают с Git-дефолтом;
-- 7 имеют рабочие отличия: AI models/registry и memory claims, ingestion,
-  profiles, retrieval budget, sources;
-- `core.contract.role_rules` имеет default-only ключи `$defaults` и `viewer` и
-  классифицирован текущей командой как кандидат на ручной перенос.
-
-Это snapshot для планирования, а не инструкция применить Git-дефолт. К моменту
-исполнения пакет 01 обязан пересчитать его. Для `role_rules` автоматическое
-добавление ключей запрещено до сверки с ADR-0045, фактическими группами и
-матрицей доступа.
-
-Следовательно, основной источник сложности — не «30 слишком мелких файлов», а:
-
-- несколько реестров;
-- разные семантики чтения;
-- две системы согласованности;
-- смешение пользовательских настроек, контрактов и runtime-артефактов;
-- зависимость актуальности от перезапуска конкретного потребителя.
-
-Целевое решение не сокращает документы по квоте. Оно сокращает число способов
-работы с ними.
+Таким образом, исполнение и тестовый хост следуют целевой модели. Техническая
+приёмка и PostgreSQL recovery drill завершены; pending относится только к
+production cutover и пользовательскому решению об архивировании блока.
 
 ## 2. Цели и ограничения
 
@@ -325,50 +306,51 @@ write endpoint.
 
 Так сокращается пользовательская сложность без увеличения blast radius.
 
-## 12. Инвентарь и предварительная классификация
+## 12. Инвентарь и утверждённая классификация
 
 Повторная проверка содержимого показала, что часть нынешних `editable`
 дескрипторов описывает не операторские настройки, а исполняемый/security
 контракт. Их перенос в DB сохранил бы опасную возможность менять через общий JSON
 editor то, что должно проходить code review.
 
-| Документ | Предварительная цель | Основание/условие |
+| Документ | Класс хранения | Основание/условие |
 |---|---|---|
 | `role_rules.json` | `database_override` | специальный access workflow, fail closed |
 | `workflow_rules.json` | `database_override` | доменная команда и cross-validation |
-| `workorder_status_colors.json` | `database_override` | первый безопасный pilot |
-| `waiting_list_status_colors.json` | `database_override` | первый безопасный pilot |
+| `workorder_status_colors.json` | `database_override` | связанный access/workflow срез, не pilot |
+| `waiting_list_status_colors.json` | `database_override` | первый независимый pilot |
 | `ai/chat_settings.json` | `database_override` | операторские параметры UX/контекста |
 | `ai/registry.json` | `git_static` | identity/execution security architecture, не обычная настройка |
 | `ai/tools.json` | `git_static` | каталог должен совпадать с Python tool definitions |
 | `ai/task_types.json` | `git_static` | содержит allowed tools и confirmation policy; editable aliases требуют будущего безопасного выделения |
-| `ai/models.json` | `unresolved` | выбрать Git-static либо специальный model-profile workflow; raw keys всё равно вне документа |
+| `ai/models.json` | `git_static` | model catalog и identity/security parity; raw keys вне документа |
 | `ai/memory_sources.json` | `database_override` | host/runtime sources, доменная проверка |
 | `ai/memory_profiles.json` | `database_override` | runtime profiles, requires evaluation |
 | `ai/memory_routing.json` | `database_override` | runtime routing, privacy-aware validator |
 | `ai/memory_trust_policy.json` | `database_override` | fail closed, специальное право |
-| `ai/memory_claims_policy.json` | `unresolved` | claim/belief layer сейчас отложен; проверить consumer и удалить либо оставить Git-static |
+| `ai/memory_claims_policy.json` | `git_static` | claims policy read-only до отдельного безопасного domain workflow |
 | `ai/memory_retrieval_budget.json` | `database_override` | tuning document с ограничениями |
 | `ai/memory_ingestion_profiles.json` | `database_override` | доменная настройка, последствия для ingestion |
 | `ai/memory_file_organization_profiles.json` | `database_override` | один snapshot на FileHub job |
 | `ai/memory_graph_schema.json` | `database_override` через domain workflow | не generic editor; модерация экспертом/владельцем графа |
-| `analytics/analysis_scope_rules.json` | `git_static` предварительно | нет runtime owner/writer; privacy policy требует review |
-| `analytics/business_facts.json` | `git_static` предварительно | нет runtime owner/writer |
-| `analytics/datasets.json` | `git_static` предварительно | registry contract; не operational data rows |
-| `analytics/dedup_rules.json` | `git_static` предварительно | менять только после domain workflow |
-| `analytics/diagnostic_playbooks.json` | `git_static` предварительно | нет runtime writer |
-| `analytics/metrics.json` | `git_static` предварительно | metric definition contract |
-| `analytics/monitors.json` | `git_static` предварительно | monitor definition contract |
-| `analytics/retention_profiles.json` | `git_static` предварительно | privacy/retention review |
-| `analytics/sources.json` | `git_static` предварительно | до появления управляемого source workflow |
-| `analytics/workflow_routes.json` | `git_static` предварительно | нет runtime writer |
+| `analytics/analysis_scope_rules.json` | `git_static` | нет runtime owner/writer; privacy policy требует review |
+| `analytics/business_facts.json` | `git_static` | нет runtime owner/writer |
+| `analytics/datasets.json` | `git_static` | registry contract; не operational data rows |
+| `analytics/dedup_rules.json` | `git_static` | менять только после domain workflow |
+| `analytics/diagnostic_playbooks.json` | `git_static` | нет runtime writer |
+| `analytics/metrics.json` | `git_static` | metric definition contract |
+| `analytics/monitors.json` | `git_static` | monitor definition contract |
+| `analytics/retention_profiles.json` | `git_static` | privacy/retention review |
+| `analytics/sources.json` | `git_static` | до появления управляемого source workflow |
+| `analytics/workflow_routes.json` | `git_static` | нет runtime writer |
 | `integrations/registry.json` | `git_static` | канонический общий registry по правилам репозитория |
 | `warehouse/settings.json` (`warehouse.settings`) | `database_override` | точность новых единиц и пороги срока годности; доменный валидатор склада |
 
-Итого предварительно: 14 `database_override`, 14 `git_static`, 2 `unresolved`.
-Первый task packet обязан подтвердить это машинным inventory и фактическими
-consumer-ами. Статус `unresolved` блокирует автоматический перенос, а
-предварительный `git_static` не удаляет runtime copy до доказанного cutover.
+Итого: 14 `database_override` и 16 `git_static`; unresolved-документов среди
+30 JSON-документов значений нет. Все 14 database_override ID проходят единый
+release gate в `ConfigDocumentRegistry`; приватный deployment allowlist не
+меняется автоматически. `bootstrap_runtime` не создаёт для этих двух классов
+новые runtime-копии.
 
 Runtime AI skills (`SKILL.md` и связанные директории) остаются `generated_file`
 и не входят в список 30 JSON-документов.
@@ -394,8 +376,10 @@ evidence и предлагаемое действие.
 1. Инвентарь и единый registry без изменения поведения.
 2. Модель, repository, transactional writer и тесты на временных документах.
 3. Идемпотентный migration planner/importer.
-4. Pilot двух status color документов; общий экран остаётся поверх двух записей.
-5. Core role/workflow как единый security acceptance slice.
+4. Pilot независимого `waiting_list.contract.status_colors`; общий экран
+   продолжает показывать обе палитры, но палитра заявок пока остаётся legacy.
+5. Core role/workflow и `workorders.contract.status_colors` как единый
+   dependency-closed security acceptance slice.
 6. AI documents одновременно с gateway и agent-runtime ETag delivery.
 7. Memory/FileHub consumers; один снимок на job/command.
 8. Analytics/integrations classification, удаление startup payload constants и

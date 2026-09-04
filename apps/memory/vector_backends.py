@@ -701,9 +701,12 @@ class LanceDBMemoryBackend:
         *,
         embedding_provider: EmbeddingProvider | None = None,
         embedding_profile: str | None = None,
+        snapshots=None,
     ):
         self.db_path = Path(db_path) if db_path is not None else default_lancedb_index_path()
-        self.embedding_provider = embedding_provider or get_embedding_provider(embedding_profile)
+        self.embedding_provider = embedding_provider or get_embedding_provider(
+            embedding_profile, snapshots=snapshots
+        )
 
     def upsert(self, record: MemoryIndexRecord) -> None:
         self.upsert_many((record,))
@@ -882,17 +885,14 @@ def get_default_fulltext_schema_version() -> str:
     return SQLITE_FTS_SCHEMA_VERSION
 
 
-def get_default_vector_backend() -> LanceDBMemoryBackend | None:
-    try:
-        from django.conf import settings
+def get_default_vector_backend(*, snapshots=None) -> LanceDBMemoryBackend | None:
+    from django.conf import settings
 
-        backend = str(getattr(settings, "LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND", "lancedb") or "").strip().lower()
-        if backend not in {"lancedb", "enabled"}:
-            return None
-        profile = getattr(settings, "LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE", None)
-        return LanceDBMemoryBackend(embedding_profile=profile)
-    except Exception:
+    backend = str(getattr(settings, "LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND", "lancedb") or "").strip().lower()
+    if backend not in {"lancedb", "enabled"}:
         return None
+    profile = getattr(settings, "LOCAL_BUSINESS_MEMORY_EMBEDDING_PROFILE", None)
+    return LanceDBMemoryBackend(embedding_profile=profile, snapshots=snapshots)
 
 
 def _django_data_dir() -> Path | None:

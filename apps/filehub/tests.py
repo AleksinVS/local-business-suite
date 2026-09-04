@@ -890,6 +890,42 @@ class MemoryFileHubScopeBoundaryTests(MemoryModelFactoryMixin, TestCase):
                 placement.source_object = source_object
                 placement.physical_ref = str(safe_path)
                 placement.save(update_fields=["source_object", "physical_ref", "updated_at"])
+
+                foreign_file = MemoryFileObject.objects.create(
+                    file_id="file:foreign-validator-state",
+                    source=foreign_source,
+                )
+                foreign_version = MemoryFileObjectVersion.objects.create(
+                    file_object=foreign_file,
+                    source_object=foreign_object,
+                    sha256=source_object.content_hash,
+                    size_bytes=source_object.size_bytes,
+                    storage_backend=MemoryFilePhysicalPlacement.StorageBackend.SOURCE_FS,
+                    storage_ref=foreign_object.object_uri,
+                    version_status=MemoryFileObjectVersion.VersionStatus.CURRENT,
+                )
+                file_object.current_version = foreign_version
+                file_object.save(update_fields=["current_version", "updated_at"])
+                with self.assertRaises(ValidationError):
+                    _validate_job_source_state(job)
+                file_object.current_version = version
+                file_object.save(update_fields=["current_version", "updated_at"])
+
+                version.version_status = MemoryFileObjectVersion.VersionStatus.HISTORICAL
+                version.save(update_fields=["version_status", "updated_at"])
+                with self.assertRaises(ValidationError):
+                    _validate_job_source_state(job)
+                version.version_status = MemoryFileObjectVersion.VersionStatus.CURRENT
+                version.save(update_fields=["version_status", "updated_at"])
+
+                original_placement_file_id = placement.file_object_id
+                placement.file_object = foreign_file
+                placement.save(update_fields=["file_object", "updated_at"])
+                with self.assertRaises(ValidationError):
+                    _validate_job_source_state(job)
+                placement.file_object_id = original_placement_file_id
+                placement.save(update_fields=["file_object", "updated_at"])
+
                 file_object.current_physical_placement = None
                 file_object.save(update_fields=["current_physical_placement", "updated_at"])
                 with self.assertRaises(ValidationError):
@@ -914,6 +950,110 @@ class MemoryFileHubScopeBoundaryTests(MemoryModelFactoryMixin, TestCase):
                 placement.save(update_fields=["physical_ref", "updated_at"])
                 with self.assertRaises(ValidationError):
                     _validate_job_source_state(job)
+
+    def test_move_creation_rejects_corrupt_current_chain_before_job(self):
+        """Creation must fail before a corrupt chain can reach file I/O."""
+        from .file_organization_move import _create_system_planned_move_job
+
+        source, file_object = self.create_scoped_file(
+            source_code="filehub-creation-chain",
+            token=f"user:{self.actor.pk}",
+        )
+        foreign_source = self.create_source(
+            code="filehub-creation-chain-foreign",
+            source_kind="local_path",
+            domain="docs",
+            scope_rule="authenticated_user",
+            config={"source_ref": "/tmp/not-used"},
+        )
+        original_object = file_object.current_version.source_object
+        foreign_object = MemorySourceObject.objects.create(
+            source=foreign_source,
+            object_id="foreign:creation-chain",
+            object_uri="/tmp/foreign-creation-chain.txt",
+            relative_path="foreign-creation-chain.txt",
+            file_name="foreign-creation-chain.txt",
+            extension=".txt",
+            mime_type="text/plain",
+            content_hash="foreign-creation-hash",
+            size_bytes=12,
+            mtime=timezone.now(),
+            metadata={"scope_tokens": [f"user:{self.actor.pk}"]},
+        )
+        foreign_file = MemoryFileObject.objects.create(
+            file_id="file:foreign-creation-chain",
+            source=foreign_source,
+        )
+        foreign_version = MemoryFileObjectVersion.objects.create(
+            file_object=foreign_file,
+            source_object=foreign_object,
+            sha256=foreign_object.content_hash,
+            size_bytes=foreign_object.size_bytes,
+            storage_backend=MemoryFilePhysicalPlacement.StorageBackend.SOURCE_FS,
+            storage_ref=foreign_object.object_uri,
+            version_status=MemoryFileObjectVersion.VersionStatus.CURRENT,
+        )
+        foreign_placement = MemoryFilePhysicalPlacement.objects.create(
+            file_object=foreign_file,
+            source_object=foreign_object,
+            storage_backend=MemoryFilePhysicalPlacement.StorageBackend.SOURCE_FS,
+            physical_ref=foreign_object.object_uri,
+            relative_path=foreign_object.relative_path,
+            path_role=MemoryFilePhysicalPlacement.PathRole.SOURCE_CURRENT,
+            placement_status=MemoryFilePhysicalPlacement.PlacementStatus.ACTIVE,
+            is_current=True,
+        )
+        profiles = _file_organization_profiles(
+            source_code=source.code,
+            managed_root=Path("/tmp/filehub-creation-chain-managed"),
+        )
+        original_version = file_object.current_version
+        original_placement = file_object.current_physical_placement
+        cases = (
+            ("foreign_version", lambda: setattr(file_object, "current_version", foreign_version), lambda: setattr(file_object, "current_version", original_version)),
+            ("foreign_placement", lambda: setattr(file_object, "current_physical_placement", foreign_placement), lambda: setattr(file_object, "current_physical_placement", original_placement)),
+            ("mismatched_source_object", lambda: setattr(original_placement, "source_object", foreign_object), lambda: setattr(original_placement, "source_object", original_object)),
+            ("non_current_version", lambda: setattr(original_version, "version_status", MemoryFileObjectVersion.VersionStatus.HISTORICAL), lambda: setattr(original_version, "version_status", MemoryFileObjectVersion.VersionStatus.CURRENT)),
+        )
+        with self.settings(LOCAL_BUSINESS_MEMORY_FILE_ORGANIZATION_PROFILES=profiles):
+            for case, corrupt, restore in cases:
+                with self.subTest(case=case):
+                    corrupt()
+                    if case == "mismatched_source_object":
+                        original_placement.save(update_fields=["source_object", "updated_at"])
+                    elif case == "non_current_version":
+                        original_version.save(update_fields=["version_status", "updated_at"])
+                    else:
+                        file_object.save(
+                            update_fields=[
+                                "current_version" if case == "foreign_version" else "current_physical_placement",
+                                "updated_at",
+                            ]
+                        )
+                    with self.assertRaises(ValidationError):
+                        _create_system_planned_move_job(
+                            file_object=file_object,
+                            target_relative_path=f"managed/{case}.txt",
+                        )
+                    self.assertEqual(MemoryFileMoveJob.objects.count(), 0)
+                    restore()
+                    if case == "mismatched_source_object":
+                        original_placement.save(update_fields=["source_object", "updated_at"])
+                    elif case == "non_current_version":
+                        original_version.save(update_fields=["version_status", "updated_at"])
+                    else:
+                        file_object.save(
+                            update_fields=[
+                                "current_version" if case == "foreign_version" else "current_physical_placement",
+                                "updated_at",
+                            ]
+                        )
+            valid_job = _create_system_planned_move_job(
+                file_object=file_object,
+                target_relative_path="managed/valid.txt",
+            )
+            self.assertEqual(valid_job.status, MemoryFileMoveJob.Status.PLANNED)
+            self.assertEqual(MemoryFileMoveJob.objects.count(), 1)
 
     def test_execute_profile_is_canonical_and_backend_mismatch_requires_review(self):
         from .file_organization_move import execute_move_job

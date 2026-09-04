@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
@@ -137,3 +138,4 @@ class LegacyImportIdempotencyTests(TestCase):
                 manifest={**manifest, "run_id": str(uuid.uuid4())}
             )
         self.assertEqual(first.run_id, uuid.UUID(self.run_id))
+pytestmark = pytest.mark.integration

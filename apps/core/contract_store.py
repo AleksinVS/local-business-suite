@@ -1,9 +1,10 @@
-"""Единый слой чтения рабочих копий бизнес-контрактов (ADR-0031).
+"""Узкий адаптер совместимости для четырёх исторических контрактов (ADR-0031).
 
-Модуль устраняет межпроцессную несогласованность: вместо того чтобы держать
-разобранные контракты в константах ``settings.*`` (обновляются только в одном
-воркере после записи), процессы читают рабочую копию из ``data/contracts/`` по
-требованию и кэшируют разобранный payload по ключу метаданных файла.
+При активном переводе документа на PostgreSQL публичные функции делегируют
+чтение централизованному repository. Файловый путь сохраняется только как
+ограниченный переходный адаптер для ещё не переведённого хоста и явных
+legacy-override; новым потребителям нельзя использовать модуль как общее
+файловое хранилище настроек.
 
 Методическая заметка (для обучающего контура проекта): ключ инвалидации кэша —
 кортеж ``(st_mtime_ns, st_size, st_ino)``, а не голый ``mtime``. Атомарная запись
@@ -18,6 +19,7 @@ import hashlib
 import logging
 import os
 from copy import deepcopy
+from pathlib import Path
 
 from django.conf import settings
 
@@ -39,7 +41,7 @@ class ContractStoreError(RuntimeError):
     """Контракт нельзя прочитать, и валидного снимка в процессе ещё нет."""
 
 
-# Реестр контрактов, которые обслуживает store: имя -> путь и валидатор.
+# Реестр исторических контрактов переходного адаптера: имя -> путь и валидатор.
 # Путь берётся из ``settings.LOCAL_BUSINESS_*_FILE`` (уважает env-override,
 # который settings.py уже применил к этим константам).
 #
@@ -68,6 +70,13 @@ _CONTRACTS = {
     },
 }
 
+_DOCUMENT_ID_BY_CONTRACT_NAME = {
+    "role_rules": "core.contract.role_rules",
+    "workflow_rules": "core.contract.workflow_rules",
+    "workorder_status_colors": "workorders.contract.status_colors",
+    "waiting_list_status_colors": "waiting_list.contract.status_colors",
+}
+
 # Процессный кэш: имя -> {"key": кортеж метаданных, "payload": разобранный dict}.
 # ``payload`` считается приватным и наружу отдаётся только глубокой копией.
 _cache: dict[str, dict] = {}
@@ -92,7 +101,34 @@ def _load_current(name: str):
     try:
         key = _stat_key(path)
     except OSError as exc:
-        return _handle_failure(name, exc)
+        # A clean runtime has no mutable mirror yet.  Let the repository's
+        # legacy policy distinguish that canonical absence from an explicit
+        # environment override, which must remain fail-closed.
+        try:
+            from apps.settings_center.document_registry import get_document_registry
+            from apps.settings_center.document_repository import load_legacy_document
+
+            spec = get_document_registry().get(_DOCUMENT_ID_BY_CONTRACT_NAME[name])
+            default_path = Path(settings.BASE_DIR) / spec.default_path
+            default_payload = load_json_file(default_path)
+            payload, source = load_legacy_document(
+                spec,
+                default_payload=default_payload,
+                path=Path(path),
+            )
+            if source != "git_default":
+                raise ContractStoreError(
+                    f"Неожиданный источник legacy-контракта '{name}'."
+                )
+            cfg["validator"](deepcopy(payload))
+            _cache[name] = {
+                "key": ("git_default", normalized_hash(default_payload)),
+                "payload": payload,
+            }
+            _degraded.pop(name, None)
+            return payload
+        except Exception as fallback_exc:  # noqa: BLE001 — preserve store boundary
+            return _handle_failure(name, fallback_exc)
 
     entry = _cache.get(name)
     if entry is not None and entry["key"] == key:
@@ -113,6 +149,12 @@ def _load_current(name: str):
 
 
 def _handle_failure(name: str, exc: Exception):
+    from apps.settings_center.document_repository import ExplicitLegacyPathUnavailable
+
+    if isinstance(exc, ExplicitLegacyPathUnavailable):
+        raise ContractStoreError(
+            f"Не удалось загрузить контракт '{name}': явно заданный путь недоступен."
+        ) from exc
     entry = _cache.get(name)
     if entry is None:
         # Первое чтение после старта процесса — поднимаем ошибку наверх (fail-fast).
@@ -143,6 +185,16 @@ def get_contract(name: str, request=None):
     недоступен, вызывается ``get_contract(name)`` — согласованность в пределах
     запроса в типичном случае обеспечивает кэш по ключу метаданных.
     """
+    document_id = _active_database_document_id(name)
+    if document_id is not None:
+        # Lazy import keeps the transport-only contract store independent from
+        # Settings Center models during Django settings import.
+        from apps.settings_center.document_repository import ConfigDocumentRepository
+
+        return ConfigDocumentRepository().get_document(
+            document_id, request=request
+        ).payload
+
     if request is not None:
         snapshots = getattr(request, "_contract_snapshots", None)
         if snapshots is None:
@@ -170,12 +222,32 @@ def normalized_hash(payload) -> str:
 
 def current_contract_hash(name: str) -> str:
     """Хеш актуальной версии контракта для оптимистической проверки записи."""
+    document_id = _active_database_document_id(name)
+    if document_id is not None:
+        from apps.settings_center.document_repository import ConfigDocumentRepository
+
+        return ConfigDocumentRepository().get_document(document_id).content_hash
     return normalized_hash(get_contract(name))
 
 
 def registered_contracts() -> tuple:
     """Имена контрактов, которые обслуживает store (для активных health-проверок)."""
-    return tuple(_CONTRACTS)
+    return tuple(
+        name for name in _CONTRACTS if _active_database_document_id(name) is None
+    )
+
+
+def _active_database_document_id(name: str) -> str | None:
+    document_id = _DOCUMENT_ID_BY_CONTRACT_NAME.get(name)
+    if document_id is None:
+        return None
+    from apps.settings_center.document_registry import get_document_registry
+
+    return (
+        document_id
+        if get_document_registry().get(document_id).active_backend == "database"
+        else None
+    )
 
 
 def get_degradation_state() -> dict:

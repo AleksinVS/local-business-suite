@@ -15,6 +15,12 @@ ENV HOME=/home/app
 
 WORKDIR /app
 
+# Каноническое хранилище знаний в data/knowledge_repo является отдельным
+# Git-репозиторием: memory.remember и recovery/e2e вызывают git синхронно.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Ставим зависимости из requirements.lock (сгенерирован pip-compile), а не из
 # requirements.txt: requirements.lock фиксирует версии всех транзитивных
 # зависимостей и делает сборку образа воспроизводимой. requirements.txt

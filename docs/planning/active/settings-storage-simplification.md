@@ -1,7 +1,10 @@
 # Упрощение хранения и доставки настроек
 
-Статус: архитектура и исполнительные пакеты подготовлены; реализация не начата,
-ADR-0048 имеет статус `Proposed`.
+Статус: ADR-0048 и пакеты 01–08 технически приняты. После объединения со
+складским контуром реестр содержит 14 DB-документов; на тестовом хосте выполнены
+cleanup, cross-domain e2e и recovery drill для исходных 13 документов.
+Production cutover остаётся отдельной операцией, а planning/workflow ожидают
+явной пользовательской приёмки перед архивированием.
 
 Дата: 2026-08-31.
 
@@ -65,7 +68,8 @@ ADR-0045 и фактической матрицей доступа.
 3. `RuntimeSettingDocument`, repository и транзакционный writer.
 4. Версии схем, content hash, revision/CAS и health state.
 5. Идемпотентный migration planner/importer для legacy runtime JSON.
-6. Pilot на двух status color документах без их физического объединения.
+6. Pilot на независимом документе цветов листа ожидания; обе палитры остаются
+   отдельными документами.
 7. Перевод role/workflow с независимой security-приёмкой.
 8. Django gateway и доставка AI-документов в agent-runtime по ETag.
 9. Перевод memory/FileHub consumers со startup constants на repository.
@@ -146,19 +150,23 @@ ADR-0045 и фактической матрицей доступа.
 
 Результат: dry-run даёт исчерпывающий и идемпотентный план.
 
-### Пакет 04. Pilot status colors
+### Пакет 04. Pilot цвета статусов листа ожидания
 
-- перевести два документа цветов на DB backend;
-- оставить отдельные document/revision/rollback;
+- перевести независимый `waiting_list.contract.status_colors` на DB backend;
+- оставить палитру заявок на legacy backend до согласованного перехода с
+  workflow;
 - показать их рядом в существующем UX;
 - выполнить multi-worker и UI e2e;
 - выдержать окно наблюдения перед следующим срезом.
 
 Результат: первый безопасный proof of architecture.
 
-### Пакет 05. Access/workflow security slice
+### Пакет 05. Access/workflow/status-colors security slice
 
-- перевести role/workflow repository и writer одной согласованной волной;
+- реализация и PostgreSQL/HTTP e2e завершены 2026-09-01; production allowlist не
+  изменён, поскольку точный runtime payload роли требует отдельного решения
+  владельца и операционного окна;
+- перевести role/workflow и палитру заявок одной согласованной волной;
 - сохранить специальные команды изменения ролей;
 - заменить прямые file/settings reads;
 - проверить roleless access, default role, privilege ceiling, role copy и
@@ -166,6 +174,8 @@ ADR-0045 и фактической матрицей доступа.
 - выполнить независимую security-проверку.
 
 Результат: авторизация использует один DB-снимок без изменения семантики.
+Техническая приёмка оформлена в `TASK_ACCEPTANCE.05-access-workflow-security-cutover.md`;
+production cutover не выполнялся.
 
 ### Пакет 06. AI и agent-runtime delivery
 
@@ -173,12 +183,15 @@ ADR-0045 и фактической матрицей доступа.
 - ETag/conditional request и diagnostics;
 - сделать AI registry/tools/task types Git-static и убрать их из generic runtime
   editor: они задают identity, tool/code parity и confirmation policy;
-- перевести chat settings в DB, а models — только после отдельного решения;
+- перевести chat settings в DB; `ai.contract.models` оставлен `git_static`
+  решением ADR-0048;
 - доставлять через gateway единый набор Git-static и DB-effective документов;
 - добавить last-known-good cache и schema checks agent-runtime;
 - удалить прямой file resolver только после parity/e2e.
 
 Результат: Django и agent-runtime сообщают одинаковые hashes/revisions.
+Техническая приёмка оформлена в `TASK_ACCEPTANCE.06-ai-agent-runtime-delivery.md`;
+production gateway/allowlist не переключались.
 
 ### Пакет 07. Memory/FileHub и статические документы
 
@@ -189,6 +202,9 @@ ADR-0045 и фактической матрицей доступа.
 - не менять memory knowledge canon и AG-UI wire contract.
 
 Результат: startup payload constants больше не являются runtime API.
+Техническая приёмка оформлена в
+`TASK_ACCEPTANCE.07-memory-filehub-and-static-classification.md`; PostgreSQL
+результаты основного агента зафиксированы в executor report.
 
 ### Пакет 08. Cleanup, recovery и финальная приёмка
 
@@ -198,6 +214,14 @@ ADR-0045 и фактической матрицей доступа.
 - обновить health, deployment, operations, backup/restore и README;
 - выполнить полный e2e и один `make verify-full`;
 - архивировать workflow только после пользовательской и технической приёмки.
+
+Результат 2026-09-01: пакет технически принят на тестовом хосте. Все 14
+DB-документов зарегистрированы; исходные 13 были включены при приёмке пакета,
+а `warehouse.settings` добавлен при объединении со складским контуром. 30 тестовых legacy JSON удалены по прямому разрешению
+владельца без экспорта, live e2e и `make verify-full` прошли. PostgreSQL dump
+успешно восстановлен в отдельную временную БД с проверкой revision/hash, audit,
+матрицы назначений, AI parity и memory dry-run; временная БД и dump удалены.
+Архивирование ожидает пользовательской приёмки.
 
 ## Зависимости и порядок
 
@@ -274,7 +298,7 @@ make verify-full
 - inventory подтверждён владельцами доменов;
 - каждый packet имеет точный read/write scope и rollback;
 - тестовый PostgreSQL профиль доступен;
-- выбраны первые два status color документа для pilot;
+- выбран независимый `waiting_list.contract.status_colors` для первого pilot;
 - backup и freeze procedure согласованы;
 - ни один документ с secret-bearing payload не попал в scope;
 - для security/AI/memory срезов назначена независимая проверка.

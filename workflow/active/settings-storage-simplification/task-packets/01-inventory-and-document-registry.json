@@ -1,7 +1,7 @@
 {
   "task_id": "01-inventory-and-document-registry",
   "title": "Инвентарь конфигурации и единый реестр документов",
-  "status": "planned",
+  "status": "accepted",
   "risk": "medium",
   "objective": "Получить проверяемую классификацию всех конфигурационных документов и ввести один ConfigDocumentSpec registry, не меняя фактический backend чтения или записи.",
   "start_gate": [

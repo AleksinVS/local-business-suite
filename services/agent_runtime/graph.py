@@ -13,10 +13,14 @@ from langgraph.graph import add_messages
 
 logger = logging.getLogger(__name__)
 
-from .config import load_runtime_settings, resolve_model
+from .config import (
+    load_ai_contract_snapshot,
+    load_runtime_settings,
+    resolve_model,
+    resolve_effective_tool_policy,
+)
 from .gateway_client import DjangoGatewayClient
 from .prompting import build_system_prompt
-from .task_types import resolve_task_type_for_tool
 from .tools import build_tools
 
 # Absolute wall-clock deadline for a single LLM call. LangChain's
@@ -177,13 +181,19 @@ def stream_agent(
     origin_channel: str = "",
     actor_version: str = "",
     model_id: str = "",
+    contract_snapshot=None,
 ):
     """
     Stream the LangGraph agent for a single user prompt.
     Yields chunks of text or tool execution events.
     """
     settings = load_runtime_settings()
-    resolved = resolve_model(model_id)
+    # One full immutable-at-operation-boundary aggregate: model selection,
+    # prompt construction, tool metadata and task policy all use this set.
+    contract_snapshot = (
+        load_ai_contract_snapshot() if contract_snapshot is None else contract_snapshot
+    )
+    resolved = resolve_model(model_id, snapshot=contract_snapshot)
 
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
@@ -204,6 +214,7 @@ def stream_agent(
         actor=actor,
         session_id=session_id,
         gateway_client=gateway_client,
+        contract_snapshot=contract_snapshot,
         conversation_id=conversation_id,
         request_id=request_id,
         origin_channel=origin_channel,
@@ -221,7 +232,12 @@ def stream_agent(
     model_with_tools = model.bind_tools(tools)
 
     # Dynamic state for instructions — updated when activate_skill succeeds
-    current_instructions = {"body": build_system_prompt(skills_catalog=skills_catalog)}
+    current_instructions = {
+        "body": build_system_prompt(
+            skills_catalog=skills_catalog,
+            contract_snapshot=contract_snapshot,
+        )
+    }
     tool_trace = []
     ui_commands = []
 
@@ -237,6 +253,13 @@ def stream_agent(
         tool_name = tool_call["name"]
         tool_call_id = tool_call.get("id", str(uuid.uuid4()))
         try:
+            # Do this check before looking up or invoking the bound function.
+            # A model-produced tool call is untrusted input even when the
+            # model was bound to the filtered list above.
+            policy = resolve_effective_tool_policy(
+                tool_name,
+                snapshot=contract_snapshot,
+            )
             tool = tools_by_name[tool_name]
             result = tool.invoke(tool_call)
         except Exception as exc:
@@ -247,11 +270,31 @@ def stream_agent(
         if tool_name == "activate_skill" and isinstance(result, dict) and result.get("ok"):
             current_instructions["body"] = build_system_prompt(
                 skills_catalog=skills_catalog,
-                active_skill_content=result.get("instructions", "")
+                active_skill_content=result.get("instructions", ""),
+                contract_snapshot=contract_snapshot,
             )
 
         slot_values = tool_call.get("args", {})
-        resolution = resolve_task_type_for_tool(tool_name, slot_values)
+        # Task policy (allowed tools, required slots and confirmation) is
+        # resolved from this operation's delivered aggregate, never from the
+        # legacy in-code task catalog.
+        missing = [
+            slot for slot in policy["required_slots"]
+            if slot_values.get(slot) is None or slot_values.get(slot) == ""
+        ]
+        resolution = {
+            "task_type_id": policy["task_type_id"],
+            "task_type_title": policy["task_type_title"],
+            "task_type_mode": policy["task_type_mode"],
+            "resolved_tool": tool_name,
+            "requires_confirmation": policy["requires_confirmation"],
+            "slot_state": {
+                key: value for key, value in slot_values.items()
+                if value is not None and value != ""
+            },
+            "missing_required_slots": missing,
+            "all_slots_fulfilled": not missing,
+        }
 
         trace_entry = {
             "tool": tool_name,
@@ -263,7 +306,7 @@ def stream_agent(
             "actor_version": actor_version,
         }
         if resolution:
-            trace_entry.update(resolution.to_trace_dict())
+            trace_entry.update(resolution)
         tool_trace.append(trace_entry)
         ui_command = _extract_ui_command(result)
         if ui_command:

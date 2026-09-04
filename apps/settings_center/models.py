@@ -39,6 +39,8 @@ class SettingsChange(models.Model):
     operation_fingerprint = models.CharField(max_length=64, unique=True, blank=True, null=True)
     before_snapshot = models.JSONField(blank=True, null=True)
     after_snapshot = models.JSONField(blank=True, null=True)
+    document_revision_before = models.PositiveBigIntegerField(blank=True, null=True)
+    document_revision_after = models.PositiveBigIntegerField(blank=True, null=True)
     failure_code = models.CharField(max_length=64, blank=True)
     contract_relpath = models.CharField(max_length=500, blank=True)
     file_written_at = models.DateTimeField(blank=True, null=True)
@@ -84,6 +86,47 @@ class SettingsChange(models.Model):
 
     def __str__(self):
         return f"{self.setting_id}:{self.action}:{self.status}"
+
+
+class RuntimeSettingDocument(models.Model):
+    """Текущая управляемая рабочая версия типизированного документа настроек.
+
+    Отсутствие строки означает использование Git-дефолта. История изменений не
+    дублируется здесь: полные снимки и ревизии остаются в ``SettingsChange``.
+    """
+
+    document_id = models.CharField(max_length=160, primary_key=True)
+    schema_version = models.PositiveIntegerField()
+    payload = models.JSONField()
+    revision = models.PositiveBigIntegerField(default=1)
+    content_hash = models.CharField(max_length=64)
+    default_hash = models.CharField(max_length=64)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="updated_runtime_setting_documents",
+        blank=True,
+        null=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["document_id"]
+        indexes = [models.Index(fields=["-updated_at"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(schema_version__gte=1),
+                name="settings_document_schema_version_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(revision__gte=1),
+                name="settings_document_revision_gte_1",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.document_id}@{self.revision}"
 
 
 class SettingsChangeComment(models.Model):

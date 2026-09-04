@@ -80,6 +80,56 @@ class MemorySourceModelAndServiceTests(MemoryModelFactoryMixin, TestCase):
         self.assertEqual(sources[1].status, MemorySource.Status.DISABLED)
         self.assertEqual(sources[0].config["scope_rule"], "workorder_visibility")
 
+    def test_full_source_sync_disables_omitted_projection_atomically_and_is_idempotent(self):
+        stale = self.create_source(code="omitted-from-source-contract")
+        payload = [{
+            "code": "retained-source",
+            "title": "Retained source",
+            "source_kind": "django_model",
+            "domain": "workorders",
+            "sensitivity": "internal",
+            "enabled": True,
+        }]
+
+        sync_sources_from_contract(payload)
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, MemorySource.Status.DISABLED)
+        self.assertEqual(stale.error_message, "source_missing_from_contract")
+        self.assertFalse(
+            MemorySource.objects.filter(
+                code=stale.code, status=MemorySource.Status.ENABLED
+            ).exists()
+        )
+        cleanup_jobs = MemoryExternalConnectorJob.objects.filter(
+            job_kind=MemoryQueueJobKind.SOURCE_CLEANUP,
+            source_code=stale.code,
+        )
+        self.assertEqual(cleanup_jobs.count(), 1)
+
+        # A repeat of the same complete snapshot does not reopen the omitted
+        # projection or create a second source row.
+        sync_sources_from_contract(payload)
+        self.assertEqual(MemorySource.objects.filter(code="retained-source").count(), 1)
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, MemorySource.Status.DISABLED)
+        self.assertEqual(cleanup_jobs.count(), 1)
+
+    def test_source_scoped_sync_does_not_disable_other_projections(self):
+        other = self.create_source(code="untouched-by-partial-source-sync")
+        payload = [{
+            "code": "partial-source",
+            "title": "Partial source",
+            "source_kind": "django_model",
+            "domain": "workorders",
+            "sensitivity": "internal",
+            "enabled": True,
+        }]
+
+        sync_sources_from_contract(payload, source_code="partial-source")
+        other.refresh_from_db()
+        self.assertEqual(other.status, MemorySource.Status.ENABLED)
+        self.assertEqual(other.error_message, "")
+
     def test_envelope_cannot_reenable_an_administratively_disabled_source(self):
         from apps.memory.services import _ensure_memory_source_from_envelope
 

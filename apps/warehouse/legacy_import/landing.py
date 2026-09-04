@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Iterable
 
 from django.conf import settings
@@ -87,6 +87,14 @@ def safe_payload(payload: dict) -> dict:
     return result
 
 
+def _source_basename(source_name: str) -> str:
+    """Return only the source filename for POSIX and Windows path syntax."""
+    name = PureWindowsPath(str(source_name or "")).name
+    if not name or name in {".", ".."}:
+        raise LandingPackageError("Не указано корректное имя legacy-источника.")
+    return name
+
+
 def write_landing_package(
     *,
     run_id: str | uuid.UUID,
@@ -156,7 +164,7 @@ def write_landing_package(
         "adapter": adapter,
         "transformation_version": transformation_version,
         "source_fingerprint": source_fingerprint,
-        "source_name": Path(source_name).name,
+        "source_name": _source_basename(source_name),
         "tables": table_entries,
         "intentionally_skipped": ["sett", "tmp", "treb", "s_otdelenie.pass"],
     }

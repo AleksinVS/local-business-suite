@@ -1,9 +1,9 @@
 {
   "task_id": "04-status-colors-pilot",
-  "title": "Pilot PostgreSQL-настроек цветов статусов",
-  "status": "planned",
+  "title": "Pilot PostgreSQL-настройки цветов листа ожидания",
+  "status": "accepted-dev-test",
   "risk": "medium",
-  "objective": "Перевести workorders и waiting list status colors на новый backend как два самостоятельных документа и доказать UI/multi-worker поведение до критичных срезов.",
+  "objective": "Перевести независимый waiting list status colors на новый backend и доказать UI/multi-worker поведение до критичных срезов, не разрывая транзакционную зависимость workorders palette от workflow.",
   "start_gate": [
     "Пакеты 01-03 accepted.",
     "Pilot migration plan не содержит ambiguous drift.",
@@ -40,10 +40,11 @@
   ],
   "requirements": [
     "Оставить два document_id: workorders.contract.status_colors и waiting_list.contract.status_colors. Не объединять payload/revision/rollback.",
-    "Оба документа имеют database_override policy и visible_default_fallback с health signal; fallback не должен скрывать invalid DB state.",
+    "На pilot перевести только waiting_list.contract.status_colors с database_override policy и visible_default_fallback; fallback не должен скрывать invalid DB state.",
+    "workorders.contract.status_colors остаётся на legacy backend до пакета 05, где блокируется и валидируется вместе с workflow_rules.",
     "UI может показывать оба редактора на одной странице, но каждая форма передаёт свой expected revision/hash и создаёт отдельный audit event.",
     "Workorders validator продолжает проверять статусы относительно согласованного workflow snapshot. Waiting list validator сохраняет собственный status vocabulary.",
-    "Все production consumers цветов читают repository/request snapshot, а не settings constant/file.",
+    "Все production consumers цветов листа ожидания читают repository/request snapshot, а не settings constant/file.",
     "До cutover выполнить --plan и backup; переключение reader/writer атомарно на уровне deployment change, без dual-write.",
     "Добавить multi-worker integration test: worker/process B видит обновление нового request без restart.",
     "Добавить stale edit test между двумя формами и rollback UI/service test.",
@@ -57,8 +58,8 @@
     "Удалять общий legacy infrastructure."
   ],
   "acceptance_checks": [
-    "Два документа имеют независимые revisions/audit/rollback.",
-    "Общий экран корректно сохраняет каждый документ и показывает conflict.",
+    "Документ листа ожидания имеет независимые revisions/audit/rollback; палитра заявок не изменена pilot-ом.",
+    "Общий экран корректно сохраняет pilot-документ и продолжает обслуживать legacy-палитру заявок без dual-write.",
     "Waiting list статусы отображаются фактическими настроенными цветами, а не единым зелёным.",
     "Новый request в другом worker видит изменение без restart.",
     "Отсутствие override использует Git default.",

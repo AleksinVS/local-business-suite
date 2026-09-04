@@ -19,9 +19,12 @@ python manage.py check
 python manage.py warehouse_acceptance_e2e
 ```
 
-`bootstrap_runtime` создаёт отсутствующий рабочий документ
-`data/contracts/warehouse/settings.json`, не перезаписывая существующие
-настройки. На действующей установке изменения `role_rules.json` применяются
+`warehouse.settings` зарегистрирован как типизированный документ Центра
+настроек. Git-файл задаёт проверенный дефолт, а изменённая рабочая версия
+хранится в PostgreSQL; `bootstrap_runtime` не создаёт файловое зеркало. В
+приватный `LOCAL_BUSINESS_SETTINGS_DOCUMENT_DB_ALLOWLIST` нужно включить
+`warehouse.settings` и пересоздать все Django-процессы. На действующей установке
+изменения `role_rules.json` применяются
 защищённым preview/apply-процессом Центра настроек; прямое копирование Git-файла
 поверх рабочей версии запрещено.
 

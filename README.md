@@ -32,7 +32,9 @@
 
 - `apps/` — Django-приложения доменов: core, accounts, inventory, warehouse, workorders, waiting_list, notifications, analytics, ai, memory, filehub (замороженное автоупорядочивание файлов, ADR-0030), settings_center.
 - `contracts/` — дефолтные JSON-контракты, которые версионируются в Git.
-- `data/contracts/` — runtime-копии контрактов для изменяемой среды.
+- `data/contracts/` — сохранённые legacy-копии и переходные резервные артефакты;
+  чистый `bootstrap_runtime` не создаёт зеркала `git_static` или
+  `database_override` документов.
 - `services/agent_runtime/` — отдельный runtime AI-агента на LangGraph/MCP.
 - `services/copilot_runtime/` — пилотный CopilotKit Runtime для AG-UI интеграции в основной Django UI.
 - `clients/desktop-notifier/` — опциональный Tauri-клиент уведомлений в трее.
@@ -49,7 +51,7 @@
 
 - `AGENTS.md` — актуальный протокол работы ИИ-агентов.
 - `PROJECT_STRUCTURE.yaml` — автоматически генерируемая карта структуры проекта.
-- `contracts/` и `data/contracts/` — декларативные контракты системы.
+- `contracts/` — Git-дефолты декларативных документов; PostgreSQL — рабочие версии `database_override`; `data/contracts/` — только legacy/file-backed/generated данные.
 - `apps/ai/tool_definitions.py` — реестр AI-инструментов на стороне Django.
 - `python manage.py validate_architecture_contracts` — проверка контрактов.
 
@@ -123,6 +125,9 @@
 - raw mode по умолчанию `reference_only`, без копирования всех документов в `data/memory/raw_vault/`;
 - default file limit 100 MB, большие/сложные документы допускают partial indexing с issue flag;
 - ACL inheritance, production cloud OCR/LLM и mandatory review каждого graph instance не входят в MVP.
+- Остаточный **HIGH-риск** bootstrap deidentification/PII не закрыт: raw ПДн и
+  необезличенная внешняя/cloud OCR/LLM передача запрещены до отдельного
+  security packet.
 
 ## Быстрый старт
 
@@ -142,7 +147,7 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-`bootstrap_runtime` — идемпотентная подготовка runtime при первом запуске: создаёт каталоги `data/` и копирует дефолтные контракты в `data/contracts/`. Импорт `config/settings.py` этого больше не делает (никакой записи на диск при импорте), а валидация контрактов вынесена в system check `python manage.py check --tag contracts` (её выполняет и обычный `python manage.py check`).
+`bootstrap_runtime` — идемпотентная подготовка runtime при первом запуске: создаёт каталоги `data/`, но не зеркалирует в `data/contracts/` документы `git_static` или `database_override`. Существующие legacy-копии не удаляются и остаются только переходным резервом до отдельного migration/cutover окна. Импорт `config/settings.py` не пишет на диск, а валидация контрактов вынесена в system check `python manage.py check --tag contracts` (её выполняет и обычный `python manage.py check`).
 
 ### Windows
 
@@ -255,7 +260,10 @@ python manage.py performance_report
 Runtime-данные не коммитятся:
 
 - база данных, медиа и логи;
-- `data/contracts/` — рабочие копии контрактов;
+- `data/contracts/` — сохранённые legacy-копии и переходные резервные артефакты;
+  при отсутствии канонической legacy-копии repository использует
+  validated Git-default, Git-static документы читаются из `contracts/`, а
+  database_override — из PostgreSQL после явного включения среза;
 - `data/knowledge_repo/` — runtime Git-репозиторий знаний;
 - `data/db/*.sqlite3` — только legacy/dev SQLite-файлы и источники миграции, не production target основного репозитория;
 - `data/indexes/` — полнотекстовые, векторные и графовые индексы;
@@ -307,7 +315,7 @@ Runtime-данные не коммитятся:
 - После изменения структуры нужно запускать `make gen-struct`.
 - Временные файлы, логи и локальные артефакты создаются только в `.local/`.
 - Секреты и host-specific deployment-файлы не хранятся в репозитории.
-- Изменяемые бизнес-контракты в runtime пишутся в `data/contracts/`.
+- Типизированные рабочие версии документов `database_override` пишутся в PostgreSQL. В `data/` остаются только изменяемые файловые и generated-данные; `data/contracts/` не является универсальным хранилищем настроек.
 
 ## Лицензия и поддержка
 

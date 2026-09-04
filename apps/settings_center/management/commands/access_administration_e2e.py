@@ -4,18 +4,22 @@ from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
+from django.db import connection, transaction
 from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.core.contract_store import _reset_for_tests
 from apps.core.json_utils import load_json_file
+from apps.settings_center.document_hashes import document_hash
+from apps.settings_center.document_registry import get_document_registry
+from apps.settings_center.document_repository import get_fresh_document
 from apps.core.models import Department
 from apps.memory.models import MemoryGroupMembershipAudit
-from apps.settings_center.models import SettingsChange
+from apps.settings_center.models import RuntimeSettingDocument, SettingsChange
 from apps.workorders.models import Board, BoardAccessAudit, WorkOrder
 
 
@@ -60,6 +64,7 @@ class Command(BaseCommand):
             return normalized
         return None
 
+    @transaction.atomic
     def handle(self, *args, **options):
         required_tables = {
             BoardAccessAudit._meta.db_table,
@@ -81,7 +86,15 @@ class Command(BaseCommand):
         if user_model.objects.filter(username__in=names.values()).exists():
             raise CommandError("Тестовые логины уже заняты; существующие данные не изменены.")
 
-        role_rules = load_json_file("contracts/role_rules.json")
+        role_snapshot = get_fresh_document("core.contract.role_rules")
+        role_spec = get_document_registry().get("core.contract.role_rules")
+        database_backend = role_spec.active_backend == "database"
+        active_role_rules = role_snapshot.payload
+        # This is an isolated acceptance fixture, not a migration of the
+        # operator's role catalog.  Build it from the current validated Git
+        # schema so a reviewed legacy catalog may lag newly released
+        # capabilities without making the HTTP scenario order-dependent.
+        role_rules = load_json_file(Path(settings.BASE_DIR) / role_spec.default_path)
         source_role_code = "technician"
         role_code = "e2e_access_technician"
         copy_role_code = "e2e_access_technician_copy"
@@ -95,12 +108,30 @@ class Command(BaseCommand):
             raise CommandError("E2E ожидает исходную контрактную роль manager.")
         temporary_role_codes = (role_code, control_role_code, copy_role_code)
         if any(
-            code in role_rules or Group.objects.filter(name=code).exists()
+            code in active_role_rules
+            or code in role_rules
+            or Group.objects.filter(name=code).exists()
             for code in temporary_role_codes
         ):
             raise CommandError("Временная роль E2E уже занята; существующие данные не изменены.")
         role_rules[role_code] = copy.deepcopy(source_role)
         role_rules[control_role_code] = copy.deepcopy(source_control_role)
+        if database_backend:
+            # The command runs inside one outer transaction and rolls it back
+            # after the assertions.  Seed the temporary roles in the backend
+            # that production requests actually use; a file-only fixture would
+            # be ignored after DB cutover and give a false 404.
+            RuntimeSettingDocument.objects.update_or_create(
+                document_id="core.contract.role_rules",
+                defaults={
+                    "schema_version": role_spec.schema_version,
+                    "payload": role_rules,
+                    "revision": max(role_snapshot.revision + 1, 1),
+                    "content_hash": document_hash(role_rules),
+                    "default_hash": role_snapshot.default_hash,
+                    "updated_by": None,
+                },
+            )
 
         actor = member = control = board = department = None
         created_group_names = []
@@ -188,6 +219,10 @@ class Command(BaseCommand):
                         "action": "save",
                         **role_query,
                         "base_hash": form.initial.get("base_hash") or form["base_hash"].value(),
+                        "base_revision": (
+                            form.initial.get("base_revision")
+                            or form["base_revision"].value()
+                        ),
                     }
                     for field_name in form.fields:
                         if not field_name.startswith("capability__"):
@@ -204,8 +239,23 @@ class Command(BaseCommand):
                             role_post[field_name] = value
                         elif value is not False and value is not None:
                             role_post[field_name] = value
-                    if client.post(role_url, role_post).status_code != 302:
-                        raise CommandError("Изменение одной роли не сохранилось через HTTP.")
+                    role_response = client.post(role_url, role_post)
+                    if role_response.status_code != 302:
+                        response_context = self._normalize_response_context(
+                            getattr(role_response, "context_data", None)
+                            or getattr(role_response, "context", None)
+                        ) or {}
+                        response_form = response_context.get("field_form")
+                        form_errors = (
+                            response_form.errors.get_json_data()
+                            if response_form is not None
+                            else {}
+                        )
+                        raise CommandError(
+                            "Изменение одной роли не сохранилось через HTTP: "
+                            f"status={role_response.status_code}, errors={form_errors}, "
+                            f"editor_error={response_context.get('editor_error', '')!r}."
+                        )
 
                     copy_query = {"view": "roles", "copy": source_role_code, "panel": "inspector"}
                     copy_page = client.get(role_url, copy_query)
@@ -219,13 +269,19 @@ class Command(BaseCommand):
                         "display_name": "Копия technician",
                         "description": "E2E копия без назначений",
                         "base_hash": copy_form["base_hash"].value(),
+                        "base_revision": copy_form["base_revision"].value(),
                     }
                     if client.post(role_url, copy_post).status_code != 302:
                         raise CommandError("Копирование роли не сохранилось через HTTP.")
                     created_group_names.append(copy_role_code)
                     expected_copy = copy.deepcopy(source_role)
                     expected_copy.update({"display_name": "Копия technician", "description": "E2E копия без назначений"})
-                    if load_json_file(role_file).get(copy_role_code) != expected_copy:
+                    updated_roles = (
+                        get_fresh_document("core.contract.role_rules").payload
+                        if database_backend
+                        else load_json_file(role_file)
+                    )
+                    if updated_roles.get(copy_role_code) != expected_copy:
                         raise CommandError("Определение копии не совпадает с источником.")
                     if Group.objects.get(name=copy_role_code).user_set.exists():
                         raise CommandError("Копия роли неожиданно получила участников.")
@@ -281,19 +337,25 @@ class Command(BaseCommand):
                         raise CommandError("MemoryGroupMembershipAudit не создан.")
         finally:
             _reset_for_tests()
-            if board is not None:
-                BoardAccessAudit.objects.filter(board=board).delete()
-                board.delete()
-            if member is not None:
-                MemoryGroupMembershipAudit.objects.filter(target_user=member).delete()
-            SettingsChange.objects.filter(actor=actor).delete() if actor is not None else None
-            for user in (member, control, actor):
-                if user is not None:
-                    user.delete()
-            if department is not None:
-                department.delete()
-            if created_group_names:
-                Group.objects.filter(name__in=created_group_names).delete()
+            if database_backend:
+                # Includes the temporary RuntimeSettingDocument, UI writes,
+                # audits and every E2E fixture.  A failure also exits the
+                # atomic block by exception and therefore cannot leak state.
+                transaction.set_rollback(True)
+            else:
+                if board is not None:
+                    BoardAccessAudit.objects.filter(board=board).delete()
+                    board.delete()
+                if member is not None:
+                    MemoryGroupMembershipAudit.objects.filter(target_user=member).delete()
+                SettingsChange.objects.filter(actor=actor).delete() if actor is not None else None
+                for user in (member, control, actor):
+                    if user is not None:
+                        user.delete()
+                if department is not None:
+                    department.delete()
+                if created_group_names:
+                    Group.objects.filter(name__in=created_group_names).delete()
 
         self.stdout.write(
             self.style.SUCCESS("access_administration_e2e: OK (тестовые данные удалены)")

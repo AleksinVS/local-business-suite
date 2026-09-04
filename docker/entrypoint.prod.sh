@@ -3,11 +3,10 @@ set -eu
 
 mkdir -p /app/staticfiles
 
-# Идемпотентная первичная подготовка runtime: каталоги data/ и копии дефолтных
-# контрактов в data/contracts/. Заменяет побочные эффекты, которые раньше
-# выполнялись на импорте config/settings.py. Выполняется ДО migrate, не требует БД
-# и не запускает system checks (иначе проверка контрактов сработала бы до того,
-# как рабочие копии скопированы). Повторный запуск безопасен.
+# Идемпотентная первичная подготовка runtime: создаёт каталоги data/ и
+# generated-файлы, но не зеркалирует Git-дефолты или документы PostgreSQL в
+# data/contracts/. Выполняется до migrate, не требует БД и не запускает system
+# checks. Повторный запуск безопасен.
 python manage.py bootstrap_runtime
 
 python manage.py wait_for_database --timeout "${LOCAL_BUSINESS_DB_WAIT_TIMEOUT:-60}"

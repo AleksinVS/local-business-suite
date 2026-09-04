@@ -23,7 +23,10 @@
 
 Runtime data:
 
-- `data/contracts/ai/` — runtime copies of AI/memory contracts;
+- `data/contracts/ai/` — runtime copies only for documents whose registry
+  `active_backend` is still `legacy_file`; `git_static` documents (claims,
+  analytics and integration registry) are read from Git through the
+  ConfigDocumentRepository and are not copied;
 - `data/knowledge_repo/` — runtime Git-репозиторий принятых знаний — **канон** (см. «Резервное копирование `data/knowledge_repo/`» ниже);
 - основная PostgreSQL database — данные AI-чатов, metadata памяти (пересобираемая проекция канона), управляющие модели аналитики, единая очередь `MemoryExternalConnectorJob` и таблица рёбер `MemoryKnowledgeEdge`;
 - PostgreSQL full-text таблица `MemoryFullTextIndex` — production индекс поиска по памяти;
@@ -38,6 +41,9 @@ Runtime data:
 - `data/memory/eval/` — eval reports.
 
 Эти runtime data не коммитятся в основной репозиторий кода, но `data/knowledge_repo/` — это отдельный git-репозиторий сам по себе (см. backup ниже).
+Основной web-образ поэтому обязан содержать исполняемый файл `git`; без него
+`memory.remember`, reconcile после восстановления и сквозная проверка памяти
+завершаются до записи канонического файла.
 
 ## Перед деплоем
 
@@ -92,7 +98,10 @@ python manage.py memory_verify_knowledge_files --strict
 
 ## Runtime contracts
 
-При первом запуске settings копирует default contracts из `contracts/` в `data/contracts/`. Если в `data/contracts/ai/` уже были старые runtime-копии, они не перезаписываются автоматически.
+Явная команда `bootstrap_runtime` создаёт каталоги, но не копирует документы
+`git_static` или `database_override` из `contracts/` в `data/contracts/`.
+Существующие legacy runtime-копии не удаляются и не перезаписываются: они
+сохраняются как переходный backup до отдельного migration/cutover окна.
 
 После обновления с добавлением `memory.search` и memory contracts проверить:
 
@@ -100,24 +109,27 @@ python manage.py memory_verify_knowledge_files --strict
 python manage.py validate_architecture_contracts
 ```
 
-Если команда падает из-за устаревших `data/contracts/ai/tools.json` или `task_types.json`, нужно синхронизировать runtime contracts с текущими default contracts контролируемым способом:
+Если команда показывает ошибку для memory-документа, проверить его operation
+snapshot, Git-дефолт и состояние PostgreSQL. Для временно оставшегося legacy
+backend отсутствие канонической рабочей копии безопасно означает проверенный
+Git-default; отсутствующий явный env override остаётся fail-closed.
+`bootstrap_runtime` новые database/static копии не создаёт.
+`analytics`, integration registry и claims policy — `git_static`: их runtime-
+копии не нужны.
+Изменение DB-документа с `requires_reindex` создаёт durable outbox-задание в
+той же транзакции; worker начинает тяжёлую переиндексацию только после commit.
 
 ```bash
-cp contracts/ai/tools.json data/contracts/ai/tools.json
-cp contracts/ai/task_types.json data/contracts/ai/task_types.json
-cp contracts/ai/memory_sources.json data/contracts/ai/memory_sources.json
-cp contracts/ai/memory_profiles.json data/contracts/ai/memory_profiles.json
-cp contracts/ai/memory_routing.json data/contracts/ai/memory_routing.json
-cp contracts/ai/memory_trust_policy.json data/contracts/ai/memory_trust_policy.json
-cp contracts/ai/memory_claims_policy.json data/contracts/ai/memory_claims_policy.json
-cp contracts/ai/memory_retrieval_budget.json data/contracts/ai/memory_retrieval_budget.json
-cp contracts/ai/memory_ingestion_profiles.json data/contracts/ai/memory_ingestion_profiles.json
-cp contracts/ai/memory_file_organization_profiles.json data/contracts/ai/memory_file_organization_profiles.json
-cp contracts/ai/memory_graph_schema.json data/contracts/ai/memory_graph_schema.json
+python manage.py bootstrap_runtime --dry-run
 python manage.py validate_architecture_contracts
 ```
 
-На production перед копированием сохранить backup runtime contracts, если они редактировались через UI или вручную.
+Перед миграцией или включением DB-ready документа сохранить backup runtime
+contract, если он редактировался через UI или вручную. Для такого документа
+сначала проверить allowlist и рабочую ревизию в PostgreSQL; после явного
+переключения effective value берётся из `RuntimeSettingDocument`, а не из
+legacy-файла. Это операционная проверка, а не автоматический production
+cutover.
 
 ## Резервное копирование `data/knowledge_repo/` (канон)
 
@@ -208,11 +220,17 @@ Get-ChildItem "\\SERVER\Share\Folder" -File | Select-Object -First 5
 
 ## Auto Organization Managed FS
 
-Режим автоупорядочивания файлового источника включается отдельным runtime-контрактом:
+До DB cutover режим автоупорядочивания файлового источника настраивается
+отдельным legacy runtime-контрактом:
 
 ```text
 data/contracts/ai/memory_file_organization_profiles.json
 ```
+
+Каждый FileHub job захватывает один profile snapshot до физической операции;
+после включения DB backend эффективным становится PostgreSQL-документ.
+Постоянный FileHub e2e использует явно scoped test source snapshot; settings
+holder не является источником production-конфигурации.
 
 Production checklist:
 
@@ -426,7 +444,10 @@ python manage.py migrate --noinput
 
 ### `validate_architecture_contracts` падает на `memory.search`
 
-Runtime copy `data/contracts/ai/tools.json` или `task_types.json` устарела. Сравнить с default contract и синхронизировать после backup.
+Для `git_static` документов runtime copy не используется: проверить текущий
+Git-дефолт и revision snapshot через `validate_architecture_contracts`. Для
+memory-документа на legacy backend проверить соответствующую копию в
+`data/contracts/ai/` после backup.
 
 ### `memory.search` возвращает пусто
 

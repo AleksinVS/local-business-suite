@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.core.file_locks import exclusive_file_lock, memory_source_lifecycle_lock_path
 from apps.memory.document_ingestion import build_source_object_payload, get_source_ingestion_profile, resolve_source_root, sha256_file
 from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
+from apps.memory.config_documents import get_memory_document_snapshots
 from apps.memory.security import scan_for_secrets
 from apps.memory.source_text_extraction import SUPPORTED_SOURCE_TEXT_EXTENSIONS
 
@@ -34,13 +35,26 @@ def process_incoming_folder(
     dry_run: bool = False,
     limit: int | None = None,
     require_enabled: bool = True,
+    snapshots=None,
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
-            return _process_incoming_folder_locked(source=source, dry_run=dry_run, limit=limit)
+            if snapshots is None:
+                snapshots = get_memory_document_snapshots(
+                    document_ids=(
+                        "memory.contract.file_organization_profiles",
+                        "memory.contract.ingestion_profiles",
+                    )
+                )
+            return _process_incoming_folder_locked(
+                source=source,
+                dry_run=dry_run,
+                limit=limit,
+                snapshots=snapshots,
+            )
 
 
 def _process_incoming_folder_locked(
@@ -48,9 +62,10 @@ def _process_incoming_folder_locked(
     source: MemorySource,
     dry_run: bool = False,
     limit: int | None = None,
+    snapshots=None,
 ) -> dict:
-    organization_profile = get_file_organization_profile(source)
-    ingestion_profile = get_source_ingestion_profile(source)
+    organization_profile = get_file_organization_profile(source, snapshots=snapshots)
+    ingestion_profile = get_source_ingestion_profile(source, snapshots=snapshots)
     root = resolve_source_root(source)
     incoming_root = root / organization_profile.incoming_relative_path
     _ensure_incoming_dirs(incoming_root=incoming_root, dry_run=dry_run)

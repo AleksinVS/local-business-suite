@@ -10,6 +10,7 @@
             <input type="hidden" name="view" value="users">
             {{ default_new_user_role_form.non_field_errors }}
             {{ default_new_user_role_form.base_hash }}
+            {{ default_new_user_role_form.base_revision }}
             <label>{{ default_new_user_role_form.role_name.label }} {{ default_new_user_role_form.role_name }}</label>
             {{ default_new_user_role_form.role_name.errors }}
             <p class="muted">Настройка применяется только при создании новой учётной записи. Вариант «Не назначать роль» закрывает продуктовый доступ до ручного назначения.</p>

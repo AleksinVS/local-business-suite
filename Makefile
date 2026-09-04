@@ -81,7 +81,7 @@ verify-profile: check-fast
 		ai) $(MAKE) test-fast TEST_SCOPE="apps/ai services/agent_runtime/tests" && $(MAKE) contracts ;; \
 		memory) $(MAKE) test-fast TEST_SCOPE="apps/memory apps/filehub" && $(MAKE) contracts ;; \
 		ui) $(MAKE) test-fast TEST_SCOPE="apps/ai/tests apps/notifications/tests.py apps/workorders/tests.py" && bash scripts/e2e/run-smoke.sh ;; \
-		contracts) $(MAKE) contracts && $(MAKE) test-fast TEST_SCOPE="apps/core/tests.py services/agent_runtime/tests/test_contracts.py" TEST_FLAGS="-k Contract" ;; \
+		contracts) $(MAKE) contracts && $(MAKE) test-fast TEST_SCOPE="apps/core/tests.py services/agent_runtime/tests" TEST_FLAGS="-k Contract" ;; \
 		deployment) $(MAKE) test-fast TEST_SCOPE="apps/core/tests.py" TEST_FLAGS="-k 'Iis or Staticfiles or Bootstrap or DatabaseConfig'" ;; \
 		*) echo "Неизвестный PROFILE=$(PROFILE). Допустимо: ai, memory, ui, contracts, deployment" >&2; exit 2 ;; \
 	esac
@@ -90,7 +90,7 @@ verify-profile: check-fast
 verify-full: check
 	$(PYTHON) manage.py makemigrations --check --dry-run
 	$(MAKE) contracts
-	$(MAKE) test
+	$(PYTEST) $(TEST_SCOPE) --migrations --reuse-db $(TEST_FLAGS)
 
 contracts:
 	$(PYTHON) manage.py validate_architecture_contracts

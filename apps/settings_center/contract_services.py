@@ -21,21 +21,56 @@ from apps.core.json_utils import (
     atomic_write_json,
     load_json_file,
 )
-from .descriptors import runtime_validators
+from .document_registry import get_document_registry
+from .document_repository import (
+    ConfigDocumentRepository,
+    load_legacy_document,
+)
+from .document_services import ConfigDocumentWriter
 from .models import SettingsChange
 from .registry import get_registry
 from .services import build_masked_diff, record_settings_change
 
 
-VALIDATORS = runtime_validators()
+_LEGACY_ROLE_RULES_SETTINGS_NAME = "LOCAL_BUSINESS_ROLE_RULES_FILE"
 
 
-def read_contract_value(descriptor):
+def read_contract_snapshot(descriptor, *, request=None, fresh=False):
+    spec = get_document_registry().get(descriptor.setting_id)
+    if spec.active_backend != "legacy_file":
+        repository = ConfigDocumentRepository()
+        if fresh:
+            return repository.get_fresh_document(spec.document_id)
+        return repository.get_document(spec.document_id, request=request)
     path = _contract_path(descriptor)
-    return load_json_file(path)
+    default_payload = load_json_file(Path(settings.BASE_DIR) / spec.default_path)
+    payload, source = load_legacy_document(
+        spec,
+        default_payload=default_payload,
+        path=path,
+    )
+    if source == "git_default" and spec.validator is not None:
+        spec.validator(copy.deepcopy(payload))
+    from .document_repository import RuntimeSettingSnapshot
+
+    return RuntimeSettingSnapshot(
+        document_id=spec.document_id,
+        payload=payload,
+        source=source,
+        schema_version=spec.schema_version,
+        revision=0,
+        content_hash=normalized_hash(payload),
+        default_hash="",
+    )
 
 
-def save_default_new_user_role(*, actor, role_name, base_hash, reason=""):
+def read_contract_value(descriptor, *, request=None):
+    return read_contract_snapshot(descriptor, request=request).payload
+
+
+def save_default_new_user_role(
+    *, actor, role_name, base_hash, base_revision=None, reason=""
+):
     """Атомарно изменить только роль, назначаемую новым пользователям."""
 
     current_actor = get_user_model().objects.filter(pk=getattr(actor, "pk", None)).first()
@@ -48,9 +83,17 @@ def save_default_new_user_role(*, actor, role_name, base_hash, reason=""):
     if len(reason) > 1000:
         raise ValidationError("Комментарий не должен превышать 1000 символов.")
     descriptor = get_registry().get("core.contract.role_rules")
-    before = read_contract_value(descriptor)
-    if normalized_hash(before) != str(base_hash or "").removeprefix("sha256:"):
+    snapshot = read_contract_snapshot(descriptor, fresh=True)
+    before = snapshot.payload
+    if snapshot.content_hash != str(base_hash or "").removeprefix("sha256:"):
         raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
+    if snapshot.source in {"database_override", "git_default"}:
+        try:
+            requested_revision = int(base_revision)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия контракта ролей имеет неверный формат.") from exc
+        if requested_revision != snapshot.revision:
+            raise ValidationError("Контракт ролей уже изменился. Перезагрузите страницу.")
     if role_name:
         if role_name.startswith("$") or not isinstance(before.get(role_name), dict):
             raise ValidationError("Выбранная роль отсутствует в рабочем контракте.")
@@ -68,6 +111,7 @@ def save_default_new_user_role(*, actor, role_name, base_hash, reason=""):
         raw_payload=json.dumps(after, ensure_ascii=False),
         confirmed=True,
         base_hash=base_hash,
+        base_revision=snapshot.revision,
         audit_context={
             "operation": "new_user_default_role",
             "reason": reason,
@@ -80,15 +124,19 @@ def preview_contract_payload(*, actor, setting_id: str, raw_payload: str):
     # Preview is an authorization boundary too; otherwise a user could use
     # the validation/diff endpoint as a read oracle for a protected contract.
     descriptor = get_registry().get(setting_id)
+    if descriptor.write_policy != "editable":
+        raise ValidationError("Предпросмотр доступен только для редактируемых настроек.")
     _require_contract_editor(actor=actor, setting_id=descriptor.setting_id, descriptor=descriptor)
-    before = read_contract_value(descriptor)
+    snapshot = read_contract_snapshot(descriptor)
+    before = snapshot.payload
     after = parse_and_validate_payload(descriptor, raw_payload)
     return {
         "before": before,
         "after": after,
         "masked_diff": build_masked_diff(before, after),
         "validation_result": {"valid": True},
-        "base_hash": normalized_hash(before),
+        "base_hash": snapshot.content_hash,
+        "base_revision": snapshot.revision,
     }
 
 
@@ -99,6 +147,7 @@ def apply_contract_payload(
     raw_payload: str,
     confirmed: bool,
     base_hash: str | None = None,
+    base_revision: int | None = None,
     _action=SettingsChange.Action.APPLY,
     _rollback_of=None,
     operation_fingerprint: str | None = None,
@@ -112,6 +161,7 @@ def apply_contract_payload(
         raw_payload=raw_payload,
         confirmed=confirmed,
         base_hash=base_hash,
+        base_revision=base_revision,
         _action=_action,
         _rollback_of=_rollback_of,
         operation_fingerprint=operation_fingerprint,
@@ -125,6 +175,7 @@ def _apply_role_definition_payload(
     actor,
     role_code: str,
     base_hash: str,
+    base_revision: int | None = None,
     confirmed: bool,
     raw_payload_factory,
     preview_token: str | None = None,
@@ -148,6 +199,7 @@ def _apply_role_definition_payload(
         raw_payload=None,
         confirmed=confirmed,
         base_hash=base_hash,
+        base_revision=base_revision,
         operation_fingerprint=operation_fingerprint,
         audit_context=audit_context,
         locked_precondition=locked_precondition,
@@ -167,6 +219,7 @@ def _apply_contract_payload(
     raw_payload: str | None,
     confirmed: bool,
     base_hash: str | None = None,
+    base_revision: int | None = None,
     _action=SettingsChange.Action.APPLY,
     _rollback_of=None,
     operation_fingerprint: str | None = None,
@@ -196,12 +249,131 @@ def _apply_contract_payload(
         raise ValidationError("Изменение определения роли требует подписанного предпросмотра.")
     if descriptor.storage_kind != "runtime_contract":
         raise ValidationError("Настройка не связана с рабочим контрактом.")
-    if not descriptor.is_editable:
+    role_domain_workflow = (
+        setting_id == "core.contract.role_rules"
+        and descriptor.write_policy == "requires_domain_workflow"
+    )
+    if not descriptor.is_editable and not role_domain_workflow:
         raise ValidationError("Настройка недоступна для редактирования.")
     if not confirmed:
         raise ValidationError("Для изменения контракта нужно явное подтверждение.")
     if not base_hash:
         raise ValidationError("Не указана версия контракта. Перечитайте актуальную версию.")
+    spec = get_document_registry().get(setting_id)
+    if spec.active_backend == "database":
+        if _action != SettingsChange.Action.APPLY or _rollback_of is not None:
+            raise ValidationError("Rollback PostgreSQL-документа выполняется отдельным writer.")
+        if base_revision is None:
+            raise ValidationError(
+                "Не указана ревизия документа. Перечитайте актуальную версию."
+            )
+        try:
+            expected_revision = int(base_revision)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия документа имеет неверный формат.") from exc
+        writer = ConfigDocumentWriter()
+        if role_domain_workflow:
+            def authorize_role_writer(current_actor):
+                _require_contract_editor(
+                    actor=current_actor,
+                    setting_id=setting_id,
+                    descriptor=descriptor,
+                    allow_delegated_role_definition=_allow_delegated_role_definition,
+                )
+
+            def role_candidate_factory(current_actor, before):
+                _assert_runtime_role_catalog_matches_git_default(
+                    runtime_payload=before,
+                    descriptor=descriptor,
+                )
+                if locked_precondition is not None:
+                    locked_precondition(current_actor, before)
+                candidate_raw = (
+                    _raw_payload_factory(copy.deepcopy(before))
+                    if _raw_payload_factory is not None
+                    else raw_payload
+                )
+                return parse_and_validate_payload(descriptor, candidate_raw)
+
+            def validate_role_candidate(current_actor, before, after):
+                _assert_candidate_role_catalog_unchanged(
+                    runtime_payload=before,
+                    candidate_payload=after,
+                )
+                _assert_candidate_role_administration_unchanged(
+                    runtime_payload=before,
+                    candidate_payload=after,
+                )
+                _assert_role_set_transport_change(
+                    runtime_payload=before,
+                    candidate_payload=after,
+                    constrained_role_code=(
+                        _role_definition_role_code
+                        if _allow_delegated_role_definition
+                        else None
+                    ),
+                )
+                if not _allow_delegated_role_definition:
+                    return
+                _assert_single_role_payload(
+                    before=before,
+                    after=after,
+                    role_code=_role_definition_role_code,
+                )
+                from apps.accounts.access_contracts import (
+                    _validate_role_definition_transport_request,
+                )
+
+                _validate_role_definition_transport_request(
+                    actor=current_actor,
+                    role_code=_role_definition_role_code,
+                    before=before,
+                    after=after,
+                    preview_token=_role_definition_preview_token,
+                    risk_confirmed=_role_definition_risk_confirmed,
+                )
+
+            snapshot = writer.save_constrained_document_via_domain_workflow(
+                actor=actor,
+                document_id=setting_id,
+                expected_revision=expected_revision,
+                expected_content_hash=_plain_hash(base_hash),
+                authorize=authorize_role_writer,
+                candidate_factory=role_candidate_factory,
+                validate_candidate=validate_role_candidate,
+                before_write=(
+                    (lambda current_actor, after: _pre_write_callback(current_actor, after))
+                    if _pre_write_callback is not None
+                    else None
+                ),
+                operation_fingerprint=operation_fingerprint,
+                audit_context=audit_context,
+            )
+        else:
+            if any(
+                (
+                    _allow_delegated_role_definition,
+                    _raw_payload_factory is not None,
+                    _pre_write_callback is not None,
+                    locked_precondition is not None,
+                )
+            ):
+                raise ValidationError(
+                    "Доменный writer разрешён только для контракта ролей."
+                )
+            after = parse_and_validate_payload(descriptor, raw_payload)
+            snapshot = writer.save_document(
+                actor=actor,
+                document_id=setting_id,
+                payload=after,
+                expected_revision=expected_revision,
+                expected_content_hash=_plain_hash(base_hash),
+                operation_fingerprint=operation_fingerprint,
+                audit_context=audit_context,
+            )
+        if snapshot.change_id is None:
+            raise ValidationError("Аудит изменения документа не создан.")
+        return SettingsChange.objects.get(pk=snapshot.change_id)
     _require_autocommit_boundary()
     if descriptor.sensitivity == "secret":
         raise ValidationError("Секретный контракт нельзя сохранять в журнале версий.")
@@ -327,6 +499,17 @@ def migrate_role_capability_catalog(
     candidate_path = Path(candidate_path)
     _require_autocommit_boundary()
     descriptor = get_registry().get("core.contract.role_rules")
+    spec = get_document_registry().get(descriptor.setting_id)
+    if spec.active_backend == "database":
+        return _migrate_role_capability_catalog_database(
+            actor=actor,
+            descriptor=descriptor,
+            candidate_path=candidate_path,
+            expected_runtime_catalog_hash=expected_runtime_catalog_hash,
+            expected_git_catalog_hash=expected_git_catalog_hash,
+            expected_runtime_hash=expected_runtime_hash,
+            reason=reason,
+        )
     contract_relpath = _contract_relative_path(descriptor)
 
     try:
@@ -404,6 +587,109 @@ def migrate_role_capability_catalog(
         ) from exc
 
 
+def _migrate_role_capability_catalog_database(
+    *,
+    actor,
+    descriptor,
+    candidate_path,
+    expected_runtime_catalog_hash,
+    expected_git_catalog_hash,
+    expected_runtime_hash,
+    reason,
+):
+    """Обновить frozen capability catalog и Git-default hash одной DB-транзакцией."""
+
+    snapshot = read_contract_snapshot(descriptor)
+    if snapshot.source != "database_override":
+        raise ValidationError(
+            "Deployment-миграция capability после cutover требует существующую DB-ревизию."
+        )
+    audit_context = {
+        "operation": "deployment_role_capability_catalog_migration",
+        "reason": reason,
+    }
+    backup_holder = {}
+
+    def authorize(current_actor):
+        _require_active_superuser(current_actor)
+
+    def candidate_factory(_current_actor, before):
+        git_default = _read_git_default_role_rules(descriptor=descriptor)
+        candidate = load_json_file(candidate_path)
+        _validate_payload_object(descriptor=descriptor, payload=before)
+        _validate_payload_object(descriptor=descriptor, payload=candidate)
+
+        runtime_catalog = _role_capability_catalog(before, label="runtime")
+        git_catalog = _role_capability_catalog(git_default, label="Git-default")
+        candidate_catalog = _role_capability_catalog(candidate, label="candidate")
+        runtime_catalog_hash = normalized_hash(runtime_catalog)
+        git_catalog_hash = normalized_hash(git_catalog)
+        _require_matching_hash(
+            expected_runtime_catalog_hash,
+            runtime_catalog_hash,
+            label="runtime capability catalog",
+        )
+        _require_matching_hash(
+            expected_git_catalog_hash,
+            git_catalog_hash,
+            label="Git-default capability catalog",
+        )
+        _require_matching_hash(
+            expected_runtime_hash,
+            normalized_hash(before),
+            label="full runtime role contract",
+        )
+        if normalized_hash(candidate_catalog) != git_catalog_hash:
+            raise ValidationError(
+                "Справочник candidate не совпадает с текущим Git-default."
+            )
+        _assert_deployment_catalog_candidate_delta(
+            runtime_payload=before,
+            candidate_payload=candidate,
+        )
+        if normalized_hash(before) == normalized_hash(candidate):
+            raise ValidationError("В deployment-кандидате нет изменений.")
+        audit_context.update(
+            {
+                "runtime_catalog_hash_before": runtime_catalog_hash,
+                "git_catalog_hash_target": git_catalog_hash,
+            }
+        )
+        return candidate
+
+    def validate_candidate(_current_actor, before, candidate):
+        _assert_deployment_catalog_candidate_delta(
+            runtime_payload=before,
+            candidate_payload=candidate,
+        )
+
+    def before_write(_current_actor, candidate):
+        del candidate
+        backup_path = _write_role_contract_backup(snapshot.payload)
+        backup_holder["path"] = backup_path
+        audit_context["backup_file"] = backup_path.name
+
+    written = ConfigDocumentWriter().migrate_constrained_document_default_via_domain_workflow(
+        actor=actor,
+        document_id=descriptor.setting_id,
+        expected_revision=snapshot.revision,
+        expected_content_hash=snapshot.content_hash,
+        authorize=authorize,
+        candidate_factory=candidate_factory,
+        validate_candidate=validate_candidate,
+        before_write=before_write,
+        audit_context=audit_context,
+    )
+    if written.change_id is None or "path" not in backup_holder:
+        raise ValidationError("Deployment-миграция не создала аудит или backup.")
+    return {
+        "change": SettingsChange.objects.get(pk=written.change_id),
+        "backup_path": backup_holder["path"],
+        "runtime_catalog_hash_before": audit_context["runtime_catalog_hash_before"],
+        "git_catalog_hash_target": audit_context["git_catalog_hash_target"],
+    }
+
+
 def migrate_role_administration_metadata(
     *, actor, expected_runtime_hash: str, expected_git_hash: str, reason: str
 ):
@@ -414,15 +700,24 @@ def migrate_role_administration_metadata(
     if not reason:
         raise ValidationError("Для deployment-миграции нужна причина.")
     _require_autocommit_boundary()
-    descriptor = get_registry().get("core.contract.role_rules")
+    descriptor = _role_administration_descriptor()
+    if _role_administration_active_backend(descriptor) == "database":
+        return _migrate_role_administration_metadata_database(
+            actor=actor,
+            descriptor=descriptor,
+            expected_runtime_hash=expected_runtime_hash,
+            expected_git_hash=expected_git_hash,
+            reason=reason,
+        )
     contract_relpath = _contract_relative_path(descriptor)
+    legacy_contract_path = _role_legacy_migration_path()
     try:
         with exclusive_file_lock(_contract_write_lock_path(), timeout=10.0):
             actor = _require_active_superuser(actor)
             _resolve_known_pending_changes(setting_id=descriptor.setting_id)
-            before = read_contract_value(descriptor)
+            before = load_json_file(legacy_contract_path)
             git_default = _read_git_default_role_rules(descriptor=descriptor)
-            _validate_payload_object(descriptor=descriptor, payload=before)
+            _validate_role_payload_for_migration(before)
             runtime_hash = normalized_hash(before)
             git_hash = normalized_hash(git_default)
             _require_matching_hash(expected_runtime_hash, runtime_hash, label="runtime role contract")
@@ -438,7 +733,7 @@ def migrate_role_administration_metadata(
             )
             after = copy.deepcopy(before)
             after.pop("$administration")
-            _validate_payload_object(descriptor=descriptor, payload=after)
+            _validate_role_payload_for_migration(after)
             if {key: value for key, value in before.items() if key != "$administration"} != after:
                 raise ValidationError("Migration candidate содержит посторонние изменения.")
             backup_path = _write_role_contract_backup(before)
@@ -450,6 +745,7 @@ def migrate_role_administration_metadata(
                 after=after,
                 rollback_of=None,
                 contract_relpath=contract_relpath,
+                contract_path=legacy_contract_path,
                 audit_context={
                     "operation": "deployment_remove_role_administration",
                     "reason": reason,
@@ -462,6 +758,150 @@ def migrate_role_administration_metadata(
         raise ValidationError(
             "Контракт сейчас изменяет другой процесс. Повторите позже."
         ) from exc
+
+
+def _role_administration_descriptor():
+    """Resolve the role descriptor even in a minimal legacy migration sandbox."""
+
+    try:
+        return get_registry().get("core.contract.role_rules")
+    except ValueError:
+        # The legacy migration tests intentionally provide only role_rules.json
+        # under a temporary BASE_DIR.  Do not weaken normal registry validation:
+        # this fallback is allowed only when the unrelated integration default
+        # is absent and the overridden legacy role file exists.
+        integration_default = Path(settings.BASE_DIR) / "contracts" / "integrations" / "registry.json"
+        role_path = Path(getattr(settings, _LEGACY_ROLE_RULES_SETTINGS_NAME, ""))
+        if integration_default.exists() or not role_path.is_file():
+            raise
+        from apps.core.settings_descriptors import get_settings_descriptors
+
+        return next(
+            descriptor
+            for descriptor in get_settings_descriptors()
+            if descriptor.setting_id == "core.contract.role_rules"
+        )
+
+
+def _role_legacy_migration_path() -> Path:
+    path = Path(getattr(settings, _LEGACY_ROLE_RULES_SETTINGS_NAME, ""))
+    if not path.is_file():
+        raise ValidationError("Legacy-файл role_rules.json недоступен.")
+    return path
+
+
+def _role_administration_active_backend(descriptor):
+    try:
+        return get_document_registry().get(descriptor.setting_id).active_backend
+    except ValueError:
+        integration_default = Path(settings.BASE_DIR) / "contracts" / "integrations" / "registry.json"
+        role_path = Path(getattr(settings, _LEGACY_ROLE_RULES_SETTINGS_NAME, ""))
+        if integration_default.exists() or not role_path.is_file():
+            raise
+        return "legacy_file"
+
+
+def _migrate_role_administration_metadata_database(
+    *, actor, descriptor, expected_runtime_hash, expected_git_hash, reason
+):
+    """DB deployment writer for the inert ``$administration`` cleanup.
+
+    The candidate is constructed from the row locked by the constrained
+    writer, so a request snapshot or a pre-lock read cannot authorize a stale
+    revision.  The writer owns the access lock, PostgreSQL advisory locks,
+    row locks, transaction and SettingsChange audit; the backup is created in
+    that same guarded callback and removed if the transaction is rolled back.
+    """
+
+    snapshot = read_contract_snapshot(descriptor, fresh=True)
+    if snapshot.source != "database_override":
+        raise ValidationError(
+            "Deployment-миграция $administration требует существующую DB-ревизию."
+        )
+    audit_context = {
+        "operation": "deployment_remove_role_administration",
+        "reason": reason,
+        "runtime_hash_before": snapshot.content_hash,
+    }
+    backup_holder = {}
+
+    def authorize(current_actor):
+        _require_active_superuser(current_actor)
+
+    def candidate_factory(_current_actor, before):
+        backup_holder["before"] = copy.deepcopy(before)
+        git_default = _read_git_default_role_rules(descriptor=descriptor)
+        runtime_hash = normalized_hash(before)
+        git_hash = normalized_hash(git_default)
+        _require_matching_hash(
+            expected_runtime_hash, runtime_hash, label="runtime role contract"
+        )
+        _require_matching_hash(
+            expected_git_hash, git_hash, label="Git-default role contract"
+        )
+        if "$administration" in git_default:
+            raise ValidationError(
+                "Git-default всё ещё содержит legacy $administration."
+            )
+        if "$administration" not in before:
+            raise ValidationError("Runtime уже не содержит $administration.")
+        _assert_runtime_role_catalog_matches_git_default(
+            runtime_payload=before, descriptor=descriptor
+        )
+        after = copy.deepcopy(before)
+        after.pop("$administration")
+        expected_after = {
+            key: value for key, value in before.items() if key != "$administration"
+        }
+        if after != expected_after:
+            raise ValidationError(
+                "Migration candidate может удалить только $administration."
+            )
+        audit_context.update(
+            {
+                "runtime_hash_before": runtime_hash,
+                "git_default_hash": git_hash,
+            }
+        )
+        return after
+
+    def validate_candidate(_current_actor, before, candidate):
+        expected_after = {
+            key: value for key, value in before.items() if key != "$administration"
+        }
+        if candidate != expected_after:
+            raise ValidationError(
+                "Migration candidate может удалить только $administration."
+            )
+
+    def before_write(_current_actor, _candidate):
+        backup_path = _write_role_contract_backup(backup_holder["before"])
+        backup_holder["path"] = backup_path
+        audit_context["backup_file"] = backup_path.name
+
+    try:
+        written = ConfigDocumentWriter().migrate_constrained_document_default_via_domain_workflow(
+            actor=actor,
+            document_id=descriptor.setting_id,
+            expected_revision=snapshot.revision,
+            expected_content_hash=snapshot.content_hash,
+            authorize=authorize,
+            candidate_factory=candidate_factory,
+            validate_candidate=validate_candidate,
+            before_write=before_write,
+            audit_context=audit_context,
+        )
+    except Exception:
+        backup_path = backup_holder.get("path")
+        if backup_path is not None:
+            backup_path.unlink(missing_ok=True)
+        raise
+    if written.change_id is None or "path" not in backup_holder:
+        raise ValidationError("Deployment-миграция не создала аудит или backup.")
+    return {
+        "change": SettingsChange.objects.get(pk=written.change_id),
+        "backup_path": backup_holder["path"],
+    }
 
 
 def apply_explicit_viewer_contract_cutover_locked(
@@ -552,8 +992,9 @@ def rollback_explicit_viewer_contract_locked(
 
 def preview_contract_rollback(*, actor, change_id: int):
     source, descriptor = _rollback_source(actor=actor, change_id=change_id)
-    current = read_contract_value(descriptor)
-    current_hash = normalized_hash(current)
+    snapshot = read_contract_snapshot(descriptor)
+    current = snapshot.payload
+    current_hash = snapshot.content_hash
     if current_hash != source.after_hash:
         raise ValidationError(
             "После выбранной версии контракт уже изменялся. Восстановление старой версии запрещено."
@@ -567,13 +1008,19 @@ def preview_contract_rollback(*, actor, change_id: int):
         "before": current,
         "after": restored,
         "base_hash": current_hash,
+        "base_revision": snapshot.revision,
         "masked_diff": build_masked_diff(current, restored),
         "validation_result": {"valid": True},
     }
 
 
 def rollback_contract_change(
-    *, actor, change_id: int, confirmed: bool, base_hash: str | None = None
+    *,
+    actor,
+    change_id: int,
+    confirmed: bool,
+    base_hash: str | None = None,
+    base_revision: int | None = None,
 ):
     preview = preview_contract_rollback(actor=actor, change_id=change_id)
     if not confirmed:
@@ -581,6 +1028,56 @@ def rollback_contract_change(
     if not base_hash or _plain_hash(base_hash) != preview["base_hash"]:
         raise ValidationError("Предпросмотр восстановления устарел. Повторите проверку.")
     source = SettingsChange.objects.get(pk=change_id)
+    spec = get_document_registry().get(source.setting_id)
+    if spec.active_backend == "database":
+        descriptor = get_registry().get(source.setting_id)
+        try:
+            requested_revision = int(base_revision) if base_revision is not None else None
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Ревизия документа имеет неверный формат.") from exc
+        if requested_revision != preview["base_revision"]:
+            raise ValidationError("Предпросмотр восстановления устарел. Повторите проверку.")
+        role_domain_workflow = source.setting_id == "core.contract.role_rules"
+
+        def authorize_role_rollback(current_actor):
+            _require_contract_editor(
+                actor=current_actor,
+                setting_id=source.setting_id,
+                descriptor=descriptor,
+            )
+
+        def validate_role_rollback(_current_actor, before, after):
+            _assert_runtime_role_catalog_matches_git_default(
+                runtime_payload=before,
+                descriptor=descriptor,
+            )
+            _assert_candidate_role_catalog_unchanged(
+                runtime_payload=before,
+                candidate_payload=after,
+            )
+            _assert_candidate_role_administration_unchanged(
+                runtime_payload=before,
+                candidate_payload=after,
+            )
+            _assert_role_set_transport_change(
+                runtime_payload=before,
+                candidate_payload=after,
+            )
+
+        snapshot = ConfigDocumentWriter().rollback_document(
+            actor=actor,
+            document_id=source.setting_id,
+            source_change_id=source.pk,
+            expected_revision=preview["base_revision"],
+            expected_content_hash=preview["base_hash"],
+            authorize=(authorize_role_rollback if role_domain_workflow else None),
+            validate_candidate=(
+                validate_role_rollback if role_domain_workflow else None
+            ),
+        )
+        if snapshot.change_id is None:
+            raise ValidationError("Аудит восстановления документа не создан.")
+        return SettingsChange.objects.get(pk=snapshot.change_id)
     return apply_contract_payload(
         actor=actor,
         setting_id=source.setting_id,
@@ -627,7 +1124,14 @@ def _require_contract_editor(
         )
 
         if allow_delegated_role_definition:
-            if not can_edit_role_definitions(actor_state):
+            rules_snapshot = None
+            if get_document_registry().get(setting_id).active_backend == "database":
+                rules_snapshot = read_contract_snapshot(
+                    get_registry().get(setting_id), fresh=True
+                ).payload
+            if not can_edit_role_definitions(
+                actor_state, rules_snapshot=rules_snapshot
+            ):
                 raise PermissionDenied(ROLE_DEFINITION_EDITOR_DENIED_MESSAGE)
         elif not actor_state.is_superuser:
             raise PermissionDenied(
@@ -688,10 +1192,9 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
     except json.JSONDecodeError as exc:
         raise ValidationError(f"Некорректный JSON: {exc.msg}.") from exc
     payload = copy.deepcopy(payload)
-    validator_name = descriptor.metadata.get("validator")
-    validator = VALIDATORS.get(validator_name)
+    validator = get_document_registry().get(descriptor.setting_id).validator
     if validator is None:
-        raise ValidationError(f"Неизвестный валидатор контракта: '{validator_name}'.")
+        raise ValidationError("Для документа не зарегистрирован callable validator.")
     validator(payload)
     return payload
 
@@ -699,10 +1202,9 @@ def parse_and_validate_payload(descriptor, raw_payload: str):
 def _validate_payload_object(*, descriptor, payload) -> None:
     if not isinstance(payload, dict):
         raise ValidationError("Контракт ролей должен быть JSON-объектом.")
-    validator_name = descriptor.metadata.get("validator")
-    validator = VALIDATORS.get(validator_name)
+    validator = get_document_registry().get(descriptor.setting_id).validator
     if validator is None:
-        raise ValidationError(f"Неизвестный валидатор контракта: '{validator_name}'.")
+        raise ValidationError("Для документа не зарегистрирован callable validator.")
     validator(copy.deepcopy(payload))
 
 
@@ -732,13 +1234,21 @@ def _read_git_default_role_rules(*, descriptor):
         payload = load_json_file(path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         raise ValidationError("Не удалось прочитать Git-default role_rules.json.") from exc
-    _validate_payload_object(descriptor=descriptor, payload=payload)
+    _validate_role_payload_for_migration(payload)
     _role_capability_catalog(payload, label="Git-default")
     return payload
 
 
+def _validate_role_payload_for_migration(payload) -> None:
+    """Validate role payload without requiring unrelated registry defaults."""
+
+    from apps.workorders.contracts import validate_role_rules_payload
+
+    validate_role_rules_payload(copy.deepcopy(payload))
+
+
 def _assert_runtime_role_catalog_matches_git_default(*, runtime_payload, descriptor) -> None:
-    _validate_payload_object(descriptor=descriptor, payload=runtime_payload)
+    _validate_role_payload_for_migration(runtime_payload)
     runtime_catalog = _role_capability_catalog(runtime_payload, label="runtime")
     git_default = _read_git_default_role_rules(descriptor=descriptor)
     git_catalog = _role_capability_catalog(git_default, label="Git-default")
@@ -866,6 +1376,25 @@ def _write_role_contract_backup(payload) -> Path:
 
 
 def _contract_path(descriptor):
+    try:
+        spec = get_document_registry().get(descriptor.setting_id)
+    except ValueError:
+        # A legacy deployment migration may run from a minimal unpacked
+        # sandbox that contains only role_rules.json.  Keep this compatibility
+        # path narrow; ordinary writers must still use the validated registry.
+        integration_default = Path(settings.BASE_DIR) / "contracts" / "integrations" / "registry.json"
+        role_path = Path(getattr(settings, _LEGACY_ROLE_RULES_SETTINGS_NAME, ""))
+        if (
+            descriptor.setting_id != "core.contract.role_rules"
+            or integration_default.exists()
+            or not role_path.is_file()
+        ):
+            raise
+        spec = None
+    if spec is not None and spec.active_backend != "legacy_file":
+        raise ValidationError(
+            "Файловый compatibility writer отключён после переключения документа."
+        )
     setting_name = descriptor.metadata.get("settings_path")
     if not setting_name:
         raise ValidationError("Дескриптор не задает settings_path.")
@@ -936,6 +1465,7 @@ def _write_validated_contract_change(
     after,
     rollback_of,
     contract_relpath,
+    contract_path=None,
     operation_fingerprint=None,
     audit_context=None,
 ):
@@ -953,13 +1483,13 @@ def _write_validated_contract_change(
         audit_context=audit_context,
     )
     try:
-        atomic_write_json(_contract_path(descriptor), after)
+        atomic_write_json(contract_path or _contract_path(descriptor), after)
     except Exception:
         _classify_failed_write(change=change, descriptor=descriptor)
         raise
 
     try:
-        written = read_contract_value(descriptor)
+        written = load_json_file(contract_path) if contract_path is not None else read_contract_value(descriptor)
     except Exception:
         SettingsChange.objects.filter(
             pk=change.pk,
@@ -1125,7 +1655,11 @@ def _rollback_source(*, actor, change_id):
         raise ValidationError("Изменение для восстановления не найдено.") from exc
     descriptor = get_registry().get(source.setting_id)
     _require_contract_editor(actor=actor, setting_id=source.setting_id, descriptor=descriptor)
-    if source.storage_kind != "runtime_contract" or source.action not in {
+    spec = get_document_registry().get(source.setting_id)
+    expected_storage_kind = (
+        "runtime_document" if spec.active_backend == "database" else "runtime_contract"
+    )
+    if source.storage_kind != expected_storage_kind or source.action not in {
         SettingsChange.Action.APPLY,
         SettingsChange.Action.ROLLBACK,
     }:
@@ -1134,12 +1668,19 @@ def _rollback_source(*, actor, change_id):
         raise ValidationError("Восстанавливать можно только успешно применённую версию.")
     if source.before_snapshot is None or source.after_snapshot is None:
         raise ValidationError("Для этой версии нет безопасного снимка восстановления.")
-    if not descriptor.is_editable or descriptor.sensitivity == "secret":
+    role_domain_workflow = (
+        source.setting_id == "core.contract.role_rules"
+        and descriptor.write_policy == "requires_domain_workflow"
+    )
+    if (
+        not descriptor.is_editable
+        and not role_domain_workflow
+    ) or descriptor.sensitivity == "secret":
         raise ValidationError("Этот контракт нельзя восстановить через интерфейс.")
     latest = (
         SettingsChange.objects.filter(
             setting_id=source.setting_id,
-            storage_kind="runtime_contract",
+            storage_kind=expected_storage_kind,
             action__in=(SettingsChange.Action.APPLY, SettingsChange.Action.ROLLBACK),
             status=SettingsChange.Status.APPLIED,
         )
@@ -1165,14 +1706,23 @@ def _contract_relative_path(descriptor) -> str:
 
 
 def _validate_cross_contract_candidate(*, setting_id, candidate):
-    if setting_id != "core.contract.workflow_rules":
-        return
-    from apps.workorders.contracts import (
-        validate_role_rules_payload,
-        validate_workorder_status_colors_payload,
-    )
-
-    role_rules = read_contract_value(get_registry().get("core.contract.role_rules"))
-    status_colors = read_contract_value(get_registry().get("workorders.contract.status_colors"))
-    validate_role_rules_payload(role_rules, workflow_payload=candidate)
-    validate_workorder_status_colors_payload(status_colors, workflow_payload=candidate)
+    document_registry = get_document_registry()
+    scope = document_registry.connected_validation_scope((setting_id,))
+    descriptors = get_registry()
+    payloads = {}
+    for document_id in scope:
+        payloads[document_id] = (
+            copy.deepcopy(candidate)
+            if document_id == setting_id
+            else read_contract_value(descriptors.get(document_id))
+        )
+    for document_id in scope:
+        spec = document_registry.get(document_id)
+        if spec.validator is not None:
+            spec.validator(copy.deepcopy(payloads[document_id]))
+        if spec.cross_validator is not None:
+            related = {
+                dependency: copy.deepcopy(payloads[dependency])
+                for dependency in spec.cross_document_ids
+            }
+            spec.cross_validator(copy.deepcopy(payloads[document_id]), related)

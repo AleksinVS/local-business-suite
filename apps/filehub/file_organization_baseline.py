@@ -17,6 +17,7 @@ from .file_organization import (
     _sync_file_objects_from_source_objects_locked,
 )
 from apps.memory.models import MemoryIngestionIssue, MemorySource, MemorySourceObject
+from apps.memory.config_documents import get_memory_document_snapshots
 
 from .models import MemoryFileVirtualPlacement, MemoryFileVirtualView
 
@@ -45,17 +46,23 @@ def build_baseline_virtual_structure(
     limit: int | None = None,
     create_issues: bool = True,
     require_enabled: bool = True,
+    snapshots=None,
 ) -> dict:
     if require_enabled is not True:
         raise ValueError("Обход проверки включенного источника запрещен.")
     with exclusive_file_lock(memory_source_lifecycle_lock_path(), timeout=300.0):
         with transaction.atomic():
             source = MemorySource.objects.select_for_update().get(pk=source.pk)
+            if snapshots is None:
+                snapshots = get_memory_document_snapshots(
+                    document_ids=("memory.contract.file_organization_profiles",)
+                )
             return _build_baseline_virtual_structure_locked(
                 source=source,
                 dry_run=dry_run,
                 limit=limit,
                 create_issues=create_issues,
+                snapshots=snapshots,
             )
 
 
@@ -65,8 +72,9 @@ def _build_baseline_virtual_structure_locked(
     dry_run: bool = False,
     limit: int | None = None,
     create_issues: bool = True,
+    snapshots=None,
 ) -> dict:
-    profile = get_file_organization_profile(source)
+    profile = get_file_organization_profile(source, snapshots=snapshots)
     sync_metrics = _sync_file_objects_from_source_objects_locked(source=source, dry_run=dry_run, limit=limit)
     queryset = MemorySourceObject.objects.filter(source=source).order_by("relative_path")
     if limit:

@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand
 from apps.memory.chat_memory import index_knowledge_item
 from apps.memory.knowledge_files import write_knowledge_item_file
 from apps.memory.models import MemoryKnowledgeItem
+from apps.memory.config_documents import get_memory_document_snapshots
 
 
 class Command(BaseCommand):
@@ -23,6 +24,9 @@ class Command(BaseCommand):
             self.stdout.write(f"Legacy knowledge migration dry-run: legacy_rows={len(rows)}")
             return
 
+        snapshots = get_memory_document_snapshots(
+            document_ids=("memory.contract.profiles",)
+        )
         migrated = 0
         for row in rows:
             if not str(row.get("text") or "").strip():
@@ -30,7 +34,7 @@ class Command(BaseCommand):
             item = _upsert_target_item(row)
             write_knowledge_item_file(item, body=row.get("text") or "", commit_message=f"Migrate legacy knowledge {item.memory_id}")
             if not options["no_index"] and item.status == MemoryKnowledgeItem.Status.ACTIVE:
-                index_knowledge_item(item)
+                index_knowledge_item(item, snapshots=snapshots)
             migrated += 1
         self.stdout.write(self.style.SUCCESS(f"Migrated {migrated} legacy knowledge item(s)."))
 

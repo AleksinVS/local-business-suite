@@ -2659,9 +2659,20 @@ class CapabilityRegistryTests(TestCase):
 class ExplicitViewerPolicyPhaseTests(TestCase):
     def test_runtime_viewer_presence_disables_legacy_fallback(self):
         payload = copy.deepcopy(get_contract("role_rules"))
-        payload["viewer"] = copy.deepcopy(
-            json_utils.load_json_file(Path(settings.BASE_DIR) / "contracts" / "role_rules.json")["viewer"]
-        )
+        default_viewer = json_utils.load_json_file(
+            Path(settings.BASE_DIR) / "contracts" / "role_rules.json"
+        )["viewer"]
+        supported_fields = {
+            "display_name",
+            "description",
+            "protected",
+            *payload["$capabilities"],
+        }
+        payload["viewer"] = {
+            key: copy.deepcopy(value)
+            for key, value in default_viewer.items()
+            if key in supported_fields
+        }
         user = User.objects.create_user(username="runtime-viewer-phase")
         with _override_contract_file("LOCAL_BUSINESS_ROLE_RULES_FILE", "role_rules.json", payload):
             self.assertFalse(default_board_access_applies(user))

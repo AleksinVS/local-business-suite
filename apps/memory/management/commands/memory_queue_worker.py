@@ -18,15 +18,19 @@ from apps.memory.chat_memory import index_knowledge_item, remember_knowledge
 from apps.memory.models import MemoryKnowledgeItem
 from apps.memory.services import (
     MemoryQueueJobKind,
+    cleanup_disabled_source_projection,
     complete_memory_queue_task,
     fail_memory_queue_task,
+    sync_sources_from_contract,
     lease_memory_queue_tasks,
 )
+from apps.memory.config_documents import get_memory_document_snapshots
 
 QUEUE_JOB_KINDS = (
     MemoryQueueJobKind.RECONCILE,
     MemoryQueueJobKind.INGESTION,
     MemoryQueueJobKind.REINDEX,
+    MemoryQueueJobKind.SOURCE_CLEANUP,
 )
 
 
@@ -73,6 +77,8 @@ class Command(BaseCommand):
 def _process_task(job) -> dict:
     if job.job_kind == MemoryQueueJobKind.REINDEX:
         return _process_reindex(job.payload or {})
+    if job.job_kind == MemoryQueueJobKind.SOURCE_CLEANUP:
+        return _process_source_cleanup(job.payload or {})
     if job.job_kind == MemoryQueueJobKind.INGESTION:
         return _process_ingestion(job.payload or {})
     if job.job_kind == MemoryQueueJobKind.RECONCILE:
@@ -81,6 +87,34 @@ def _process_task(job) -> dict:
 
 
 def _process_reindex(payload: dict) -> dict:
+    document_id = str(payload.get("document_id") or "").strip()
+    if document_id:
+        snapshots = get_memory_document_snapshots(document_ids=(document_id,))
+        snapshot = snapshots[document_id]
+        expected_revision = payload.get("document_revision")
+        expected_hash = str(payload.get("document_hash") or "")
+        if (
+            expected_revision is not None
+            and int(expected_revision) != snapshot.revision
+        ) or (expected_hash and expected_hash != snapshot.content_hash):
+            # A newer settings revision owns the follow-up job. Do not apply
+            # an older source/profile snapshot after it has been superseded.
+            return {
+                "document_id": document_id,
+                "stale": True,
+                "current_revision": snapshot.revision,
+                "current_hash": snapshot.content_hash,
+            }
+        if document_id == "memory.contract.sources":
+            payload_value = snapshot.payload if hasattr(snapshot, "payload") else snapshot
+            synced = sync_sources_from_contract(list(payload_value or []))
+            reconcile = _process_reconcile(payload)
+            return {
+                "document_id": document_id,
+                "sources_synced": len(synced),
+                "reconcile": reconcile,
+            }
+        return _process_reconcile(payload)
     memory_id = payload.get("memory_id")
     if not memory_id:
         # Legacy source-data reindex task migrated from MemoryIndexJob: there is
@@ -91,6 +125,13 @@ def _process_reindex(payload: dict) -> dict:
     item = MemoryKnowledgeItem.objects.get(memory_id=memory_id)
     index_knowledge_item(item)
     return {"memory_id": memory_id, "indexed": True}
+
+
+def _process_source_cleanup(payload: dict) -> dict:
+    source_code = str(payload.get("source_code") or "").strip()
+    if not source_code:
+        raise ValueError("source_cleanup task has no source_code")
+    return cleanup_disabled_source_projection(source_code=source_code)
 
 
 def _process_ingestion(payload: dict) -> dict:

@@ -39,6 +39,24 @@ MIGRATION_SIGNING_SALT = "settings-center.explicit-viewer-migration.v1"
 PHASE_SIGNING_SALT = "settings-center.explicit-viewer-migration.phase.v1"
 
 
+def _assert_viewer_migration_legacy_backend():
+    """Stop the legacy viewer workflow once access uses the DB repository.
+
+    This check intentionally runs before actor/manifest handling in every
+    mutating phase.  A previously prepared legacy manifest must not be able to
+    reach membership, board ACL, or legacy-contract writes after the access
+    cutover.
+    """
+
+    from .document_registry import get_document_registry
+
+    role_spec = get_document_registry().get("core.contract.role_rules")
+    if role_spec.active_backend == "database":
+        raise ValidationError(
+            "Миграция viewer закрыта: access role_rules уже использует PostgreSQL."
+        )
+
+
 def migration_artifact_root() -> Path:
     root = (Path(settings.DATA_DIR) / "access-migrations").resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -648,6 +666,7 @@ def _validate_manifest_against_current(manifest):
 
 def prepare_explicit_viewer_migration(*, actor, manifest, reason="", output_path=None):
     """Stage the exact owner choices while viewer remains inert."""
+    _assert_viewer_migration_legacy_backend()
     actor = _fresh_superuser(actor)
     manifest = _prepare_manifest_input(manifest)
     reason = str(reason or "").strip()
@@ -855,6 +874,7 @@ def _validate_cutover_recoverable_state(manifest):
 
 
 def cutover_explicit_viewer(*, actor, manifest, reason=""):
+    _assert_viewer_migration_legacy_backend()
     from .contract_services import (
         _resolve_known_pending_changes,
         apply_explicit_viewer_contract_cutover_locked,
@@ -991,6 +1011,7 @@ def _validate_rollback_recoverable_state(manifest, runtime):
 
 
 def rollback_explicit_viewer(*, actor, manifest, reason=""):
+    _assert_viewer_migration_legacy_backend()
     from .contract_services import (
         _resolve_known_pending_changes,
         rollback_explicit_viewer_contract_locked,

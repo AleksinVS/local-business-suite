@@ -375,6 +375,8 @@ docs: # Документация проекта
     ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md: file # Предлагаемый ADR: копирование ролей сейчас и ограниченная аддитивная иерархия после отдельного подтверждения
     ADR-0047-warehouse-ledger-and-department-scoped-access.md: file # Принятый ADR: складской журнал, адресное хранение и доступ по подразделениям
     ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
+    ADR-0049-portal-autocomplete-and-contextual-form-panels.md: file # Принятый ADR: общее автодополнение и доменные формы в правой панели
+    ADR-0050-warehouse-inline-series-and-list-relocation.md: file # Принятый ADR: серия в строке складского движения и перемещение из списка остатков
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -414,6 +416,7 @@ docs: # Документация проекта
     SETTINGS_CENTER_IMPLEMENTATION_PLAN.md: file # План реализации Settings Center, GUI настроек и контекстной справки
     SETTINGS_STORAGE_TARGET_ARCHITECTURE.md: file # Целевая архитектура хранения настроек: единый реестр, Git-дефолты и PostgreSQL runtime-документы
     WAREHOUSE_SYSTEM_ARCHITECTURE.md: file # Архитектура общего раздела Склад, прав, отчётов и legacy-миграции
+    WAREHOUSE_UX_TARGET_ARCHITECTURE.md: file # Целевая UX-архитектура склада, inline-серии, перемещения и общего автодополнения
   deployment: # Гайды по деплою (Docker, IIS)
     AI_UI_PROTOCOL_DEPLOYMENT.md: file # Deployment note по выбору AI UI драйвера copilotkit/native
     COPILOTKIT_AG_UI_DEPLOYMENT.md: file # Deployment note для CopilotKit Runtime, AG-UI endpoint и React island
@@ -442,6 +445,7 @@ docs: # Документация проекта
     MEMORY_INGESTION_OPERATIONS.md: file # Операционный guide по ingestion документов, review queues и bootstrapping схемы графа памяти
     MEMORY_USER_GUIDE.md: file # Руководство пользователя и администратора по системе памяти
     NOTIFICATIONS_USER_GUIDE.md: file # Руководство пользователя по центру уведомлений, PWA и ограничениям браузерных уведомлений
+    PORTAL_AUTOCOMPLETE_FIELD_MATRIX.md: file # Исполнительная матрица значимых полей и общего автодополнения портала
     PROJECT_REVIEW.md: file # Чек-лист ревью проекта
     PROJECT_STRUCTURE_SYSTEM.md: file # Система автоматического сбора структуры (.desc.json → PROJECT_STRUCTURE.yaml)
     SETTINGS_CENTER_OPERATIONS.md: file # Операционный guide по Settings Center, runtime contracts, users, AD link, ACL и .env proposals
@@ -468,6 +472,7 @@ docs: # Документация проекта
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
       settings-storage-simplification.md: file # Активный план упрощения хранения и доставки настроек
+      warehouse-ux-simplification.md: file # Активный план упрощения UX склада и общего автодополнения портала
     archive: # Архив закрытых или остановленных планов
       2026: file
       README.md: file # Описание архива planning-файлов
@@ -775,6 +780,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       ARCHITECT_PLAN.json: file # Порядок исполнения, зависимости пакетов и общие проверки
       BLOCK_BRIEF.md: file # Цель, границы, риски и критерии приемки блока
       EXECUTION_GUIDE.md: file # Правила исполнения, отчётности, миграции и независимой приемки
+    warehouse-ux-simplification: directory... # Workflow: упрощение UX склада и общее автодополнение (9 task packets)
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков

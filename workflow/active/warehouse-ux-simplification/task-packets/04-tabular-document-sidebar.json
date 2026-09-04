@@ -1,0 +1,58 @@
+{
+  "task_id": "04-tabular-document-sidebar",
+  "title": "Реализовать табличный документ в правой панели",
+  "type": "implementation",
+  "executor": {
+    "recommended_model": "gpt-5.6-terra",
+    "reasoning_effort": "high",
+    "rationale": "Сложная связка Django formset, HTMX, зависимых подсказок и доступного табличного интерфейса."
+  },
+  "objective": "Создавать и редактировать многострочный складской черновик без отдельной страницы и без лишних полей.",
+  "read_scope": [
+    "apps/warehouse/forms.py",
+    "apps/warehouse/views.py",
+    "apps/warehouse/urls.py",
+    "templates/warehouse/",
+    "static/src/js/autocomplete.js",
+    "static/src/js/right_panel.js",
+    "docs/architecture/WAREHOUSE_UX_TARGET_ARCHITECTURE.md"
+  ],
+  "write_scope": [
+    "apps/warehouse/forms.py",
+    "apps/warehouse/views.py",
+    "apps/warehouse/urls.py",
+    "apps/warehouse/selectors.py",
+    "apps/warehouse/right_panel.py",
+    "templates/warehouse/",
+    "static/src/warehouse/",
+    "static/src/css/app.css",
+    "apps/warehouse/tests/",
+    "scripts/e2e/"
+  ],
+  "requirements": [
+    "Открывать create/edit draft в workspace drawer; оставить full-page fallback для прямого URL.",
+    "Показывать строки таблицей, скрыть sequence и добавить клиентское добавление/удаление строк.",
+    "Показывать только поля выбранной операции.",
+    "Использовать общий autocomplete для позиции, серии, источника и адреса.",
+    "Для выдачи предлагать только доступные остатки в FEFO-порядке и заполнять зависимые поля.",
+    "Поддержать кнопки «Сохранить черновик» и «Провести» без диалога подтверждения, с защитой от повторной отправки.",
+    "Запретить редактирование проведённого документа и повторно проверить scope на POST."
+  ],
+  "acceptance": [
+    "Документ из трёх строк создаётся в одной таблице.",
+    "Ошибка второй строки не стирает первую и третью.",
+    "Черновик повторно открывается и редактируется в панели.",
+    "Приход не показывает source, выдача не показывает destination.",
+    "Новая серия принимается текстом, существующая заполняет срок.",
+    "Клавиатурный сценарий проходит без мыши."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_views_security.py",
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_posting.py",
+    "node --check static/src/warehouse/document_editor.js",
+    "make verify-profile PROFILE=ui",
+    "Playwright: receipt/issue/edit/error/keyboard/mobile",
+    "git diff --check"
+  ],
+  "report": "workflow/active/warehouse-ux-simplification/EXECUTOR_REPORT.04-tabular-document-sidebar.md"
+}

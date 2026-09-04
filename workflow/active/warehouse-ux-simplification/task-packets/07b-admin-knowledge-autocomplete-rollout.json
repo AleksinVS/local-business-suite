@@ -1,0 +1,61 @@
+{
+  "task_id": "07b-admin-knowledge-autocomplete-rollout",
+  "title": "Внедрить общий autocomplete в административных и knowledge-модулях",
+  "type": "inventory_and_implementation",
+  "executor": {
+    "recommended_model": "gpt-5.6-terra",
+    "reasoning_effort": "high",
+    "rationale": "Поля пользователей, ролей, памяти и настроек имеют повышенный риск раскрытия и изменения прав."
+  },
+  "objective": "Перевести значимые поля accounts, core, settings_center, filehub, memory, analytics и пользовательских AI-форм на общий компонент без расширения authority.",
+  "read_scope": [
+    "apps/accounts/",
+    "apps/core/",
+    "apps/settings_center/",
+    "apps/filehub/",
+    "apps/memory/",
+    "apps/analytics/",
+    "apps/ai/",
+    "templates/"
+  ],
+  "write_scope": [
+    "apps/accounts/",
+    "apps/settings_center/",
+    "apps/filehub/",
+    "apps/memory/",
+    "apps/analytics/",
+    "apps/ai/",
+    "templates/accounts/",
+    "templates/settings_center/",
+    "templates/filehub/",
+    "templates/memory/",
+    "templates/analytics/",
+    "templates/ai/",
+    "docs/guides/PORTAL_AUTOCOMPLETE_FIELD_MATRIX.md",
+    "scripts/e2e/"
+  ],
+  "requirements": [
+    "Не менять apps.core autocomplete без согласования с пакетом 01.",
+    "Не возвращать secret values, hidden principals, недоступные memory sources или объекты вне scope.",
+    "Не обходить privilege ceiling и канонические write services access control plane.",
+    "Фиксировать исключения: secrets, небольшие enums, даты, числа и multiline text.",
+    "Не менять AG-UI wire contract или зависимости."
+  ],
+  "acceptance": [
+    "Матрица покрывает все пользовательские формы перечисленных модулей.",
+    "Autocomplete не расширяет read/write authority и не раскрывает скрытые principals.",
+    "Основные формы используют общий компонент или имеют проверяемое обоснование исключения.",
+    "Настройки и память сохраняют текущий storage/write path."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/accounts",
+    "make verify-fast TEST_SCOPE=apps/settings_center",
+    "make verify-profile PROFILE=memory",
+    "make verify-profile PROFILE=ui",
+    "make verify-profile PROFILE=contracts",
+    "Playwright: scoped user/role/source autocomplete",
+    "git diff --check"
+  ],
+  "report": "workflow/active/warehouse-ux-simplification/EXECUTOR_REPORT.07b-admin-knowledge-autocomplete-rollout.md"
+}
+

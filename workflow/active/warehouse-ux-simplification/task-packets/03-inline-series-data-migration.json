@@ -1,0 +1,53 @@
+{
+  "task_id": "03-inline-series-data-migration",
+  "title": "Перенести StockLot в inline-серию",
+  "type": "data_migration_and_domain_refactor",
+  "executor": {
+    "recommended_model": "gpt-5.6-sol",
+    "reasoning_effort": "ultra",
+    "rationale": "Критичная миграция изменяет неизменяемый журнал, ключ проекции, импорт и отчёты."
+  },
+  "objective": "Получить целевую модель без отдельной таблицы серий с доказуемым сохранением движений и остатков.",
+  "read_scope": [
+    "apps/warehouse/",
+    "docs/adr/ADR-0047-warehouse-ledger-and-department-scoped-access.md",
+    "docs/adr/ADR-0050-warehouse-inline-series-and-list-relocation.md",
+    "docs/deployment/WAREHOUSE_DEPLOYMENT.md"
+  ],
+  "write_scope": [
+    "apps/warehouse/models.py",
+    "apps/warehouse/migrations/",
+    "apps/warehouse/services/",
+    "apps/warehouse/reports/",
+    "apps/warehouse/legacy_import/",
+    "apps/warehouse/management/commands/",
+    "apps/warehouse/tests/"
+  ],
+  "requirements": [
+    "Выполнить expand/backfill/switch/rebuild/contract отдельными проверяемыми шагами.",
+    "Добавить прямой item в StockEntry/StockBalance, хранить series display и нормализованный series_key; не терять expires_on и incomplete_reason.",
+    "Зафиксировать контрольные суммы journal и balance до удаления FK.",
+    "Обнаруживать одну series_key с конфликтующими сроками и не угадывать значение.",
+    "Переключить posting, reversal, rebuilding, reports и legacy import.",
+    "Удалять StockLot только после целевой команды сверки и теста обратимости переходного шага."
+  ],
+  "acceptance": [
+    "Количество и число проводок до/после миграции совпадают.",
+    "Баланс по department/warehouse/location/item/series/expiry/source совпадает.",
+    "Новые документы создаются без StockLot.",
+    "Повторная миграция/сверка идемпотентна.",
+    "Legacy import записывает серию непосредственно и сохраняет issue для конфликтов.",
+    "Финальная модель и миграции не требуют отдельной таблицы серий."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_posting.py",
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_reports_exports.py",
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_legacy_import.py",
+    "python manage.py makemigrations --check --dry-run",
+    "python manage.py warehouse_rebuild_balances --actor <test-user> --check",
+    "python manage.py warehouse_acceptance_e2e",
+    "make verify-profile PROFILE=contracts",
+    "git diff --check"
+  ],
+  "report": "workflow/active/warehouse-ux-simplification/EXECUTOR_REPORT.03-inline-series-data-migration.md"
+}

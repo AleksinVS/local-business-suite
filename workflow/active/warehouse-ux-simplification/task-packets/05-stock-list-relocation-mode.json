@@ -1,0 +1,57 @@
+{
+  "task_id": "05-stock-list-relocation-mode",
+  "title": "Реализовать массовое перемещение из списка остатков",
+  "type": "implementation_and_concurrency",
+  "executor": {
+    "recommended_model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "rationale": "Массовая команда меняет остатки и требует правильных блокировок, scope и атомарности."
+  },
+  "objective": "Отбирать остатки фильтрами, указывать количества и одной командой перемещать их на склад назначения.",
+  "read_scope": [
+    "apps/warehouse/selectors.py",
+    "apps/warehouse/services/posting.py",
+    "apps/warehouse/models.py",
+    "apps/warehouse/views.py",
+    "templates/warehouse/",
+    "docs/adr/ADR-0050-warehouse-inline-series-and-list-relocation.md"
+  ],
+  "write_scope": [
+    "apps/warehouse/selectors.py",
+    "apps/warehouse/services/",
+    "apps/warehouse/views.py",
+    "apps/warehouse/urls.py",
+    "apps/warehouse/forms.py",
+    "templates/warehouse/stock/",
+    "templates/warehouse/relocation/",
+    "static/src/warehouse/stock_list.js",
+    "static/src/css/app.css",
+    "apps/warehouse/tests/",
+    "scripts/e2e/"
+  ],
+  "requirements": [
+    "Добавить серверные фильтры и pagination списка остатков.",
+    "В режиме перемещения показывать флажок и количество только для доступных строк.",
+    "Добавить валидируемый Warehouse.default_receiving_location; выбирать склад назначения через автодополнение, адрес по умолчанию заполнять автоматически, неоднозначный адрес спрашивать один раз.",
+    "В транзакции повторно разрешать и блокировать balance rows в стабильном порядке.",
+    "Создавать и проводить один multi-line relocation document атомарно.",
+    "Не допускать partial success, foreign department, quarantine/unassigned destination и source=destination.",
+    "Не показывать отдельный диалог подтверждения."
+  ],
+  "acceptance": [
+    "Несколько отфильтрованных строк перемещаются одним действием.",
+    "Изменившийся между экраном и POST остаток даёт понятную ошибку и не меняет ни одной строки.",
+    "Подмена balance id или destination отклоняется.",
+    "Созданный документ виден в журнале и корректно сторнируется.",
+    "Межподразделенческий вариант отсутствует и отклоняется сервером."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_posting.py",
+    "make verify-fast TEST_SCOPE=apps/warehouse/tests/test_views_security.py",
+    "python manage.py warehouse_acceptance_e2e",
+    "make verify-profile PROFILE=ui",
+    "Playwright: filter/select/quantity/destination/save/stale balance",
+    "git diff --check"
+  ],
+  "report": "workflow/active/warehouse-ux-simplification/EXECUTOR_REPORT.05-stock-list-relocation-mode.md"
+}

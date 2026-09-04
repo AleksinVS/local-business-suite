@@ -1,0 +1,51 @@
+{
+  "task_id": "02-right-panel-form-modes",
+  "title": "Подготовить общий правый сайдбар к доменным формам",
+  "type": "implementation",
+  "executor": {
+    "recommended_model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "rationale": "Изменение общего shell, фокуса, HTMX и границы AI/UI требует осторожной реализации."
+  },
+  "objective": "Поддержать безопасные пользовательские create/edit формы в общей панели, сохранив AI tool только view-only.",
+  "read_scope": [
+    "apps/core/right_panels.py",
+    "static/src/js/right_panel.js",
+    "templates/base.html",
+    "apps/ai/",
+    "docs/adr/ADR-0020-universal-right-drawer-ai-navigation.md",
+    "docs/adr/ADR-0049-portal-autocomplete-and-contextual-form-panels.md"
+  ],
+  "write_scope": [
+    "apps/core/right_panels.py",
+    "apps/core/tests.py",
+    "static/src/js/right_panel.js",
+    "static/src/css/app.css",
+    "templates/base.html",
+    "scripts/e2e/"
+  ],
+  "requirements": [
+    "Добавить workspace-size и полноэкранный режим на узкой ширине.",
+    "Обработать GET, ошибки HTMX, повторную отправку, focus trap, восстановление фокуса и доменные success events.",
+    "Не добавлять подтверждение перед сохранением или проведением.",
+    "Допустить guard только при закрытии панели с несохранёнными изменениями.",
+    "Не расширять ui.open_right_panel для AI на create/edit.",
+    "Не вводить универсальный CRUD или произвольные URL."
+  ],
+  "acceptance": [
+    "Тестовая доменная форма создаётся и редактируется в панели через HTMX.",
+    "Ошибка валидации остаётся в панели и сохраняет введённые значения.",
+    "Успех генерирует событие обновления и не допускает двойной записи.",
+    "На 390 px обязательные кнопки доступны без горизонтальной обрезки.",
+    "AI create/edit остаётся запрещён серверным тестом."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/core",
+    "node --check static/src/js/right_panel.js",
+    "make verify-profile PROFILE=ui",
+    "Playwright: create/edit/error/mobile/focus",
+    "git diff --check"
+  ],
+  "report": "workflow/active/warehouse-ux-simplification/EXECUTOR_REPORT.02-right-panel-form-modes.md"
+}
+

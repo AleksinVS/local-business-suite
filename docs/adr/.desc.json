@@ -47,5 +47,7 @@
   "ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md": "Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию",
   "ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md": "Предлагаемый ADR: копирование ролей сейчас и ограниченная аддитивная иерархия после отдельного подтверждения",
   "ADR-0047-warehouse-ledger-and-department-scoped-access.md": "Принятый ADR: складской журнал, адресное хранение и доступ по подразделениям",
-  "ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md": "Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий"
+  "ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md": "Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий",
+  "ADR-0049-portal-autocomplete-and-contextual-form-panels.md": "Принятый ADR: общее автодополнение и доменные формы в правой панели",
+  "ADR-0050-warehouse-inline-series-and-list-relocation.md": "Принятый ADR: серия в строке складского движения и перемещение из списка остатков"
 }

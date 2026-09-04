@@ -34,5 +34,6 @@
   "POSTGRESQL_PRIMARY_STORE_PLAN.md": "План миграции основного хранилища на одну PostgreSQL database и выноса SQLite-варианта",
   "SETTINGS_STORAGE_TARGET_ARCHITECTURE.md": "Целевая архитектура хранения настроек: единый реестр, Git-дефолты и PostgreSQL runtime-документы",
   "project-knowledge-system-v0.1.md": "Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)",
-  "WAREHOUSE_SYSTEM_ARCHITECTURE.md": "Архитектура общего раздела Склад, прав, отчётов и legacy-миграции"
+  "WAREHOUSE_SYSTEM_ARCHITECTURE.md": "Архитектура общего раздела Склад, прав, отчётов и legacy-миграции",
+  "WAREHOUSE_UX_TARGET_ARCHITECTURE.md": "Целевая UX-архитектура склада, inline-серии, перемещения и общего автодополнения"
 }

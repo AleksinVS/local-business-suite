@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% load static %}
 {% block content %}<section class="panel"><h1>{{ document }}</h1><p>{{ document.department }} · {{ document.get_status_display }}</p>
-<div class="table-container"><table><thead><tr><th>Позиция</th><th>Партия</th><th>Источник</th><th>Количество</th></tr></thead><tbody>
-{% for line in document.lines.all %}<tr><td>{{ line.item }}</td><td>{{ line.lot }}</td><td>{{ line.funding_source }}</td><td>{{ line.quantity }}</td></tr>{% endfor %}
+{% if document.status == 'draft' and can_operate_document %}<p><a class="btn btn-primary" href="{% url 'warehouse:document_edit_panel' document.pk %}" onclick="event.preventDefault(); openGlobalRightPanel({type:'open_right_panel_form',mode:'edit',title:'Редактирование документа',drawer_size:'workspace',htmx_url:this.href});">Редактировать</a></p>{% endif %}
+<div class="table-container"><table><thead><tr><th>Позиция</th><th>Серия</th><th>Срок годности</th><th>Источник</th><th>Количество</th></tr></thead><tbody>
+{% for line in document.lines.all %}<tr><td>{{ line.item }}</td><td>{{ line.series|default:"—" }}</td><td>{{ line.expires_on|default:"—" }}</td><td>{{ line.funding_source }}</td><td>{{ line.quantity }}</td></tr>{% endfor %}
 </tbody></table></div>
 {% if document.status == 'draft' and can_operate_document %}<form method="post" action="{% url 'warehouse:document_post' document.pk %}">{% csrf_token %}<button class="btn btn-primary" type="submit">Провести</button></form>
 <form method="post" action="{% url 'warehouse:document_cancel' document.pk %}">{% csrf_token %}<label>Причина отмены <input name="reason" required></label><button class="btn btn-outline" type="submit">Отменить</button></form>{% endif %}

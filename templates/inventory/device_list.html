@@ -16,13 +16,12 @@
         <input type="search" id="searchInput" name="q" value="{{ filters.q }}" placeholder="Поиск по названию, модели, серийному номеру, рег. номеру">
       </div>
       <div class="input-group">
-        <label for="deptSelect">Подразделение</label>
-        <select id="deptSelect" name="department">
-          <option value="">Все подразделения</option>
-          {% for department in departments %}
-            <option value="{{ department.id }}" {% if filters.department == department.id|stringformat:"s" %}selected{% endif %}>{{ department.indented_name }}</option>
-          {% endfor %}
-        </select>
+        <label for="inventoryDepartmentSearch">Подразделение</label>
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'inventory:department_options' %}">
+          <input type="hidden" name="department" value="{{ filters.department }}" data-autocomplete-value>
+          <input type="search" id="inventoryDepartmentSearch" value="{{ filters.department_label }}" placeholder="Все подразделения" autocomplete="off" data-autocomplete-input>
+          <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
       </div>
       <div class="input-group">
         <label for="statusSelect">Статус</label>

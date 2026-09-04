@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 import uuid
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -17,6 +18,7 @@ from apps.warehouse.models import (
     StockEntry,
     StorageLocation,
     WarehouseAuditEvent,
+    WarehouseItem,
 )
 from apps.warehouse.policies import require_warehouse_scope
 
@@ -24,14 +26,52 @@ from apps.warehouse.policies import require_warehouse_scope
 class WarehousePostingError(ValidationError):
     """Ошибка бизнес-инварианта, при которой документ не проводится."""
 
+    def __init__(self, message, *, line_sequence=None, line_index=None, field=None):
+        super().__init__(message)
+        self.line_sequence = line_sequence
+        self.line_index = line_index
+        self.field = field
 
-@dataclass(frozen=True, order=True)
+
+def _line_error(line, field, message):
+    return WarehousePostingError(
+        {field: message}, line_sequence=line.sequence, field=field
+    )
+
+
+def _annotate_line_error(error, line, *, line_index=None, field=None):
+    """Attach stable row identity without parsing human-facing text."""
+    if getattr(error, "line_sequence", None) is None:
+        error.line_sequence = line.sequence
+    if getattr(error, "line_index", None) is None:
+        error.line_index = line_index
+    if getattr(error, "field", None) is None and field:
+        error.field = field
+    return error
+
+
+@dataclass(frozen=True)
 class _BalanceKey:
     department_id: int
     warehouse_id: int
     location_id: int
-    lot_id: int
+    item_id: int
+    series_key: str
+    expires_on: date | None
     funding_source_id: int
+
+
+def _key_sort_value(key: _BalanceKey):
+    return (
+        key.department_id,
+        key.warehouse_id,
+        key.location_id,
+        key.item_id,
+        key.series_key,
+        key.expires_on is None,
+        key.expires_on or date.max,
+        key.funding_source_id,
+    )
 
 
 def _normalized_quantity(line: StockDocumentLine) -> Decimal:
@@ -60,7 +100,9 @@ def _key_for(line: StockDocumentLine, location: StorageLocation) -> _BalanceKey:
         department_id=line.document.department_id,
         warehouse_id=location.warehouse_id,
         location_id=location.pk,
-        lot_id=line.lot_id,
+        item_id=line.item_id,
+        series_key=line.series_key,
+        expires_on=line.expires_on,
         funding_source_id=line.funding_source_id,
     )
 
@@ -92,12 +134,41 @@ def _movement_specs(
     raise WarehousePostingError("Неподдерживаемый тип складского документа.")
 
 
-def _validate_location(location: StorageLocation, *, incoming: bool) -> None:
+def _validate_location(
+    location: StorageLocation,
+    *,
+    incoming: bool,
+    document_type: str,
+    allow_legacy_unassigned: bool = False,
+) -> None:
     if location is None:
         raise WarehousePostingError("В строке не указан обязательный адрес хранения.")
-    if incoming and not location.is_active:
+    ordinary_document = document_type in {
+        StockDocument.DocumentType.OPENING,
+        StockDocument.DocumentType.RECEIPT,
+        StockDocument.DocumentType.ISSUE,
+        StockDocument.DocumentType.WRITEOFF,
+    }
+    if ordinary_document and not location.is_active:
         raise WarehousePostingError(
-            {"destination_location": "Нельзя размещать остаток в неактивном адресе."}
+            {
+                "destination_location" if incoming else "source_location":
+                "Обычная операция разрешена только в активном адресе."
+            }
+        )
+    legacy_unassigned_opening = (
+        allow_legacy_unassigned
+        and document_type == StockDocument.DocumentType.OPENING
+        and location.purpose == StorageLocation.Purpose.UNASSIGNED
+    )
+    if (
+        ordinary_document
+        and location.purpose != StorageLocation.Purpose.AVAILABLE
+        and not legacy_unassigned_opening
+    ):
+        field = "destination_location" if incoming else "source_location"
+        raise WarehousePostingError(
+            {field: "Обычная операция разрешена только в доступном адресе."}
         )
 
 
@@ -105,37 +176,32 @@ def _validate_fefo(document: StockDocument, line: StockDocumentLine) -> None:
     if document.document_type != StockDocument.DocumentType.ISSUE:
         return
     if line.source_location.purpose != StorageLocation.Purpose.AVAILABLE:
-        raise WarehousePostingError(
-            {"source_location": "Выдача разрешена только из доступного адреса."}
-        )
-    if line.lot.expires_on and line.lot.expires_on < document.operation_date:
-        raise WarehousePostingError({"lot": "Нельзя выдать просроченную партию."})
+        raise _line_error(line, "source_location", "Выдача разрешена только из доступного адреса.")
+    if line.expires_on and line.expires_on < document.operation_date:
+        raise _line_error(line, "expires_on", "Нельзя выдать просроченную серию.")
 
     earliest = (
         StockBalance.objects.filter(
             department_id=document.department_id,
-            lot__item_id=line.item_id,
+            item_id=line.item_id,
             funding_source_id=line.funding_source_id,
             location__purpose=StorageLocation.Purpose.AVAILABLE,
             location__is_active=True,
             quantity__gt=0,
         )
-        .exclude(lot__expires_on__lt=document.operation_date)
-        .exclude(lot__expires_on__isnull=True)
-        .select_related("lot")
-        .order_by("lot__expires_on", "lot__batch_number", "lot_id")
+        .exclude(expires_on__lt=document.operation_date)
+        .exclude(expires_on__isnull=True)
+        .order_by("expires_on", "series_key", "id")
         .first()
     )
-    selected_expiry = line.lot.expires_on
-    if earliest and (selected_expiry is None or earliest.lot.expires_on < selected_expiry):
+    selected_expiry = line.expires_on
+    if earliest and (selected_expiry is None or earliest.expires_on < selected_expiry):
         if not line.fefo_override_reason.strip():
-            raise WarehousePostingError(
-                {
-                    "fefo_override_reason": (
-                        "Выбрана не ближайшая по сроку годности доступная партия; "
-                        "укажите причину отклонения от FEFO."
-                    )
-                }
+            raise _line_error(
+                line,
+                "fefo_override_reason",
+                "Выбрана не ближайшая по сроку годности доступная серия; "
+                "укажите причину отклонения от FEFO.",
             )
 
 
@@ -143,7 +209,6 @@ def _load_lines(document: StockDocument) -> list[StockDocumentLine]:
     lines = list(
         document.lines.select_related(
             "item__unit",
-            "lot",
             "funding_source",
             "source_location__warehouse",
             "destination_location__warehouse",
@@ -151,25 +216,77 @@ def _load_lines(document: StockDocument) -> list[StockDocumentLine]:
     )
     if not lines:
         raise WarehousePostingError("Нельзя провести документ без строк.")
-    for line in lines:
-        line.full_clean()
+    expiries_by_series: dict[tuple[int, str], set[date | None]] = defaultdict(set)
+    for line_index, line in enumerate(lines):
+        try:
+            line.full_clean()
+        except ValidationError as exc:
+            raise _annotate_line_error(
+                WarehousePostingError(exc), line, line_index=line_index
+            ) from exc
+        if line.series_key:
+            expiries_by_series[(line.item_id, line.series_key)].add(line.expires_on)
+    if any(len(expiries) > 1 for expiries in expiries_by_series.values()):
+        raise WarehousePostingError(
+            {"expires_on": "Одна серия позиции указана с разными сроками годности."}
+        )
     return lines
 
 
+def _lock_document_items(document: StockDocument) -> tuple[int, ...]:
+    """Serialize series validation/posting for every item in the document.
+
+    The item row is the stable database barrier available without restoring a
+    separate series table.  A transaction waiting here observes the entries
+    committed by the preceding transaction before ``_load_lines`` performs the
+    series/expiry conflict check again.
+    """
+
+    item_ids = tuple(
+        sorted(set(document.lines.values_list("item_id", flat=True)))
+    )
+    return tuple(
+        WarehouseItem.objects.select_for_update()
+        .filter(pk__in=item_ids)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    )
+
+
 def _apply_movements(
-    *, document: StockDocument, lines: list[StockDocumentLine]
+    *,
+    document: StockDocument,
+    lines: list[StockDocumentLine],
+    allow_legacy_unassigned: bool = False,
 ) -> list[StockEntry]:
     deltas: dict[_BalanceKey, Decimal] = defaultdict(Decimal)
     entry_specs: list[tuple[StockDocumentLine, StorageLocation, Decimal]] = []
     locations: dict[int, StorageLocation] = {}
+    samples: dict[_BalanceKey, StockDocumentLine] = {}
 
-    for line in lines:
-        _validate_fefo(document, line)
-        for location, quantity in _movement_specs(document, line):
-            _validate_location(location, incoming=quantity > 0)
+    for line_index, line in enumerate(lines):
+        try:
+            _validate_fefo(document, line)
+            movement_specs = _movement_specs(document, line)
+        except WarehousePostingError as exc:
+            raise _annotate_line_error(exc, line, line_index=line_index) from exc
+        for location, quantity in movement_specs:
+            try:
+                _validate_location(
+                    location,
+                    incoming=quantity > 0,
+                    document_type=document.document_type,
+                    allow_legacy_unassigned=allow_legacy_unassigned,
+                )
+            except WarehousePostingError as exc:
+                field = "destination_location" if quantity > 0 else "source_location"
+                raise _annotate_line_error(
+                    exc, line, line_index=line_index, field=field
+                ) from exc
             locations[location.pk] = location
             key = _key_for(line, location)
             deltas[key] += quantity
+            samples.setdefault(key, line)
             entry_specs.append((line, location, quantity))
 
     list(
@@ -177,36 +294,51 @@ def _apply_movements(
         .filter(pk__in=sorted(locations))
         .order_by("pk")
     )
-    keys = sorted(deltas)
+    keys = sorted(deltas, key=_key_sort_value)
     existing = {
         _BalanceKey(
             balance.department_id,
             balance.warehouse_id,
             balance.location_id,
-            balance.lot_id,
+            balance.item_id,
+            balance.series_key,
+            balance.expires_on,
             balance.funding_source_id,
         ): balance
         for balance in StockBalance.objects.select_for_update()
         .filter(
             department_id=document.department_id,
             location_id__in=[key.location_id for key in keys],
-            lot_id__in=[key.lot_id for key in keys],
+            item_id__in=[key.item_id for key in keys],
             funding_source_id__in=[key.funding_source_id for key in keys],
         )
-        .order_by("department_id", "warehouse_id", "location_id", "lot_id", "funding_source_id")
+        .order_by(
+            "department_id",
+            "warehouse_id",
+            "location_id",
+            "item_id",
+            "series_key",
+            "expires_on",
+            "funding_source_id",
+        )
     }
 
     balances: dict[_BalanceKey, StockBalance] = {}
     for key in keys:
         balance = existing.get(key)
         if balance is None:
+            sample = samples[key]
             try:
                 with transaction.atomic():
                     balance = StockBalance.objects.create(
                         department_id=key.department_id,
                         warehouse_id=key.warehouse_id,
                         location_id=key.location_id,
-                        lot_id=key.lot_id,
+                        item_id=key.item_id,
+                        series=sample.series,
+                        series_key=key.series_key,
+                        expires_on=key.expires_on,
+                        incomplete_reason=sample.incomplete_reason,
                         funding_source_id=key.funding_source_id,
                         quantity=0,
                     )
@@ -215,13 +347,18 @@ def _apply_movements(
                     department_id=key.department_id,
                     warehouse_id=key.warehouse_id,
                     location_id=key.location_id,
-                    lot_id=key.lot_id,
+                    item_id=key.item_id,
+                    series_key=key.series_key,
+                    expires_on=key.expires_on,
                     funding_source_id=key.funding_source_id,
                 )
         resulting_quantity = balance.quantity + deltas[key]
         if resulting_quantity < 0:
-            raise WarehousePostingError(
-                "Операция создаёт отрицательный остаток. Проведение отменено."
+            sample = samples[key]
+            raise _line_error(
+                sample,
+                "quantity",
+                "Операция создаёт отрицательный остаток. Проведение отменено.",
             )
         balance.quantity = resulting_quantity
         balance.updated_at = timezone.now()
@@ -235,7 +372,11 @@ def _apply_movements(
             department_id=document.department_id,
             warehouse_id=location.warehouse_id,
             location_id=location.pk,
-            lot_id=line.lot_id,
+            item_id=line.item_id,
+            series=line.series,
+            series_key=line.series_key,
+            expires_on=line.expires_on,
+            incomplete_reason=line.incomplete_reason,
             unit_id=line.item.unit_id,
             funding_source_id=line.funding_source_id,
             quantity=quantity,
@@ -257,7 +398,7 @@ def _apply_reversal(
     line_by_sequence = {line.sequence: line for line in lines}
     source_lines = {
         line.sequence: line
-        for line in source.lines.select_related("item", "lot", "funding_source").all()
+        for line in source.lines.select_related("item", "funding_source").all()
     }
     if set(line_by_sequence) != set(source_lines):
         raise WarehousePostingError("Строки сторно не соответствуют исходному документу.")
@@ -265,7 +406,10 @@ def _apply_reversal(
         original_line = source_lines[sequence]
         if (
             reversal_line.item_id != original_line.item_id
-            or reversal_line.lot_id != original_line.lot_id
+            or reversal_line.series != original_line.series
+            or reversal_line.series_key != original_line.series_key
+            or reversal_line.expires_on != original_line.expires_on
+            or reversal_line.incomplete_reason != original_line.incomplete_reason
             or reversal_line.funding_source_id != original_line.funding_source_id
             or reversal_line.quantity != original_line.quantity
             or reversal_line.source_location_id != original_line.source_location_id
@@ -292,7 +436,9 @@ def _apply_reversal(
             entry.department_id,
             entry.warehouse_id,
             entry.location_id,
-            entry.lot_id,
+            entry.item_id,
+            entry.series_key,
+            entry.expires_on,
             entry.funding_source_id,
         )
         quantity = -entry.quantity
@@ -310,7 +456,9 @@ def _apply_reversal(
             balance.department_id,
             balance.warehouse_id,
             balance.location_id,
-            balance.lot_id,
+            balance.item_id,
+            balance.series_key,
+            balance.expires_on,
             balance.funding_source_id,
         ): balance
         for balance in StockBalance.objects.select_for_update()
@@ -318,9 +466,17 @@ def _apply_reversal(
             department_id=document.department_id,
             location_id__in=location_ids,
         )
-        .order_by("department_id", "warehouse_id", "location_id", "lot_id", "funding_source_id")
+        .order_by(
+            "department_id",
+            "warehouse_id",
+            "location_id",
+            "item_id",
+            "series_key",
+            "expires_on",
+            "funding_source_id",
+        )
     }
-    for key, delta in sorted(deltas.items()):
+    for key, delta in sorted(deltas.items(), key=lambda item: _key_sort_value(item[0])):
         balance = balances.get(key)
         if balance is None or balance.quantity + delta < 0:
             raise WarehousePostingError(
@@ -337,7 +493,11 @@ def _apply_reversal(
                 department_id=entry.department_id,
                 warehouse_id=entry.warehouse_id,
                 location_id=entry.location_id,
-                lot_id=entry.lot_id,
+                item_id=entry.item_id,
+                series=entry.series,
+                series_key=entry.series_key,
+                expires_on=entry.expires_on,
+                incomplete_reason=entry.incomplete_reason,
                 unit_id=entry.unit_id,
                 funding_source_id=entry.funding_source_id,
                 quantity=quantity,
@@ -349,7 +509,9 @@ def _apply_reversal(
 
 
 @transaction.atomic
-def post_document(*, document_id: int, actor) -> StockDocument:
+def post_document(
+    *, document_id: int, actor, allow_legacy_unassigned: bool = False
+) -> StockDocument:
     document = (
         StockDocument.objects.select_for_update()
         .select_related("department")
@@ -372,12 +534,27 @@ def post_document(*, document_id: int, actor) -> StockDocument:
         return document
     if document.status != StockDocument.Status.DRAFT:
         raise WarehousePostingError("Провести можно только черновик.")
+    allow_legacy_unassigned = bool(
+        allow_legacy_unassigned
+        and document.document_type == StockDocument.DocumentType.OPENING
+        and str(document.external_source_id or "").startswith("legacy:")
+        and get_user_model().objects.filter(
+            pk=getattr(actor, "pk", None), is_active=True, is_superuser=True
+        ).exists()
+    )
     document.full_clean()
+    _lock_document_items(document)
+    # Re-read and validate after the item locks. This closes the race where two
+    # receipts introduce the same normalized series with different expiries.
     lines = _load_lines(document)
     if document.document_type == StockDocument.DocumentType.REVERSAL:
         entries = _apply_reversal(document=document, lines=lines)
     else:
-        entries = _apply_movements(document=document, lines=lines)
+        entries = _apply_movements(
+            document=document,
+            lines=lines,
+            allow_legacy_unassigned=allow_legacy_unassigned,
+        )
     document.status = StockDocument.Status.POSTED
     document.posted_by = actor
     document.posted_at = timezone.now()
@@ -464,14 +641,17 @@ def reverse_document(
                 document=reversal,
                 sequence=line.sequence,
                 item=line.item,
-                lot=line.lot,
+                series=line.series,
+                series_key=line.series_key,
+                expires_on=line.expires_on,
+                incomplete_reason=line.incomplete_reason,
                 funding_source=line.funding_source,
                 quantity=line.quantity,
                 source_location=line.source_location,
                 destination_location=line.destination_location,
             )
             for line in source.lines.select_related(
-                "item", "lot", "funding_source", "source_location", "destination_location"
+                "item", "funding_source", "source_location", "destination_location"
             ).order_by("sequence", "id")
         ]
     )

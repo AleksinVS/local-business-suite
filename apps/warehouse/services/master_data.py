@@ -5,7 +5,6 @@ from django.db import transaction
 
 from apps.warehouse.models import (
     FundingSource,
-    StockLot,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,
@@ -17,7 +16,6 @@ from apps.warehouse.models import (
 from apps.warehouse.policies import (
     WAREHOUSE_MANAGE_LOCATIONS_SCOPE,
     WAREHOUSE_MANAGE_REPORT_PROFILES_SCOPE,
-    WAREHOUSE_OPERATE_SCOPE,
     require_warehouse_catalog_access,
     require_warehouse_scope,
 )
@@ -71,7 +69,11 @@ def save_warehouse(*, actor, cleaned_data: dict, warehouse_id: int | None = None
         capability=WAREHOUSE_MANAGE_LOCATIONS_SCOPE,
         department=department,
     )
-    _assign(instance, cleaned_data, ("department", "code", "name", "is_active"))
+    _assign(
+        instance,
+        cleaned_data,
+        ("department", "code", "name", "default_receiving_location", "is_active"),
+    )
     instance.full_clean()
     instance.save()
     _audit(
@@ -82,7 +84,6 @@ def save_warehouse(*, actor, cleaned_data: dict, warehouse_id: int | None = None
         summary={"code": instance.code, "is_active": instance.is_active},
     )
     return instance
-
 
 @transaction.atomic
 def save_storage_location(*, actor, cleaned_data: dict, location_id: int | None = None):
@@ -174,36 +175,5 @@ def save_catalog_record(*, actor, model, cleaned_data: dict, object_id: int | No
         action="catalog.saved",
         instance=instance,
         summary={"code": instance.code, "is_active": instance.is_active},
-    )
-    return instance
-
-
-@transaction.atomic
-def register_stock_lot(*, actor, cleaned_data: dict):
-    department = cleaned_data.get("department")
-    require_warehouse_scope(
-        actor=actor,
-        capability=WAREHOUSE_OPERATE_SCOPE,
-        department=department,
-    )
-    instance = StockLot()
-    _assign(
-        instance,
-        cleaned_data,
-        ("item", "batch_number", "expires_on", "incomplete_reason"),
-    )
-    instance.full_clean()
-    instance.save()
-    _audit(
-        actor=actor,
-        department=department,
-        action="stock_lot.registered",
-        instance=instance,
-        summary={
-            "item_id": instance.item_id,
-            "expires_on": instance.expires_on.isoformat()
-            if instance.expires_on
-            else None,
-        },
     )
     return instance

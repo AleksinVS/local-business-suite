@@ -33,12 +33,11 @@
         <option value="{{ value }}" {% if filters.issue_kind == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <select name="source">
-      <option value="">Все источники</option>
-      {% for source in sources %}
-        <option value="{{ source }}" {% if filters.source == source %}selected{% endif %}>{{ source }}</option>
-      {% endfor %}
-    </select>
+    <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'memory:source_options' %}">
+      <input type="hidden" name="source" value="{{ filters.source }}" data-autocomplete-value>
+      <input type="search" value="{{ filters.source }}" data-autocomplete-input autocomplete="off" placeholder="Все источники" aria-label="Источник">
+      <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+    </div>
     <select name="flag">
       <option value="">Все группы</option>
       <option value="privacy" {% if filters.flag == "privacy" %}selected{% endif %}>Персональные данные</option>

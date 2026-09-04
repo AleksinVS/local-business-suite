@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+from django.db.models import Q
+
 from apps.memory.models import MemorySearchDocument, MemorySource, MemorySourceObject
 from apps.memory.policies import (
     can_access_search_document,
@@ -112,6 +114,38 @@ def visible_file_objects(actor, *, source=None):
     if getattr(actor, "is_superuser", False):
         return queryset.filter(source__status=MemorySource.Status.ENABLED)
     return [file_object for file_object in queryset if can_access_file_object(actor, file_object)]
+
+
+def file_object_autocomplete_candidates(actor, *, query="", limit=20):
+    """Return a bounded database window, then apply the canonical file ACL."""
+
+    actor = resolve_active_actor(actor, force_refresh=True)
+    if actor is None:
+        return []
+    bounded_limit = max(1, min(int(limit), 20))
+    queryset = MemoryFileObject.objects.select_related(
+        "source",
+        "current_version",
+        "current_version__source_object",
+    ).filter(source__status=MemorySource.Status.ENABLED)
+    normalized_query = str(query or "").strip()
+    if normalized_query:
+        queryset = queryset.filter(
+            Q(file_id__icontains=normalized_query)
+            | Q(source__code__icontains=normalized_query)
+            | Q(current_version__source_object__file_name__icontains=normalized_query)
+        )
+    queryset = queryset.order_by("source__code", "file_id", "pk")
+    candidates = queryset[: min(max(bounded_limit * 5, 50), 100)]
+    if getattr(actor, "is_superuser", False):
+        return list(candidates[:bounded_limit])
+    result = []
+    for file_object in candidates:
+        if can_access_file_object(actor, file_object):
+            result.append(file_object)
+            if len(result) >= bounded_limit:
+                break
+    return result
 
 
 def proposal_membership_is_visible(actor, proposal) -> bool:

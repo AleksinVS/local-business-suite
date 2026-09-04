@@ -11,6 +11,10 @@
     <link rel="apple-touch-icon" sizes="192x192" href="{% static 'icons/pwa-icon-192.png' %}">
     <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
     <link rel="stylesheet" href="{% static 'src/css/app.css' %}?v=pwa-v8">
+    <link rel="stylesheet" href="{% static 'src/css/autocomplete.css' %}?v=portal-v1">
+    <link rel="stylesheet" href="{% static 'src/css/warehouse_document.css' %}?v=warehouse-ux-v1">
+    <link rel="stylesheet" href="{% static 'src/css/warehouse_relocation.css' %}?v=warehouse-ux-v1">
+    <link rel="stylesheet" href="{% static 'src/css/warehouse-reports.css' %}?v=warehouse-ux-v1">
     {% if copilotkit_enabled %}
       <link rel="stylesheet" href="{% static 'dist/copilotkit/copilotkit-island.css' %}?v={{ copilotkit_css_version }}">
     {% elif native_ai_ui_enabled %}
@@ -171,7 +175,7 @@
     </div>
 
     <div class="drawer-overlay global-right-panel-overlay" id="globalRightPanelOverlay" onclick="closeGlobalRightPanel()"></div>
-    <aside class="drawer global-right-panel" id="global-right-panel" aria-label="Правая панель" aria-hidden="true">
+    <aside class="drawer global-right-panel" id="global-right-panel" aria-label="Правая панель" aria-hidden="true" tabindex="-1">
       <div id="global-right-panel-content" class="global-right-panel-content">
         <div class="drawer-content">
           <div class="text-muted">Панель не открыта.</div>
@@ -377,7 +381,8 @@
     <script src="{% static 'src/js/page_context.js' %}?v=pwa-v4"></script>
     <script src="{% static 'src/js/waiting_list_cards.js' %}?v=pwa-v4"></script>
     {% if user.is_authenticated %}<script src="{% static 'src/js/role_capability_editor.js' %}?v=role-capability-v3"></script>{% endif %}
-    <script src="{% static 'src/js/right_panel.js' %}?v=pwa-v5"></script>
+    <script src="{% static 'src/js/autocomplete.js' %}?v=portal-v1"></script>
+    <script src="{% static 'src/js/right_panel.js' %}?v=right-panel-forms-v1"></script>
     <script src="{% static 'src/js/inventory_groups.js' %}?v=pwa-v4"></script>
     <script src="{% static 'src/js/sidebar_resize.js' %}?v=sidebar-resize-v1"></script>
     {% if copilotkit_enabled %}

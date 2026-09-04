@@ -8,18 +8,20 @@ from zipfile import ZipFile
 import pytest
 
 from apps.warehouse.models import StockDocument
-from apps.warehouse.reports.datasets import build_expense_report
+from apps.warehouse.reports.datasets import ReportTooLargeError, build_expense_report
 from apps.warehouse.reports.exports import export_csv, export_xlsx
 
 
 def _entry(quantity, operation_date, department_id=1, item_id=2, funding_id=3, unit_id=4, kind="receipt"):
     item = SimpleNamespace(name="Item", id=item_id)
-    lot = SimpleNamespace(item=item, item_id=item_id)
     document = SimpleNamespace(status=StockDocument.Status.POSTED, document_type=kind, reverses_document_id=None)
     return SimpleNamespace(quantity=Decimal(quantity), operation_date=operation_date, department_id=department_id,
-                           funding_source_id=funding_id, unit_id=unit_id, lot=lot, document=document,
+                           funding_source_id=funding_id, unit_id=unit_id, item=item, item_id=item_id,
+                           series="S-1", series_key="s-1", expires_on=date(2027, 1, 1), document=document,
                            department=SimpleNamespace(name="Dept"), funding_source=SimpleNamespace(name="Fund"),
-                           unit=SimpleNamespace(name="pcs"))
+                           unit=SimpleNamespace(name="pcs"), warehouse_id=5, location_id=6,
+                           warehouse=SimpleNamespace(name="WH"),
+                           location=SimpleNamespace(name="Rack", code="R-1"))
 
 
 class WarehouseReportDatasetTests(TestCase):
@@ -31,6 +33,14 @@ class WarehouseReportDatasetTests(TestCase):
         self.assertEqual(rows[0]["opening"], Decimal("10"))
         self.assertEqual(rows[0]["outgoing"], Decimal("3"))
         self.assertEqual(rows[0]["closing"], Decimal("7"))
+
+    def test_report_row_guard_rejects_new_groups_before_materializing_too_many(self):
+        with self.assertRaises(ReportTooLargeError):
+            build_expense_report(
+                department_ids=[1, 2], period_start=date(2026, 1, 1), period_end=date(2026, 1, 31),
+                entries=[_entry("1", date(2026, 1, 1), department_id=1), _entry("1", date(2026, 1, 1), department_id=2)],
+                max_rows=1,
+            )
 
 
 class WarehouseReportExportTests(TestCase):

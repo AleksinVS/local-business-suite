@@ -8,3 +8,6 @@ class AccountsConfig(AppConfig):
     def ready(self):
         """Регистрация сигналов при загрузке приложения"""
         import apps.accounts.signals
+        from . import autocomplete
+
+        autocomplete.register()

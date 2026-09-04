@@ -218,14 +218,33 @@ def issue_available_actions(issue: MemoryIngestionIssue, *, user) -> tuple[str, 
     return tuple(dict.fromkeys(actions))
 
 
-def assignees_for_issue(issue: MemoryIngestionIssue, *, actor):
+def assignees_for_issue(
+    issue: MemoryIngestionIssue,
+    *,
+    actor,
+    query: str = "",
+    limit: int | None = None,
+):
     """Return only active operators who can actually work on this issue."""
     from .policies import can_review_memory_issues, can_review_memory_privacy_issues
 
     actor = resolve_active_actor(actor, force_refresh=True)
     if actor is None or not can_view_memory_review_queue(actor) or not can_review_scoped_issue(actor, issue):
         return []
-    candidates = get_user_model().objects.filter(is_active=True).prefetch_related("groups").order_by("username")
+    candidates = get_user_model().objects.filter(is_active=True)
+    normalized_query = str(query or "").strip()
+    if normalized_query:
+        candidates = candidates.filter(
+            Q(username__icontains=normalized_query)
+            | Q(first_name__icontains=normalized_query)
+            | Q(last_name__icontains=normalized_query)
+        )
+    candidates = candidates.prefetch_related("groups").order_by("username", "pk")
+    if limit is not None:
+        bounded_limit = max(1, min(int(limit), 20))
+        candidates = candidates[: min(max(bounded_limit * 5, 50), 100)]
+    else:
+        bounded_limit = None
     result = []
     for assignee in candidates:
         if not can_review_memory_issues(assignee):
@@ -234,6 +253,8 @@ def assignees_for_issue(issue: MemoryIngestionIssue, *, actor):
             continue
         if can_review_scoped_issue(assignee, issue):
             result.append(assignee)
+            if bounded_limit is not None and len(result) >= bounded_limit:
+                break
     return result
 
 

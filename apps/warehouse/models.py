@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Q
 
 from apps.core.models import Department
+from apps.warehouse.series import SERIES_MAX_LENGTH, normalize_series
 
 
 QUANTITY_MAX_DIGITS = 20
@@ -123,6 +124,15 @@ class Warehouse(models.Model):
     code = models.CharField("Код", max_length=64)
     name = models.CharField("Наименование", max_length=255)
     is_active = models.BooleanField("Активно", default=True)
+    default_receiving_location = models.ForeignKey(
+        "StorageLocation",
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="Адрес приёмки по умолчанию",
+        blank=True,
+        null=True,
+        help_text="Активный доступный адрес этого склада.",
+    )
     created_at = models.DateTimeField("Создано", auto_now_add=True)
     updated_at = models.DateTimeField("Изменено", auto_now=True)
 
@@ -143,6 +153,24 @@ class Warehouse(models.Model):
 
     def clean(self):
         super().clean()
+        if self.default_receiving_location_id:
+            location = self.default_receiving_location
+            if not self.pk or location.warehouse_id != self.pk:
+                raise ValidationError(
+                    {
+                        "default_receiving_location": (
+                            "Адрес приёмки должен принадлежать выбранному складу."
+                        )
+                    }
+                )
+            if not location.is_active or location.purpose != StorageLocation.Purpose.AVAILABLE:
+                raise ValidationError(
+                    {
+                        "default_receiving_location": (
+                            "Адрес приёмки должен быть активным и доступным для выдачи."
+                        )
+                    }
+                )
         if self.pk:
             previous_department_id = type(self).objects.filter(pk=self.pk).values_list(
                 "department_id", flat=True
@@ -211,6 +239,18 @@ class StorageLocation(models.Model):
 
     def clean(self):
         super().clean()
+        if self.pk and Warehouse.objects.filter(
+            default_receiving_location_id=self.pk
+        ).exists():
+            if not self.is_active or self.purpose != self.Purpose.AVAILABLE:
+                raise ValidationError(
+                    {
+                        "purpose": (
+                            "Адрес приёмки по умолчанию должен оставаться активным "
+                            "и доступным для выдачи."
+                        )
+                    }
+                )
         if self.pk:
             previous_warehouse_id = type(self).objects.filter(pk=self.pk).values_list(
                 "warehouse_id", flat=True
@@ -220,61 +260,6 @@ class StorageLocation(models.Model):
                     raise ValidationError(
                         {"warehouse": "Нельзя переносить использованный адрес в другой склад."}
                     )
-
-
-class StockLot(models.Model):
-    item = models.ForeignKey(
-        WarehouseItem,
-        on_delete=models.PROTECT,
-        related_name="lots",
-        verbose_name="Позиция",
-    )
-    batch_number = models.CharField("Серия/партия", max_length=255, blank=True)
-    expires_on = models.DateField("Срок годности", blank=True, null=True, db_index=True)
-    incomplete_reason = models.TextField(
-        "Причина неполных данных",
-        blank=True,
-        help_text="Обязательна, если серия или срок годности не указаны.",
-    )
-    created_at = models.DateTimeField("Создано", auto_now_add=True)
-
-    class Meta:
-        ordering = ["item__name", "expires_on", "batch_number", "id"]
-        verbose_name = "Партия"
-        verbose_name_plural = "Партии"
-        indexes = [
-            models.Index(fields=["item", "expires_on"]),
-            models.Index(fields=["item", "batch_number"]),
-        ]
-
-    def __str__(self):
-        batch = self.batch_number or "без серии"
-        return f"{self.item} / {batch}"
-
-    def clean(self):
-        super().clean()
-        if (not self.batch_number or not self.expires_on) and not self.incomplete_reason.strip():
-            raise ValidationError(
-                {
-                    "incomplete_reason": (
-                        "Укажите причину, если серия или срок годности отсутствуют."
-                    )
-                }
-            )
-        if self.pk:
-            previous = type(self).objects.filter(pk=self.pk).values(
-                "item_id", "batch_number", "expires_on"
-            ).first()
-            if previous and any(
-                (
-                    previous["item_id"] != self.item_id,
-                    previous["batch_number"] != self.batch_number,
-                    previous["expires_on"] != self.expires_on,
-                )
-            ) and StockEntry.objects.filter(lot_id=self.pk).exists():
-                raise ValidationError(
-                    "Нельзя менять идентификационные данные партии после проведения операций."
-                )
 
 
 class StockDocument(models.Model):
@@ -426,11 +411,28 @@ class StockDocumentLine(models.Model):
         related_name="document_lines",
         verbose_name="Позиция",
     )
-    lot = models.ForeignKey(
-        StockLot,
-        on_delete=models.PROTECT,
-        related_name="document_lines",
-        verbose_name="Партия",
+    series = models.CharField(
+        "Серия",
+        max_length=SERIES_MAX_LENGTH,
+        blank=True,
+    )
+    series_key = models.CharField(
+        "Нормализованный ключ серии",
+        max_length=SERIES_MAX_LENGTH,
+        blank=True,
+        db_index=True,
+        editable=False,
+    )
+    expires_on = models.DateField(
+        "Срок годности",
+        blank=True,
+        null=True,
+        db_index=True,
+    )
+    incomplete_reason = models.TextField(
+        "Причина неполных данных",
+        blank=True,
+        help_text="Обязательна, если серия или срок годности не указаны.",
     )
     funding_source = models.ForeignKey(
         FundingSource,
@@ -462,7 +464,7 @@ class StockDocumentLine(models.Model):
     fefo_override_reason = models.TextField(
         "Причина отклонения от FEFO",
         blank=True,
-        help_text="Обязательна, если выбрана не самая ранняя доступная партия.",
+        help_text="Обязательна, если выбрана не самая ранняя доступная серия.",
     )
 
     class Meta:
@@ -479,12 +481,41 @@ class StockDocumentLine(models.Model):
                 name="warehouse_document_line_quantity_positive",
             ),
         ]
+        indexes = [
+            models.Index(
+                fields=["item", "series_key", "expires_on"],
+                name="wh_line_series_lookup",
+            ),
+        ]
 
     def clean(self):
         super().clean()
         errors = {}
-        if self.lot_id and self.item_id and self.lot.item_id != self.item_id:
-            errors["lot"] = "Партия должна относиться к выбранной позиции."
+        try:
+            self.series, self.series_key = normalize_series(self.series)
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
+        if (not self.series or not self.expires_on) and not (
+            self.incomplete_reason or ""
+        ).strip():
+            errors["incomplete_reason"] = (
+                "Укажите причину, если серия или срок годности отсутствуют."
+            )
+        if self.item_id and self.series_key:
+            conflicting = StockEntry.objects.filter(
+                item_id=self.item_id,
+                series_key=self.series_key,
+            )
+            if self.expires_on is None:
+                conflicting = conflicting.exclude(expires_on__isnull=True)
+            else:
+                conflicting = conflicting.filter(
+                    Q(expires_on__isnull=True) | ~Q(expires_on=self.expires_on)
+                )
+            if conflicting.exists():
+                errors["expires_on"] = (
+                    "Для этой позиции серия уже встречалась с другим сроком годности."
+                )
         document_type = self.document.document_type if self.document_id else None
         if document_type in {StockDocument.DocumentType.OPENING, StockDocument.DocumentType.RECEIPT}:
             if self.source_location_id or not self.destination_location_id:
@@ -519,6 +550,7 @@ class StockDocumentLine(models.Model):
             ).first()
             if status == StockDocument.Status.POSTED:
                 raise ValidationError("Строки проведённого документа нельзя изменять.")
+        self.series, self.series_key = normalize_series(self.series)
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -566,11 +598,24 @@ class StockEntry(models.Model):
         related_name="entries",
         verbose_name="Адрес",
     )
-    lot = models.ForeignKey(
-        StockLot,
+    item = models.ForeignKey(
+        WarehouseItem,
         on_delete=models.PROTECT,
-        related_name="entries",
-        verbose_name="Партия",
+        related_name="stock_entries",
+        verbose_name="Позиция",
+    )
+    series = models.CharField("Серия", max_length=SERIES_MAX_LENGTH, blank=True)
+    series_key = models.CharField(
+        "Нормализованный ключ серии",
+        max_length=SERIES_MAX_LENGTH,
+        blank=True,
+        db_index=True,
+        editable=False,
+    )
+    expires_on = models.DateField("Срок годности", blank=True, null=True, db_index=True)
+    incomplete_reason = models.TextField(
+        "Причина неполных данных",
+        blank=True,
     )
     unit = models.ForeignKey(
         UnitOfMeasure,
@@ -600,7 +645,16 @@ class StockEntry(models.Model):
         verbose_name_plural = "Складские проводки"
         indexes = [
             models.Index(fields=["department", "operation_date"]),
-            models.Index(fields=["location", "lot", "funding_source"]),
+            models.Index(
+                fields=[
+                    "location",
+                    "item",
+                    "series_key",
+                    "expires_on",
+                    "funding_source",
+                ],
+                name="wh_entry_stock_lookup",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -612,6 +666,7 @@ class StockEntry(models.Model):
     def save(self, *args, **kwargs):
         if self.pk:
             raise ValidationError("Проведённые складские проводки нельзя изменять.")
+        self.series, self.series_key = normalize_series(self.series)
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -637,11 +692,24 @@ class StockBalance(models.Model):
         related_name="balances",
         verbose_name="Адрес",
     )
-    lot = models.ForeignKey(
-        StockLot,
+    item = models.ForeignKey(
+        WarehouseItem,
         on_delete=models.PROTECT,
-        related_name="balances",
-        verbose_name="Партия",
+        related_name="stock_balances",
+        verbose_name="Позиция",
+    )
+    series = models.CharField("Серия", max_length=SERIES_MAX_LENGTH, blank=True)
+    series_key = models.CharField(
+        "Нормализованный ключ серии",
+        max_length=SERIES_MAX_LENGTH,
+        blank=True,
+        db_index=True,
+        editable=False,
+    )
+    expires_on = models.DateField("Срок годности", blank=True, null=True, db_index=True)
+    incomplete_reason = models.TextField(
+        "Причина неполных данных",
+        blank=True,
     )
     funding_source = models.ForeignKey(
         FundingSource,
@@ -658,13 +726,30 @@ class StockBalance(models.Model):
     updated_at = models.DateTimeField("Обновлено", auto_now=True)
 
     class Meta:
-        ordering = ["department", "warehouse", "location", "lot", "funding_source"]
+        ordering = [
+            "department",
+            "warehouse",
+            "location",
+            "item",
+            "series_key",
+            "expires_on",
+            "funding_source",
+        ]
         verbose_name = "Текущий остаток"
         verbose_name_plural = "Текущие остатки"
         constraints = [
             models.UniqueConstraint(
-                fields=["department", "warehouse", "location", "lot", "funding_source"],
-                name="warehouse_unique_balance_key",
+                fields=[
+                    "department",
+                    "warehouse",
+                    "location",
+                    "item",
+                    "series_key",
+                    "expires_on",
+                    "funding_source",
+                ],
+                name="warehouse_unique_inline_balance_key",
+                nulls_distinct=False,
             ),
             models.CheckConstraint(
                 condition=Q(quantity__gte=0),
@@ -674,8 +759,15 @@ class StockBalance(models.Model):
         indexes = [
             models.Index(fields=["department", "quantity"]),
             models.Index(fields=["location", "quantity"]),
-            models.Index(fields=["lot", "quantity"]),
+            models.Index(
+                fields=["item", "series_key", "expires_on", "quantity"],
+                name="wh_balance_series_qty",
+            ),
         ]
+
+    def save(self, *args, **kwargs):
+        self.series, self.series_key = normalize_series(self.series)
+        return super().save(*args, **kwargs)
 
 
 class WarehouseAuditEvent(models.Model):

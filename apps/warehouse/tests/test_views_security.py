@@ -21,11 +21,9 @@ from apps.warehouse.models import (
     StockDocument,
     StockDocumentLine,
     StockEntry,
-    StockLot,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,
-    WarehouseAuditEvent,
     WarehouseItem,
     WarehouseItemCategory,
     WarehouseReportProfile,
@@ -120,29 +118,30 @@ class WarehouseViewSecurityTests(TestCase):
             category=cls.category,
             unit=cls.unit,
         )
-        cls.own_lot = cls._create_lot(cls.own_item, "SEC-OWN-BATCH")
-        cls.child_lot = cls._create_lot(cls.child_item, "SEC-CHILD-BATCH")
-        cls.foreign_lot = cls._create_lot(cls.foreign_item, "SEC-FOREIGN-BATCH")
+        cls.expiry = date.today() + timedelta(days=365)
 
         cls.own_posted = cls._create_posted_receipt(
             department=cls.own,
             warehouse=cls.own_warehouse,
             location=cls.own_location,
-            lot=cls.own_lot,
+            item=cls.own_item,
+            series="SEC-OWN-SERIES",
             number="SEC-OWN-POSTED",
         )
         cls.child_posted = cls._create_posted_receipt(
             department=cls.child,
             warehouse=cls.child_warehouse,
             location=cls.child_location,
-            lot=cls.child_lot,
+            item=cls.child_item,
+            series="SEC-CHILD-SERIES",
             number="SEC-CHILD-POSTED",
         )
         cls.foreign_posted = cls._create_posted_receipt(
             department=cls.sibling,
             warehouse=cls.foreign_warehouse,
             location=cls.foreign_location,
-            lot=cls.foreign_lot,
+            item=cls.foreign_item,
+            series="SEC-FOREIGN-SERIES",
             number="SEC-FOREIGN-POSTED",
         )
 
@@ -171,14 +170,6 @@ class WarehouseViewSecurityTests(TestCase):
         return user
 
     @classmethod
-    def _create_lot(cls, item, batch_number):
-        return StockLot.objects.create(
-            item=item,
-            batch_number=batch_number,
-            expires_on=date.today() + timedelta(days=365),
-        )
-
-    @classmethod
     def _create_draft(cls, department, number):
         return StockDocument.objects.create(
             department=department,
@@ -190,7 +181,7 @@ class WarehouseViewSecurityTests(TestCase):
 
     @classmethod
     def _create_posted_receipt(
-        cls, *, department, warehouse, location, lot, number
+        cls, *, department, warehouse, location, item, series, number
     ):
         document = StockDocument.objects.create(
             department=department,
@@ -202,8 +193,9 @@ class WarehouseViewSecurityTests(TestCase):
         line = StockDocumentLine.objects.create(
             document=document,
             sequence=1,
-            item=lot.item,
-            lot=lot,
+            item=item,
+            series=series,
+            expires_on=cls.expiry,
             funding_source=cls.funding,
             quantity=5,
             destination_location=location,
@@ -219,7 +211,10 @@ class WarehouseViewSecurityTests(TestCase):
             department=department,
             warehouse=warehouse,
             location=location,
-            lot=lot,
+            item=item,
+            series=series,
+            series_key=series.casefold(),
+            expires_on=cls.expiry,
             unit=cls.unit,
             funding_source=cls.funding,
             quantity=5,
@@ -229,7 +224,10 @@ class WarehouseViewSecurityTests(TestCase):
             department=department,
             warehouse=warehouse,
             location=location,
-            lot=lot,
+            item=item,
+            series=series,
+            series_key=series.casefold(),
+            expires_on=cls.expiry,
             funding_source=cls.funding,
             quantity=5,
         )
@@ -260,7 +258,9 @@ class WarehouseViewSecurityTests(TestCase):
             "lines-MAX_NUM_FORMS": "1000",
             "lines-0-sequence": "1",
             "lines-0-item": str(self.own_item.pk),
-            "lines-0-lot": str(self.own_lot.pk),
+            "lines-0-series": "SEC-NEW-SERIES",
+            "lines-0-expires_on": (date.today() + timedelta(days=180)).isoformat(),
+            "lines-0-incomplete_reason": "",
             "lines-0-funding_source": str(self.funding.pk),
             "lines-0-quantity": "1",
             "lines-0-source_location": "",
@@ -282,6 +282,7 @@ class WarehouseViewSecurityTests(TestCase):
     def test_roleless_user_gets_403_and_has_no_navigation_entry(self):
         client = self._login(self.roleless)
         self.assertEqual(client.get(reverse("warehouse:overview")).status_code, 403)
+        self.assertEqual(client.get(reverse("warehouse:stock")).status_code, 403)
         self.assertEqual(
             client.get(reverse("warehouse:report_availability")).status_code, 403
         )
@@ -311,13 +312,24 @@ class WarehouseViewSecurityTests(TestCase):
 
         form = client.get(reverse("warehouse:document_new"))
         self.assertEqual(form.status_code, 200)
-        self.assertContains(form, "SEC-OWN")
-        self.assertContains(form, "SEC-CHILD")
-        self.assertContains(form, "SEC-OWN-LOC")
-        self.assertContains(form, "SEC-CHILD-LOC")
-        self.assertNotContains(form, "SEC-ORG / SEC-FOREIGN")
-        self.assertNotContains(form, "SEC-FOREIGN-WAREHOUSE")
-        self.assertNotContains(form, "SEC-FOREIGN-LOC")
+        # Growing scoped choices are loaded through autocomplete rather than
+        # embedded into the document form.  Verify the actual read boundary.
+        departments = client.get(
+            reverse("warehouse:autocomplete_department"), {"q": "SEC"}
+        ).json()["results"]
+        department_labels = {row["label"] for row in departments}
+        self.assertIn("SEC-OWN", department_labels)
+        self.assertIn("SEC-CHILD", department_labels)
+        self.assertNotIn("SEC-FOREIGN", department_labels)
+
+        locations = client.get(
+            reverse("warehouse:autocomplete_location"),
+            {"q": "SEC", "operation": "receipt"},
+        ).json()["results"]
+        location_labels = {row["label"] for row in locations}
+        self.assertIn("SEC-OWN-LOC", location_labels)
+        self.assertIn("SEC-CHILD-LOC", location_labels)
+        self.assertNotIn("SEC-FOREIGN-LOC", location_labels)
 
     def test_operator_post_tampering_cannot_select_foreign_department_or_location(self):
         client = self._login(self.operator)
@@ -341,41 +353,22 @@ class WarehouseViewSecurityTests(TestCase):
         self.assertEqual(foreign_location.status_code, 400)
         self.assertEqual(StockDocument.objects.count(), initial_count)
 
-    def test_operator_registers_lot_in_authorized_department_with_audit(self):
+    def test_series_is_entered_in_document_without_registration_screen(self):
         client = self._login(self.operator)
         response = client.post(
-            reverse("warehouse:lots"),
-            {
-                "department": self.child.pk,
-                "item": self.own_item.pk,
-                "batch_number": "SEC-NEW-BATCH",
-                "expires_on": (date.today() + timedelta(days=180)).isoformat(),
-                "incomplete_reason": "",
-            },
+            reverse("warehouse:document_new"),
+            self._document_post_data(
+                department=self.child,
+                destination=self.child_location,
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
-        lot = StockLot.objects.get(batch_number="SEC-NEW-BATCH")
-        self.assertTrue(
-            WarehouseAuditEvent.objects.filter(
-                action="stock_lot.registered",
-                department=self.child,
-                object_id=str(lot.pk),
-            ).exists()
-        )
-
-        denied = client.post(
-            reverse("warehouse:lots"),
-            {
-                "department": self.sibling.pk,
-                "item": self.own_item.pk,
-                "batch_number": "SEC-DENIED-BATCH",
-                "expires_on": (date.today() + timedelta(days=180)).isoformat(),
-                "incomplete_reason": "",
-            },
-        )
-        self.assertEqual(denied.status_code, 400)
-        self.assertFalse(StockLot.objects.filter(batch_number="SEC-DENIED-BATCH").exists())
+        line = StockDocumentLine.objects.get(document__number="SEC-TAMPERED-DRAFT")
+        self.assertEqual(line.series, "SEC-NEW-SERIES")
+        self.assertEqual(line.series_key, "sec-new-series")
+        overview = client.get(reverse("warehouse:overview"))
+        self.assertNotContains(overview, "Зарегистрировать партию")
 
     def test_operator_has_no_controller_or_catalog_routes(self):
         client = self._login(self.operator)
@@ -509,6 +502,11 @@ class WarehouseViewSecurityTests(TestCase):
         self.assertContains(overview, "SEC-FOREIGN-REPORT-ITEM")
         documents = client.get(reverse("warehouse:documents"))
         self.assertContains(documents, "SEC-FOREIGN-DRAFT")
+        stock = client.get(reverse("warehouse:stock"))
+        self.assertEqual(stock.status_code, 200)
+        self.assertContains(stock, "SEC-FOREIGN-REPORT-ITEM")
+        self.assertNotContains(stock, "data-relocation-selection")
+        self.assertNotContains(stock, "Переместить")
         self.assertEqual(client.get(reverse("warehouse:document_new")).status_code, 403)
 
         catalog = client.get(reverse("warehouse:catalog", args=["categories"]))
@@ -528,6 +526,21 @@ class WarehouseViewSecurityTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_mixed_view_and_operate_scopes_show_only_operable_row_controls(self):
+        mixed = self._create_user("sec-mixed", self.own)
+        mixed.groups.add(
+            Group.objects.get(name="warehouse_administrator"),
+            Group.objects.get(name="warehouse_operator"),
+        )
+        client = self._login(mixed)
+        response = client.get(reverse("warehouse:stock"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "SEC-FOREIGN-REPORT-ITEM")
+        self.assertContains(response, 'data-relocation-selection')
+        # Own and child balances are operable; the globally visible foreign
+        # balance is intentionally rendered read-only.
+        self.assertEqual(response.content.decode().count('data-relocation-select>'), 2)
         self.assertEqual(
             client.post(
                 reverse("warehouse:document_reverse", args=[self.own_posted.pk]),
@@ -535,6 +548,73 @@ class WarehouseViewSecurityTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_report_profile_department_provider_uses_management_scope(self):
+        operator_client = self._login(self.operator)
+        self.assertEqual(
+            operator_client.get(
+                reverse("warehouse:autocomplete_report_profile_department"),
+                {"q": "SEC"},
+            ).status_code,
+            403,
+        )
+
+        controller_client = self._login(self.controller)
+        response = controller_client.get(
+            reverse("warehouse:autocomplete_report_profile_department"),
+            {"q": "SEC"},
+        )
+        self.assertEqual(response.status_code, 200)
+        values = {row["value"] for row in response.json()["results"]}
+        self.assertIn(str(self.own.pk), values)
+        self.assertIn(str(self.child.pk), values)
+        self.assertNotIn(str(self.sibling.pk), values)
+
+    def test_item_form_preserves_current_archived_category_and_unit(self):
+        from apps.warehouse.forms import WarehouseItemForm
+
+        category = WarehouseItemCategory.objects.create(
+            code="SEC-ARCHIVE-CAT",
+            name="SEC-ARCHIVE-CATEGORY",
+            is_active=False,
+        )
+        unit = UnitOfMeasure.objects.create(
+            code="SEC-ARCHIVE-UNIT",
+            name="SEC-ARCHIVE-UNIT",
+            quantity_precision=0,
+            is_active=False,
+        )
+        item = WarehouseItem.objects.create(
+            code="SEC-ARCHIVE-ITEM",
+            name="SEC-ARCHIVE-ITEM",
+            category=category,
+            unit=unit,
+        )
+        form = WarehouseItemForm(
+            {
+                "code": item.code,
+                "name": item.name,
+                "short_name": "",
+                "category": category.pk,
+                "unit": unit.pk,
+                "manufacturer": "",
+                "dosage_form": "",
+                "application_method": "",
+                "is_active": "on",
+            },
+            actor=self.administrator,
+            instance=item,
+        )
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+
+    def test_stock_pagination_serializes_legacy_item_once(self):
+        from apps.warehouse.relocation_selectors import sanitized_stock_filter_query
+
+        query = sanitized_stock_filter_query(
+            {"item": "SEC-ITEM", "series": "SEC-SERIES", "page": "2"}
+        )
+        self.assertEqual(query.count("item="), 1)
+        self.assertNotIn("page=", query)
 
     def test_inactive_user_is_denied_and_navigation_is_hidden(self):
         client = self._login(self.inactive)
@@ -552,7 +632,6 @@ class WarehouseViewSecurityTests(TestCase):
         for url in (
             reverse("warehouse:overview"),
             reverse("warehouse:document_new"),
-            reverse("warehouse:lots"),
             reverse("warehouse:warehouses"),
             reverse("warehouse:locations"),
             reverse("warehouse:report_profiles"),
@@ -561,6 +640,28 @@ class WarehouseViewSecurityTests(TestCase):
             self.assertEqual(client.get(url).status_code, 200)
         overview = client.get(reverse("warehouse:overview"))
         self.assertContains(overview, "SEC-FOREIGN-REPORT-ITEM")
+
+    def test_catalog_list_search_and_pagination_are_bounded(self):
+        for index in range(60):
+            WarehouseItemCategory.objects.create(
+                code=f"SEC-PAGE-CAT-{index:03d}",
+                name=f"SEC-PAGE-CATEGORY-{index:03d}",
+            )
+        client = self._login(self.superuser)
+        first_page = client.get(
+            reverse("warehouse:catalog", args=["categories"]),
+            {"q": "SEC-PAGE-CATEGORY", "page": 1},
+        )
+        self.assertEqual(first_page.status_code, 200)
+        self.assertContains(first_page, "Найдено: 60")
+        self.assertContains(first_page, "SEC-PAGE-CAT-000")
+        self.assertNotContains(first_page, "SEC-PAGE-CAT-059")
+        second_page = client.get(
+            reverse("warehouse:catalog", args=["categories"]),
+            {"q": "SEC-PAGE-CATEGORY", "page": 2},
+        )
+        self.assertContains(second_page, "SEC-PAGE-CAT-059")
+        self.assertContains(second_page, "q=SEC-PAGE-CATEGORY")
 
     def test_html_csv_and_xlsx_reports_use_the_same_operator_scope(self):
         client = self._login(self.operator)
@@ -595,6 +696,21 @@ class WarehouseViewSecurityTests(TestCase):
         self.assertIn("SEC-OWN-REPORT-ITEM", xml)
         self.assertIn("SEC-CHILD-REPORT-ITEM", xml)
         self.assertNotIn("SEC-FOREIGN-REPORT-ITEM", xml)
+
+    def test_report_url_keeps_profile_metadata_for_single_department(self):
+        client = self._login(self.operator)
+        response = client.get(
+            reverse("warehouse:report_availability"),
+            {"department_id": self.own.pk, "location_purpose": "available"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "SEC-OWN-PROFILE")
+
+    def test_all_production_report_urls_accept_empty_query(self):
+        client = self._login(self.operator)
+        for name in ("report_expense", "report_rack_card", "report_availability"):
+            response = client.get(reverse(f"warehouse:{name}"))
+            self.assertEqual(response.status_code, 200, name)
 
     def test_post_action_requires_csrf_token_and_accepts_a_valid_token(self):
         document = self._create_draft(self.own, "SEC-CSRF-DRAFT")

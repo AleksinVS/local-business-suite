@@ -9,7 +9,6 @@ from apps.warehouse.models import (
     FundingSource,
     StockDocument,
     StockDocumentLine,
-    StockLot,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,
@@ -23,7 +22,7 @@ from apps.warehouse.reports import (
     export_csv,
     export_xlsx,
 )
-from apps.warehouse.services import post_document
+from apps.warehouse.services import inline_series_reconciliation, post_document
 
 
 class Command(BaseCommand):
@@ -53,15 +52,12 @@ class Command(BaseCommand):
             rack_b = StorageLocation.objects.create(
                 warehouse=warehouse, code="E2E-B", name="Стеллаж B"
             )
-            lot = StockLot.objects.create(
-                item=item,
-                batch_number="E2E-LOT",
-                expires_on=date.today() + timedelta(days=365),
-            )
+            series = "E2E-SERIES"
+            expires_on = date.today() + timedelta(days=365)
 
-            self._post(actor, department, StockDocument.DocumentType.RECEIPT, 10, lot, funding, destination=rack_a)
-            self._post(actor, department, StockDocument.DocumentType.RELOCATION, 3, lot, funding, source=rack_a, destination=rack_b)
-            issue = self._post(actor, department, StockDocument.DocumentType.ISSUE, 2, lot, funding, source=rack_b)
+            self._post(actor, department, StockDocument.DocumentType.RECEIPT, 10, item, series, expires_on, funding, destination=rack_a)
+            self._post(actor, department, StockDocument.DocumentType.RELOCATION, 3, item, series, expires_on, funding, source=rack_a, destination=rack_b)
+            issue = self._post(actor, department, StockDocument.DocumentType.ISSUE, 2, item, series, expires_on, funding, source=rack_b)
             if issue.number:
                 raise AssertionError("Номер требования должен оставаться необязательным.")
 
@@ -83,12 +79,30 @@ class Command(BaseCommand):
                 raise AssertionError("Неверный итог наличия в подразделении.")
             if not export_csv(expense) or not export_xlsx(rack_card):
                 raise AssertionError("Экспорт отчёта не сформирован.")
+            reconciliation = inline_series_reconciliation(
+                actor=actor,
+                department_id=department.pk,
+            )
+            if not reconciliation["ok"] or reconciliation["entry_count"] != 4:
+                raise AssertionError("Сверка inline-серий не подтвердила журнал.")
             transaction.set_rollback(True)
 
         self.stdout.write(self.style.SUCCESS("Warehouse acceptance e2e: OK"))
 
     @staticmethod
-    def _post(actor, department, document_type, quantity, lot, funding, *, source=None, destination=None):
+    def _post(
+        actor,
+        department,
+        document_type,
+        quantity,
+        item,
+        series,
+        expires_on,
+        funding,
+        *,
+        source=None,
+        destination=None,
+    ):
         document = StockDocument.objects.create(
             department=department,
             document_type=document_type,
@@ -97,8 +111,9 @@ class Command(BaseCommand):
         )
         StockDocumentLine.objects.create(
             document=document,
-            item=lot.item,
-            lot=lot,
+            item=item,
+            series=series,
+            expires_on=expires_on,
             funding_source=funding,
             quantity=quantity,
             source_location=source,

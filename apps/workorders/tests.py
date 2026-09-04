@@ -1286,12 +1286,39 @@ class WorkOrderViewPermissionTests(TestCase):
         self.assertContains(response, f'value="{self.board.pk}"')
         self.assertContains(response, 'data-autocomplete-kind="department"')
         self.assertContains(response, 'data-autocomplete-kind="device"')
+        self.assertContains(response, "data-autocomplete-mode=\"entity\"", count=3)
         self.assertNotContains(response, 'name="title"')
         self.assertNotContains(response, 'name="assignee"')
         self.assertEqual(
             response.context["form"].initial["department"],
             self.customer.department_id,
         )
+
+    def test_create_drawer_can_select_between_multiple_visible_boards(self):
+        second_board = Board.objects.create(title="Ремонтная доска", slug="repair-board")
+        second_board.allowed_groups.add(
+            Group.objects.get(name=ROLE_CUSTOMER),
+            Group.objects.get(name=ROLE_MANAGER),
+            Group.objects.get(name=ROLE_TECHNICIAN),
+        )
+        self.client.force_login(self.customer)
+
+        response = self.client.get(
+            reverse("workorders:create"),
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="detail-panel-content",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'data-autocomplete-url="{reverse("workorders:board_options")}"',
+        )
+        self.assertContains(response, 'data-autocomplete-value')
+        options = self.client.get(reverse("workorders:board_options")).json()["results"]
+        option_ids = {result["id"] for result in options}
+        self.assertIn(self.board.pk, option_ids)
+        self.assertIn(second_board.pk, option_ids)
 
     def test_legacy_tree_create_prefills_fields_but_returns_to_board(self):
         self.client.force_login(self.customer)
@@ -1385,9 +1412,29 @@ class WorkOrderViewPermissionTests(TestCase):
                 self.assertIn("no-store", response["Cache-Control"])
                 result = response.json()["results"][0]
                 self.assertEqual(result["id"], self.device.pk)
+                self.assertEqual(result["value"], str(self.device.pk))
+                self.assertEqual(response.json()["mode"], "entity")
                 self.assertIn(self.device.inventory_number, result["label"])
                 self.assertNotIn(self.device.serial_number, result["label"])
                 self.assertEqual(result["department_id"], self.sub_department.pk)
+
+    def test_create_device_autocomplete_applies_allowlisted_department_context(self):
+        other_device = MedicalDevice.objects.create(
+            name="Аппарат другого доступного подразделения",
+            inventory_number="AUTO-OTHER-DEPARTMENT",
+            department=self.department,
+        )
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("workorders:create_device_options"),
+            {"department": self.sub_department.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result_ids = {result["id"] for result in response.json()["results"]}
+        self.assertIn(self.device.pk, result_ids)
+        self.assertNotIn(other_device.pk, result_ids)
 
     def test_create_autocomplete_limits_departments_to_visible_branch(self):
         hidden_department = Department.objects.create(
@@ -1448,6 +1495,108 @@ class WorkOrderViewPermissionTests(TestCase):
         response = self.client.get(reverse("workorders:create_device_options"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_update_autocomplete_is_scoped_and_prefilled(self):
+        self.client.force_login(self.manager)
+        response = self.client.get(
+            reverse("workorders:edit", args=[self.workorder.pk]),
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'data-autocomplete-url="{reverse("workorders:board_options")}"',
+        )
+        self.assertContains(
+            response,
+            f'data-autocomplete-url="{reverse("workorders:device_options")}"',
+        )
+        self.assertContains(response, self.device.name)
+        self.assertContains(response, self.technician.username)
+        self.assertContains(response, 'id="workorder-current-device"')
+
+    def test_update_autocomplete_rejects_unauthorized_and_assignment_queries(self):
+        self.client.force_login(self.outsider)
+        for url_name in (
+            "workorders:board_options",
+            "workorders:department_options",
+            "workorders:device_options",
+            "workorders:assignee_options",
+        ):
+            with self.subTest(url_name=url_name):
+                self.assertEqual(self.client.get(reverse(url_name)).status_code, 403)
+
+        self.client.force_login(self.customer)
+        self.assertEqual(
+            self.client.get(reverse("workorders:assignee_options")).status_code,
+            403,
+        )
+
+    def test_assignee_autocomplete_keeps_active_unassigned_users_and_excludes_inactive(self):
+        available = User.objects.create_user(
+            username="new-assignee",
+            password="pass",
+            first_name="Новый",
+            last_name="Исполнитель",
+        )
+        unavailable = User.objects.create_user(
+            username="inactive-assignee",
+            password="pass",
+            first_name="Неактивный",
+        )
+        unavailable.is_active = False
+        unavailable.save(update_fields=["is_active"])
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("workorders:assignee_options"),
+            {"q": "assignee"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result_ids = {result["id"] for result in response.json()["results"]}
+        self.assertIn(available.pk, result_ids)
+        self.assertNotIn(unavailable.pk, result_ids)
+
+    def test_update_device_autocomplete_preserves_archived_current_value(self):
+        archived_device = MedicalDevice.objects.create(
+            name="Архивный аппарат для подсказки",
+            serial_number="SN-UPDATE-ARCHIVED-AUTO",
+            department=self.sub_department,
+        )
+        archived_device.archive()
+        self.workorder.device = archived_device
+        self.workorder.save(update_fields=["device", "updated_at"])
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("workorders:device_options"),
+            {"q": "SN-UPDATE-ARCHIVED-AUTO", "current_device": archived_device.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["id"], archived_device.pk)
+
+    def test_update_post_rejects_unknown_entity_id(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("workorders:edit", args=[self.workorder.pk]),
+            {
+                "board": self.board.pk,
+                "title": self.workorder.title,
+                "description": self.workorder.description,
+                "department": self.sub_department.pk,
+                "priority": self.workorder.priority,
+                "device": 999999,
+                "assignee": self.technician.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("device", response.context["form"].errors)
+        self.workorder.refresh_from_db()
+        self.assertEqual(self.workorder.device_id, self.device.pk)
 
     def test_edit_preserves_existing_archived_device(self):
         archived_device = MedicalDevice.objects.create(

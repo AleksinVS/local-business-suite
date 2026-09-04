@@ -16,7 +16,14 @@
           {% if field.name in "name,device_type,manufacturer,production_country,model,serial_number,inventory_number" %}
             <div class="input-group {% if field.name == 'notes' or field.name == 'serial_number' %}full-width{% endif %}">
               {{ field.label_tag }}
-              {{ field }}
+              {% if field.name in "name,manufacturer,production_country,model" %}
+                <div class="autocomplete" data-autocomplete data-autocomplete-mode="suggestion" data-autocomplete-url="{% if field.name == 'name' %}{% url 'inventory:device_name_options' %}{% elif field.name == 'manufacturer' %}{% url 'inventory:manufacturer_options' %}{% elif field.name == 'production_country' %}{% url 'inventory:country_options' %}{% else %}{% url 'inventory:model_options' %}{% endif %}"{% if field.name == 'model' %} data-autocomplete-context='{"manufacturer":"#id_manufacturer"}'{% endif %}>
+                  <input type="search" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{{ field.value|default_if_none:'' }}" autocomplete="off" data-autocomplete-input>
+                  <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+                </div>
+              {% else %}
+                {{ field }}
+              {% endif %}
               {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
               {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
             </div>
@@ -47,8 +54,24 @@
         {% for field in form %}
           {% if field.name in "department,address,location" %}
             <div class="input-group {% if field.name == 'location' %}full-width{% endif %}">
-              {{ field.label_tag }}
-              {{ field }}
+              {% if field.name == "department" %}
+                <label for="inventoryDepartmentSearch">{{ field.label }}</label>
+                <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'inventory:department_options' %}" data-autocomplete-required="true" data-autocomplete-required-message="Выберите подразделение из предложенных вариантов.">
+                  <input type="hidden" name="{{ field.html_name }}" value="{{ field.value|default_if_none:'' }}" data-autocomplete-value>
+                  <input type="search" id="inventoryDepartmentSearch" value="{{ selected_department_label }}" placeholder="Начните вводить подразделение" autocomplete="off" data-autocomplete-input required>
+                  <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+                </div>
+              {% else %}
+                {{ field.label_tag }}
+                {% if field.name in "address,location" %}
+                  <div class="autocomplete" data-autocomplete data-autocomplete-mode="suggestion" data-autocomplete-url="{% if field.name == 'address' %}{% url 'inventory:address_options' %}{% else %}{% url 'inventory:location_options' %}{% endif %}" data-autocomplete-context='{"department":"#id_department"}'>
+                    <input type="search" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{{ field.value|default_if_none:'' }}" autocomplete="off" data-autocomplete-input>
+                    <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+                  </div>
+                {% else %}
+                  {{ field }}
+                {% endif %}
+              {% endif %}
               {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
               {% if field.errors %}<div class="error">{{ field.errors }}</div>{% endif %}
             </div>

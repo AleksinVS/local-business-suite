@@ -123,6 +123,44 @@ class MemoryReviewUITests(MemoryModelFactoryMixin, TestCase):
         )
         return source, document, issue
 
+    def test_memory_autocomplete_requires_review_access_and_renders_shared_widgets(self):
+        plain = User.objects.create_user(username="memory-autocomplete-plain", password="pass")
+        reviewer = User.objects.create_superuser(username="memory-autocomplete-reviewer", password="pass")
+        source, _document, issue = self.create_review_issue(source_code="autocomplete_source")
+
+        self.client.force_login(plain)
+        denied = self.client.get(reverse("memory:source_options"), {"q": "autocomplete"})
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_login(reviewer)
+        source_response = self.client.get(reverse("memory:source_options"), {"q": "autocomplete"})
+        self.assertEqual(source_response.status_code, 200)
+        self.assertIn(source.code, {item["value"] for item in source_response.json()["results"]})
+        list_response = self.client.get(reverse("memory:review_issue_list"))
+        detail_response = self.client.get(reverse("memory:review_issue_detail", kwargs={"pk": issue.pk}))
+        self.assertContains(list_response, 'data-autocomplete-url="%s"' % reverse("memory:source_options"), html=False)
+        self.assertContains(detail_response, 'data-autocomplete-url="%s"' % reverse("memory:issue_assignee_options"), html=False)
+
+    def test_memory_observer_cannot_enumerate_issue_assignees(self):
+        observer = self.create_review_user(
+            username="memory-autocomplete-observer",
+            group_name="memory_observer",
+        )
+        eligible = self.create_review_user(username="memory-autocomplete-eligible")
+        _source, _document, issue = self.create_review_issue(
+            issue_kind=MemoryIngestionIssue.IssueKind.PARTIAL_INDEXED,
+            source_code="observer_autocomplete_source",
+        )
+        self.client.force_login(observer)
+
+        response = self.client.get(
+            reverse("memory:issue_assignee_options"),
+            {"issue": issue.pk, "q": eligible.username},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
+
     def test_review_ui_requires_review_permission(self):
         user = User.objects.create_user(username="plain-user", password="pass")
         self.client.force_login(user)

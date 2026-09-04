@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.core.autocomplete import AutocompleteView
+
 from . import views
 
 app_name = "settings_center"
@@ -25,6 +27,8 @@ urlpatterns = [
         name="waiting_list_status_colors",
     ),
     path("access/", views.AccessWorkspaceView.as_view(), name="access_workspace"),
+    path("access/autocomplete/departments/", AutocompleteView.as_view(provider_code="accounts.department"), name="department_options"),
+    path("access/autocomplete/role-principals/", AutocompleteView.as_view(provider_code="accounts.role_principal"), name="role_principal_options"),
     path("boards/", views.BoardAccessListView.as_view(), name="board_access_list"),
     path("boards/<int:pk>/access/", views.BoardAccessView.as_view(), name="board_access"),
     path("access/roles/", views.RoleCatalogView.as_view(), name="role_catalog"),

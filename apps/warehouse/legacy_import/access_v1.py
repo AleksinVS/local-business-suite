@@ -85,16 +85,48 @@ def department_dto(payload: dict) -> dict:
     }
 
 
-def opening_lot_dto(payload: dict) -> dict:
-    """Нормализовать партийный начальный остаток без угадывания адреса."""
+def opening_stock_dto(payload: dict) -> dict:
+    """Нормализовать начальный остаток по серии без угадывания адреса."""
     return {
         "legacy_key": text_from(payload, "id", "kod", "code"),
         "department": text_from(payload, "otd_name", "department", "otdelenie"),
-        "item": text_from(payload, "item", "name", "naimenovanie", "ls_name"),
+        "item_code": text_from(
+            payload,
+            "item_code",
+            "ls_code",
+            "kod_ls",
+            "code_ls",
+            "id_ls",
+        ),
+        "item_name": text_from(
+            payload,
+            "item",
+            "item_name",
+            "name",
+            "naimenovanie",
+            "ls_name",
+        ),
         "unit": text_from(payload, "unit", "ed", "ed_izm", "edinica", "edizm"),
-        "funding_source": text_from(payload, "istoch", "funding_source", "source"),
+        "funding_source_code": text_from(
+            payload,
+            "funding_source_code",
+            "source_code",
+            "istoch_code",
+            "kod_istoch",
+            "code_istoch",
+            "id_istoch",
+        ),
+        "funding_source_name": text_from(
+            payload,
+            "istoch",
+            "funding_source",
+            "funding_source_name",
+            "source",
+            "source_name",
+            "name_istoch",
+        ),
         "quantity": decimal_from(payload, "quantity", "kol", "kolvo", "ostatok"),
-        "batch_number": text_from(payload, "batch", "series", "seria", "nomer_serii"),
+        "series": text_from(payload, "batch", "series", "seria", "nomer_serii"),
         "expires_on": date_from(payload, "expires_on", "expiry", "srok_godnosti"),
         "application_method": text_from(payload, "application_method", "sposob_primeneniya"),
     }

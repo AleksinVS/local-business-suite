@@ -16,11 +16,11 @@
     <div class="form-grid">
       <label>
         <span>Файл</span>
-        <select name="file_object_id" required>
-          {% for item in file_objects %}
-            <option value="{{ item.id }}">{{ item.source_code }} / {{ item.path }}</option>
-          {% endfor %}
-        </select>
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'filehub:file_object_options' %}" data-autocomplete-required="true">
+          <input type="hidden" name="file_object_id" data-autocomplete-value required>
+          <input type="search" data-autocomplete-input autocomplete="off" placeholder="Начните вводить имя файла" required aria-label="Файл">
+          <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+        </div>
       </label>
       <label>
         <span>Виртуальный путь</span>

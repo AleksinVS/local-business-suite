@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.core.autocomplete import AutocompleteView
+
 from .views import (
     WorkOrderAttachmentCreateView,
     WorkOrderBoardView,
@@ -8,7 +10,6 @@ from .views import (
     KanbanColumnRenameView,
     WorkOrderCommentCreateView,
     WorkOrderCreateView,
-    WorkOrderCreateAutocompleteView,
     WorkOrderDetailView,
     WorkOrderRateView,
     WorkOrderUpdateView,
@@ -32,14 +33,18 @@ urlpatterns = [
     path("new/", WorkOrderCreateView.as_view(), name="create"),
     path(
         "new/options/departments/",
-        WorkOrderCreateAutocompleteView.as_view(kind="department"),
+        AutocompleteView.as_view(provider_code="workorders.department"),
         name="create_department_options",
     ),
     path(
         "new/options/devices/",
-        WorkOrderCreateAutocompleteView.as_view(kind="device"),
+        AutocompleteView.as_view(provider_code="workorders.device"),
         name="create_device_options",
     ),
+    path("options/departments/", AutocompleteView.as_view(provider_code="workorders.update_department"), name="department_options"),
+    path("options/boards/", AutocompleteView.as_view(provider_code="workorders.board"), name="board_options"),
+    path("options/devices/", AutocompleteView.as_view(provider_code="workorders.update_device"), name="device_options"),
+    path("options/assignees/", AutocompleteView.as_view(provider_code="workorders.assignee"), name="assignee_options"),
     path("<int:pk>/", WorkOrderDetailView.as_view(), name="detail"),
     path("<int:pk>/edit/", WorkOrderUpdateView.as_view(), name="edit"),
     path("<int:pk>/comments/", WorkOrderCommentCreateView.as_view(), name="comment"),

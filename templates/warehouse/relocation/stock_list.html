@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load static l10n %}
+
+{% block title %}Остатки склада{% endblock %}
+
+{% block content %}
+<section class="panel warehouse-stock-list" data-warehouse-stock-list>
+  <div class="section-head">
+    <div>
+      <h1>Остатки склада</h1>
+      {% if can_relocate %}<p class="muted">Отберите строки, укажите количество и переместите их одним документом.</p>{% else %}<p class="muted">Просмотр доступных остатков в пределах ваших подразделений.</p>{% endif %}
+    </div>
+  </div>
+
+  <form method="get" class="warehouse-stock-filters">
+    <label>Подразделение <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_department' %}"><input type="hidden" id="stock-filter-department" name="department_id" value="{{ filters.department_id|default:'' }}" data-autocomplete-value><input type="search" value="{{ selected_filter_labels.department_id|default:'' }}" placeholder="Все доступные" autocomplete="off" data-autocomplete-input><span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span></span></label>
+    <label>Склад <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_warehouse' %}" data-autocomplete-context='{"department_id":"#stock-filter-department"}'><input type="hidden" id="stock-filter-warehouse" name="warehouse_id" value="{{ filters.warehouse_id|default:'' }}" data-autocomplete-value><input type="search" value="{{ selected_filter_labels.warehouse_id|default:'' }}" placeholder="Все доступные" autocomplete="off" data-autocomplete-input><span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span></span></label>
+    <label>Адрес <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_location' %}" data-autocomplete-context='{"department_id":"#stock-filter-department","warehouse_id":"#stock-filter-warehouse"}'><input type="hidden" id="stock-filter-location" name="location_id" value="{{ filters.location_id|default:'' }}" data-autocomplete-value><input type="search" value="{{ selected_filter_labels.location_id|default:'' }}" placeholder="Все доступные" autocomplete="off" data-autocomplete-input><span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span></span></label>
+    <label>Категория <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_category' %}"><input type="hidden" id="stock-filter-category" name="category_id" value="{{ filters.category_id|default:'' }}" data-autocomplete-value><input type="search" value="{{ selected_filter_labels.category_id|default:'' }}" placeholder="Все доступные" autocomplete="off" data-autocomplete-input><span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span></span></label>
+    <label>Источник финансирования <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_source' %}"><input type="hidden" id="stock-filter-source" name="funding_source_id" value="{{ filters.funding_source_id|default:'' }}" data-autocomplete-value><input type="search" value="{{ selected_filter_labels.funding_source_id|default:'' }}" placeholder="Все доступные" autocomplete="off" data-autocomplete-input><span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span></span></label>
+    <label>Позиция
+      <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_stock_item' %}">
+        <input type="hidden" id="stock-filter-item" name="item_id" value="{{ filters.item_id|default:'' }}" data-autocomplete-value>
+        <input type="search" name="item" value="{% if filters.item_id %}{{ selected_filter_labels.item_id }}{% else %}{{ filters.item|default:'' }}{% endif %}" placeholder="Все позиции" autocomplete="off" data-autocomplete-input>
+        <span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span>
+      </span>
+    </label>
+    <label>Серия <input type="search" name="series" value="{{ filters.series|default:'' }}" list="warehouse-series-filter-options" autocomplete="off"></label>
+    <datalist id="warehouse-series-filter-options">{% for value in filter_options.series_suggestions %}<option value="{{ value }}">{% endfor %}</datalist>
+    <label>Срок с <input type="date" name="expires_from" value="{{ filters.expires_from|default:'' }}"></label>
+    <label>Срок по <input type="date" name="expires_to" value="{{ filters.expires_to|default:'' }}"></label>
+    <button type="submit" class="btn btn-outline">Применить</button>
+  </form>
+
+  {% if can_relocate %}<form
+    method="post"
+    action="{{ relocation_panel_url }}"
+    hx-post="{{ relocation_panel_url }}"
+    hx-target="#global-right-panel-content"
+    hx-swap="innerHTML"
+    class="warehouse-relocation-selection"
+    data-relocation-selection
+  >
+    {% csrf_token %}
+  {% else %}<div class="warehouse-stock-readonly">
+  {% endif %}
+    <div class="warehouse-table-scroll">
+      <table class="warehouse-stock-table">
+        <thead><tr>{% if can_relocate %}<th scope="col">Выбор</th>{% endif %}<th scope="col">Позиция</th><th scope="col">Серия</th><th scope="col">Срок</th><th scope="col">Источник</th><th scope="col">Склад / адрес</th><th scope="col">Остаток</th>{% if can_relocate %}<th scope="col">Переместить</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for balance in page.object_list %}
+          <tr data-relocation-row>
+            {% if can_relocate %}<td>{% if balance.can_relocate %}<input type="checkbox" name="selected_balance" value="{{ balance.pk }}" aria-label="Выбрать {{ balance.item.name }}" data-relocation-select>{% endif %}</td>{% endif %}
+            <td>{{ balance.item.name }}</td>
+            <td>{{ balance.series|default:"—" }}</td>
+            <td>{{ balance.expires_on|date:"d.m.Y"|default:"—" }}</td>
+            <td>{{ balance.funding_source.name }}</td>
+            <td>{{ balance.warehouse.name }} / {{ balance.location.code }}</td>
+            <td>{{ balance.quantity }} {{ balance.item.unit.name }}</td>
+            {% if can_relocate %}<td>{% if balance.can_relocate %}
+              <input type="hidden" name="expected_quantity_{{ balance.pk }}" value="{{ balance.quantity|unlocalize }}">
+              <input type="number" name="quantity_{{ balance.pk }}" min="0.000001" max="{{ balance.quantity|unlocalize }}" step="{% if balance.item.unit.quantity_precision == 0 %}1{% else %}any{% endif %}" disabled inputmode="decimal" aria-label="Количество для {{ balance.item.name }}" data-relocation-quantity>
+            {% endif %}</td>{% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="{% if can_relocate %}8{% else %}6{% endif %}">По выбранным фильтрам доступных остатков нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if can_relocate %}<div class="warehouse-relocation-actions" data-relocation-actions hidden>
+      <span>Выбрано строк: <strong data-relocation-count>0</strong></span>
+      <button type="submit" class="btn btn-primary" data-relocation-submit disabled>Переместить</button>
+    </div>{% endif %}
+  {% if can_relocate %}</form>{% else %}</div>{% endif %}
+
+  {% if page.paginator.num_pages > 1 %}
+  <nav class="pagination" aria-label="Страницы остатков">
+    {% if page.has_previous %}<a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page.previous_page_number }}">Назад</a>{% endif %}
+    <span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?{% if pagination_query %}{{ pagination_query }}&amp;{% endif %}page={{ page.next_page_number }}">Далее</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+<script src="{% static 'src/warehouse/stock_list.js' %}?v=relocation-v1"></script>
+<link rel="stylesheet" href="{% static 'src/css/warehouse_relocation.css' %}?v=relocation-v1">
+{% endblock %}

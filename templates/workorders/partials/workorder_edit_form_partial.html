@@ -23,9 +23,22 @@
         {{ form.description }}
         {{ form.description.errors }}
       </div>
+      <div class="input-group full-width">
+        <label for="workorder-edit-board-search">{{ form.board.label }}</label>
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:board_options' %}">
+          <input type="hidden" id="{{ form.board.id_for_label }}" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="search" id="workorder-edit-board-search" value="{{ selected_board_label }}" placeholder="Начните вводить доску" autocomplete="off" data-autocomplete-input{% if form.board.field.required %} required{% endif %}>
+          <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
+        {{ form.board.errors }}
+      </div>
       <div class="input-group">
         <label for="{{ form.department.id_for_label }}">{{ form.department.label }}</label>
-        {{ form.department }}
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:department_options' %}">
+          <input type="hidden" id="{{ form.department.id_for_label }}" name="{{ form.department.html_name }}" value="{{ form.department.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="search" id="workorder-edit-department-search" value="{{ selected_department_label }}" placeholder="Начните вводить подразделение" autocomplete="off" data-autocomplete-input{% if form.department.field.required %} required{% endif %}>
+          <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
         {{ form.department.errors }}
       </div>
       <div class="input-group">
@@ -35,12 +48,23 @@
       </div>
       <div class="input-group full-width">
         <label for="{{ form.device.id_for_label }}">{{ form.device.label }}</label>
-        {{ form.device }}
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:device_options' %}" data-autocomplete-context='{"department":"#{{ form.department.id_for_label }}","current_device":"#workorder-current-device"}'>
+          <input type="hidden" id="{{ form.device.id_for_label }}" name="{{ form.device.html_name }}" value="{{ form.device.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="hidden" id="workorder-current-device" value="{{ current_device_id }}">
+          <input type="search" id="workorder-edit-device-search" value="{{ selected_device_label }}" placeholder="Название, инвентарный или серийный номер" autocomplete="off" data-autocomplete-input>
+          <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
         {{ form.device.errors }}
       </div>
       <div class="input-group full-width">
         <label for="{{ form.assignee.id_for_label }}">{{ form.assignee.label }}</label>
-        {{ form.assignee }}
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:assignee_options' %}" data-autocomplete-context='{"workorder":"#workorder-current-workorder","current_assignee":"#workorder-current-assignee"}'>
+          <input type="hidden" id="{{ form.assignee.id_for_label }}" name="{{ form.assignee.html_name }}" value="{{ form.assignee.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="hidden" id="workorder-current-workorder" value="{{ current_workorder_id }}">
+          <input type="hidden" id="workorder-current-assignee" value="{{ current_assignee_id }}">
+          <input type="search" id="workorder-edit-assignee-search" value="{{ selected_assignee_label }}" placeholder="Начните вводить имя" autocomplete="off" data-autocomplete-input{% if form.assignee.disabled %} disabled{% endif %}>
+          <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
         {{ form.assignee.errors }}
       </div>
     </div>

@@ -38,7 +38,16 @@
       </div>
 
       <div class="access-editor-group" id="access-editor-department" data-editor-group="department" role="tabpanel">
-        <div class="access-form-field{% if field_form.department.errors %} has-error{% endif %}">{{ field_form.department.label_tag }}{{ field_form.department }}{{ field_form.department.errors }}</div>
+        <div class="access-form-field{% if field_form.department.errors %} has-error{% endif %}">{{ field_form.department.label_tag }}
+          {% if field_form.can_edit_account %}
+            <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'settings_center:department_options' %}" data-autocomplete-required="true">
+              <input type="hidden" name="department" value="{{ field_form.department.value|default:'' }}" data-autocomplete-value required>
+              <input type="search" name="department_label" value="{{ request.POST.department_label|default:selected.department|default:'' }}" data-autocomplete-input autocomplete="off" required aria-label="Подразделение">
+              <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+            </div>
+          {% else %}{{ field_form.department }}{% endif %}
+          {{ field_form.department.errors }}
+        </div>
       </div>
       <div class="access-editor-group" id="access-editor-ad" data-editor-group="ad" role="tabpanel" hidden>
         {% for field in field_form.visible_fields %}{% if field.name == 'ad_provider' or field.name == 'ad_subject_id' or field.name == 'ad_username' or field.name == 'ad_upn' or field.name == 'ad_distinguished_name' or field.name == 'ad_domain' or field.name == 'ad_sync_status' %}<div class="access-form-field{% if field.errors %} has-error{% endif %}">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endif %}{% endfor %}

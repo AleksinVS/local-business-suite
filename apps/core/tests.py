@@ -719,6 +719,41 @@ class DepartmentViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Department.objects.filter(name="ОРИТ", parent=self.department).exists())
 
+    def test_department_parent_autocomplete_excludes_current_tree(self):
+        child = Department.objects.create(name="Кардиология", parent=self.department)
+        grandchild = Department.objects.create(name="Палата", parent=child)
+        other = Department.objects.create(name="Диагностика")
+        self.client.force_login(self.manager)
+
+        response = self.client.get(
+            reverse("core:department_options"),
+            {"current_department": self.department.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.json()["results"]}
+        self.assertNotIn(self.department.pk, ids)
+        self.assertNotIn(child.pk, ids)
+        self.assertNotIn(grandchild.pk, ids)
+        self.assertIn(other.pk, ids)
+
+    def test_department_edit_prefills_parent_and_rejects_descendant_post(self):
+        child = Department.objects.create(name="Кардиология", parent=self.department)
+        grandchild = Department.objects.create(name="Палата", parent=child)
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("core:department_edit", args=[child.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.department.indented_name)
+        self.assertContains(response, "data-autocomplete-url")
+
+        forged = self.client.post(
+            reverse("core:department_edit", args=[self.department.pk]),
+            {"name": self.department.name, "parent": grandchild.pk},
+        )
+        self.assertEqual(forged.status_code, 200)
+        self.assertIn("parent", forged.context["form"].errors)
+
     def test_department_nav_link_visible_for_manager(self):
         self.client.force_login(self.manager)
         response = self.client.get(reverse("core:dashboard"))

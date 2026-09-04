@@ -5,5 +5,10 @@
   "test_posting.py": "Проведение, FEFO, запрет отрицательных остатков, сторно и пересборка",
   "test_reports_exports.py": "Наборы данных и защита CSV/XLSX от формул",
   "test_runtime_settings.py": "Проверка и совместимое чтение warehouse.settings",
-  "test_views_security.py": "Сквозная матрица URL, подразделений, CSRF и экспортов"
+  "test_views_security.py": "Сквозная матрица URL, подразделений, CSRF и экспортов",
+  "test_document_sidebar.py": "Проверка табличного редактора документа в правой панели",
+  "test_inline_series_migrations.py": "Проверка безопасного переноса партий в текстовые серии",
+  "inline_series_migration_scenario.py": "Изолированный сценарий миграции старой схемы серий",
+  "test_relocation_mode.py": "Права, атомарность, идемпотентность и конкурентность массового перемещения",
+  "test_report_views.py": "Фильтры, локализация, постраничность и экспорт складских отчётов"
 }

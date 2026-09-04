@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.department_policy import available_user_departments
 from apps.accounts.models import ExternalIdentity
@@ -685,16 +685,58 @@ class AccessRoleMembershipForm(forms.Form):
     selected_user_ids = forms.MultipleChoiceField(
         label="Пользователи роли",
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.MultipleHiddenInput,
     )
+    new_user_id = forms.CharField(required=False, widget=forms.HiddenInput)
     reason = forms.CharField(
         label="Комментарий (необязательно)", max_length=1000, required=False
     )
 
-    def __init__(self, *args, role_name=None, **kwargs):
+    def __init__(self, *args, role_name=None, actor=None, current_users=None, **kwargs):
         super().__init__(*args, **kwargs)
-        users = get_user_model().objects.order_by("username", "pk")
+        users = list(current_users or ())
         self.fields["selected_user_ids"].choices = [
             (str(user.pk), user.get_full_name() or user.username) for user in users
         ]
         self.role_name = role_name or ""
+        self.actor = actor
+        self.manageable_members = []
+        self.protected_member_ids = set()
+        for user in users:
+            try:
+                assignable = assignable_role_names_for_actor(actor=actor, target_user=user)
+            except PermissionDenied:
+                assignable = ()
+            if self.role_name in assignable:
+                self.manageable_members.append(user)
+            else:
+                self.protected_member_ids.add(str(user.pk))
+
+    def clean_new_user_id(self):
+        raw_value = str(self.cleaned_data.get("new_user_id") or "").strip()
+        if not raw_value:
+            return ""
+        try:
+            user_id = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Выберите пользователя из предложенного списка.") from exc
+        target = get_user_model().objects.filter(pk=user_id, is_active=True).first()
+        if target is None:
+            raise ValidationError("Выбранный пользователь недоступен.")
+        try:
+            assignable = assignable_role_names_for_actor(actor=self.actor, target_user=target)
+        except PermissionDenied as exc:
+            raise ValidationError("Недостаточно прав для изменения выбранного пользователя.") from exc
+        if self.role_name not in assignable:
+            raise ValidationError("Недостаточно прав для назначения этой роли пользователю.")
+        return str(target.pk)
+
+    def clean(self):
+        cleaned = super().clean()
+        selected = {str(value) for value in cleaned.get("selected_user_ids") or ()}
+        selected.update(self.protected_member_ids)
+        new_user_id = cleaned.get("new_user_id")
+        if new_user_id:
+            selected.add(new_user_id)
+        cleaned["selected_user_ids"] = sorted(selected, key=int)
+        return cleaned

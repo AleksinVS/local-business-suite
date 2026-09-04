@@ -6,7 +6,7 @@
     <div><p class="eyebrow">Количественный учёт</p><h1>Склад</h1></div>
     <div class="table-actions">
       {% if can_operate_warehouse %}<a class="btn btn-primary" href="{% url 'warehouse:document_new' %}">Новый документ</a>{% endif %}
-      {% if can_operate_warehouse %}<a class="btn btn-outline" href="{% url 'warehouse:lots' %}">Зарегистрировать партию</a>{% endif %}
+      {% if can_view_warehouse %}<a class="btn btn-outline" href="{% url 'warehouse:stock' %}">{% if can_operate_warehouse %}Остатки и перемещение{% else %}Остатки{% endif %}</a>{% endif %}
       <a class="btn btn-outline" href="{% url 'warehouse:documents' %}">Документы</a>
     </div>
   </div>
@@ -21,16 +21,22 @@
 </section>
 <section class="panel">
   <div class="section-head"><h2>Текущие остатки</h2><small>Пороги срока: {{ expiry_warning_days|join:", " }} дней</small></div>
+  <form method="get" class="table-actions">
+    <label>Поиск <input name="q" value="{{ search }}" placeholder="Позиция, серия, склад или адрес"></label>
+    <button class="btn btn-outline" type="submit">Найти</button>
+  </form>
+  <p class="muted">Найдено: {{ total }}</p>
   <div class="table-container"><table>
     <thead><tr><th>Подразделение</th><th>Склад / адрес</th><th>Позиция</th><th>Серия</th><th>Срок</th><th>Источник</th><th>Остаток</th></tr></thead>
     <tbody>{% for balance in balances %}
       <tr{% if balance.expiry_warning %} class="warning"{% endif %}>
         <td>{{ balance.department }}</td><td>{{ balance.warehouse.name }} / {{ balance.location.code }}</td>
-        <td>{{ balance.lot.item.name }}</td><td>{{ balance.lot.batch_number|default:"—" }}</td>
-        <td>{{ balance.lot.expires_on|default:"—" }}</td><td>{{ balance.funding_source.name }}</td>
-        <td>{{ balance.quantity }} {{ balance.lot.item.unit.name }}</td>
+        <td>{{ balance.item.name }}</td><td>{{ balance.series|default:"—" }}</td>
+        <td>{{ balance.expires_on|default:"—" }}</td><td>{{ balance.funding_source.name }}</td>
+        <td>{{ balance.quantity }} {{ balance.item.unit.name }}</td>
       </tr>
     {% empty %}<tr><td colspan="7" class="empty-state">Остатков пока нет.</td></tr>{% endfor %}</tbody>
   </table></div>
+  {% include "warehouse/partials/pagination.html" %}
 </section>
 {% endblock %}

@@ -632,25 +632,57 @@ class AIViewsTests(TestCase):
         self.assertEqual(PendingAction.objects.count(), before_pending)
 
     def test_generic_right_panel_rejects_edit_mode_at_gateway_boundary(self):
+        from apps.ai.tests.test_contract_gateway import ai_policy_snapshot
+
         root = User.objects.create_superuser(username="access-generic-root", password="pass")
-        response = self.client.post(
-            reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
-            data=json.dumps({
-                "actor": {"user_id": root.id, "channel": "internal"},
-                "payload": {
-                    "source_code": "settings_center",
-                    "object_type": "user",
-                    "object_id": str(self.customer.id),
-                    "mode": "edit",
-                },
-            }),
-            content_type="application/json",
-            HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+        snapshot = ai_policy_snapshot()
+        snapshot["ai.contract.task_types"]["payload"]["task_types"].append(
+            {
+                "id": "ui.open_right_panel",
+                "title": "Open right panel",
+                "mode": "read",
+                "description": "Test the generic right-panel boundary.",
+                "allowed_tools": ["ui.open_right_panel"],
+                "required_slots": [],
+                "requires_confirmation": False,
+                "output_mode": "ui_command",
+                "example_requests": [],
+            }
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("outside delivered", response.json()["error"])
-        self.assertFalse(AgentActionLog.objects.filter(tool_code="ui.open_right_panel").exists())
-        self.assertFalse(PendingAction.objects.filter(tool_code="ui.open_right_panel").exists())
+        with patch("apps.ai.views.get_ai_document_snapshots", return_value=snapshot):
+            for mode in ("create", "edit"):
+                with self.subTest(mode=mode):
+                    response = self.client.post(
+                        reverse("ai:tool_execute", kwargs={"tool_code": "ui.open_right_panel"}),
+                        data=json.dumps({
+                            "actor": {"user_id": root.id, "channel": "internal"},
+                            "payload": {
+                                "source_code": "settings_center",
+                                "object_type": "user",
+                                "object_id": str(self.customer.id),
+                                "mode": mode,
+                            },
+                        }),
+                        content_type="application/json",
+                        HTTP_X_AI_GATEWAY_TOKEN="test-ai-token",
+                    )
+
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn(
+                        "ui.open_right_panel поддерживает только режим просмотра",
+                        " ".join(response.json()["errors"]),
+                    )
+
+        self.assertEqual(
+            AgentActionLog.objects.filter(
+                tool_code="ui.open_right_panel",
+                status=AgentActionLog.Status.FAILED,
+            ).count(),
+            2,
+        )
+        self.assertFalse(
+            PendingAction.objects.filter(tool_code="ui.open_right_panel").exists()
+        )
 
     def test_skill_catalog_includes_module_skills(self):
         response = self.client.get(

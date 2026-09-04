@@ -5,3 +5,8 @@ class MemoryConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.memory"
     verbose_name = "Память ИИ"
+
+    def ready(self):
+        from . import autocomplete
+
+        autocomplete.register()

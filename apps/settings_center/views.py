@@ -734,11 +734,22 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
             messages.success(request, f"Роль изменена. Аудит #{change.pk}.")
             return self._success_response(request, "roles", selected["code"], field)
         if field == "users":
-            form = AccessRoleMembershipForm(request.POST, role_name=selected["code"])
+            form = AccessRoleMembershipForm(
+                request.POST,
+                role_name=selected["code"],
+                actor=request.user,
+                current_users=selected.get("user_objects", []),
+            )
             if not form.is_valid():
                 return self._editor_response(request, form, selected)
             from apps.accounts.services import save_role_membership_change
-            ids = form.cleaned_data["selected_user_ids"]
+            ids = list(form.cleaned_data["selected_user_ids"])
+            remove_user_id = str(request.POST.get("remove_user_id") or "").strip()
+            if remove_user_id:
+                manageable_ids = {str(user.pk) for user in form.manageable_members}
+                if remove_user_id not in manageable_ids:
+                    raise ValidationError("Недостаточно прав для удаления выбранного участника.")
+                ids = [value for value in ids if str(value) != remove_user_id]
             audits = save_role_membership_change(actor=request.user, role_name=selected["code"], selected_user_ids=ids, reason=form.cleaned_data["reason"])
             messages.success(request, f"Состав роли изменён. Аудитов: {len(audits)}.")
             return self._success_response(request, "roles", selected["code"], "users")
@@ -817,8 +828,15 @@ class AccessWorkspaceView(UserManagementMixin, TemplateView):
                     },
                 )
             if field == "users":
-                current = [user.pk for user in selected.get("user_objects", [])]
-                return AccessRoleMembershipForm(bound_data, role_name=selected["code"], initial={"selected_user_ids": current})
+                current_users = selected.get("user_objects", [])
+                current = [user.pk for user in current_users]
+                return AccessRoleMembershipForm(
+                    bound_data,
+                    role_name=selected["code"],
+                    actor=request.user,
+                    current_users=current_users,
+                    initial={"selected_user_ids": current},
+                )
         if selected["kind"] == "board" and field == "groups":
             return BoardAccessForm(bound_data, initial={"group_names": selected["group_codes"]})
         return None

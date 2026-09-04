@@ -17,7 +17,6 @@ from .policies import (
 )
 from .review_selectors import (
     INDEX_REVIEW_DISPLAY_LIMIT,
-    assignees_for_issue,
     index_document_queryset,
     issue_detail_context,
     pending_item_kind,
@@ -79,7 +78,6 @@ class MemoryIssueDetailView(MemoryReviewAccessMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(issue_detail_context(self.issue, user=self.request.user))
-        context["assignees"] = assignees_for_issue(self.issue, actor=self.request.user)
         return context
 
 

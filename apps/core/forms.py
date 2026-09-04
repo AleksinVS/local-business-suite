@@ -23,11 +23,20 @@ class DepartmentForm(forms.ModelForm):
         model = Department
         fields = ["name", "parent"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if user is not None:
+            from apps.workorders.selectors import visible_departments_queryset
+
+            self.fields["parent"].queryset = visible_departments_queryset(user)
         if self.instance.pk:
             excluded_ids = set(self.instance.descendant_ids())
             self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(pk__in=excluded_ids)
+        raw_parent = self.data.get(self.add_prefix("parent")) if self.is_bound else self.initial.get("parent")
+        if not raw_parent:
+            raw_parent = getattr(self.instance, "parent_id", None)
+        selected = self.fields["parent"].queryset.filter(pk=raw_parent).first() if raw_parent else None
+        self.selected_parent_label = selected.indented_name if selected else ""
 
 
 class RoleRulesForm(forms.Form):

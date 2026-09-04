@@ -6,6 +6,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     access_contracts.py: file # Каталог определений ролей, подписанный preview/apply одной роли и серверная оценка влияния
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
+    autocomplete.py: file # Поставщики автодополнения подразделений пользователей и доступных участников роли с повторной проверкой полномочий
     config_documents.py: file # Спецификации документов настроек домена учётных записей и ролей
     department_policy.py: file # Fail-closed политика обязательного подразделения и карантинной записи
     ldap_backend.py: file # LDAP-бэкенд аутентификации с сериализованным внешним созданием пользователя и fail-closed синхронизацией контрактных ролей
@@ -63,6 +64,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Общий контракт AgentSkillProvider и registry модульных AI skills
     apps.py: file # Конфигурация приложения (в ready регистрирует system checks)
+    autocomplete.py: file # Общий серверный реестр безопасного автодополнения с проверкой прав и ограничением выдачи, включая parent-провайдер подразделений
     checks.py: file # Django system checks: валидация бизнес-контрактов (тег contracts), вынесенная с импорта settings в штатный manage.py check (ADR-0031)
     config_documents.py: file # Спецификации общих документов ролей и workflow для типизированного реестра настроек
     context_processors.py: file # Контекстные процессоры шаблонов
@@ -71,7 +73,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     contracts.py: file # Общие валидаторы контрактных структур: реестр интеграций, task brief/change plan и формат палитр статусов
     debug_views.py: file # Debug-представления (включаются в DEBUG=True)
     file_locks.py: file # Межпроцессная блокировка файлов Linux/Windows с ограничением времени и закрытым отказом
-    forms.py: file # Формы настроек
+    forms.py: file # Формы настроек и actor-scoped форма подразделения с автодополнением родителя
     health_views.py: file # Health-check endpoint (/health/)
     json_utils.py: file # Универсальные JSON-примитивы ядра: pretty_json/load_json_file/atomic_write_json и общие внутренние проверки _ensure_* (доменные валидаторы вынесены в contracts.py приложений, правила 3/5 AGENTS.md)
     media.py: file # Единый защищённый media-dispatcher: реестр доменных политик по префиксу первого сегмента пути (register_media_policy) + hardening (null-байт, path traversal); ядро не импортирует доменные модели, приложения сами регистрируют политику в ready() (правила 3/5 AGENTS.md)
@@ -83,12 +85,14 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     settings_descriptors.py: file # Доменные descriptors Settings Center для core contracts и .env status
     source_adapters.py: file # Общий контракт SourceObjectEnvelope, SourceAdapter, privacy profiles и registry универсальных источников
     status_colors.py: file # Безопасное преобразование контрактных палитр статусов в CSS-переменные интерфейса
+    test_autocomplete.py: file # Тесты общего контракта, прав и формата автодополнения
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты приложения
     views.py: file # Представления дашборда и настроек с actor-aware read selectors
   filehub: # File Source Auto Organization: 11 моделей MemoryFile*, baseline/incoming/move/stats сервисы и UI. Контур заморожен ADR-0030 решением 5 (см. README.md) до выбора пилотного источника
     admin.py: file # Регистрация моделей MemoryFile* в Django Admin
     apps.py: file # Конфигурация Django-приложения filehub
+    autocomplete.py: file # Поставщик доступных объектов файлов без раскрытия физических путей
     file_organization_baseline.py: file # Генератор исходной виртуальной файловой структуры с confidence, evidence, conflicts и review issues
     file_organization_incoming.py: file # Worker входного каталога для стабильных файлов, secret blocking и виртуального размещения
     file_organization_move.py: file # Согласованный managed_fs перенос файлов с exact batch membership, claim token, actor-aware approval и copy/verify/quarantine/purge gate; system bootstrap создает только PLANNED
@@ -103,6 +107,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
   inventory: # Каталог управляемых активов (медицинские устройства)
     admin.py: file # Регистрация моделей в Django Admin
     apps.py: file # Конфигурация приложения
+    autocomplete.py: file # Actor-aware providers подразделений и повторяющихся реквизитов медицинских изделий для общего автодополнения
     forms.py: file # Формы устройств
     models.py: file # Модель MedicalDevice (с архивацией)
     selectors.py: file # Actor-aware selectors доступных и создаваемых изделий
@@ -116,6 +121,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     acl.py: file # ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens
     admin.py: file # Регистрация моделей памяти в Django Admin
     apps.py: file # Конфигурация Django-приложения memory
+    autocomplete.py: file # ACL-scoped поставщики автодополнения источников памяти и исполнителей доступной проблемы ревью
     chat_memory.py: file # Синхронный memory.remember (файл+commit+индекс), personal/org chat knowledge writer path, organization candidacy (pending pages) и reflection
     config_documents.py: file # Спецификации документов памяти и FileHub в типизированном реестре настроек
     contracts.py: file # Валидаторы доменных контрактов памяти (sources, profiles, routing, trust/claims policy, retrieval budget, graph schema, ingestion и file organization), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
@@ -206,7 +212,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты
     views.py: file # Представления листа ожидания
-  warehouse: # Домен количественного складского учёта по подразделениям, партиям и адресам
+  warehouse: # Домен количественного складского учёта по подразделениям, сериям и адресам
     legacy_import: # Версионированная подготовка и миграция legacy-складов
       access_v1.py: file # Предметное преобразование таблиц Access v1
       landing.py: file # Проверяемый неизменяемый landing package
@@ -221,20 +227,34 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
       posting.py: file # Проведение, FEFO, сторно и атомарное обновление остатков
       rebuilding.py: file # Проверочная пересборка проекции из журнала
     tests: # Тесты складского домена, прав, интерфейса, отчётов и миграции
+      inline_series_migration_scenario.py: file # Изолированный сценарий миграции старой схемы серий
       test_access.py: file # Матрица складских ролей и областей подразделений
+      test_document_sidebar.py: file # Проверка табличного редактора документа в правой панели
+      test_inline_series_migrations.py: file # Проверка безопасного переноса партий в текстовые серии
       test_legacy_import.py: file # Целостность landing package, идемпотентность и сверка legacy-импорта
       test_posting.py: file # Проведение, FEFO, запрет отрицательных остатков, сторно и пересборка
+      test_relocation_mode.py: file # Права, атомарность, идемпотентность и конкурентность массового перемещения
+      test_report_views.py: file # Фильтры, локализация, постраничность и экспорт складских отчётов
       test_reports_exports.py: file # Наборы данных и защита CSV/XLSX от формул
       test_runtime_settings.py: file # Проверка и совместимое чтение warehouse.settings
       test_views_security.py: file # Сквозная матрица URL, подразделений, CSRF и экспортов
     admin.py: file # Резервный superuser-only просмотр и обслуживание
+    autocomplete.py: file # Область складских поставщиков общего автодополнения
     config_documents.py: file # Спецификация PostgreSQL-документа настроек склада
     contracts.py: file # Доменная проверка настроек склада
     forms.py: file # Закрытые по области доступа формы документов и справочников
     models.py: file # Справочники, документы, проводки, остатки, отчётные профили и импорт
     policies.py: file # Складские права и области доступа
+    relocation_forms.py: file # Проверка подписанного выбора и формы склада назначения
+    relocation_selectors.py: file # Областные выборки, фильтры и автодополнение сценария перемещения
+    relocation_views.py: file # Список остатков, правая панель и сохранение перемещения
+    relocation.py: file # Атомарная команда массового перемещения выбранных остатков
+    report_forms.py: file # Единые видимые фильтры складских отчётов
+    report_views.py: file # Постраничное HTML-представление и экспорт складских отчётов
+    right_panel.py: file # Поставщик безопасных правых панелей складских документов
     runtime_settings.py: file # Чтение warehouse.settings через единый repository
     selectors.py: file # Серверные области чтения и наборы данных остатков
+    series.py: file # Нормализация текстового номера серии и срока годности без отдельного справочника серий
     settings_descriptors.py: file # Descriptor warehouse.settings для Центра настроек
     urls.py: file # Маршруты раздела Склад
     views.py: file # Серверный интерфейс остатков, документов, отчётов и справочников
@@ -242,6 +262,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     admin.py: file # Регистрация моделей в Django Admin
     ai_skills.py: file # Модульные AI skills заявок для открытия карточек и workflow-инструкций
     apps.py: file # Конфигурация приложения
+    autocomplete.py: file # Actor-aware providers общего автодополнения досок, подразделений, изделий и исполнителей
     config_documents.py: file # Спецификации связанных документов workflow и палитры заявок
     contracts.py: file # Валидаторы доменных контрактов заявок (role_rules, workflow_rules, workorder_status_colors), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
     department_filter.py: file # Нормализация фильтра подразделений и безопасная модель доступного дерева
@@ -258,7 +279,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     test_actor_commands.py: file # Тесты actor-aware команд изменения заявок
     tests.py: file # Тесты приложения
     urls.py: file # URL-маршруты нарядов
-    views.py: file # Представления: Kanban-доска, детали наряда, комментарии и безопасное автодополнение формы создания
+    views.py: file # Представления: Kanban-доска, детали наряда, комментарии и безопасные формы создания/изменения
 archive: # Завершённые документы: отчёты об ошибках, заметки миграций, исторические планы
   AGENT_RUNTIME_SETUP.md: file # Настройка agent runtime (устарело)
   AI_FIRST_CODE_FIRST_REMEDIATION_PLAN.md: file # План remediation AI-first
@@ -495,7 +516,6 @@ docs: # Документация проекта
       project-knowledge-system-mvp.md: file # Исполнительный план MVP базы проектных знаний для ИИ-агентов (kb): задачи T0-T6, DDL, алгоритмы
       README.md: file # Правила для активных planning-файлов
       settings-storage-simplification.md: file # Активный план упрощения хранения и доставки настроек
-      warehouse-ux-simplification.md: file # Активный план упрощения UX склада и общего автодополнения портала
     archive: # Архив закрытых или остановленных планов
       2026: file
       README.md: file # Описание архива planning-файлов
@@ -509,6 +529,7 @@ scripts: # Скрипты и инструменты разработки
   e2e: # Playwright e2e configuration and tests
     tests: # Permanent Playwright e2e scenarios
       access_administration.spec.ts: file # Checks six access tabs, master-detail editors, memory context, reserve Django Admin and 320px dialog behavior
+      autocomplete.spec.ts: file # Checks scoped autocomplete keyboard, ARIA and stale-response behavior
       copilotkit_sidebar.spec.ts: file # Checks CopilotKit AG-UI sidebar embedding, signed actor config and runtime bridge
       health.spec.ts: file # Checks that the Django health endpoint is reachable without starting a browser
       kanban_department_filter.spec.ts: file # Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar
@@ -516,6 +537,8 @@ scripts: # Скрипты и инструменты разработки
       notifications.spec.ts: file # Checks PWA manifest, root service worker and authenticated notification center behavior
       portal_smoke.spec.ts: file # Checks authenticated login and the main portal shell in a real browser
       right_panel_ai_navigation.spec.ts: file # Checks opening module objects in the shared right panel from the AI chat page
+      right_panel_form_shell.spec.ts: file # Checks create/edit form lifecycle, dirty guard, submission and mobile right panel bounds
+      warehouse_document_editor.spec.ts: file # Checks cloned warehouse rows keep unique autocomplete context and listbox ids
     playwright.config.ts: file # Playwright configuration for project e2e tests with artifacts under .local/playwright
     run-smoke.sh: file # Self-contained authenticated browser smoke runner with isolated SQLite database and artifacts under .local
   linux: # Linux deployment и обслуживание
@@ -820,7 +843,6 @@ workflow: # Исполнительные workflow-пакеты для сложн
       TASK_ACCEPTANCE.06-ai-agent-runtime-delivery.md: file # Техническая приёмка AI gateway и доставки agent-runtime
       TASK_ACCEPTANCE.07-memory-filehub-and-static-classification.md: file # Техническая приёмка memory/FileHub и классификации документов
       TASK_ACCEPTANCE.08-cleanup-recovery-and-final-acceptance.md: file # Техническая приёмка cleanup/recovery на тестовом хосте без production cutover
-    warehouse-ux-simplification: directory... # Workflow: упрощение UX склада и общее автодополнение (9 task packets)
     README.md: file # Правила для активных workflow-блоков
   ai_artifacts: directory... # Legacy-шаблоны agent workflow и change plan
   archive: # Архив workflow-блоков
@@ -861,6 +883,7 @@ workflow: # Исполнительные workflow-пакеты для сложн
       waiting-list-cards-and-access-flags: file
       waiting-list-inline-editing: file
       warehouse-management-system: file
+      warehouse-ux-simplification: file
       workorder-tree-view: file
     README.md: file # Правила и описание архива workflow-блоков
   templates: directory... # Шаблоны workflow-артефактов

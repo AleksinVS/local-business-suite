@@ -8,12 +8,10 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 
 User = get_user_model()
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.decorators.cache import never_cache
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
 
 from . import notification_events
@@ -170,30 +168,6 @@ def _positive_id(raw_value):
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None
-
-
-def _department_option_labels(departments):
-    department_by_id = {department.id: department for department in departments}
-    labels = {}
-
-    def build_label(department_id, visited=()):
-        if department_id in labels:
-            return labels[department_id]
-        department = department_by_id[department_id]
-        if department_id in visited or department.parent_id not in department_by_id:
-            label = department.name
-        else:
-            parent_label = build_label(
-                department.parent_id,
-                (*visited, department_id),
-            )
-            label = f"{parent_label} / {department.name}"
-        labels[department_id] = label
-        return label
-
-    for department_id in department_by_id:
-        build_label(department_id)
-    return labels
 
 
 def _workorder_status_color_style():
@@ -627,8 +601,14 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context["return_view"] = VIEW_BOARD
         form = context["form"]
+        board_id = _positive_id(form["board"].value())
         department_id = _positive_id(form["department"].value())
         device_id = _positive_id(form["device"].value())
+        board = (
+            form.fields["board"].queryset.filter(pk=board_id).first()
+            if board_id
+            else None
+        )
         department = None
         device = None
         if department_id:
@@ -642,6 +622,7 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
         context["selected_department_label"] = (
             department_choice_label(department) if department else ""
         )
+        context["selected_board_label"] = board.title if board else ""
         context["selected_device_label"] = (
             device_choice_label(device) if device else ""
         )
@@ -649,60 +630,6 @@ class WorkOrderCreateView(LoginRequiredMixin, CreateView):
             device.department_id if device else ""
         )
         return context
-
-
-@method_decorator(never_cache, name="dispatch")
-class WorkOrderCreateAutocompleteView(LoginRequiredMixin, View):
-    kind = ""
-    result_limit = 20
-
-    def dispatch(self, request, *args, **kwargs):
-        actor = resolve_active_actor(request.user, force_refresh=True)
-        if actor is None or not can_create(actor):
-            return HttpResponseForbidden("Создание заявок запрещено")
-        return super().dispatch(request, *args, **kwargs)
-
-    def get(self, request, *args, **kwargs):
-        query = request.GET.get("q", "").strip()[:100]
-        normalized_query = query.casefold()
-        if self.kind == "department":
-            departments = tuple(creation_departments_queryset(request.user))
-            labels = _department_option_labels(departments)
-            results = [
-                {"id": department.id, "label": labels[department.id]}
-                for department in departments
-                if not normalized_query
-                or normalized_query in department.name.casefold()
-                or normalized_query in labels[department.id].casefold()
-            ][: self.result_limit]
-        elif self.kind == "device":
-            devices = creation_devices_queryset(request.user)
-            if query:
-                devices = devices.filter(
-                    Q(name__icontains=query)
-                    | Q(inventory_number__icontains=query)
-                    | Q(serial_number__icontains=query)
-                )
-            devices = list(devices[: self.result_limit])
-            department_labels = _department_option_labels(
-                tuple(creation_departments_queryset(request.user))
-            )
-            results = [
-                {
-                    "id": device.id,
-                    "label": device_choice_label(device),
-                    "name": device.name,
-                    "department_id": device.department_id,
-                    "department_label": department_labels.get(
-                        device.department_id,
-                        device.department.name,
-                    ),
-                }
-                for device in devices
-            ]
-        else:
-            return JsonResponse({"error": "Неизвестный справочник."}, status=404)
-        return JsonResponse({"results": results})
 
 
 class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
@@ -771,7 +698,36 @@ class WorkOrderUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["workorder"] = self.get_object()
+        workorder = self.get_object()
+        context["workorder"] = workorder
+        form = context["form"]
+
+        def selected_object(field_name):
+            value = _positive_id(form[field_name].value())
+            if not value:
+                return None
+            return form.fields[field_name].queryset.filter(pk=value).first()
+
+        board = selected_object("board")
+        department = selected_object("department")
+        device = selected_object("device")
+        assignee = selected_object("assignee")
+        context["selected_board_label"] = board.title if board else ""
+        context["selected_department_label"] = (
+            department_choice_label(department) if department else ""
+        )
+        context["selected_device_label"] = (
+            device_choice_label(device) if device else ""
+        )
+        context["selected_device_department_id"] = (
+            device.department_id if device else ""
+        )
+        context["selected_assignee_label"] = (
+            (assignee.get_full_name() or assignee.username) if assignee else ""
+        )
+        context["current_device_id"] = device.pk if device else ""
+        context["current_assignee_id"] = assignee.pk if assignee else ""
+        context["current_workorder_id"] = workorder.pk
         return context
 
     def get_success_url(self):

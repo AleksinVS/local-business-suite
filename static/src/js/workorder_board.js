@@ -29,179 +29,51 @@
     });
   }
 
-  function initWorkorderAutocomplete(root) {
-    if (!root || root.dataset.autocompleteInitialized === "true") return;
-    root.dataset.autocompleteInitialized = "true";
+  function autocompleteMetadata(option) {
+    return { ...(option?.metadata || {}), ...(option || {}) };
+  }
 
-    const input = root.querySelector("[data-autocomplete-input]");
+  function clearDeviceIfDepartmentChanged(departmentRoot, departmentId) {
+    const form = departmentRoot.closest("form");
+    const deviceRoot = form?.querySelector('[data-autocomplete][data-autocomplete-kind="device"]');
+    const deviceValue = deviceRoot?.querySelector("[data-autocomplete-value]");
+    if (!deviceValue?.value || !deviceValue.dataset.selectedDepartmentId) return;
+    if (deviceValue.dataset.selectedDepartmentId === String(departmentId || "")) return;
+    window.LocalBusinessAutocomplete?.clear(deviceRoot, { notify: true });
+    deviceValue.dataset.selectedDepartmentId = "";
+  }
+
+  document.addEventListener("autocomplete:select", (event) => {
+    const root = event.target.closest?.("[data-autocomplete]");
+    if (!root?.closest("#workorder-create-form")) return;
+    const option = event.detail?.option || {};
+    const metadata = autocompleteMetadata(option);
+    if (root.dataset.autocompleteKind === "department") {
+      clearDeviceIfDepartmentChanged(root, option.value);
+      return;
+    }
+    if (root.dataset.autocompleteKind !== "device" || !metadata.department_id) return;
     const valueInput = root.querySelector("[data-autocomplete-value]");
-    const optionsNode = root.querySelector("[data-autocomplete-options]");
-    const endpoint = root.dataset.autocompleteUrl;
-    const kind = root.dataset.autocompleteKind;
-    const isRequired = root.dataset.autocompleteRequired === "true";
-    if (!input || !valueInput || !optionsNode || !endpoint) return;
-
-    let selectedLabel = input.value;
-    let results = [];
-    let activeIndex = -1;
-    let debounceTimer = 0;
-    let requestController = null;
-
-    function closeOptions() {
-      optionsNode.hidden = true;
-      input.setAttribute("aria-expanded", "false");
-      activeIndex = -1;
-      input.removeAttribute("aria-activedescendant");
+    if (valueInput) valueInput.dataset.selectedDepartmentId = String(metadata.department_id);
+    const departmentRoot = root.closest("form")?.querySelector(
+      '[data-autocomplete][data-autocomplete-kind="department"]'
+    );
+    if (departmentRoot) {
+      window.LocalBusinessAutocomplete?.setSelection(
+        departmentRoot,
+        {
+          value: metadata.department_id,
+          label: metadata.department_label || "",
+        },
+        { notify: true }
+      );
     }
+  });
 
-    function setSelectionError() {
-      const hasUnselectedText = Boolean(input.value.trim() && !valueInput.value);
-      if (hasUnselectedText) {
-        input.setCustomValidity("Выберите значение из предложенных вариантов.");
-      } else if (isRequired && !valueInput.value) {
-        input.setCustomValidity("Выберите подразделение из предложенных вариантов.");
-      } else {
-        input.setCustomValidity("");
-      }
-    }
-
-    function clearDeviceIfDepartmentChanged(departmentId) {
-      if (kind !== "department") return;
-      const form = root.closest("form");
-      const deviceRoot = form?.querySelector('[data-workorder-autocomplete][data-autocomplete-kind="device"]');
-      const deviceValue = deviceRoot?.querySelector("[data-autocomplete-value]");
-      const deviceInput = deviceRoot?.querySelector("[data-autocomplete-input]");
-      if (!deviceValue?.value || !deviceValue.dataset.selectedDepartmentId) return;
-      if (deviceValue.dataset.selectedDepartmentId === String(departmentId)) return;
-      deviceValue.value = "";
-      deviceValue.dataset.selectedDepartmentId = "";
-      if (deviceInput) {
-        deviceInput.value = "";
-        deviceInput.setCustomValidity("");
-      }
-    }
-
-    function selectResult(result) {
-      valueInput.value = String(result.id);
-      selectedLabel = result.label;
-      input.value = result.label;
-      input.setCustomValidity("");
-      if (kind === "department") {
-        clearDeviceIfDepartmentChanged(result.id);
-      }
-      if (kind === "device") {
-        valueInput.dataset.selectedDepartmentId = String(result.department_id || "");
-        const form = root.closest("form");
-        const departmentRoot = form?.querySelector('[data-workorder-autocomplete][data-autocomplete-kind="department"]');
-        const departmentValue = departmentRoot?.querySelector("[data-autocomplete-value]");
-        const departmentInput = departmentRoot?.querySelector("[data-autocomplete-input]");
-        if (departmentValue && departmentInput && result.department_id) {
-          departmentValue.value = String(result.department_id);
-          departmentInput.value = result.department_label || "";
-          departmentInput.setCustomValidity("");
-        }
-      }
-      closeOptions();
-    }
-
-    function activateOption(index) {
-      if (!results.length) return;
-      activeIndex = Math.max(0, Math.min(index, results.length - 1));
-      optionsNode.querySelectorAll("[data-autocomplete-option]").forEach((option, optionIndex) => {
-        const isActive = optionIndex === activeIndex;
-        option.classList.toggle("active", isActive);
-        option.setAttribute("aria-selected", String(isActive));
-        if (isActive) {
-          input.setAttribute("aria-activedescendant", option.id);
-          option.scrollIntoView({ block: "nearest" });
-        }
-      });
-    }
-
-    function renderOptions(items) {
-      results = Array.isArray(items) ? items : [];
-      optionsNode.replaceChildren();
-      if (!results.length) {
-        const empty = document.createElement("div");
-        empty.className = "workorder-autocomplete-empty";
-        empty.textContent = "Подходящих вариантов нет";
-        optionsNode.appendChild(empty);
-      } else {
-        results.forEach((result, index) => {
-          const option = document.createElement("div");
-          option.id = `${optionsNode.id}-option-${index}`;
-          option.className = "workorder-autocomplete-option";
-          option.setAttribute("role", "option");
-          option.setAttribute("aria-selected", "false");
-          option.tabIndex = -1;
-          option.dataset.autocompleteOption = "";
-          option.textContent = result.label;
-          option.addEventListener("mousedown", (event) => event.preventDefault());
-          option.addEventListener("click", () => selectResult(result));
-          optionsNode.appendChild(option);
-        });
-      }
-      optionsNode.hidden = false;
-      input.setAttribute("aria-expanded", "true");
-      activeIndex = -1;
-    }
-
-    async function loadOptions() {
-      requestController?.abort();
-      requestController = new AbortController();
-      const url = new URL(endpoint, window.location.origin);
-      url.searchParams.set("q", input.value.trim());
-      try {
-        const response = await fetch(url, {
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-          signal: requestController.signal,
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
-        renderOptions(payload.results);
-      } catch (error) {
-        if (error.name === "AbortError") return;
-        renderOptions([]);
-      }
-    }
-
-    function scheduleLoad() {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(loadOptions, 180);
-    }
-
-    input.addEventListener("focus", loadOptions);
-    input.addEventListener("input", () => {
-      if (input.value !== selectedLabel) {
-        valueInput.value = "";
-        valueInput.dataset.selectedDepartmentId = "";
-      }
-      setSelectionError();
-      scheduleLoad();
-    });
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        if (optionsNode.hidden) loadOptions();
-        else activateOption(activeIndex + 1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        activateOption(activeIndex <= 0 ? results.length - 1 : activeIndex - 1);
-      } else if (event.key === "Enter" && activeIndex >= 0) {
-        event.preventDefault();
-        selectResult(results[activeIndex]);
-      } else if (event.key === "Escape") {
-        closeOptions();
-      }
-    });
-    input.addEventListener("blur", () => window.setTimeout(closeOptions, 100));
-    setSelectionError();
-  }
-
-  function initWorkorderAutocompletes(scope = document) {
-    scope.querySelectorAll?.("[data-workorder-autocomplete]").forEach(initWorkorderAutocomplete);
-  }
+  document.addEventListener("autocomplete:clear", (event) => {
+    const root = event.target.closest?.('[data-autocomplete][data-autocomplete-kind="department"]');
+    if (root?.closest("#workorder-create-form")) clearDeviceIfDepartmentChanged(root, "");
+  });
 
   function csrfToken() {
     try {
@@ -234,10 +106,10 @@
   document.addEventListener("DOMContentLoaded", () => {
     restoreColumnStates();
     updateEmptyState();
-    initWorkorderAutocompletes();
+    window.LocalBusinessAutocomplete?.init(document);
   });
   document.addEventListener("htmx:afterSwap", (event) => {
-    initWorkorderAutocompletes(event.detail.target || document);
+    window.LocalBusinessAutocomplete?.init(event.detail.target || document);
     if (event.detail.target?.id === "workorders-view" || event.detail.target?.id === "board-columns") {
       restoreColumnStates();
       updateEmptyState();

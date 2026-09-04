@@ -2,6 +2,7 @@
   ".": "Каталог управляемых активов (медицинские устройства)",
   "models.py": "Модель MedicalDevice (с архивацией)",
   "selectors.py": "Actor-aware selectors доступных и создаваемых изделий",
+  "autocomplete.py": "Actor-aware providers подразделений и повторяющихся реквизитов медицинских изделий для общего автодополнения",
   "services.py": "Actor-aware команды создания, изменения и архивации изделий",
   "views.py": "Представления CRUD устройств со scoped read querysets",
   "forms.py": "Формы устройств",

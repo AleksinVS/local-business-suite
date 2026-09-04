@@ -10,10 +10,11 @@ class WorkordersConfig(AppConfig):
         # AppRegistryNotReady на импорте моделей во время загрузки приложений.
         from apps.core.media import register_media_policy
 
-        from . import ai_skills, right_panel, source_adapter
+        from . import ai_skills, autocomplete, right_panel, source_adapter
         from .media_policies import serve_workorder_media
 
         ai_skills.register()
+        autocomplete.register()
         right_panel.register()
         source_adapter.register()
         register_media_policy("workorders", serve_workorder_media)

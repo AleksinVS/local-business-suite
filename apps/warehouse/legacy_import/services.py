@@ -1,7 +1,7 @@
 """Подготовка, идемпотентный импорт и сверка landing package склада.
 
 Этот модуль намеренно не пишет ``StockEntry`` или ``StockBalance`` напрямую.
-Партийные начальные остатки передаются только в доменный posting service, когда
+Начальные остатки по сериям передаются только в доменный posting service, когда
 тот доступен; до этого commit закрыто отклоняется.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ from apps.warehouse.models import (
     StockDocument,
     StockDocumentLine,
     StockBalance,
-    StockLot,
+    StockEntry,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,
@@ -35,6 +35,7 @@ from apps.warehouse.models import (
     WarehouseItem,
     WarehouseItemCategory,
 )
+from apps.warehouse.series import normalize_series
 
 from .access_v1 import (
     ACCESS_V1_ADAPTER,
@@ -44,7 +45,7 @@ from .access_v1 import (
     department_dto,
     funding_dto,
     item_dto,
-    opening_lot_dto,
+    opening_stock_dto,
 )
 from .landing import LandingPackageError, load_landing_package, package_dir, sha256_payload, write_landing_package
 
@@ -61,6 +62,123 @@ class PreparedIssue:
     source_table: str = ""
     legacy_key: str = ""
     context: dict | None = None
+
+
+@dataclass(frozen=True)
+class _CatalogIdentity:
+    row: dict
+    dto: dict
+    target_code: str
+
+
+def _identity_key(value: object) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _catalog_identities(
+    *, rows: dict[str, list[dict]], table: str, dto_factory, prefix: str
+) -> list[_CatalogIdentity]:
+    identities = []
+    for row in rows.get(table, []):
+        dto = dto_factory(row.get("payload", {}))
+        identities.append(
+            _CatalogIdentity(
+                row=row,
+                dto=dto,
+                target_code=_stable_code(prefix, dto["code"] or dto["name"]),
+            )
+        )
+    return identities
+
+
+def _item_identities(rows: dict[str, list[dict]]) -> list[_CatalogIdentity]:
+    return _catalog_identities(
+        rows=rows,
+        table="s_ls",
+        dto_factory=item_dto,
+        prefix="legacy-item",
+    )
+
+
+def _source_identities(rows: dict[str, list[dict]]) -> list[_CatalogIdentity]:
+    return _catalog_identities(
+        rows=rows,
+        table="istoch",
+        dto_factory=funding_dto,
+        prefix="legacy-source",
+    )
+
+
+def _resolve_catalog_identity(
+    identities: list[_CatalogIdentity],
+    *,
+    reference_code: str,
+    reference_name: str,
+) -> tuple[str | None, str]:
+    """Resolve an explicit code first, otherwise an unambiguous display name."""
+
+    if reference_code:
+        code_key = _identity_key(reference_code)
+        candidates = {
+            identity.target_code
+            for identity in identities
+            if code_key
+            in {
+                _identity_key(identity.dto["code"]),
+                _identity_key(identity.dto["legacy_key"]),
+            }
+        }
+    elif reference_name:
+        name_key = _identity_key(reference_name)
+        candidates = {
+            identity.target_code
+            for identity in identities
+            if _identity_key(identity.dto["name"]) == name_key
+        }
+    else:
+        return None, "missing"
+    if len(candidates) == 1:
+        return next(iter(candidates)), "resolved"
+    if candidates:
+        return None, "ambiguous"
+    return None, "missing"
+
+
+def _resolve_opening_item(
+    dto: dict, identities: list[_CatalogIdentity]
+) -> tuple[str | None, str]:
+    return _resolve_catalog_identity(
+        identities,
+        reference_code=dto["item_code"],
+        reference_name=dto["item_name"],
+    )
+
+
+def _resolve_opening_source(
+    dto: dict, identities: list[_CatalogIdentity]
+) -> tuple[str | None, str]:
+    return _resolve_catalog_identity(
+        identities,
+        reference_code=dto["funding_source_code"],
+        reference_name=dto["funding_source_name"],
+    )
+
+
+def _catalog_identity_collisions(
+    identities: list[_CatalogIdentity],
+) -> list[dict]:
+    by_target: dict[str, set[tuple[str, str]]] = {}
+    for identity in identities:
+        signature = (
+            _identity_key(identity.dto["code"]),
+            _identity_key(identity.dto["name"]),
+        )
+        by_target.setdefault(identity.target_code, set()).add(signature)
+    return [
+        {"target_code": target_code, "identities": sorted(signatures)}
+        for target_code, signatures in sorted(by_target.items())
+        if len(signatures) > 1
+    ]
 
 
 def load_mapping(path: Path | None) -> dict:
@@ -151,7 +269,12 @@ def prepare_landing(
         raise LegacyImportError("Для этого landing package не найден профиль Access v1.")
     run = ensure_import_run(manifest=manifest)
     mapping = mapping or {}
-    issues = _validate_rows(rows=rows, mapping=mapping, include_unused_catalog=include_unused_catalog)
+    issues = _validate_rows(
+        rows=rows,
+        mapping=mapping,
+        include_unused_catalog=include_unused_catalog,
+        existing_series_expiries=_existing_series_expiries(rows),
+    )
     _sync_issues(run=run, issues=issues)
     run.manifest = {
         **manifest,
@@ -172,12 +295,18 @@ def prepare_landing(
     return run, summary, issues
 
 
-def _validate_rows(*, rows: dict[str, list[dict]], mapping: dict, include_unused_catalog: bool = False) -> list[PreparedIssue]:
+def _validate_rows(
+    *,
+    rows: dict[str, list[dict]],
+    mapping: dict,
+    include_unused_catalog: bool = False,
+    existing_series_expiries: dict[tuple[str, str], set[date | None]] | None = None,
+) -> list[PreparedIssue]:
     issues: list[PreparedIssue] = []
     department_map = _normalised_mapping(mapping.get("departments"))
     unit_map = _normalised_mapping(mapping.get("units"))
-    source_names = set()
-    item_names = set()
+    item_identities = _item_identities(rows)
+    source_identities = _source_identities(rows)
     for record in rows.get("s_otdelenie", []):
         dto = department_dto(record.get("payload", {}))
         if not dto["name"]:
@@ -188,14 +317,32 @@ def _validate_rows(*, rows: dict[str, list[dict]], mapping: dict, include_unused
         dto = funding_dto(record.get("payload", {}))
         if not dto["name"]:
             issues.append(_issue("critical", "funding_source_name_missing", "Не указано наименование источника финансирования.", "istoch", dto["legacy_key"]))
-        source_names.add(dto["name"].casefold())
+    for collision in _catalog_identity_collisions(source_identities):
+        issues.append(
+            _issue(
+                "critical",
+                "funding_source_identity_collision",
+                "Несколько legacy-источников образуют один целевой код.",
+                "istoch",
+                context=collision,
+            )
+        )
     for record in _catalog_rows(rows=rows, include_unused_catalog=include_unused_catalog):
         dto = item_dto(record.get("payload", {}))
         if not dto["name"]:
             issues.append(_issue("critical", "item_name_missing", "Не указано наименование складской позиции.", "s_ls", dto["legacy_key"]))
         if not dto["unit"] or dto["unit"].casefold() not in unit_map:
             issues.append(_issue("critical", "unit_mapping_missing", "Нет подтверждённого сопоставления единицы измерения.", "s_ls", dto["legacy_key"], {"legacy_unit": dto["unit"]}))
-        item_names.add(dto["name"].casefold())
+    for collision in _catalog_identity_collisions(item_identities):
+        issues.append(
+            _issue(
+                "critical",
+                "item_identity_collision",
+                "Несколько legacy-позиций образуют один целевой код.",
+                "s_ls",
+                context=collision,
+            )
+        )
     seen_hashes: set[tuple[str, str]] = set()
     for table, table_rows in rows.items():
         for record in table_rows:
@@ -203,18 +350,93 @@ def _validate_rows(*, rows: dict[str, list[dict]], mapping: dict, include_unused
             if key in seen_hashes:
                 issues.append(_issue("critical", "ambiguous_duplicate_source_row", "В landing package есть неразличимые строки.", table, key[1]))
             seen_hashes.add(key)
+    expiry_by_series: dict[tuple[str, str], set[date | None]] = {}
+    series_records: dict[tuple[str, str], list[tuple[dict, dict]]] = {}
     for record in rows.get("stelazh", []):
-        dto = opening_lot_dto(record.get("payload", {}))
+        dto = opening_stock_dto(record.get("payload", {}))
         if dto["quantity"] is None or dto["quantity"] <= 0:
             issues.append(_issue("critical", "opening_quantity_invalid", "Начальный остаток имеет некорректное количество.", "stelazh", dto["legacy_key"]))
         if dto["department"].casefold() not in department_map:
             issues.append(_issue("critical", "opening_department_mapping_missing", "Нет подтверждённого подразделения начального остатка.", "stelazh", dto["legacy_key"]))
         if dto["unit"].casefold() not in unit_map:
             issues.append(_issue("critical", "opening_unit_mapping_missing", "Нет подтверждённой единицы начального остатка.", "stelazh", dto["legacy_key"]))
-        if dto["item"].casefold() not in item_names:
-            issues.append(_issue("critical", "opening_item_missing", "Партия ссылается на нераспознанную позицию.", "stelazh", dto["legacy_key"]))
-        if dto["funding_source"].casefold() not in source_names:
-            issues.append(_issue("critical", "opening_funding_source_missing", "Партия ссылается на нераспознанный источник финансирования.", "stelazh", dto["legacy_key"]))
+        item_target_code, item_status = _resolve_opening_item(dto, item_identities)
+        if item_status != "resolved":
+            issue_code = (
+                "opening_item_ambiguous"
+                if item_status == "ambiguous"
+                else "opening_item_missing"
+            )
+            issues.append(
+                _issue(
+                    "critical",
+                    issue_code,
+                    "Серия ссылается на неоднозначную позицию."
+                    if item_status == "ambiguous"
+                    else "Серия ссылается на нераспознанную позицию.",
+                    "stelazh",
+                    dto["legacy_key"],
+                    {
+                        "item_code": dto["item_code"],
+                        "item_name": dto["item_name"],
+                    },
+                )
+            )
+        _source_target_code, source_status = _resolve_opening_source(
+            dto, source_identities
+        )
+        if source_status != "resolved":
+            issue_code = (
+                "opening_funding_source_ambiguous"
+                if source_status == "ambiguous"
+                else "opening_funding_source_missing"
+            )
+            issues.append(
+                _issue(
+                    "critical",
+                    issue_code,
+                    "Серия ссылается на неоднозначный источник финансирования."
+                    if source_status == "ambiguous"
+                    else "Серия ссылается на нераспознанный источник финансирования.",
+                    "stelazh",
+                    dto["legacy_key"],
+                    {
+                        "funding_source_code": dto["funding_source_code"],
+                        "funding_source_name": dto["funding_source_name"],
+                    },
+                )
+            )
+        _, series_key = normalize_series(dto["series"])
+        if series_key and item_target_code:
+            key = (item_target_code, series_key)
+            expiry_by_series.setdefault(key, set()).add(dto["expires_on"])
+            series_records.setdefault(key, []).append((record, dto))
+    for key, expiries in expiry_by_series.items():
+        item_target_code, series_key = key
+        existing_expiries = set((existing_series_expiries or {}).get(key, set()))
+        all_expiries = expiries | existing_expiries
+        if len(all_expiries) <= 1:
+            continue
+        expiry_labels = sorted(
+            (value.isoformat() if value else None for value in all_expiries),
+            key=lambda value: (value is None, value or ""),
+        )
+        for _, dto in series_records[key]:
+            issues.append(
+                _issue(
+                    "critical",
+                    "series_expiry_conflict",
+                    "Одна серия позиции имеет разные сроки годности; значение не угадано.",
+                    "stelazh",
+                    dto["legacy_key"],
+                    {
+                        "item_code": item_target_code,
+                        "item_name": dto["item_name"],
+                        "series_key": series_key,
+                        "expires_on": expiry_labels,
+                    },
+                )
+            )
     if rows.get("stelazh") and not _opening_date(mapping):
         issues.append(_issue("critical", "opening_date_missing", "Для начальных остатков требуется явно заданная дата среза opening_date."))
     if rows.get("uchet"):
@@ -227,6 +449,26 @@ def _validate_rows(*, rows: dict[str, list[dict]], mapping: dict, include_unused
             )
         )
     return issues
+
+
+def _existing_series_expiries(rows):
+    result: dict[tuple[str, str], set[date | None]] = {}
+    item_identities = _item_identities(rows)
+    for record in rows.get("stelazh", []):
+        dto = opening_stock_dto(record.get("payload", {}))
+        _, series_key = normalize_series(dto["series"])
+        item_code, status = _resolve_opening_item(dto, item_identities)
+        if status != "resolved" or not item_code or not series_key:
+            continue
+        item = WarehouseItem.objects.filter(code=item_code).first()
+        if item is None:
+            continue
+        result[(item_code, series_key)] = set(
+            StockEntry.objects.filter(item=item, series_key=series_key).values_list(
+                "expires_on", flat=True
+            )
+        )
+    return result
 
 
 def _issue(severity: str, code: str, message: str, table: str = "", legacy_key: str = "", context: dict | None = None) -> PreparedIssue:
@@ -285,7 +527,9 @@ def import_landing(
             run=run, rows=rows, mapping=mapping or {}, include_unused_catalog=include_unused_catalog
         )
         if rows.get("stelazh"):
-            _post_opening_lots_via_domain_service(run=run, rows=rows, mapping=mapping or {}, actor=actor)
+            _post_opening_series_via_domain_service(
+                run=run, rows=rows, mapping=mapping or {}, actor=actor
+            )
         run.status = WarehouseImportRun.Status.IMPORTED
         run.completed_at = timezone.now()
         run.save(update_fields=["status", "completed_at"])
@@ -308,21 +552,17 @@ def _import_catalog(
     category, _ = WarehouseItemCategory.objects.get_or_create(
         code="legacy-uncategorized", defaults={"name": "Импортировано из legacy"}
     )
-    source_by_name = {}
     for row in rows.get("istoch", []):
         dto = funding_dto(row["payload"])
         code = _stable_code("legacy-source", dto["code"] or dto["name"])
         source, was_created = FundingSource.objects.get_or_create(code=code, defaults={"name": dto["name"]})
-        source_by_name[dto["name"].casefold()] = source
         created["funding_sources"] += int(was_created)
         _record(run, "istoch", row, source, "created" if was_created else "reused")
-    unit_by_legacy_name = {}
     for row in _catalog_rows(rows=rows, include_unused_catalog=include_unused_catalog):
         dto = item_dto(row["payload"])
         mapped_unit = str(unit_map.get(dto["unit"].casefold()) or "").strip()
         unit_code = _stable_code("legacy-unit", mapped_unit)
         unit, was_created = UnitOfMeasure.objects.get_or_create(code=unit_code, defaults={"name": mapped_unit, "quantity_precision": 0})
-        unit_by_legacy_name[dto["unit"].casefold()] = unit
         created["units"] += int(was_created)
         item_code = _stable_code("legacy-item", dto["code"] or dto["name"])
         item, item_created = WarehouseItem.objects.get_or_create(
@@ -340,15 +580,18 @@ def _import_catalog(
 def _catalog_rows(*, rows: dict[str, list[dict]], include_unused_catalog: bool) -> list[dict]:
     if include_unused_catalog:
         return rows.get("s_ls", [])
-    referenced_names = {
-        opening_lot_dto(record.get("payload", {}))["item"].casefold()
-        for table in ("stelazh", "uchet")
-        for record in rows.get(table, [])
-        if opening_lot_dto(record.get("payload", {}))["item"]
-    }
+    identities = _item_identities(rows)
+    referenced_codes = set()
+    for table in ("stelazh", "uchet"):
+        for record in rows.get(table, []):
+            dto = opening_stock_dto(record.get("payload", {}))
+            target_code, status = _resolve_opening_item(dto, identities)
+            if status == "resolved" and target_code:
+                referenced_codes.add(target_code)
     return [
-        record for record in rows.get("s_ls", [])
-        if item_dto(record.get("payload", {}))["name"].casefold() in referenced_names
+        identity.row
+        for identity in identities
+        if identity.target_code in referenced_codes
     ]
 
 
@@ -373,7 +616,7 @@ def _stable_code(prefix: str, value: str) -> str:
     return f"{prefix}-{normalized}"[:64]
 
 
-def _post_opening_lots_via_domain_service(*, run, rows, mapping, actor) -> None:
+def _post_opening_series_via_domain_service(*, run, rows, mapping, actor) -> None:
     """Создать начальные документы и провести их исключительно через posting API."""
     from apps.warehouse.services.posting import post_document
 
@@ -381,10 +624,12 @@ def _post_opening_lots_via_domain_service(*, run, rows, mapping, actor) -> None:
     if opening_date is None:
         raise LegacyImportError("Не задана дата среза начальных остатков opening_date.")
     department_mapping = _normalised_mapping(mapping.get("departments"))
+    item_identities = _item_identities(rows)
+    source_identities = _source_identities(rows)
     for row in rows["stelazh"]:
         if WarehouseImportRecord.objects.filter(run=run, source_table="stelazh", row_hash=row["row_hash"]).exists():
             continue
-        dto = opening_lot_dto(row["payload"])
+        dto = opening_stock_dto(row["payload"])
         department = _resolve_department(department_mapping.get(dto["department"].casefold()))
         warehouse, _ = Warehouse.objects.get_or_create(
             department=department,
@@ -400,15 +645,20 @@ def _post_opening_lots_via_domain_service(*, run, rows, mapping, actor) -> None:
                 "purpose": StorageLocation.Purpose.UNASSIGNED,
             },
         )
-        item = WarehouseItem.objects.get(code=_stable_code("legacy-item", dto["item"]))
-        funding_source = FundingSource.objects.get(code=_stable_code("legacy-source", dto["funding_source"]))
-        incomplete_reason = "Импортированная партия без полного номера или срока годности."
-        lot, _ = StockLot.objects.get_or_create(
-            item=item,
-            batch_number=dto["batch_number"],
-            expires_on=dto["expires_on"],
-            defaults={"incomplete_reason": incomplete_reason if (not dto["batch_number"] or not dto["expires_on"]) else ""},
-        )
+        item_code, item_status = _resolve_opening_item(dto, item_identities)
+        source_code, source_status = _resolve_opening_source(dto, source_identities)
+        if item_status != "resolved" or not item_code:
+            raise LegacyImportError(
+                "Не удалось однозначно сопоставить позицию начального остатка."
+            )
+        if source_status != "resolved" or not source_code:
+            raise LegacyImportError(
+                "Не удалось однозначно сопоставить источник начального остатка."
+            )
+        item = WarehouseItem.objects.get(code=item_code)
+        funding_source = FundingSource.objects.get(code=source_code)
+        series, series_key = normalize_series(dto["series"])
+        incomplete_reason = "Импортированная серия без полного номера или срока годности."
         source_id = f"legacy:{run.run_id}:stelazh:{row['row_hash']}"
         key = uuid.uuid5(uuid.NAMESPACE_URL, source_id)
         document, created = StockDocument.objects.get_or_create(
@@ -427,13 +677,22 @@ def _post_opening_lots_via_domain_service(*, run, rows, mapping, actor) -> None:
                 document=document,
                 sequence=1,
                 item=item,
-                lot=lot,
+                series=series,
+                series_key=series_key,
+                expires_on=dto["expires_on"],
+                incomplete_reason=(
+                    incomplete_reason if (not series or not dto["expires_on"]) else ""
+                ),
                 funding_source=funding_source,
                 quantity=dto["quantity"],
                 destination_location=location,
             )
         if document.status != StockDocument.Status.POSTED:
-            post_document(document_id=document.pk, actor=actor)
+            post_document(
+                document_id=document.pk,
+                actor=actor,
+                allow_legacy_unassigned=True,
+            )
         _record(run, "stelazh", row, document, "created" if created else "reused")
 
 
@@ -502,9 +761,11 @@ def _balance_mismatches_for_table(*, table_name: str, rows: dict[str, list[dict]
     if not rows.get(table_name):
         return []
     department_mapping = _normalised_mapping(mapping.get("departments"))
+    item_identities = _item_identities(rows)
+    source_identities = _source_identities(rows)
     expected = {}
     for row in rows[table_name]:
-        dto = opening_lot_dto(row["payload"])
+        dto = opening_stock_dto(row["payload"])
         if dto["quantity"] is None:
             continue
         try:
@@ -513,19 +774,31 @@ def _balance_mismatches_for_table(*, table_name: str, rows: dict[str, list[dict]
             )
         except LegacyImportError:
             return [{"kind": "department_mapping_unavailable", "source_table": table_name}]
+        item_code, item_status = _resolve_opening_item(dto, item_identities)
+        source_code, source_status = _resolve_opening_source(dto, source_identities)
+        if item_status != "resolved" or source_status != "resolved":
+            return [
+                {
+                    "kind": "catalog_identity_unavailable",
+                    "source_table": table_name,
+                    "legacy_key": dto["legacy_key"],
+                    "item_status": item_status,
+                    "funding_source_status": source_status,
+                }
+            ]
         key = (
             department.pk,
-            _stable_code("legacy-item", dto["item"]),
-            _stable_code("legacy-source", dto["funding_source"]),
+            item_code,
+            source_code,
         )
         expected[key] = expected.get(key, 0) + dto["quantity"]
     actual = {}
     for row in (
         StockBalance.objects.filter(department_id__in={key[0] for key in expected})
-        .values("department_id", "lot__item__code", "funding_source__code")
+        .values("department_id", "item__code", "funding_source__code")
         .annotate(quantity=Sum("quantity"))
     ):
-        key = (row["department_id"], row["lot__item__code"], row["funding_source__code"])
+        key = (row["department_id"], row["item__code"], row["funding_source__code"])
         actual[key] = row["quantity"]
     mismatches = []
     for key in sorted(expected):

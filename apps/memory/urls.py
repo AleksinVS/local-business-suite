@@ -1,10 +1,14 @@
 from django.urls import path
 
+from apps.core.autocomplete import AutocompleteView
+
 from . import views
 
 app_name = "memory"
 
 urlpatterns = [
+    path("autocomplete/sources/", AutocompleteView.as_view(provider_code="memory.source"), name="source_options"),
+    path("autocomplete/issue-assignees/", AutocompleteView.as_view(provider_code="memory.issue_assignee"), name="issue_assignee_options"),
     path("review/", views.MemoryReviewDashboardView.as_view(), name="review_dashboard"),
     path("review/issues/", views.MemoryIssueListView.as_view(), name="review_issue_list"),
     path("review/issues/<int:pk>/", views.MemoryIssueDetailView.as_view(), name="review_issue_detail"),

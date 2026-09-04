@@ -1,3 +1,4 @@
+{% load static %}
 <div class="drawer-header">
   <div>
     <h3>Новая заявка</h3>
@@ -12,10 +13,23 @@
     hx-swap="innerHTML"
   >
     {% csrf_token %}
-    <input type="hidden" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}">
     <input type="hidden" name="return_view" value="{{ return_view|default:'board' }}">
-    {{ form.board.errors }}
     <div class="form-grid">
+      <div class="input-group full-width">
+        <label for="id_board_search">{{ form.board.label }}</label>
+        <div
+          class="workorder-autocomplete autocomplete"
+          data-autocomplete
+          data-autocomplete-mode="entity"
+          data-autocomplete-url="{% url 'workorders:board_options' %}"
+          data-autocomplete-required="true"
+        >
+          <input type="hidden" id="{{ form.board.id_for_label }}" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="search" id="id_board_search" value="{{ selected_board_label }}" placeholder="Начните вводить доску" autocomplete="off" data-autocomplete-input required>
+          <div id="board-autocomplete-options" class="workorder-autocomplete-options autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+        </div>
+        {{ form.board.errors }}
+      </div>
       <div class="input-group full-width">
         <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
         {{ form.description }}
@@ -24,11 +38,13 @@
       <div class="input-group full-width">
         <label for="id_department_search">{{ form.department.label }}</label>
         <div
-          class="workorder-autocomplete"
-          data-workorder-autocomplete
+          class="workorder-autocomplete autocomplete"
+          data-autocomplete
           data-autocomplete-kind="department"
+          data-autocomplete-mode="entity"
           data-autocomplete-url="{% url 'workorders:create_department_options' %}"
           data-autocomplete-required="true"
+          data-autocomplete-required-message="Выберите подразделение из предложенных вариантов."
         >
           <input
             type="hidden"
@@ -52,7 +68,7 @@
           >
           <div
             id="department-autocomplete-options"
-            class="workorder-autocomplete-options"
+            class="workorder-autocomplete-options autocomplete-options"
             role="listbox"
             data-autocomplete-options
             hidden
@@ -68,9 +84,10 @@
       <div class="input-group full-width">
         <label for="id_device_search">{{ form.device.label }}</label>
         <div
-          class="workorder-autocomplete"
-          data-workorder-autocomplete
+          class="workorder-autocomplete autocomplete"
+          data-autocomplete
           data-autocomplete-kind="device"
+          data-autocomplete-mode="entity"
           data-autocomplete-url="{% url 'workorders:create_device_options' %}"
         >
           <input
@@ -95,7 +112,7 @@
           >
           <div
             id="device-autocomplete-options"
-            class="workorder-autocomplete-options"
+            class="workorder-autocomplete-options autocomplete-options"
             role="listbox"
             data-autocomplete-options
             hidden

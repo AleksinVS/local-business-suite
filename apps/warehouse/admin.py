@@ -6,7 +6,6 @@ from .models import (
     StockDocument,
     StockDocumentLine,
     StockEntry,
-    StockLot,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,
@@ -82,7 +81,6 @@ class ImportIssueAdmin(ReadOnlyWarehouseAdmin):
 
 for model in (
     FundingSource,
-    StockLot,
     StorageLocation,
     UnitOfMeasure,
     Warehouse,

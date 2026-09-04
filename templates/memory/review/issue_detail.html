@@ -79,12 +79,12 @@
     <form method="post" action="{% url 'memory:review_issue_action' issue.pk %}" class="memory-review-inline-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="assign">
-      <select name="assigned_to" aria-label="Назначить">
-        <option value="">Не назначено</option>
-        {% for assignee in assignees %}
-          <option value="{{ assignee.pk }}" {% if issue.assigned_to_id == assignee.pk %}selected{% endif %}>{{ assignee }}</option>
-        {% endfor %}
-      </select>
+      <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'memory:issue_assignee_options' %}" data-autocomplete-context='{"issue":"input[name=issue_autocomplete_context]"}'>
+        <input type="hidden" name="assigned_to" value="{{ issue.assigned_to_id|default:'' }}" data-autocomplete-value>
+        <input type="hidden" name="issue_autocomplete_context" value="{{ issue.pk }}">
+        <input type="search" value="{% if issue.assigned_to %}{{ issue.assigned_to.get_full_name|default:issue.assigned_to.username }}{% endif %}" data-autocomplete-input autocomplete="off" placeholder="Не назначено" aria-label="Назначить">
+        <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+      </div>
       <button type="submit">Назначить</button>
     </form>
   {% endif %}

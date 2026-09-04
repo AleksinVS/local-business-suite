@@ -78,6 +78,18 @@ class MedicalDeviceCrudTests(TestCase):
         self.assertEqual(self.device.service_life_years, 10)
         self.assertEqual(self.device.address, "Корпус А - 2 - 205")
 
+    def test_edit_form_prefills_department_without_catchall_department(self):
+        self.client.force_login(self.manager)
+
+        response = self.client.get(reverse("inventory:edit", args=[self.device.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["form"].selected_department_label,
+            self.department.indented_name,
+        )
+        self.assertContains(response, self.department.indented_name)
+
     def test_decommission_fields_saved(self):
         self.client.force_login(self.manager)
         response = self.client.post(
@@ -169,6 +181,52 @@ class MedicalDeviceCrudTests(TestCase):
         self.assertContains(response, "Рег. №")
         self.assertContains(response, "Размещение")
         self.assertContains(response, '/inventory/{}/'.format(self.device.pk))
+
+    def test_department_autocomplete_is_scoped_and_used_by_primary_forms(self):
+        self.client.force_login(self.manager)
+        options = self.client.get(
+            reverse("inventory:department_options"), {"q": "Лучевая"}
+        )
+        self.assertEqual(options.status_code, 200)
+        payload = options.json()
+        self.assertEqual(payload["provider"], "inventory.department")
+        self.assertTrue(any("Лучевая диагностика" in item["label"] for item in payload["results"]))
+
+        form = self.client.get(reverse("inventory:edit", args=[self.device.pk]))
+        self.assertContains(form, 'data-autocomplete-url="/inventory/autocomplete/departments/"')
+        self.assertContains(form, 'data-autocomplete-value')
+
+    def test_device_suggestion_providers_deduplicate_and_honor_model_context(self):
+        self.device.manufacturer = "Acme"
+        self.device.production_country = "Россия"
+        self.device.model = "M-1"
+        self.device.address = "Корпус А"
+        self.device.location = "Кабинет 1"
+        self.device.save()
+        MedicalDevice.objects.create(
+            name="Рентген второй",
+            manufacturer="Acme",
+            production_country="Россия",
+            model="M-2",
+            address="Корпус Б",
+            location="Кабинет 2",
+            department=self.department,
+            inventory_number="104-0003",
+        )
+        self.client.force_login(self.manager)
+        manufacturers = self.client.get(reverse("inventory:manufacturer_options"), {"q": "Acme"})
+        self.assertEqual(manufacturers.status_code, 200)
+        self.assertEqual([item["value"] for item in manufacturers.json()["results"]], ["Acme"])
+        models = self.client.get(
+            reverse("inventory:model_options"), {"q": "M-", "manufacturer": "Acme"}
+        )
+        self.assertEqual(models.status_code, 200)
+        self.assertEqual({item["value"] for item in models.json()["results"]}, {"M-1", "M-2"})
+
+    def test_device_suggestion_providers_reject_unauthorized_actor(self):
+        self.client.force_login(self.regular_user)
+        response = self.client.get(reverse("inventory:manufacturer_options"), {"q": "Acme"})
+        self.assertEqual(response.status_code, 403)
 
     def test_detail_view_renders_all_field_groups(self):
         self.device.device_type = "Рентгеновский аппарат"

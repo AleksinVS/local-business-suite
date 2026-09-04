@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import unquote, urlsplit
 
 from django.core.exceptions import PermissionDenied, ValidationError
 
@@ -11,10 +12,13 @@ DEFAULT_RIGHT_PANEL_TARGET = "#global-right-panel-content"
 DEFAULT_RIGHT_PANEL_SWAP = "innerHTML"
 DEFAULT_RIGHT_PANEL_MODE = "view"
 RIGHT_PANEL_COMMAND_OPEN = "open_right_panel"
+RIGHT_PANEL_FORM_COMMAND_OPEN = "open_right_panel_form"
+RIGHT_PANEL_FORM_MODES = frozenset({"create", "edit"})
 
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z0-9_.:-]+$")
-_SUPPORTED_SWAPS = {"innerHTML", "outerHTML"}
-_SUPPORTED_DRAWER_SIZES = {"default", "large", "waiting_list"}
+_SUPPORTED_SWAPS = {"innerHTML"}
+_SUPPORTED_MODES = {DEFAULT_RIGHT_PANEL_MODE, *RIGHT_PANEL_FORM_MODES}
+_SUPPORTED_DRAWER_SIZES = {"default", "large", "waiting_list", "workspace"}
 
 
 @dataclass(frozen=True)
@@ -36,7 +40,7 @@ class RightPanelDescriptor:
             "source_code": _normalize_identifier(self.source_code, "source_code"),
             "object_type": _normalize_identifier(self.object_type, "object_type"),
             "object_id": _normalize_object_id(self.object_id),
-            "mode": _normalize_identifier(self.mode or DEFAULT_RIGHT_PANEL_MODE, "mode"),
+            "mode": _normalize_mode(self.mode),
             "title": str(self.title or "").strip()[:200],
             "htmx_url": _normalize_local_path(self.htmx_url),
             "target": _normalize_target(self.target),
@@ -67,6 +71,27 @@ class RightPanelDescriptor:
         }
 
 
+@dataclass(frozen=True)
+class RightPanelFormDescriptor:
+    """Human-initiated form command backed by a registered domain provider.
+
+    The wrapper deliberately has no URL field of its own.  A domain provider
+    must resolve permissions, the object and the local HTMX endpoint first;
+    callers therefore cannot turn the shared shell into arbitrary CRUD.
+    """
+
+    panel: RightPanelDescriptor
+
+    def __post_init__(self) -> None:
+        if self.panel.mode not in RIGHT_PANEL_FORM_MODES:
+            raise ValidationError("Форма правой панели поддерживает только создание или редактирование.")
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = self.panel.as_dict()
+        payload["type"] = RIGHT_PANEL_FORM_COMMAND_OPEN
+        return payload
+
+
 @runtime_checkable
 class RightPanelProvider(Protocol):
     source_code: str
@@ -90,7 +115,7 @@ def register_right_panel_provider(provider: RightPanelProvider, *, replace: bool
     if not supported_modes:
         raise ValidationError("Поставщик правой панели должен объявить supported_modes.")
     for mode in supported_modes:
-        _normalize_identifier(mode, "mode")
+        _normalize_mode(mode)
     key = (source_code, object_type)
     if key in _PROVIDERS and not replace:
         raise ValidationError(f"Поставщик правой панели '{source_code}/{object_type}' уже зарегистрирован.")
@@ -124,7 +149,7 @@ def build_right_panel_descriptor(
 ) -> RightPanelDescriptor:
     normalized_source = _normalize_identifier(source_code, "source_code")
     normalized_type = _normalize_identifier(object_type, "object_type")
-    normalized_mode = _normalize_identifier(mode or DEFAULT_RIGHT_PANEL_MODE, "mode")
+    normalized_mode = _normalize_mode(mode)
     normalized_object_id = _normalize_object_id(object_id)
     provider = get_right_panel_provider(normalized_source, normalized_type)
     if provider is None:
@@ -144,12 +169,42 @@ def build_right_panel_descriptor(
     return descriptor
 
 
+def build_human_right_panel_form_descriptor(
+    *,
+    user: Any,
+    source_code: str,
+    object_type: str,
+    object_id: str,
+    mode: str,
+) -> RightPanelFormDescriptor:
+    """Build a server-owned create/edit command for an explicit human action."""
+
+    normalized_mode = _normalize_mode(mode)
+    if normalized_mode not in RIGHT_PANEL_FORM_MODES:
+        raise ValidationError("Пользовательская форма правой панели поддерживает только create/edit.")
+    panel = build_right_panel_descriptor(
+        user=user,
+        source_code=source_code,
+        object_type=object_type,
+        object_id=object_id,
+        mode=normalized_mode,
+    )
+    return RightPanelFormDescriptor(panel=panel)
+
+
 def _normalize_identifier(value: Any, field_name: str) -> str:
     normalized = str(value or "").strip()
     if not normalized:
         raise ValidationError(f"Поле правой панели {field_name} не должно быть пустым.")
     if len(normalized) > 80 or not _IDENTIFIER_RE.match(normalized):
         raise ValidationError(f"Поле правой панели {field_name} некорректно.")
+    return normalized
+
+
+def _normalize_mode(value: Any) -> str:
+    normalized = _normalize_identifier(value or DEFAULT_RIGHT_PANEL_MODE, "mode")
+    if normalized not in _SUPPORTED_MODES:
+        raise ValidationError("Режим правой панели не поддерживается.")
     return normalized
 
 
@@ -164,10 +219,29 @@ def _normalize_object_id(value: Any) -> str:
 
 def _normalize_local_path(value: Any) -> str:
     normalized = str(value or "").strip()
-    if not normalized.startswith("/") or normalized.startswith("//"):
-        raise ValidationError("htmx_url правой панели должен быть локальным путем.")
-    if any(ord(ch) < 32 for ch in normalized):
-        raise ValidationError("htmx_url правой панели некорректен.")
+    candidates = [normalized]
+    for _ in range(3):
+        decoded = unquote(candidates[-1])
+        if decoded == candidates[-1]:
+            break
+        candidates.append(decoded)
+    for candidate in candidates:
+        try:
+            parsed = urlsplit(candidate)
+        except ValueError as exc:
+            raise ValidationError("htmx_url правой панели должен быть безопасным локальным путем.") from exc
+        if (
+            not candidate.startswith("/")
+            or candidate.startswith("//")
+            or "\\" in candidate
+            or parsed.scheme
+            or parsed.netloc
+            or parsed.fragment
+            or not parsed.path.startswith("/")
+            or parsed.path.startswith("//")
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in candidate)
+        ):
+            raise ValidationError("htmx_url правой панели должен быть безопасным локальным путем.")
     return normalized
 
 

@@ -72,6 +72,68 @@ User = get_user_model()
 pytestmark = pytest.mark.integration
 
 
+class AccessAutocompleteSecurityTests(TestCase):
+    def test_department_provider_requires_active_superuser_and_hides_unassigned_bucket(self):
+        from apps.accounts.department_policy import get_unassigned_user_department
+        from apps.core.models import Department
+
+        root = User.objects.create_superuser(username="autocomplete-root", password="pass")
+        ordinary = User.objects.create_user(username="autocomplete-ordinary", password="pass")
+        visible = Department.objects.create(name="Autocomplete Clinic")
+        hidden = get_unassigned_user_department()
+
+        self.client.force_login(ordinary)
+        denied = self.client.get(reverse("settings_center:department_options"), {"q": "Auto"})
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_login(root)
+        response = self.client.get(reverse("settings_center:department_options"), {"q": ""})
+        self.assertEqual(response.status_code, 200)
+        values = {item["value"] for item in response.json()["results"]}
+        self.assertIn(str(visible.pk), values)
+        self.assertNotIn(str(hidden.pk), values)
+        self.assertEqual(response["Cache-Control"], "private, no-store, max-age=0")
+
+    def test_role_principal_provider_never_returns_inactive_principals(self):
+        root = User.objects.create_superuser(username="principal-root", password="pass")
+        active = User.objects.create_user(username="principal-active", password="pass")
+        User.objects.create_user(username="principal-inactive", password="pass", is_active=False)
+        self.client.force_login(root)
+
+        response = self.client.get(
+            reverse("settings_center:role_principal_options"),
+            {"role": ROLE_CUSTOMER, "q": "principal"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        values = {item["value"] for item in response.json()["results"]}
+        self.assertIn(str(active.pk), values)
+        self.assertNotIn(str(User.objects.get(username="principal-inactive").pk), values)
+
+    def test_delegated_manager_cannot_suggest_self_or_protected_role_principals(self):
+        manager = User.objects.create_user(username="principal-manager", password="pass")
+        manager_group, _ = Group.objects.get_or_create(name="manager")
+        manager.groups.add(manager_group)
+        candidate = User.objects.create_user(username="principal-candidate", password="pass")
+        self.client.force_login(manager)
+
+        ordinary = self.client.get(
+            reverse("settings_center:role_principal_options"),
+            {"role": ROLE_CUSTOMER, "q": "principal"},
+        )
+        protected = self.client.get(
+            reverse("settings_center:role_principal_options"),
+            {"role": "admin", "q": "principal"},
+        )
+
+        self.assertEqual(ordinary.status_code, 200)
+        ordinary_values = {item["value"] for item in ordinary.json()["results"]}
+        self.assertIn(str(candidate.pk), ordinary_values)
+        self.assertNotIn(str(manager.pk), ordinary_values)
+        self.assertEqual(protected.status_code, 200)
+        self.assertEqual(protected.json()["results"], [])
+
+
 class AccessCommentPolicyTests(TestCase):
     def test_comment_is_optional_in_ordinary_access_forms(self):
         actor = User.objects.create_superuser(username="comment-policy-root")
@@ -1388,13 +1450,69 @@ class AccessWorkspaceTests(TestCase):
             "field": "users",
             "panel": "field",
             "action": "save",
-            "selected_user_ids": [target.pk],
+            "new_user_id": target.pk,
             "reason": "Проверка состава роли через карточку.",
         }
         response = self.client.post(url, payload)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(target.groups.filter(name=role_name).exists())
         self.assertEqual(AccessAssignmentAudit.objects.filter(target_user=target).count(), 1)
+
+    def test_role_membership_editor_uses_bounded_add_picker_and_removable_members(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-picker-root", password="pass")
+        target = User.objects.create_user(username="workspace-picker-target")
+        unrelated = User.objects.create_user(username="workspace-picker-unrelated")
+        role_name = contract_role_names()[0]
+        role, _ = Group.objects.get_or_create(name=role_name)
+        target.groups.add(role)
+        self.client.force_login(actor)
+        url = reverse("settings_center:access_workspace")
+
+        response = self.client.get(
+            url,
+            {"view": "roles", "object": role_name, "field": "users", "panel": "field"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("settings_center:role_principal_options"))
+        self.assertContains(response, 'name="selected_user_ids"', html=False)
+        self.assertNotContains(response, 'type="checkbox" name="selected_user_ids"', html=False)
+        self.assertContains(response, target.username)
+        self.assertNotContains(response, unrelated.username)
+
+        remove_response = self.client.post(
+            url,
+            {
+                "view": "roles", "object": role_name, "field": "users", "panel": "field",
+                "action": "save", "selected_user_ids": [target.pk],
+                "remove_user_id": target.pk, "reason": "Удаление через chip.",
+            },
+        )
+        self.assertEqual(remove_response.status_code, 302)
+        self.assertFalse(target.groups.filter(pk=role.pk).exists())
+
+    def test_role_membership_picker_rejects_forged_inactive_principal(self):
+        from apps.accounts.selectors import contract_role_names
+
+        actor = User.objects.create_superuser(username="workspace-forged-root", password="pass")
+        inactive = User.objects.create_user(username="workspace-forged-inactive", is_active=False)
+        role_name = contract_role_names()[0]
+        Group.objects.get_or_create(name=role_name)
+        self.client.force_login(actor)
+
+        response = self.client.post(
+            reverse("settings_center:access_workspace"),
+            {
+                "view": "roles", "object": role_name, "field": "users", "panel": "field",
+                "action": "save", "new_user_id": inactive.pk, "reason": "Подделка.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Выбранный пользователь недоступен")
+        self.assertFalse(inactive.groups.filter(name=role_name).exists())
 
     def test_workspace_role_membership_read_model_ignores_user_filters(self):
         from apps.accounts.selectors import contract_role_names

@@ -5,7 +5,15 @@
   <h1>{% if object %}Редактирование подразделения{% else %}Новое подразделение{% endif %}</h1>
   <form method="post" class="stack">
     {% csrf_token %}
-    {{ form.as_p }}
+    <div class="input-group"><label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>{{ form.name }}{{ form.name.errors }}</div>
+    <div class="input-group"><label for="department-parent-search">{{ form.parent.label }}</label>
+      <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'core:department_options' %}" data-autocomplete-context='{"current_department":"#department-current-id"}'>
+        <input type="hidden" id="{{ form.parent.id_for_label }}" name="{{ form.parent.html_name }}" value="{{ form.parent.value|default_if_none:'' }}" data-autocomplete-value>
+        <input type="hidden" id="department-current-id" value="{{ object.pk|default:'' }}">
+        <input type="search" id="department-parent-search" value="{{ form.selected_parent_label }}" placeholder="Корневое подразделение" autocomplete="off" data-autocomplete-input>
+        <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+      </div>{{ form.parent.errors }}
+    </div>
     <div class="table-actions">
       <button type="submit">{% if object %}Сохранить{% else %}Создать{% endif %}</button>
       <a href="{% url 'core:department_list' %}">Назад к дереву</a>

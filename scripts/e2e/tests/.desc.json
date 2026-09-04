@@ -7,5 +7,8 @@
   "right_panel_ai_navigation.spec.ts": "Checks opening module objects in the shared right panel from the AI chat page",
   "kanban_department_filter.spec.ts": "Checks the kanban-only view, URL-backed department filter and collapsible AI sidebar",
   "notifications.spec.ts": "Checks PWA manifest, root service worker and authenticated notification center behavior",
-  "access_administration.spec.ts": "Checks six access tabs, master-detail editors, memory context, reserve Django Admin and 320px dialog behavior"
+  "access_administration.spec.ts": "Checks six access tabs, master-detail editors, memory context, reserve Django Admin and 320px dialog behavior",
+  "autocomplete.spec.ts": "Checks scoped autocomplete keyboard, ARIA and stale-response behavior",
+  "right_panel_form_shell.spec.ts": "Checks create/edit form lifecycle, dirty guard, submission and mobile right panel bounds",
+  "warehouse_document_editor.spec.ts": "Checks cloned warehouse rows keep unique autocomplete context and listbox ids"
 }

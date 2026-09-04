@@ -1,0 +1,53 @@
+{
+  "task_id": "01-core-autocomplete-foundation",
+  "title": "Создать общий autocomplete-компонент портала",
+  "type": "implementation",
+  "executor": {
+    "recommended_model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "rationale": "Общая security-граница и доступность влияют на все пользовательские модули."
+  },
+  "objective": "Извлечь проверенное автодополнение workorders в apps.core и общую статику, поддержать entity/suggestion и domain-owned providers.",
+  "read_scope": [
+    "apps/core/",
+    "apps/workorders/",
+    "templates/workorders/partials/workorder_form_partial.html",
+    "static/src/js/workorder_board.js",
+    "static/src/css/app.css",
+    "docs/adr/ADR-0049-portal-autocomplete-and-contextual-form-panels.md"
+  ],
+  "write_scope": [
+    "apps/core/",
+    "templates/core/",
+    "static/src/js/autocomplete.js",
+    "static/src/css/app.css",
+    "apps/workorders/",
+    "templates/workorders/partials/workorder_form_partial.html",
+    "static/src/js/workorder_board.js",
+    "apps/core/tests.py",
+    "apps/workorders/tests.py"
+  ],
+  "requirements": [
+    "Не принимать model name или ORM lookup от клиента.",
+    "Поддержать entity и suggestion, зависимый allowlisted context, limit<=20, private no-store.",
+    "Реализовать WAI-ARIA combobox и полную клавиатурную навигацию.",
+    "Отменять устаревший запрос, использовать debounce 180-250 мс и повторную безопасную инициализацию после HTMX swap.",
+    "Перевести существующие поля workorders без изменения прав и результата формы.",
+    "Добавить provider/test helpers без импорта доменных моделей в core."
+  ],
+  "acceptance": [
+    "Workorders autocomplete проходит прежние тесты и использует общий компонент.",
+    "Entity не принимает свободный текст, suggestion принимает.",
+    "Чужие и архивные объекты не возвращаются.",
+    "Два быстрых запроса не позволяют позднему ответу заменить свежий.",
+    "Компонент работает мышью, Tab, стрелками, Enter и Escape."
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=apps/core",
+    "make verify-fast TEST_SCOPE=apps/workorders",
+    "node --check static/src/js/autocomplete.js",
+    "make verify-profile PROFILE=ui",
+    "git diff --check"
+  ],
+  "report": "workflow/archive/2026/warehouse-ux-simplification/EXECUTOR_REPORT.01-core-autocomplete-foundation.md"
+}

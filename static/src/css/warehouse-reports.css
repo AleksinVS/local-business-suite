@@ -1,0 +1,19 @@
+.warehouse-report-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: 1rem 0; }
+.warehouse-report-filters label { display: flex; flex-direction: column; gap: .25rem; min-width: 10rem; }
+.warehouse-report .table-container { overflow-x: auto; }
+.warehouse-report th, .warehouse-report td { white-space: nowrap; }
+.warehouse-report-profile { display: flex; flex-wrap: wrap; gap: .35rem 1rem; padding: .7rem .9rem; border: 1px solid var(--border, #d9dee7); border-radius: .4rem; color: var(--text-muted); }
+.warehouse-report-profile strong { color: var(--text-main); }
+.warehouse-report-filters .field-error { color: #a51d2d; font-size: .82rem; }
+.pagination { display: flex; gap: 1rem; align-items: center; justify-content: center; margin-top: 1rem; }
+@media (max-width: 700px) {
+  .warehouse-admin-list form[role="search"] > * { flex: 1 1 100%; }
+  .warehouse-admin-list form[role="search"] button { flex: 0 1 auto; }
+}
+@media (max-width: 390px) {
+  .warehouse-report-filters { display: grid; grid-template-columns: 1fr; }
+  .warehouse-report-filters label { min-width: 0; }
+  .warehouse-report .section-head { align-items: flex-start; gap: .5rem; }
+  .warehouse-report .table-actions { flex-wrap: wrap; }
+  .warehouse-report-profile { align-items: flex-start; flex-direction: column; }
+}

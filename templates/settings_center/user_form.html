@@ -138,14 +138,32 @@
     <p class="muted">Здесь изменяются данные учётной записи. Роли и технические флаги назначаются в отдельной карточке доступа.</p>
     <form method="post" class="settings-small-form">
       {% csrf_token %}
-      {{ form.as_p }}
+      {{ form.non_field_errors }}
+      {% for field in form.visible_fields %}
+        <p>{{ field.label_tag }}{% if field.name == "department" %}
+          <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'settings_center:department_options' %}" data-autocomplete-required="true">
+            <input type="hidden" name="department" value="{{ field.value|default:'' }}" data-autocomplete-value required>
+            <input type="search" name="department_label" value="{{ request.POST.department_label|default:profile_user.department.name|default:'' }}" data-autocomplete-input autocomplete="off" required aria-label="Подразделение">
+            <span class="autocomplete-options" data-autocomplete-options role="listbox" hidden></span>
+          </span>
+        {% else %}{{ field }}{% endif %}{{ field.errors }}</p>
+      {% endfor %}
       <div class="table-actions"><button type="submit" name="action" value="save" class="button">Сохранить учётную запись</button></div>
     </form>
   {% else %}
     <p class="muted">После создания назначьте роли в карточке доступа. Технические группы через этот экран не назначаются.</p>
     <form method="post" class="settings-small-form">
       {% csrf_token %}
-      {{ form.as_p }}
+      {{ form.non_field_errors }}
+      {% for field in form.visible_fields %}
+        <p>{{ field.label_tag }}{% if field.name == "department" %}
+          <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'settings_center:department_options' %}" data-autocomplete-required="true">
+            <input type="hidden" name="department" value="{{ field.value|default:'' }}" data-autocomplete-value required>
+            <input type="search" name="department_label" value="{{ request.POST.department_label|default:'' }}" data-autocomplete-input autocomplete="off" required aria-label="Подразделение">
+            <span class="autocomplete-options" data-autocomplete-options role="listbox" hidden></span>
+          </span>
+        {% else %}{{ field }}{% endif %}{{ field.errors }}</p>
+      {% endfor %}
       <div class="table-actions"><button type="submit" name="action" value="save" class="button">Создать пользователя</button></div>
     </form>
   {% endif %}

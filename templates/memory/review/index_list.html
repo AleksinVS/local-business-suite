@@ -33,6 +33,11 @@
         <option value="{{ value }}" {% if filters.index_status == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
+    <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'memory:source_options' %}">
+      <input type="hidden" name="source" value="{{ filters.source }}" data-autocomplete-value>
+      <input type="search" value="{{ filters.source }}" data-autocomplete-input autocomplete="off" placeholder="Все источники" aria-label="Источник">
+      <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+    </div>
     <select name="gap">
       <option value="">Любая диагностика</option>
       <option value="missing_fts" {% if filters.gap == "missing_fts" %}selected{% endif %}>Нет FTS</option>

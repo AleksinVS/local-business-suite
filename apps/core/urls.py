@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.urls import path
 
+from .autocomplete import AutocompleteView
 from .debug_views import debug_request
 from .health_views import health_check, health_details
 from .views import (
@@ -19,6 +20,7 @@ urlpatterns = [
     path("health/details/", health_details, name="health_details"),
     path("departments/", DepartmentListView.as_view(), name="department_list"),
     path("departments/new/", DepartmentCreateView.as_view(), name="department_create"),
+    path("departments/autocomplete/", AutocompleteView.as_view(provider_code="core.departments"), name="department_options"),
     path(
         "departments/<int:pk>/edit/",
         DepartmentUpdateView.as_view(),

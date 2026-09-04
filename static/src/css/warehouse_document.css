@@ -1,0 +1,16 @@
+.warehouse-document-editor { min-width: 0; }
+.warehouse-document-header { align-items: flex-start; }
+.warehouse-document-header h1 { margin: 0; }
+.warehouse-lines-table-wrap { overflow-x: auto; }
+.warehouse-lines-table { min-width: 980px; }
+.warehouse-lines-table input, .warehouse-lines-table select, .warehouse-lines-table textarea { min-width: 7rem; width: 100%; box-sizing: border-box; }
+.warehouse-lines-table .warehouse-line-autocomplete { min-width: 10rem; position: relative; }
+.warehouse-lines-table .autocomplete-options { min-width: 14rem; }
+.warehouse-lines-table td { vertical-align: top; }
+.warehouse-lines-hint { margin-top: .5rem; }
+.document-save-success { padding: 1.25rem; }
+@media (max-width: 700px) {
+  .warehouse-document-meta { grid-template-columns: 1fr; }
+  .warehouse-lines-table { min-width: 860px; }
+  .warehouse-document-editor .right-panel-form-actions { position: sticky; bottom: 0; }
+}

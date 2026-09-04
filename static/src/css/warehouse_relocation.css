@@ -1,0 +1,72 @@
+.warehouse-stock-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.warehouse-stock-filters label,
+.warehouse-relocation-panel .input-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.warehouse-table-scroll {
+  overflow-x: auto;
+}
+
+.warehouse-stock-table,
+.warehouse-relocation-summary {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.warehouse-stock-table th,
+.warehouse-stock-table td,
+.warehouse-relocation-summary th,
+.warehouse-relocation-summary td {
+  padding: 0.55rem;
+  border-bottom: 1px solid var(--border-color, #d9dee7);
+  text-align: left;
+  vertical-align: top;
+}
+
+.warehouse-stock-table input[type="number"] {
+  width: 8rem;
+}
+
+.warehouse-relocation-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--surface-color, #fff);
+  border-top: 1px solid var(--border-color, #d9dee7);
+}
+
+.warehouse-relocation-panel .drawer-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.warehouse-relocation-summary small {
+  display: block;
+  color: var(--muted-color, #667085);
+}
+
+@media (max-width: 720px) {
+  .warehouse-stock-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .warehouse-relocation-panel .drawer-header,
+  .warehouse-relocation-panel .drawer-footer {
+    position: sticky;
+    z-index: 2;
+    background: var(--surface-color, #fff);
+  }
+}

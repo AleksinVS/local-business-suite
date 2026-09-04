@@ -103,6 +103,11 @@ class DepartmentCreateView(DepartmentManagementMixin, CreateView):
     template_name = "core/department_form.html"
     success_url = reverse_lazy("core:department_list")
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
     def form_valid(self, form):
         messages.success(self.request, "Подразделение создано.")
         return super().form_valid(form)
@@ -113,6 +118,11 @@ class DepartmentUpdateView(DepartmentManagementMixin, UpdateView):
     form_class = DepartmentForm
     template_name = "core/department_form.html"
     success_url = reverse_lazy("core:department_list")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
 
     def form_valid(self, form):
         messages.success(self.request, "Подразделение обновлено.")

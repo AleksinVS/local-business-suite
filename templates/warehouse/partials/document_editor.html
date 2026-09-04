@@ -1,0 +1,36 @@
+{% load static %}
+<section class="panel warehouse-document-editor" data-warehouse-document-editor>
+  <form method="post" id="warehouse-document-form" class="right-panel-form" data-right-panel-form
+        action="{% if document_is_edit %}{% url 'warehouse:document_edit_panel' document.pk %}{% else %}{% url 'warehouse:document_new_panel' %}{% endif %}"
+        hx-post="{% if document_is_edit %}{% url 'warehouse:document_edit_panel' document.pk %}{% else %}{% url 'warehouse:document_new_panel' %}{% endif %}"
+        hx-target="#global-right-panel-content" hx-swap="innerHTML" hx-sync="this:drop">
+    {% csrf_token %}
+    <input type="hidden" name="idempotency_key" value="{{ document.idempotency_key|default:'' }}" data-document-idempotency>
+    <header class="drawer-header warehouse-document-header">
+      <div>
+        <h1>{% if document_is_edit %}Редактирование складского документа{% else %}Новый складской документ{% endif %}</h1>
+        <p class="text-muted">Строки вводятся в таблице. Ненужные поля скрываются по типу операции.</p>
+      </div>
+      <button type="button" class="close-btn" onclick="closeGlobalRightPanel()" aria-label="Закрыть">&times;</button>
+    </header>
+    <div class="right-panel-form-body">
+      {{ form.non_field_errors }}
+      <div class="form-grid warehouse-document-meta">
+        <div class="input-group"><label for="{{ form.document_type.id_for_label }}">{{ form.document_type.label }}</label>{{ form.document_type }}{{ form.document_type.errors }}</div>
+        <div class="input-group"><label for="{{ form.operation_date.id_for_label }}">{{ form.operation_date.label }}</label>{{ form.operation_date }}{{ form.operation_date.errors }}</div>
+        <div class="input-group warehouse-document-department"><label for="warehouse-department-search">{{ form.department.label }}</label><div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_department' %}"><input type="hidden" name="{{ form.department.html_name }}" id="{{ form.department.id_for_label }}" value="{{ form.department.value|default_if_none:'' }}" data-autocomplete-value><input type="search" id="warehouse-department-search" value="{% if document.department %}{{ document.department }}{% endif %}" placeholder="Начните вводить подразделение" autocomplete="off" data-autocomplete-input required><div id="warehouse-department-options" class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div></div>{{ form.department.errors }}</div>
+        <div class="input-group"><label for="{{ form.number.id_for_label }}">{{ form.number.label }}</label>{{ form.number }}{{ form.number.errors }}</div>
+        <div class="input-group full-width"><label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>{{ form.comment }}{{ form.comment.errors }}</div>
+        <div class="input-group full-width operation-reason-field"><label for="{{ form.reason.id_for_label }}">{{ form.reason.label }}</label>{{ form.reason }}{{ form.reason.errors }}</div>
+      </div>
+      <div class="section-head warehouse-lines-head"><h2>Строки</h2><button type="button" class="btn btn-outline" data-add-document-line>Добавить строку</button></div>
+      {{ formset.management_form }}{{ formset.non_form_errors }}
+      <div class="table-container warehouse-lines-table-wrap"><table class="warehouse-lines-table" data-document-lines-table><thead><tr><th>Позиция</th><th>Ед.</th><th>Серия</th><th>Срок годности</th><th>Источник</th><th>Количество</th><th class="line-source-column">Исходный адрес</th><th class="line-destination-column">Целевой адрес</th><th>Неполные данные</th><th class="line-fefo-column">Причина отклонения FEFO</th><th aria-label="Действия"></th></tr></thead><tbody data-document-lines-body>
+      {% for line in formset %}{% include "warehouse/partials/document_line_row.html" with line=line %}{% endfor %}
+      </tbody></table></div>
+      <p class="text-muted warehouse-lines-hint">Серия — обычный текст с подсказками. Для выдачи список серии и адреса ограничивается доступным остатком.</p>
+    </div>
+    <footer class="right-panel-form-actions drawer-footer"><button type="button" class="btn btn-ghost" onclick="closeGlobalRightPanel()">Отмена</button><button type="submit" class="btn btn-outline" name="action" value="save">Сохранить черновик</button><button type="submit" class="btn btn-primary" name="action" value="post">Провести</button></footer>
+  </form>
+</section>
+<script src="{% static 'src/warehouse/document_editor.js' %}?v=v1"></script>

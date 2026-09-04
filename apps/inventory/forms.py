@@ -45,20 +45,28 @@ class MedicalDeviceForm(forms.ModelForm):
             .order_by("id")
             .first()
         )
-        if catchall is None:
-            return
+        if catchall is not None:
+            # Переупорядочиваем queryset: сначала агрегатор, затем остальные
+            # в порядке иерархии (parent_id, name, id).
+            others = department_queryset.exclude(pk=catchall.pk).select_related(
+                "parent"
+            ).order_by("parent_id", "name", "id")
+            self.fields["department"].queryset = department_queryset.filter(
+                pk__in=[catchall.pk, *others.values_list("pk", flat=True)]
+            )
 
-        # Переупорядочиваем queryset: сначала агрегатор, затем остальные
-        # в порядке иерархии (parent_id, name, id).
-        others = department_queryset.exclude(pk=catchall.pk).select_related(
-            "parent"
-        ).order_by("parent_id", "name", "id")
-        self.fields["department"].queryset = department_queryset.filter(
-            pk__in=[catchall.pk, *others.values_list("pk", flat=True)]
+            if not self.instance.pk or not self.instance.department_id:
+                self.fields["department"].initial = catchall.pk
+
+        selected_id = (
+            self.data.get(self.add_prefix("department"))
+            if self.is_bound
+            else self.initial.get("department")
+            or self.fields["department"].initial
+            or getattr(self.instance, "department_id", None)
         )
-
-        if not self.instance.pk or not self.instance.department_id:
-            self.fields["department"].initial = catchall.pk
+        selected = self.fields["department"].queryset.filter(pk=selected_id).first() if selected_id else None
+        self.selected_department_label = getattr(selected, "indented_name", "") if selected else ""
 
     class Meta:
         model = MedicalDevice

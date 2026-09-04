@@ -12,10 +12,35 @@
   {% if field_form.base_hash %}{{ field_form.base_hash }}{% endif %}
   {% if field_form.base_revision %}{{ field_form.base_revision }}{% endif %}
   {% if selected.kind == "user" and selected_field == "memory-groups" %}<h3>Группы памяти пользователя {{ selected.name }}</h3><p class="access-readonly-explanation">Это технические полномочия памяти, а не роли и не разделы сайта. Изменение выполняется через сервис памяти с предметным аудитом и серверной проверкой.</p>{% endif %}
+  {% if selected.kind == "role" and selected_field == "users" %}
+    <div class="access-form-field{% if field_form.selected_user_ids.errors or field_form.new_user_id.errors %} has-error{% endif %}">
+      <label for="access-role-principal-search">Пользователи роли</label>
+      {{ field_form.selected_user_ids }}
+      <input type="hidden" name="role_autocomplete_context" value="{{ selected.code }}">
+      <div class="access-selected-chips">
+        {% for member in field_form.manageable_members %}
+          <span class="access-selected-chip">{{ member.get_full_name|default:member.username }} <button type="submit" name="remove_user_id" value="{{ member.pk }}" aria-label="Удалить {{ member.get_full_name|default:member.username }}">×</button></span>
+        {% empty %}<span class="muted">Управляемых участников нет.</span>{% endfor %}
+      </div>
+      {% if field_form.protected_member_ids %}<p class="muted">Защищённые назначения сохранены и не раскрываются в подборе.</p>{% endif %}
+      <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'settings_center:role_principal_options' %}" data-autocomplete-context='{"role":"input[name=role_autocomplete_context]"}'>
+        <input type="hidden" name="new_user_id" value="{{ field_form.new_user_id.value|default:'' }}" data-autocomplete-value>
+        <input id="access-role-principal-search" type="search" name="new_user_label" value="{{ request.POST.new_user_label|default:'' }}" data-autocomplete-input autocomplete="off" placeholder="Добавить пользователя">
+        <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+      </div>
+      {{ field_form.selected_user_ids.errors }}{{ field_form.new_user_id.errors }}
+    </div>
+  {% endif %}
   {% for field in field_form.visible_fields %}
     <div class="access-form-field{% if field.errors %} has-error{% endif %}">
       {{ field.label_tag }}
-      {{ field }}
+      {% if selected.kind == "user" and selected_field == "department" and field.name == "department" %}
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'settings_center:department_options' %}" data-autocomplete-required="true">
+          <input type="hidden" name="department" value="{{ field.value|default:'' }}" data-autocomplete-value required>
+          <input type="search" name="department_label" value="{{ request.POST.department_label|default:selected.department|default:'' }}" data-autocomplete-input autocomplete="off" required aria-label="Подразделение">
+          <div class="autocomplete-options" data-autocomplete-options role="listbox" hidden></div>
+        </div>
+      {% else %}{{ field }}{% endif %}
       {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
       {{ field.errors }}
     </div>

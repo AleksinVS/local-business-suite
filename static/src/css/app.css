@@ -2976,6 +2976,11 @@ textarea:focus {
   right: -700px;
 }
 
+.drawer.drawer-workspace {
+  width: min(1120px, 84vw);
+  right: min(-1180px, -90vw);
+}
+
 .drawer.active {
   right: 0;
   visibility: visible;
@@ -2985,7 +2990,41 @@ textarea:focus {
   display: flex;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.global-right-panel-content [data-right-panel-form] {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.global-right-panel-content .right-panel-form-body {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.global-right-panel-content .right-panel-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding: 0.75rem 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.global-right-panel-content .right-panel-form-actions .btn,
+.global-right-panel-content .right-panel-form-actions button {
+  max-width: 100%;
 }
 
 .drawer-waiting-list .drawer-content {
@@ -3315,6 +3354,11 @@ textarea:focus {
 /* Responsive adjustments for Drawer */
 @media (max-width: 1200px) {
   .drawer.drawer-large {
+    width: 95%;
+    right: -100%;
+  }
+
+  .drawer.drawer-workspace {
     width: 95%;
     right: -100%;
   }
@@ -4986,8 +5030,13 @@ body.is-resizing-sidebar .sidebar-nav {
   .global-right-panel-overlay { z-index: 140; }
   .global-right-panel.drawer,
   .global-right-panel.drawer.drawer-large,
-  .global-right-panel.drawer.drawer-waiting-list { inset: 0; width: 100vw; max-width: 100vw; right: -100vw; z-index: 150; }
+  .global-right-panel.drawer.drawer-waiting-list,
+  .global-right-panel.drawer.drawer-workspace { inset: 0; width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; right: -100vw; z-index: 150; }
   .global-right-panel.drawer.active { right: 0; }
+  .global-right-panel-content { width: 100%; max-width: 100%; }
+  .global-right-panel-content .right-panel-form-actions { padding: .75rem; }
+  .global-right-panel-content .right-panel-form-actions .btn,
+  .global-right-panel-content .right-panel-form-actions button { flex: 1 1 10rem; }
 }
 
 /* Компактный рабочий список доступа: поиск, три фильтра и одна точка входа. */

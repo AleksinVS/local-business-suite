@@ -1,0 +1,61 @@
+<div class="warehouse-relocation-panel" data-relocation-panel>
+  <div class="drawer-header">
+    <div><h3>Перемещение</h3><h2>Куда переместить выбранные остатки</h2></div>
+    <button type="button" class="close-btn" onclick="closeGlobalRightPanel()" aria-label="Закрыть">&times;</button>
+  </div>
+  <form
+    id="warehouse-relocation-form"
+    method="post"
+    action="{{ relocation_save_url }}"
+    hx-post="{{ relocation_save_url }}"
+    hx-target="#global-right-panel-content"
+    hx-swap="innerHTML"
+    data-right-panel-form
+    data-right-panel-dirty="{% if form.errors %}true{% else %}false{% endif %}"
+  >
+    {% csrf_token %}
+    {{ form.selection_token }}
+    <input type="hidden" id="relocation-department" value="{{ department_id }}">
+    <div class="drawer-content">
+      <div data-right-panel-errors>{{ form.non_field_errors }}</div>
+      <table class="warehouse-relocation-summary">
+        <thead><tr><th>Позиция</th><th>Откуда</th><th>Количество</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr><td>{{ row.balance.item.name }}{% if row.balance.series %}<small>Серия {{ row.balance.series }}</small>{% endif %}</td><td>{{ row.balance.warehouse.name }} / {{ row.balance.location.code }}</td><td>{{ row.requested.quantity }} {{ row.balance.item.unit.name }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="input-group">
+        <label for="{{ form.operation_date.id_for_label }}">{{ form.operation_date.label }}</label>
+        {{ form.operation_date }}{{ form.operation_date.errors }}
+      </div>
+
+      <div class="input-group">
+        <label for="relocation-destination-search">{{ form.destination_warehouse.label }}</label>
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{{ destination_autocomplete_url }}" data-autocomplete-context='{"department":"#relocation-department"}' data-autocomplete-required="true" data-relocation-destination>
+          <input type="hidden" id="{{ form.destination_warehouse.id_for_label }}" name="{{ form.destination_warehouse.html_name }}" value="{{ form.destination_warehouse.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="search" id="relocation-destination-search" value="{{ selected_warehouse_label }}" placeholder="Начните вводить склад" autocomplete="off" data-autocomplete-input required>
+          <div id="relocation-destination-options" class="autocomplete-options" data-autocomplete-options hidden></div>
+        </div>
+        {{ form.destination_warehouse.errors }}
+      </div>
+
+      <div class="input-group" data-relocation-location-group{% if selected_warehouse_has_default %} hidden{% endif %}>
+        <label for="relocation-location-search">{{ form.destination_location.label }}</label>
+        <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{{ location_autocomplete_url }}" data-autocomplete-context='{"department":"#relocation-department","warehouse":"#{{ form.destination_warehouse.id_for_label }}"}' data-relocation-location>
+          <input type="hidden" id="{{ form.destination_location.id_for_label }}" name="{{ form.destination_location.html_name }}" value="{{ form.destination_location.value|default_if_none:'' }}" data-autocomplete-value>
+          <input type="search" id="relocation-location-search" value="{{ selected_location_label }}" placeholder="Выберите доступный адрес" autocomplete="off" data-autocomplete-input>
+          <div id="relocation-location-options" class="autocomplete-options" data-autocomplete-options hidden></div>
+        </div>
+        <p class="muted">Поле нужно только когда у склада не задан адрес приёмки по умолчанию.</p>
+        {{ form.destination_location.errors }}
+      </div>
+    </div>
+    <div class="drawer-footer">
+      <button type="button" class="btn btn-ghost" onclick="closeGlobalRightPanel()">Отмена</button>
+      <button type="submit" class="btn btn-primary">Сохранить перемещение</button>
+    </div>
+  </form>
+</div>

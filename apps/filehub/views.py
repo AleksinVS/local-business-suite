@@ -116,20 +116,21 @@ class MemoryFileUserViewsView(LoginRequiredMixin, TemplateView):
             context["placements"] = MemoryFileVirtualPlacement.objects.none()
             context["user_views"] = MemoryFileVirtualView.objects.none()
             return context
-        file_objects = [_file_object_display(file_object) for file_object in visible_file_objects(self.request.user)[:200]]
-        visible_source_ids = {item["source_code"] for item in file_objects}
+        # This list only scopes the bounded placement summary. The picker has
+        # its own bounded provider and no longer renders an object catalogue.
+        visible_file_objects_list = list(visible_file_objects(self.request.user)[:200])
+        visible_source_ids = {item.source.code for item in visible_file_objects_list}
         user_views = MemoryFileVirtualView.objects.filter(
             owner_user=self.request.user,
             view_kind=MemoryFileVirtualView.ViewKind.USER,
             source__code__in=visible_source_ids,
             source__status=MemorySource.Status.ENABLED,
         ).order_by("source__code", "slug")
-        context["file_objects"] = file_objects
         context["placements"] = (
             MemoryFileVirtualPlacement.objects.select_related("view", "file_object", "view__source")
             .filter(view__owner_user=self.request.user, view__view_kind=MemoryFileVirtualView.ViewKind.USER)
             .filter(view__source__status=MemorySource.Status.ENABLED, file_object__source__status=MemorySource.Status.ENABLED)
-            .filter(file_object_id__in=[item["id"] for item in file_objects], view__source=F("file_object__source"))
+            .filter(file_object_id__in=[item.pk for item in visible_file_objects_list], view__source=F("file_object__source"))
             .order_by("virtual_path")
         )
         context["user_views"] = user_views

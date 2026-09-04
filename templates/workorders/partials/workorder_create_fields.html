@@ -1,0 +1,25 @@
+<div class="form-grid">
+  <div class="input-group full-width"><label for="workorder-page-create-board-search">{{ form.board.label }}</label>
+    <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:board_options' %}">
+      <input type="hidden" id="{{ form.board.id_for_label }}" name="{{ form.board.html_name }}" value="{{ form.board.value|default_if_none:'' }}" data-autocomplete-value>
+      <input type="search" id="workorder-page-create-board-search" value="{{ selected_board_label }}" placeholder="Начните вводить доску" autocomplete="off" data-autocomplete-input required>
+      <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+    </div>{{ form.board.errors }}
+  </div>
+  <div class="input-group full-width"><label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>{{ form.description }}{{ form.description.errors }}</div>
+  <div class="input-group full-width"><label for="workorder-page-create-department-search">{{ form.department.label }}</label>
+    <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:create_department_options' %}">
+      <input type="hidden" id="{{ form.department.id_for_label }}" name="{{ form.department.html_name }}" value="{{ form.department.value|default_if_none:'' }}" data-autocomplete-value>
+      <input type="search" id="workorder-page-create-department-search" value="{{ selected_department_label }}" placeholder="Начните вводить подразделение" autocomplete="off" data-autocomplete-input required>
+      <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+    </div>{{ form.department.errors }}
+  </div>
+  <div class="input-group"><label for="{{ form.priority.id_for_label }}">{{ form.priority.label }}</label>{{ form.priority }}{{ form.priority.errors }}</div>
+  <div class="input-group full-width"><label for="workorder-page-create-device-search">{{ form.device.label }}</label>
+    <div class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'workorders:create_device_options' %}" data-autocomplete-context='{"department":"#{{ form.department.id_for_label }}"}'>
+      <input type="hidden" id="{{ form.device.id_for_label }}" name="{{ form.device.html_name }}" value="{{ form.device.value|default_if_none:'' }}" data-autocomplete-value>
+      <input type="search" id="workorder-page-create-device-search" value="{{ selected_device_label }}" placeholder="Название, инвентарный или серийный номер" autocomplete="off" data-autocomplete-input>
+      <div class="autocomplete-options" role="listbox" data-autocomplete-options hidden></div>
+    </div>{{ form.device.errors }}
+  </div>
+</div>

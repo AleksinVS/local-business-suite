@@ -10,6 +10,7 @@
   "file_organization_stats.py": "Безопасные usage events, aggregation thresholds и предложения общей файловой структуры",
   "file_organization_move.py": "Согласованный managed_fs перенос файлов с exact batch membership, claim token, actor-aware approval и copy/verify/quarantine/purge gate; system bootstrap создает только PLANNED",
   "selectors.py": "Scoped-селекторы полной области источника и текущего объектного доступа к файлам",
+  "autocomplete.py": "Поставщик доступных объектов файлов без раскрытия физических путей",
   "views.py": "UI: пользовательские виртуальные структуры (/memory/files/) и операторское ревью автоупорядочивания (/memory/review/file-organization/)",
   "urls.py": "URL-маршруты /memory/files/ и /memory/review/file-organization/ (примонтированы в config/urls.py под тем же префиксом memory/)",
   "tests.py": "Тесты контура автоупорядочивания файлов, scoped-доступа, actor-aware решений, точных партий, lock order, readonly Admin, immutable decision snapshot, recovery фаз и регрессионной матрицы границ доступа",

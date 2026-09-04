@@ -1,4 +1,20 @@
 {% extends "base.html" %}
-{% block content %}<section class="panel"><div class="section-head"><h1>{{ name }}</h1><div class="table-actions"><a href="?{{ request.GET.urlencode }}&format=csv">CSV</a><a href="?{{ request.GET.urlencode }}&format=xlsx">XLSX</a></div></div>
-{% if report_profile %}<div><strong>{{ report_profile.approval_label }}</strong><br>{{ report_profile.signer_position }} {{ report_profile.signer_name }}<br>{{ report_profile.footer_note }}</div>{% endif %}
-{% if rows %}<div class="table-container"><table><thead><tr>{% for key,value in rows.0.items %}<th>{{ key }}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for key,value in row.items %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">Нет данных.</p>{% endif %}</section>{% endblock %}
+{% block content %}<section class="panel warehouse-report"><div class="section-head"><h1>{{ name }}</h1><div class="table-actions"><a href="?{% if query %}{{ query }}&amp;{% endif %}format=csv">CSV</a><a href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx">XLSX</a></div></div>
+{% if report_profile %}<div class="warehouse-report-profile" aria-label="Профиль отчёта"><strong>{{ report_profile.name }}</strong>{% if report_profile.approval_label %}<span>{{ report_profile.approval_label }}</span>{% endif %}{% if report_profile.signer_position or report_profile.signer_name %}<span>{% if report_profile.signer_position %}{{ report_profile.signer_position }}{% endif %}{% if report_profile.signer_name %}: {{ report_profile.signer_name }}{% endif %}</span>{% endif %}{% if report_profile.footer_note %}<span>{{ report_profile.footer_note }}</span>{% endif %}</div>{% endif %}
+<form method="get" class="warehouse-report-filters">
+  <label>{{ filter_form.search.label }} {{ filter_form.search }}</label>
+  <label>{{ filter_form.department_id.label }}
+    <span class="autocomplete" data-autocomplete data-autocomplete-mode="entity" data-autocomplete-url="{% url 'warehouse:autocomplete_report_department' %}">
+      <input type="hidden" name="{{ filter_form.department_id.html_name }}" value="{{ filter_form.department_id.value|default_if_none:'' }}" data-autocomplete-value>
+      <input type="search" value="{{ filter_form.selected_department_label }}" placeholder="Все подразделения" autocomplete="off" data-autocomplete-input>
+      <span class="autocomplete-options" role="listbox" data-autocomplete-options hidden></span>
+    </span>
+  </label>
+  {% if filter_form.department_id.errors %}<span class="field-error">{{ filter_form.department_id.errors|striptags }}</span>{% endif %}
+  {% for field in filter_form %}{% if field.name != 'search' and field.name != 'department_id' %}<label>{{ field.label }} {{ field }}</label>{% if field.errors %}<span class="field-error">{{ field.errors|striptags }}</span>{% endif %}{% endif %}{% endfor %}
+  <button class="btn btn-primary" type="submit">Применить</button>
+</form>
+<p class="muted">Найдено: {{ total }}</p>
+{% if rows %}<div class="table-container"><table><thead><tr>{% for key,value in rows.0.items %}<th>{{ key }}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for key,value in row.items %}<td>{{ value|default:"—" }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+{% include "warehouse/partials/pagination.html" %}
+{% else %}<p class="empty-state">По заданным фильтрам данных нет.</p>{% endif %}</section>{% endblock %}

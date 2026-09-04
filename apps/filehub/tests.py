@@ -64,6 +64,46 @@ RUNTIME_DATABASES = {"default"}
 pytestmark = pytest.mark.integration
 
 
+class FileObjectAutocompleteSecurityTests(TestCase):
+    def test_provider_rejects_inactive_actor_and_page_uses_shared_widget(self):
+        inactive = User.objects.create_user(username="file-autocomplete-inactive", password="pass", is_active=False)
+        self.client.force_login(inactive)
+        denied = self.client.get(reverse("filehub:file_object_options"), {"q": "file"})
+        self.assertIn(denied.status_code, {401, 403})
+
+        root = User.objects.create_superuser(username="file-autocomplete-root", password="pass")
+        self.client.force_login(root)
+        response = self.client.get(reverse("filehub:user_file_views"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-autocomplete-url="%s"' % reverse("filehub:file_object_options"), html=False)
+
+    def test_provider_result_omits_physical_path(self):
+        from .autocomplete import FileObjectAutocompleteProvider
+
+        root = User.objects.create_superuser(username="file-path-root", password="pass")
+        file_object = SimpleNamespace(
+            pk=41,
+            file_id="stable-file-id",
+            source=SimpleNamespace(code="safe-source"),
+            current_version=SimpleNamespace(
+                source_object=SimpleNamespace(file_name="visible-name.txt")
+            ),
+        )
+        with patch(
+            "apps.filehub.autocomplete.file_object_autocomplete_candidates",
+            return_value=[file_object],
+        ) as candidates:
+            options = FileObjectAutocompleteProvider().search(
+                user=root, query="visible", context={}, limit=20
+            )
+
+        payload = options[0].as_dict()
+        self.assertEqual(payload["label"], "visible-name.txt")
+        self.assertEqual(payload["secondary"], "safe-source")
+        self.assertNotIn("confidential/contracts", str(payload))
+        candidates.assert_called_once_with(root, query="visible", limit=20)
+
+
 def _file_organization_profiles(*, source_code, managed_root, enabled=True, retention_days=30, min_users=2, min_events=2, min_files=1, min_confidence=0.2):
     return {
         "version": "1.0",

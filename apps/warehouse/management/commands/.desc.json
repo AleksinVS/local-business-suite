@@ -4,5 +4,6 @@
   "warehouse_legacy_import.py": "Dry-run/commit legacy landing package",
   "warehouse_legacy_reconcile.py": "Строгая сверка миграции",
   "warehouse_rebuild_balances.py": "Пересборка остатков из проводок",
-  "warehouse_acceptance_e2e.py": "Сквозная приёмка основных операций и отчётов"
+  "warehouse_acceptance_e2e.py": "Сквозная приёмка основных операций и отчётов",
+  "warehouse_reconcile_inline_series.py": "Контроль и фиксация готовности данных перед удалением старой модели партий"
 }

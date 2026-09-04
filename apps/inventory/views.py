@@ -77,6 +77,12 @@ class MedicalDeviceListView(InventoryAccessMixin, ListView):
             "operational_status": self.request.GET.get("operational_status", ""),
             "archived": self.request.GET.get("archived", ""),
         }
+        selected_department = context["departments"].filter(
+            pk=context["filters"]["department"]
+        ).first() if context["filters"]["department"] else None
+        context["filters"]["department_label"] = (
+            getattr(selected_department, "indented_name", "") if selected_department else ""
+        )
         actor = resolve_active_actor(self.request.user, force_refresh=True)
         context["can_manage_inventory"] = actor is not None and can_manage_inventory(actor)
 
@@ -113,6 +119,11 @@ class MedicalDeviceCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVie
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["selected_department_label"] = getattr(context["form"], "selected_department_label", "")
+        return context
 
     def test_func(self):
         actor = resolve_active_actor(self.request.user, force_refresh=True)
@@ -155,6 +166,11 @@ class MedicalDeviceUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateVie
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["selected_department_label"] = getattr(context["form"], "selected_department_label", "")
+        return context
 
     def get_queryset(self):
         return visible_devices_queryset(

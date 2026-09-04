@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="panel"><div class="section-head"><h1>Складские документы</h1>{% if can_operate_warehouse %}<a class="btn btn-primary" href="{% url 'warehouse:document_new' %}">Новый документ</a>{% endif %}</div>
+<form method="get" class="table-actions"><label>Поиск <input name="q" value="{{ search }}" placeholder="Номер, требование или подразделение"></label><label>Вид <select name="document_type"><option value="">Все</option>{% for value,label in document_type_choices %}<option value="{{ value }}"{% if selected_document_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label>Состояние <select name="status"><option value="">Все</option>{% for value,label in status_choices %}<option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="btn btn-outline" type="submit">Применить</button></form>
+<p class="muted">Найдено: {{ total }}</p>
 <div class="table-container"><table><thead><tr><th>Дата</th><th>Подразделение</th><th>Тип</th><th>Номер</th><th>Статус</th></tr></thead><tbody>
-{% for document in documents %}<tr><td><a href="{% url 'warehouse:document_detail' document.pk %}">{{ document.operation_date }}</a></td><td>{{ document.department }}</td><td>{{ document.get_document_type_display }}</td><td>{{ document.number|default:"—" }}</td><td>{{ document.get_status_display }}</td></tr>
-{% empty %}<tr><td colspan="5" class="empty-state">Нет документов.</td></tr>{% endfor %}</tbody></table></div></section>
+{% for document in documents %}<tr><td><a href="{% url 'warehouse:document_detail_panel' document.pk %}" onclick="event.preventDefault(); openGlobalRightPanel({type:'open_right_panel',mode:'view',title:'Документ',drawer_size:'workspace',htmx_url:this.href});">{{ document.operation_date }}</a></td><td>{{ document.department }}</td><td>{{ document.get_document_type_display }}</td><td>{{ document.number|default:"—" }}</td><td>{{ document.get_status_display }}</td></tr>
+{% empty %}<tr><td colspan="5" class="empty-state">Нет документов.</td></tr>{% endfor %}</tbody></table></div>
+{% include "warehouse/partials/pagination.html" %}
+</section>
 {% endblock %}

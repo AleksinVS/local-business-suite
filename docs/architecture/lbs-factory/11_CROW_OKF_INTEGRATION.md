@@ -79,7 +79,7 @@ LBS Knowledge API (единая точка для пользователей и 
        └─ LBS projection sync → MemoryKnowledgeItem, MemorySearchDocument, FTS
 ```
 
-Реализовать только необходимый вызов провайдера: `ingest_safe_source(source_ref, actor_ctx)`, `select_notes(question, actor_ctx)`, `get_note(note_ref, actor_ctx)` и техническое `reconcile()`. **Native `Wiki.ask` выдаёт итоговый ответ, а не список поисковых результатов**; поэтому для существующего `knowledge.search` использовать стабильный CROW `Steps.select(ctx, root, question)` с преобразованием `Note → LBS search hit`. При необходимости `Wiki.ask` можно отдельно предоставить как защищённый `knowledge.answer`. Это имена **проектируемого адаптера**, не upstream API. Пользовательские `knowledge.search/get/save_working/flag_confirmation/confirm` остаются фасадом LBS v3.4 и не зависят от CROW.
+Реализовать только необходимый вызов провайдера: `ingest_safe_source(source_ref, actor_ctx)`, `select_notes(question, actor_ctx)`, `prepare_context(question, actor_ctx)`, `get_note(note_ref, actor_ctx)` и техническое `reconcile()`. **Native `Wiki.ask` выдаёт ответ, а не поисковые результаты, и создаёт Researcher с unrestricted store.** Поэтому список кандидатов получать через CROW `Steps.select`, а **полноценный агентский контекст** (строки CSV, историю, подсказки о противоречиях) — через `Researcher.ask` с `ScopedReadStore` и переопределённым `Steps.answer`, который собирает контекст, а не генерирует финальный ответ. Это имена **проектируемого адаптера**, не upstream API. Пользовательские `knowledge.search/get/save_working/flag_confirmation/confirm` остаются фасадом LBS v3.4 и не зависят от CROW.
 
 Контракт backend/модуля закрепить как `KnowledgeOrganizationProvider` (или как расширение действующего `KnowledgeProvider` без второго конкурирующего фасада). Регистрация provider по **корпусу**: `corpus_id → provider_code=crow|lbs`. Конкретная настройка deployment имеет одного активного writer на corpus_id. Не создавать универсальный SDK десяти методов до второго работающего провайдера.
 
@@ -144,7 +144,7 @@ return lbs_knowledge_api.authorize_and_format(hits, actor, audience)
 
 **Рекомендуемый L0: A + C для чтения, с отдельной безопасной политикой записи.** С первого пилота LBS Access разрешает несколько крупных пространств (например, `common`, `accounting`, `project-a`), а **внутри каждого запускается единственный механизм поиска знаний — CROW `select` над отфильтрованным набором заметок**. Это не второй защищённый поисковик: исходный `source_data` остаётся доменной регистрационной/индексной проекцией, но не используется как конкурирующая универсальная выдача знаний. Для несовместимых ACL на запись допускаются дополнительные физические CROW bundles **внутри того же логического пространства LBS**, не одна Wiki на пользователя. Логический поиск объединяет результаты разрешённых bundles. CROW не делает `match/merge` через физические write-partitions; для этого потребуется согласованный отдельный механизм.
 
-**C внедряем для чтения сразу как адаптер к `Steps.select`.** При этом **полноценный native `Wiki.ask` не использовать как общий защищённый путь**: после `select` он может читать `raw` и `.archive` без предметной авторизации. Формирование ответа выполняет LBS/агент только по разрешённым Note и проверенным citations. Для записи в смешанный по ACL bundle потребуется отдельная адаптация native `route/match/relate/plan/split` и ограничение cross-ACL merge; она не является дешёвой частью фильтра `select`. Source API — независимая опция, OpenFGA только поставщик решений Access.
+**C внедряем для чтения сразу как адаптер к `Steps.select` и к `Researcher.ask` через ScopedReadStore.** Для полного контекста таблиц/истории/противоречий используем `Researcher.ask` с заменяемым шагом `answer`, который собирает подготовленные материалы для агента LBS, не вызывая финальную генерацию в CROW. При этом **полноценный native `Wiki.ask` не использовать как общий защищённый путь**: после `select` он может читать `raw` и `.archive` без предметной авторизации. Формирование ответа выполняет LBS/агент только по разрешённым Note и проверенным citations. Для записи в смешанный по ACL bundle потребуется отдельная адаптация native `route/match/relate/plan/split` и ограничение cross-ACL merge; она не является дешёвой частью фильтра `select`. Source API — независимая опция, OpenFGA только поставщик решений Access.
 
 ### 4.6 Что фильтруется в CROW и как использовать native raw
 
@@ -181,7 +181,88 @@ return hits
 
 В рабочем коде `get_authorized` выполняет повторную проверку полномочий, privacy/egress и разрешённой аудитории, а `make_safe_view` возвращает только разрешённые метаданные. Использовать пакетный ACL-check и отдельный контекст на запрос; после изменения прав кэш разрешённых ID должен обновляться или fail-closed.
 
-### 4.7 Отдельный контроль записи и консолидации
+### 4.7 Оптимизация чтения: не собирать всю Wiki на каждый запрос
+
+**Ошибку первоначальной схемы нужно исправить:** прямой `wiki.store.load()` внутри каждого `knowledge.search` повторно читает все Markdown-файлы, парсит YAML Frontmatter и тело заметок. Для большого корпуса это дороже легковесного ACL-представления. Обязательная оптимизация первого этапа — **один кэш базового дерева на физический bundle и версию файлов**, изолированный от мутаций writer.
+
+1. **Базовый снимок:** при старте/после успешного Git-коммита загружается CROW дерево для `bundle_id`. Снимок в RAM рассматривается как неизменяемый; writer не изменяет объекты этого снимка. После успешного сохранения создаётся новый снимок и атомарно заменяется ссылка на него. При нескольких Django workers/хостах используется версия корпуса в LBS и проверка локального кэша; это не обещание общей памяти между процессами.
+2. **ACL в LBS:** на запрос выполняется одна проверка доступных пространств и пакетное вычисление разрешённых `knowledge_id`; не делать SQL/access вызов на каждую Note. Сначала простые права на пространство, затем редкие исключения Note и классификация. При недоступном Access — deny.
+3. **Скопированный view:** из уже загруженного снимка собрать только разрешённые безопасные `Folder/Note` объекты (метаданные, без body/sources), не читая повторно файлы. Базовое выполнение — O(число папок + заметок проверяемого bundle); стоимость и аллокации измерять на 1k/10k/100k. Обычно она меньше сетевых classifier-операций, но без теста гарантировать это нельзя.
+4. **Оптимизация по мере измерений:** для корпусов без Note-restrictions reuse предвычисленного безопасного read-only view; для частых одинаковых ACL профилей — cache view по `bundle_revision + access_policy_revision + effective_permissions_signature + destination`. Пользовательские ACL при малом числе исключений предпочтительно применять как быстрый отказ/маску, **не** создавать долгоживущие view на каждого пользователя. Финальная проверка Access после отбора обязательна и при hit кэша.
+5. **Чтение при записи:** кешированный старый снимок разрешено обслуживать во время native write **только** при доказанной стабильности связанных raw/archive путей и версии. Для MVP сохраняется существующий read barrier: поиск ждёт окончания операции либо возвращает controlled retry. После commit/index обновляется snapshot. Нельзя смешать дерево новой редакции с `raw` от незавершённой транзакции.
+
+**Безопасность:** физическая загрузка полных файлов в доверенный LBS-процесс остаётся, даже если `select` видит только безопасные title/description. Кэш не является распределённым ACL gate и не гарантирует отзыв прав сам по себе. Для жёсткой изоляции на уровне ОС нужна отдельная физическая область/процесс.
+
+### 4.8 Полный цикл CROW: подготовка контекста вокруг select
+
+**Граница «только Steps.select» недостаточна, если требуется полнофункциональный ответ CROW.** В upstream `Researcher.ask` последовательно вызывает:
+
+```text
+store.load()
+  → Steps.select(...)              # выбор заметок
+  → Researcher._with_history(...)  # возможная старая редакция из .archive/
+  → Researcher._conflicting(...)   # классификатор противоречий + CONFLICT_HINT
+  → Researcher._with_rows(...)     # релевантные строки таблиц из raw, общий лимит
+  → Steps.answer(...)             # финальная генерация (может быть подменена)
+```
+
+`_with_history` срабатывает при `revisions="replace"`, наличии предыдущей версии и классификатора, который определил, что вопрос исторический. Это **не** гарантированный выбор всей истории. `_conflicting` даёт эвристическую подсказку о **возможных** противоречиях (если включён `answer_conflicts` и classifier), не доказательство конфликта. `_with_rows` читает сохранённые CROW CSV-таблицы через `sources[].resource` и `store.read()`, выбирает релевантные строки с учётом бюджета.
+
+**Предпочтительный путь без fork CROW:** использовать штатный `Researcher.ask`, но конструировать `Researcher` из **двух легковесных адаптеров** LBS:
+
+- `ScopedReadStore.load()` отдаёт кэшированный, но ACL-фильтрованный метаданный tree. `ScopedReadStore.read(rel)` — единственный защищённый вход к `raw` и `.archive`, сопоставляет путь с source/knowledge ID и версией, проверяет ACL исходника/архивной редакции и `destination`-privacy, выдаёт только разрешённый `Note`/`Source`. В отличие от штатного `WikiStore`, запрещённый `read` даёт controlled deny (для CROW можно отобразить в `FileNotFoundError`, который `_with_rows/_with_history` пропускают). LBS фиксирует диагностическую отметку об опущенных источниках: нельзя молча представлять неполный контекст как полный.
+- `Steps.select` заменить обёрткой `select_and_hydrate`: вызывает **штатный** CROW `select` на metadata-only дереве, проверяет `check_select`, а затем загружает **только выбранные и повторно разрешённые** Note body и проверенные `sources/previous_version` в отдельные request-local Note-копии того же scoped-root. Эти объекты не разделяются между запросами.
+- `Steps.answer` заменить штатным механизмом `dataclasses.replace(CROW, answer=collect_context)`. Callback **не генерирует** итоговый ответ, а сохраняет в локальный результат request всю подготовку `Researcher.ask`: разрешённые Note, присоединённые строки таблиц, разрешённые исторические версии, расширенный вопрос с подсказками и след решений. Возвращает простую строку `"context_ready"`, удовлетворяя `check_answer`. Если Note нет, CROW не вызывает answer step — LBS возвращает пустой результат. Никакой глобальной переменной для capture, callback создаётся на каждый запрос.
+- Далее LBS делает финальную авторизацию, общий бюджет ответа на **все разрешённые bundles**, нормализует ссылки и отдаёт структурированный `KnowledgeContext` своему агенту. Native `Answer.citations` при таком capture-режиме не использовать: они парсятся из генерируемого текста; ссылки собирает LBS из разрешённых `knowledge_id/source_ref`.
+
+Условный псевдокод (контракты `ScopedReadStore`/`KnowledgeContext` ещё не существуют):
+
+```python
+from dataclasses import replace
+from llmw2.agents.researcher import Researcher
+from llmw2.agents.steps import check_select
+
+def prepare_crow_context(wiki, actor, audience, question, tree_cache):
+    capture = {}
+    store = ScopedReadStore(wiki.store, actor, audience, tree_cache)
+
+    native_select = wiki.steps.select
+
+    def select_and_hydrate(ctx, scoped_root, question):
+        chosen = check_select(native_select(ctx, scoped_root, question), scoped_root)
+        for note in chosen:
+            # Только request-local копия, не shared tree cache:
+            store.hydrate_authorized_note(note, destination="agent_context")
+        return chosen
+
+    def collect_context(ctx, augmented_question, notes):
+        capture["question"] = augmented_question  # включает штатные CROW hints
+        capture["notes"] = list(notes)             # после history/conflicts/rows
+        capture["decisions"] = list(ctx.decisions)
+        return "context_ready"                     # не вызов answer LLM
+
+    steps = replace(wiki.steps, select=select_and_hydrate, answer=collect_context)
+    researcher = Researcher(
+        store=store, llm=wiki.llm, prompts=wiki.prompts,
+        cfg=wiki.cfg, steps=steps, classifier=wiki.classifier,
+    )
+    result = researcher.ask(question)
+    return lbs_context_finalize(capture, result, actor, audience)
+```
+
+**Важно:** `ScopedReadStore` — это read-only совместимый фасад с методами `load/read`, передаваемый конструктору `Researcher`. CROW type hint ожидает `WikiStore`, но Python runtime не заставляет этот параметр быть именно его классом; **это гипотеза об узком duck-typed контракте, проверяемая contract tests на зафиксированной версии CROW**, а не объявленный стабильный интерфейс. Шаги `select/answer` официально заменяемые по `docs/library/steps.md`, но подготовка `_with_*` приватная и при обновлении upstream может измениться. Не вызывать `Wiki.ask()` без LBS ScopedReadStore — он создаёт Researcher со штатным unrestricted store.
+
+**По режимам:**
+
+- `knowledge.search`: быстрый `select` по безопасному дереву, если нужен только список подходящих заметок. Не обещать результатов `_with_rows/юhistory/conflicting` в таком режиме.
+- `knowledge.prepare_context` (рекомендуемый агентский путь): `Researcher.ask` + `ScopedReadStore` + capture-answer hook; сохраняет native CROW таблицы/историю/конфликты **без генерации ответа CROW**.
+- `knowledge.answer` (опционально): тот же защищённый `ScopedReadStore`, но native CROW `answer` генерирует текст только по разрешённому контексту. Не требуется для MVP.
+
+**Несколько корпусов:** `Researcher.ask` подготавливает историю, строки и конфликтную подсказку **внутри одного bundle**. Если объединять результаты нескольких пространств, LBS на финальном слое должен обеспечить единый лимит контекста и при необходимости проверить конфликты **между** разрешёнными корпусами (возможно, используя чистую функцию CROW `conflicts.conflict_state` и classifier). Нельзя объявлять, что CROW автоматически анализирует межкорпусные противоречия; без этого отдельного этапа они проверяются лишь внутри корпуса.
+
+**Проверка отказа:** ограниченный по правам пользователь не может прочитать запрещённый `raw`, старый `.archive` или входящий `See also` из более закрытого источника; если источник пропущен, контекст/ответ сообщает о неполной доступности данных, а не выдаёт запрещённое содержимое или молча считает данные полными.
+
+### 4.9 Отдельный контроль записи и консолидации
 
 Предварительная фильтрация `select` **не ограничивает** `Wiki.ingest`. Native CROW при записи читает дерево, делает `route`, `match`, `consolidate`, `merge`, `relate`; пакетная работа также использует `plan/split`. Автослияние с заметкой, основанной на другом закрытом источнике, может породить вывод, имеющий более широкую аудиторию, чем разрешено.
 
@@ -190,7 +271,7 @@ return hits
 Второй этап **при доказанной потребности** — узкие контролируемые обёртки native `route/match/relate` и пересборка writer/plan/split с фильтрованной областью, без переноса ACL в сам алгоритм CROW. Обёртка `select` без переписывания core — дешёвая; полноценный mixed-ACL ingest — отдельная по сложности задача.
 
 
-### 4.8 Конкретная модель хранения прав в LBS
+### 4.10 Конкретная модель хранения прав в LBS
 
 **Не создавать новую базу прав CROW.** Использовать существующую `accounts.User`, Django `Group` / роль-гранты LBS Access в PostgreSQL и предметный `DomainPolicy` Wiki. Текущее состояние: `MemoryKnowledgeItem.scope_tokens` и `sensitivity` уже существуют, а `can_access_knowledge_item` проверяет пересечение токенов; отдельного полноценного постраничного ACL-селектора CROW пока нет. Его следует добавить *один раз* в LBS, а не реализовывать заново для каждого провайдера.
 
@@ -221,7 +302,7 @@ can_read = actor_is_verified_and_active
 
 При запросе LBS один раз получает актуальный actor/grants, делает пакетную выборку ID для bundle, формирует разрешённое дерево; финальная проверка при выдаче учитывает отзыв роли и аудиторию группы. Кэш scoped-представлений — только с привязкой к bundle revision + Access revision/actor/audience или с контролируемым отключением на старте. Никаких обращений CROW к LBS Access по одному Note.
 
-### 4.9 Что писать в OKF Frontmatter
+### 4.11 Что писать в OKF Frontmatter
 
 **Для ACL не нужны списки пользователей, групп и разрешений в заметке.** При физической группировке `space_id` определяется LBS по `bundle_id`, а разрешения групп/пользователей и исключения Note хранятся отдельно в Access. Нативный CROW уже пишет стабильный `id`, `type: Note`, `title`, `description` и `sources`. Для LBS достаточно после контролируемой записи связать этот ID с **глобальным стабильным `knowledge_id`** (можно оставить оба: внутренний native ID и внешний LBS ID), поставить `sensitivity` и `confirmation_state`, не переписывая нативные поля.
 

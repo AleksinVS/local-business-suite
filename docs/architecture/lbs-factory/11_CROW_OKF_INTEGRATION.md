@@ -144,7 +144,7 @@ return lbs_knowledge_api.authorize_and_format(hits, actor, audience)
 
 **Рекомендуемый L0: A + C для чтения, с отдельной безопасной политикой записи.** С первого пилота LBS Access разрешает несколько крупных пространств (например, `common`, `accounting`, `project-a`), а **внутри каждого запускается единственный механизм поиска знаний — CROW `select` над отфильтрованным набором заметок**. Это не второй защищённый поисковик: исходный `source_data` остаётся доменной регистрационной/индексной проекцией, но не используется как конкурирующая универсальная выдача знаний. Для несовместимых ACL на запись допускаются дополнительные физические CROW bundles **внутри того же логического пространства LBS**, не одна Wiki на пользователя. Логический поиск объединяет результаты разрешённых bundles. CROW не делает `match/merge` через физические write-partitions; для этого потребуется согласованный отдельный механизм.
 
-**C внедряем для чтения сразу как адаптер к `Steps.select` и к `Researcher.ask` через ScopedReadStore.** Для полного контекста таблиц/истории/противоречий используем `Researcher.ask` с заменяемым шагом `answer`, который собирает подготовленные материалы для агента LBS, не вызывая финальную генерацию в CROW. При этом **полноценный native `Wiki.ask` не использовать как общий защищённый путь**: после `select` он может читать `raw` и `.archive` без предметной авторизации. Формирование ответа выполняет LBS/агент только по разрешённым Note и проверенным citations. Для записи в смешанный по ACL bundle потребуется отдельная адаптация native `route/match/relate/plan/split` и ограничение cross-ACL merge; она не является дешёвой частью фильтра `select`. Source API — независимая опция, OpenFGA только поставщик решений Access.
+**C внедряем для чтения как ACL-filtered tree перед `Steps.select`, а для полного контекста используем `Researcher.ask` через ScopedReadStore.** Для полного контекста таблиц/истории/противоречий используем `Researcher.ask` с заменяемым шагом `answer`, который собирает подготовленные материалы для агента LBS, не вызывая финальную генерацию в CROW; **дополнительная обёртка `select_and_hydrate` не нужна в минимальном профиле**. При этом **полноценный native `Wiki.ask` не использовать как общий защищённый путь**: после `select` он может читать `raw` и `.archive` без предметной авторизации. Формирование ответа выполняет LBS/агент только по разрешённым Note и проверенным citations. Для записи в смешанный по ACL bundle потребуется отдельная адаптация native `route/match/relate/plan/split` и ограничение cross-ACL merge; она не является дешёвой частью фильтра `select`. Source API — независимая опция, OpenFGA только поставщик решений Access.
 
 ### 4.6 Что фильтруется в CROW и как использовать native raw
 
@@ -208,40 +208,33 @@ store.load()
 
 `_with_history` срабатывает при `revisions="replace"`, наличии предыдущей версии и классификатора, который определил, что вопрос исторический. Это **не** гарантированный выбор всей истории. `_conflicting` даёт эвристическую подсказку о **возможных** противоречиях (если включён `answer_conflicts` и classifier), не доказательство конфликта. `_with_rows` читает сохранённые CROW CSV-таблицы через `sources[].resource` и `store.read()`, выбирает релевантные строки с учётом бюджета.
 
-**Предпочтительный путь без fork CROW:** использовать штатный `Researcher.ask`, но конструировать `Researcher` из **двух легковесных адаптеров** LBS:
+**Минимальный предпочтительный путь без fork CROW:** оставить штатный `Researcher.ask` и заменить только шаг `Steps.answer`. Дополнительный `select_and_hydrate` на первом этапе **не нужен**, если Note body уже разрешён для нужного назначения и его можно без копирования использовать из кэша.
 
-- `ScopedReadStore.load()` отдаёт кэшированный, но ACL-фильтрованный метаданный tree. `ScopedReadStore.read(rel)` — единственный защищённый вход к `raw` и `.archive`, сопоставляет путь с source/knowledge ID и версией, проверяет ACL исходника/архивной редакции и `destination`-privacy, выдаёт только разрешённый `Note`/`Source`. В отличие от штатного `WikiStore`, запрещённый `read` даёт controlled deny (для CROW можно отобразить в `FileNotFoundError`, который `_with_rows/_with_history` пропускают). LBS фиксирует диагностическую отметку об опущенных источниках: нельзя молча представлять неполный контекст как полный.
-- `Steps.select` заменить обёрткой `select_and_hydrate`: вызывает **штатный** CROW `select` на metadata-only дереве, проверяет `check_select`, а затем загружает **только выбранные и повторно разрешённые** Note body и проверенные `sources/previous_version` в отдельные request-local Note-копии того же scoped-root. Эти объекты не разделяются между запросами.
-- `Steps.answer` заменить штатным механизмом `dataclasses.replace(CROW, answer=collect_context)`. Callback **не генерирует** итоговый ответ, а сохраняет в локальный результат request всю подготовку `Researcher.ask`: разрешённые Note, присоединённые строки таблиц, разрешённые исторические версии, расширенный вопрос с подсказками и след решений. Возвращает простую строку `"context_ready"`, удовлетворяя `check_answer`. Если Note нет, CROW не вызывает answer step — LBS возвращает пустой результат. Никакой глобальной переменной для capture, callback создаётся на каждый запрос.
-- Далее LBS делает финальную авторизацию, общий бюджет ответа на **все разрешённые bundles**, нормализует ссылки и отдаёт структурированный `KnowledgeContext` своему агенту. Native `Answer.citations` при таком capture-режиме не использовать: они парсятся из генерируемого текста; ссылки собирает LBS из разрешённых `knowledge_id/source_ref`.
+- `ScopedReadStore.load()` отдаёт легковесное **полностью авторизованное** представление дерева из кэша. Каждая разрешённая Note-копия содержит проверенные `title/description/body` и нужные `sources/previous_version`; immutable Python `str` тела можно переиспользовать по ссылке из кэшированного безопасного снимка, не перечитывая файл и не копируя текст. Сам native `Steps.select` использует только заголовки, описания, безопасные пути/названия папок; никакое Note body не передаётся классификатору на шаге select. Однако затем `_conflicting` и `answer` работают с разрешёнными Note body, поэтому контент должен также удовлетворять `agent_context`/`external_llm` policy.
+- `ScopedReadStore.read(rel)` — единственный вход для `raw` и `.archive`: сопоставить ссылку с стабильным source/knowledge ID и версией, проверить LBS Access **и** текущий `destination` privacy, вернуть безопасный Note/Source. Запрещённый `read` отображать в отказ, который CROW `_with_rows/_with_history` умеет пропускать (например, `FileNotFoundError`). LBS ведёт отметку о пропущенных источниках/архивах: не выдавать частичный контекст за полный.
+- Используя штатный `dataclasses.replace(wiki.steps, answer=collect_context)`, заменить только последний шаг. Callback **не генерирует** ответ, а сохраняет готовые разрешённые Note, строки CSV, архивные версии, вопрос с конфликтной/исторической подсказкой и trace решений в request-local `capture`, возвращая строку `"context_ready"`, которую принимает `check_answer`. Если Note не отобраны, answer step не вызывается — LBS обрабатывает пустой результат отдельно.
+- LBS повторно авторизует собранные ID, устанавливает **общий** бюджет контекста на несколько bundles, нормализует источники и передаёт структурированный `KnowledgeContext` агенту. Native `Answer.citations` в режиме capture не использовать: они формируются regex над строкой финального ответа, которого здесь нет. Цитаты LBS собирает из проверенных `knowledge_id/source_ref`.
 
-Условный псевдокод (контракты `ScopedReadStore`/`KnowledgeContext` ещё не существуют):
+Условный псевдокод (все имена новых LBS методов/обёрток проектные):
 
 ```python
 from dataclasses import replace
 from llmw2.agents.researcher import Researcher
-from llmw2.agents.steps import check_select
 
 def prepare_crow_context(wiki, actor, audience, question, tree_cache):
     capture = {}
-    store = ScopedReadStore(wiki.store, actor, audience, tree_cache)
-
-    native_select = wiki.steps.select
-
-    def select_and_hydrate(ctx, scoped_root, question):
-        chosen = check_select(native_select(ctx, scoped_root, question), scoped_root)
-        for note in chosen:
-            # Только request-local копия, не shared tree cache:
-            store.hydrate_authorized_note(note, destination="agent_context")
-        return chosen
+    store = ScopedReadStore(
+        wiki.store, actor, audience, tree_cache,
+        destination="agent_context",
+    )  # load(): разрешённые Note, read(): только разрешённый raw/archive
 
     def collect_context(ctx, augmented_question, notes):
-        capture["question"] = augmented_question  # включает штатные CROW hints
-        capture["notes"] = list(notes)             # после history/conflicts/rows
+        capture["question"] = augmented_question  # CROW history/conflict hints
+        capture["notes"] = list(notes)             # после history + rows
         capture["decisions"] = list(ctx.decisions)
-        return "context_ready"                     # не вызов answer LLM
+        return "context_ready"                     # НЕ вызов answer-LLM
 
-    steps = replace(wiki.steps, select=select_and_hydrate, answer=collect_context)
+    steps = replace(wiki.steps, answer=collect_context)
     researcher = Researcher(
         store=store, llm=wiki.llm, prompts=wiki.prompts,
         cfg=wiki.cfg, steps=steps, classifier=wiki.classifier,
@@ -250,7 +243,9 @@ def prepare_crow_context(wiki, actor, audience, question, tree_cache):
     return lbs_context_finalize(capture, result, actor, audience)
 ```
 
-**Важно:** `ScopedReadStore` — это read-only совместимый фасад с методами `load/read`, передаваемый конструктору `Researcher`. CROW type hint ожидает `WikiStore`, но Python runtime не заставляет этот параметр быть именно его классом; **это гипотеза об узком duck-typed контракте, проверяемая contract tests на зафиксированной версии CROW**, а не объявленный стабильный интерфейс. Шаги `select/answer` официально заменяемые по `docs/library/steps.md`, но подготовка `_with_*` приватная и при обновлении upstream может измениться. Не вызывать `Wiki.ask()` без LBS ScopedReadStore — он создаёт Researcher со штатным unrestricted store.
+**Опциональная оптимизация позднее:** если разрешённые полные тексты (особенно при обязательной переработке под внешний LLM `destination`) оказываются дорогими, `ScopedReadStore.load()` возвращает лишь metadata-only разрешённые Note, а тонкая обёртка `Steps.select=select_and_hydrate` заполняет **только выбранные** Note-копии безопасными `body/sources/previous_version` перед внутренними `_with_history/_conflicting/_with_rows`. В этом варианте CROW select остаётся неизменным. Вводить такую обёртку заранее не нужно.
+
+**Важно:** `ScopedReadStore` — это read-only совместимый фасад с методами `load/read`, передаваемый конструктору `Researcher`. CROW type hint ожидает `WikiStore`, но Python runtime не заставляет этот параметр быть именно его классом; **это гипотеза об узком duck-typed контракте, проверяемая contract tests на зафиксированной версии CROW**, а не объявленный стабильный интерфейс. Шаг `answer` официально заменяем по `docs/library/steps.md` (опционально позже заменить и `select` для ленивой дозагрузки), но подготовка `_with_*` приватная и при обновлении upstream может измениться. Не вызывать `Wiki.ask()` без LBS ScopedReadStore — он создаёт Researcher со штатным unrestricted store.
 
 **По режимам:**
 

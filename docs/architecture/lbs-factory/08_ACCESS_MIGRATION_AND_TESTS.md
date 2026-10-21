@@ -1,6 +1,6 @@
 # LBS Access — план миграции, задания агентам и проверочная матрица
 
-**Статус:** план для coding agents; **не запускать автоматический production cutover**. Использовать вместе с `07_ACCESS_ARCHITECTURE.md`, `06_PLUGGABLE_BUSINESS_MODULES.md` и `AGENTS.md` репозитория.
+**Статус:** **Accepted — согласованный исполнительный план и тестовая матрица; ещё не выполнено.** **Не запускать автоматический production cutover**. Использовать вместе с `07_ACCESS_ARCHITECTURE.md`, `06_PLUGGABLE_BUSINESS_MODULES.md` и `AGENTS.md` репозитория.
 
 ## 1. Что считается успехом
 

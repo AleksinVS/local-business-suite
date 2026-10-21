@@ -36,5 +36,5 @@
   "project-knowledge-system-v0.1.md": "Проект локальной базы проектных знаний для ИИ-агентов (markdown-канон + производный SQLite)",
   "WAREHOUSE_SYSTEM_ARCHITECTURE.md": "Архитектура общего раздела Склад, прав, отчётов и legacy-миграции",
   "WAREHOUSE_UX_TARGET_ARCHITECTURE.md": "Целевая UX-архитектура склада, inline-серии, перемещения и общего автодополнения",
-  "lbs-factory/": "Предлагаемая архитектура LBS Factory v3.4: простое ядро, реестр подтверждения Wiki, optional OpenFGA"
+  "lbs-factory/": "Согласованная целевая LBS Factory v3.4: CROW/OKF Wiki, агенты, LBS Access, прогрессивная сложность (реализация поэтапная)"
 }

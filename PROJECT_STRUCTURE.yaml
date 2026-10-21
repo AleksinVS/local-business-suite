@@ -420,12 +420,13 @@ docs: # Документация проекта
     ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
     ADR-0049-portal-autocomplete-and-contextual-form-panels.md: file # Принятый ADR: общее автодополнение и доменные формы в правой панели
     ADR-0050-warehouse-inline-series-and-list-relocation.md: file # Принятый ADR: серия в строке складского движения и перемещение из списка остатков
+    ADR-0051-crow-pluggable-okf-knowledge-provider.md: file # Принятый ADR: CROW как заменяемый OKF v0.2 модуль Wiki, централизованный LBS Access, нативный raw
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
   architecture: # Архитектурные документы проекта
-    lbs-factory: # Предлагаемая архитектура LBS Factory v3.4: простое ядро, реестр подтверждения Wiki, optional OpenFGA
-      00_README.md: file # Навигация по предлагаемой LBS Factory v3.3 и статус решений
+    lbs-factory: # Согласованная целевая LBS Factory v3.4: CROW/OKF Wiki, агенты, LBS Access, прогрессивная сложность (реализация поэтапная)
+      00_README.md: file # Навигация по согласованной целевой архитектуре LBS Factory v3.4 и открытым архитектурным долгам
       01_CONCEPT.md: file # Целевая архитектура агентной фабрики внедрения и состав компонентов
       02_AGENT_INTERACTION.md: file # Контракты взаимодействия агентов, A2A, MCP, AG-UI и доверенные полномочия
       03_LLM_WIKI.md: file # Развитие LLM-Wiki на базе apps.memory, знания, источники и ACL
@@ -435,7 +436,9 @@ docs: # Документация проекта
       07_ACCESS_ARCHITECTURE.md: file # Целевая архитектура подключаемой системы полномочий LBS Access
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Этапы и тесты миграции LBS Access
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
-      10_CONTENT_PRIVACY_PIPELINE.md: file # Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV
+      10_CONTENT_PRIVACY_PIPELINE.md: file # Согласованная граница Access/secret/egress и профилей; окончательная политика ПДн в знаниях/Git открыта
+      11_CROW_OKF_INTEGRATION.md: file # Согласованная архитектура CROW как заменяемого OKF v0.2 модуля над LBS Wiki
+      12_CROW_IMPLEMENTATION_PLAN.md: file # Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
@@ -521,6 +524,7 @@ docs: # Документация проекта
       desktop-notifications-pwa-tauri.md: file # Активный план PWA-first уведомлений и опционального Tauri-клиента
       kanban-department-filter-ai-sidebar.md: file # Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
+      knowledge-personal-data-git-policy-debt.md: file # Открытый долг: правила хранения/удаления персональных данных в CROW raw, корпоративных знаниях, Git и backup
       memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата

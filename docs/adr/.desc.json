@@ -49,5 +49,6 @@
   "ADR-0047-warehouse-ledger-and-department-scoped-access.md": "Принятый ADR: складской журнал, адресное хранение и доступ по подразделениям",
   "ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md": "Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий",
   "ADR-0049-portal-autocomplete-and-contextual-form-panels.md": "Принятый ADR: общее автодополнение и доменные формы в правой панели",
-  "ADR-0050-warehouse-inline-series-and-list-relocation.md": "Принятый ADR: серия в строке складского движения и перемещение из списка остатков"
+  "ADR-0050-warehouse-inline-series-and-list-relocation.md": "Принятый ADR: серия в строке складского движения и перемещение из списка остатков",
+  "ADR-0051-crow-pluggable-okf-knowledge-provider.md": "Принятый ADR: CROW как заменяемый OKF v0.2 модуль Wiki, централизованный LBS Access, нативный raw"
 }

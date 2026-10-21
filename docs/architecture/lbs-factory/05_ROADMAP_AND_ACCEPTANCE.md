@@ -36,7 +36,7 @@
 
 Порядок зависимостей: **PRIV-00..04 до передачи реального содержимого в CROW**; единый `SafeProjection` используется и для `wiki_git`, и для назначения LLM/classifier. Native CROW raw сохраняется вне Git, доступен только сервису и имеет отдельный backup. Новые CROW-страницы сразу OKF v0.2; legacy LBS предварительно валидируется/мигрирует по отдельному плану, не импортируется автоматически.
 
-Проверить: запрет двух writers/прямого CROW UI, ACL до classifier, исключение raw из `org/**/*.md` обхода, сохранение Frontmatter CROW и `working/needs_confirmation/confirmed`, регистрацию новых заметок в LBS индексе, частичную запись/rollback, idempotent `Origin`, выключение CROW и read-only работу LBS по его OKF-страницам. Коммерческое использование с AGPL — отдельная обязательная проверка.
+Проверить: запрет двух writers/прямого CROW UI, ACL до classifier, единый барьер чтения/записи, исключение `raw/` и `.archive/` из `org/**/*.md` обхода, сохранение Frontmatter CROW и `working/needs_confirmation/confirmed`, регистрацию новых заметок в LBS индексе, частичную запись/rollback, idempotent `Origin`, выключение CROW и read-only работу LBS по его OKF-страницам. Коммерческое использование с AGPL — отдельная обязательная проверка.
 
 Подготовить `Origin/source_ref/version+transform` для будущего Source API **без изменения native raw сейчас**. Переход `MemorySourceObject -> raw` и прямое встраивание Source API остаются возможностями для обсуждения, не задачами P1.
 

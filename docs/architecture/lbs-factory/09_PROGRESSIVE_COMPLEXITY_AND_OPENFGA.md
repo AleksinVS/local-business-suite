@@ -127,5 +127,5 @@ OKF v0.2 — формат корпоративных знаний независ
 
 До CROW выполняется единый [Content Privacy Pipeline](10_CONTENT_PRIVACY_PIPELINE.md), в том числе для запросов к внешнему LLM/classifier. Не смешивать ACL-разные документы в native дереве CROW; не включать второй контролирующий editor/registry. `working` записывается сразу; `needs_confirmation` не блокирует ingest. Legacy `pending` остаётся закрытым. Новые страницы соответствуют OKF сразу, исторические LBS — только после совместимой миграции.
 
-Полная спецификация: [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed).
+Полная спецификация: [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [инженерный план](12_CROW_IMPLEMENTATION_PLAN.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed).
 

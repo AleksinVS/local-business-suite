@@ -105,10 +105,10 @@ class AgentProvider(Protocol):
 ### Сценарий A: интервью → анализ → Wiki
 
 1. Telegram или Web принимает сообщение участника с доверенной привязкой к project/room.
-2. Channel Adapter создаёт `AgentTask(capability=discovery.interview)`.
+2. Channel Adapter передаёт агенту структурированный запрос; долгий `AgentTask` сохраняется только при необходимости восстановления выполнения.
 3. Discovery Agent через Knowledge API получает разрешённые вопросы и проверенные ранее факты.
-4. Чувствительную исходную стенограмму при необходимости хранят отдельно; безопасная тематическая выдержка **сразу** обновляет рабочую Wiki.
-5. Агент формирует `knowledge.proposal` с цитатами, scope и metadata, архивирует артефакт в Task Ledger.
+4. Исходная стенограмма при необходимости остаётся в защищённом source staging. Тематическая выдержка с выбранной privacy-политикой отправляется в `knowledge.save_working`, который направляет её в активный provider корпуса (при CROW — native ingest под LBS Writer Guard).
+5. Сохраняются `knowledge_id`, разрешённые источники/версии и статус `working`; отдельный proposal и Task Ledger для обычной заметки **не обязательны**.
 6. При обнаружении неясности агент помечает страницу needs_confirmation без блокирования работы; утверждение официального регламента выполняется отдельно.
 7. При необходимости агент делегирует узкую задачу reviewer через `AgentTask`; последний видит только разрешённые ссылки.
 
@@ -182,3 +182,13 @@ class AgentProvider(Protocol):
 ## 13. Privacy boundary перед контекстом агента (v3.4)
 
 Отбор доступного источника и подготовка текста для LLM — разные проверки. `SourceObjectEnvelope.text` и raw `adapter.render_envelope` не становятся безопасными от проверки `adapter.can_access`. Каждая агентная отправка использует SafeProjection по назначению; `title`, ссылки и метаданные тоже проверяются. При невозможности обязательной подготовки — контролируемый отказ для конкретного объекта, **никогда raw fallback**. Перед первым Git commit рабочего знания действует то же правило; реестр подтверждений не заменяет privacy gate. [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+## 14. CROW: разница между поиском и контекстом агента
+
+Подключаемый CROW выполняет **две семантически разные операции** Knowledge API:
+- `knowledge.search` → быстрый `Steps.select` по дереву с разрешёнными для получателя Folder/Note и безопасными metadata; нет штатных `_with_rows/_with_history/_conflicting`.
+- `knowledge.prepare_context` → `Researcher.ask` с LBS `ScopedReadStore` и подменой `Steps.answer=collect_context` (без второго финального LLM ответа). Подготовка CSV-строк, исторических редакций и возможных противоречий сохраняется **только** в этом пути и только для разрешённых source/archive.
+
+Нельзя включать native `Wiki.ask` с unrestricted WikiStore в агентный tool. При отсутствии разрешённого `raw` или архива агент получает отметку о **неполном контексте**, а не скрытый текст. Корпусный `source_data` FTS не становится вторым конкурирующим ответным RAG по CROW Notes. Итоговый agent response и цитаты собирает LBS, учитывая final ACL, аудиторию группового чата и отдельное разрешение egress.
+
+`AgentTask` не является источником прав на Note или исходники; CROW-модель не наследует привилегии технического service account. Для одного синхронного агента новые A2A или DB ledger необязательны. [Спецификация](11_CROW_OKF_INTEGRATION.md#48-полный-цикл-crow-подготовка-контекста-вокруг-select), [план](12_CROW_IMPLEMENTATION_PLAN.md).

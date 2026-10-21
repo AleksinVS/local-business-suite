@@ -22,11 +22,11 @@
 
 ### P1 — Wiki API и безопасный Discovery (первый вертикальный срез)
 
-- локальный facade поверх apps.memory, без нового Wiki service; **до первого прямого Git commit пройти PRIV-01 и PRIV-04**;
-- **немедленное** сохранение безопасных рабочих тематических знаний в current Wiki, без обычного human review;
+- локальный facade Knowledge API поверх `apps.memory`, без нового Wiki service; `save_working` выбирает provider по корпусу (LBS или CROW), без второго writer; до первой реальной Git-записи пройти PRIV-01/04;
+- **немедленное** сохранение разрешённой рабочей информации в OKF v0.2 Wiki (через активный writer корпуса), без обычного human review; отдельно проверяются OKF `status`, `confirmation_state` и закрытый legacy `lifecycle: pending`;
 - неблокирующий реестр needs_confirmation как проекция из канона, без второго источника истины;
 - совместимость memory.remember/search и прежнего pending проверять golden tests;
-- сохранность Git, восстановимость индекса, минимум ACL и запрет секретов в Git; **допуск реальных source_data в AI только после PRIV-02/03 и обработки старых небезопасных проекций PRIV-05**.
+- сохранность Git/индекса, минимум ACL и запрет секретов; для CROW дополнительно `raw/.archive/sync`, writer/read barrier; реальные source_data перед AI — только после PRIV-02/03 и необходимых проверок PRIV-05.
 
 **Приёмка:** агент проводит серию интервью, записи доступны сразу; отмеченные сомнения видны в реестре, но не тормозят сбор; тестовый специальный `pending` не раскрывается; backup/restore работает. Продуктивных Wiki-данных для миграции нет.
 
@@ -34,15 +34,19 @@
 
 ### P1-CROW — CROW как optional Wiki provider при обязательном OKF v0.2
 
-**Не блокирует базовое Discovery без CROW.** Начальный профиль: **один механизм поиска знаний — CROW `select`** для нескольких логических пространств; LBS Access разрешает пространственные и индивидуальные Note-ACL **до `select`**, затем проверяет результаты повторно. Физические CROW bundles разделяют несовместимые права на автообъединение, но остаются под общим логическим пространством LBS. Source Adapters и `source_data`-проекции LBS сохраняются как источники/служебные структуры, а не обязательный второй механизм поиска знаний. Source API права не определяет. При включении CROW опираться на [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Accepted). Взять upstream CROW почти неизменным, `MemorySourceObject` сохранить; выделить минимум два логических пространства и отдельные физические CROW bundles с одним LBS writer на bundle. Внутри логического пространства разрешены дополнительные индивидуальные ограничения Note на чтение.
+**Опциональный рабочий профиль, не блокирующий простую LBS-Wiki.** Подробные обязательные пакеты **CROW-00…06** и проверки определены [12_CROW_IMPLEMENTATION_PLAN.md](12_CROW_IMPLEMENTATION_PLAN.md); Accepted-контракт — [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md), [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md). Не вести ещё одну параллельную декомпозицию реализации CROW в этом файле.
 
-Порядок зависимостей: **PRIV-00..04 до передачи реального содержимого в CROW**; единый `SafeProjection` используется и для `wiki_git`, и для назначения LLM/classifier. Native CROW raw сохраняется вне Git, доступен только сервису и имеет отдельный backup. Новые CROW-страницы сразу OKF v0.2; так как внедрений Wiki ещё нет, исправить LBS writer/reader и тесты для нового стандарта напрямую, **без миграции продуктивных знаний**.
+**Порядок и границы первой очереди:**
+1. Проверить отсутствие продуктивных Wiki-корпусов, pinned upstream, OKF v0.2, AGPL и synthetic baseline; до реальных ПДн отдельно решить [политику Git/raw](../../planning/active/knowledge-personal-data-git-policy-debt.md).
+2. `PRIV-00..04` → единая source×destination SafeProjection **до** native CROW raw и внешнего classifier; тотальное PII-маскирование не утверждено.
+3. Локальный `LbsCrowAdapter`, минимум два логических пространства и отдельные физические bundles; **один active writer на corpus**, write-partitions для несовместимых ACL, CROW writes только под LBS lock/read barrier/commit+recovery.
+4. С первого дня OKF v0.2: `type/status/sources/index/log`, стабильный `knowledge_id`, сохранение unknown Frontmatter, отдельные lifecycle и confirmation. Исключить CROW namespace из legacy `memory_reconcile` и общих обходов; добавить проектор Note без конкурирующего writer.
+5. **`knowledge.search` = CROW `Steps.select`** по разрешённому scoped дереву. **`knowledge.prepare_context` = `Researcher.ask` + `ScopedReadStore` + `Steps.answer=collect_context`**, с проверенным чтением `raw/.archive` и внутренним CROW CSV/history/conflict. Внешние A2A и Source API не нужны.
+6. Кэш дерева по версии bundle, final ACL/egress после отбора; read-only OKF после выключения provider, backup/restore связанного Git+raw+archive+sync. Не обещать эквивалентный интеллектуальный поиск при выключенном CROW.
 
-**Два режима поиска:** `knowledge.search` вызывает быстрый `Steps.select`; `knowledge.prepare_context` для ответа агента вызывает штатный `Researcher.ask` с LBS `ScopedReadStore` (`load/read` с ACL) и заменяет **только `Steps.answer`**, чтобы собрать уже подготовленный контекст. Full body разрешённых Note берётся из безопасного cached tree без повторного разбора всех файлов; `select_and_hydrate` опционален только при доказанной нагрузке. Это **сохраняет `_with_rows`, `_with_history`, `_conflicting` без переписывания CROW**. Сразу кэшировать базовое дерево по версии bundle, но не пользовательскую ACL; у выбранных raw и архивных редакций проверять право отдельно. Контрактный тест обязателен, потому что `Researcher` ещё не объявляет read-store публичным интерфейсом.
+**Обязательный e2e:** два пользователя видят разный набор заметок **в одном** пространстве; чужие заголовки не попадают в prompt `select`; `raw` и архивы проверяются дополнительно; native ingest не объединяет несовместимые ACL; сценарий XLSX защищён **до** CROW ingest_file; прерывание между raw/Note и между commit/projection восстановимо; legacy `pending` закрыт. Без результата contract tests для pinned `Researcher/Steps/ScopedReadStore` не принимать.
 
-Проверить: запрет двух writers/прямого CROW UI, **ACL пространства и отдельных Note до classifier в `select` (включая fallback)**, запрет cross-ACL `merge/relate`, отдельную проверку raw через Source ACL, единый барьер чтения/записи, исключение `raw/` и `.archive/` из `org/**/*.md` обхода, сохранение Frontmatter CROW и `working/needs_confirmation/confirmed`, регистрацию новых заметок в LBS индексе, частичную запись/rollback, idempotent `Origin`, выключение CROW и read-only работу LBS по его OKF-страницам. Коммерческое использование с AGPL — отдельная обязательная проверка.
-
-Подготовить `Origin/source_ref/version+transform` для будущего Source API **без изменения native raw сейчас**. Переход `MemorySourceObject -> raw` и прямое встраивание Source API остаются возможностями для обсуждения, не задачами P1.
+**Не делать:** второй основной FTS-поиск по CROW Notes, новый Source API внутрь CROW, OpenFGA или отдельную службу CROW как предпосылку. При CROW disabled базовое чтение OKF работает без него, а остальные корпуса сохраняют LBS MemoryProvider.
 
 ### P2 — Agent Interaction Kernel локально
 
@@ -75,7 +79,7 @@
 
 - измерить Git write latency, Wiki search p95, end-to-end agent latency, стоимость и число конфликтов;
 - убрать доказанное дублирование tool/skills registry, использовать один capability source;
-- при необходимости выносить Wiki writer/индексатор в worker, но не начинать с микросервисной миграции;
+- при необходимости выносить Wiki writer/индексатор в worker, но не начинать с микросервисной миграции; при CROW обязательно проверить связанный backup native raw/archive и восстановление многофайловой операции;
 - расширение парсеров, векторов и других хранилищ только по оценке качества на реальном корпусе;
 - выработать verification pack для следующего внедрения.
 
@@ -141,7 +145,7 @@
 
 - `ADR-F01`: LBS Factory как отдельная концепция от текущего Django portal; соглашение о референсном внедрении.
 - `ADR-F02`: local AgentTask, A2A boundary, MCP/AG-UI, auth propagation и delegation limits.
-- `ADR-F03`: LLM-Wiki KnowledgeProvider, немедленная рабочая запись, необязательный реестр подтверждений, legacy pending, Git/PII/erasure и ACL.
+- `ADR-F03`: общая Wiki/Knowledge API и неблокирующее подтверждение; **CROW/OKF уже принято ADR-0051**. Политика ПДн Git/raw остаётся отдельным архитектурным долгом, не вводить фиктивное «решение» новым ADR-F03.
 - `ADR-F04`: provider lifecycle + optionality, identity and secrets.
 - `ADR-F05`: Bitrix24 TaskProvider source of truth, конфликты записей и idempotency.
 - `ADR-F06`: превращение Kanban/Waiting List/Warehouse в подключаемые компоненты, разделение WorkOrders и board UI, режимы disabled/uninstalled и migration strategy.
@@ -155,7 +159,7 @@
 
 ## 6. Пример валидации бизнес-ценности
 
-Для первого пилота метрика — доля результатов интервью, которые приобрели статус проверенных Wiki-концептов со ссылкой на источник и могут быть корректно использованы агентом поддержки без утечки/галлюцинации. Для второго — сколько функций удалось получить настройкой готового решения и интеграцией без custom-кода, и насколько легко это обновлять.
+Для первого пилота метрика — доля результатов интервью, которые **без ожидания reviewer** стали рабочими доступными страницами OKF со ссылкой на источник и понятным статусом; отдельно измеряется корректность ответов/контекста и число исправлений. Доля `confirmed` **не** должна быть KPI скорости наполнения. Для второго — сколько функций удалось получить настройкой готового решения и интеграцией без custom-кода, и насколько легко это обновлять.
 
 ## 7. Сквозной поток LBS Access (v3.3)
 
@@ -184,3 +188,18 @@ S4: OpenFGA, A2A, векторы, брокер, второй agent provider и �
 Нельзя считать исправление privacy-зазоров необязательным расширением безопасности: это предварительное условие стабильного безопасного накопления знаний из реальных документов. Выполнить `PRIV-00` (инвентаризация), `01` (общая библиотека), `02` (file ingestion), `03` (Source Adapters/adapter_check), `04` (Git Wiki и agent egress), `05` (контролируемый reindex существующих проекций) и `06` (регрессия/качество поиска). Не запускать удаление старых индексов на production без отдельного dry-run, резервной копии и подтверждения.
 
 **Gate:** file и adapter paths не выдают raw при `pii_guarded`; `pii_strict` блокирует; `adapter_check` применяет назначенную privacy-политику; первый Wiki Git commit не сохраняет секрет или запрещённый PII. Одно отклонённое содержимое не блокирует общий Wiki/discovery flow. Полная матрица: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+## 10. Сводные критерии приёмки CROW/OKF для всей Factory
+
+| Что проверяем | При включённом CROW | При выключенном CROW |
+|---|---|---|
+| `save_working` | Native CROW ingest в выделенном bundle через один LBS Writer Guard; без отдельного прямого writer | LBS MemoryProvider в назначенном не-CROW корпусе |
+| Поиск Note | Единственный `Steps.select` по разрешённым Note; LBS FTS не конкурирует за те же Note | LBS-корпуса ищутся штатным способом; CROW Note доступны для базового OKF чтения |
+| Контекст агента | `Researcher.ask` + `ScopedReadStore` + capture answer step | Нет ложного обещания полного CROW CSV/history/conflict |
+| Доступ | Space AND Note restrictions; read/write ACL; raw/archive отдельным source ACL | LBS Access и доменные права без CROW |
+| Надёжность | Lock + read barrier + operation journal + Git и native raw/archive/sync backup | Обычный существующий режим хранения и восстановления |
+| Статусы | OKF `status`, human `confirmation_state`, legacy `lifecycle` не смешиваются | Те же внешние значения Knowledge API, без автоподтверждения |
+
+Для CROW canonical per-corpus права Access не дублируются в Frontmatter как отдельные grants. Публикация закрытой информации через слияние в более общий bundle — **no-go**, даже если итоговый поиск отфильтрован. Отдельный долг по ПДн не блокирует synthetic pilot, но без политики **не включать произвольные реальные ПДн в Git и внешнюю модель**.
+
+Реализационные acceptance criteria остаются в [12_CROW_IMPLEMENTATION_PLAN.md](12_CROW_IMPLEMENTATION_PLAN.md); это короткая Factory-матрица, **не второй независимый набор работ**.

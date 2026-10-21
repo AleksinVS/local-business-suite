@@ -242,3 +242,15 @@ LBS Access остаётся владельцем ролей и capability grants
 LBS Access (и optional OpenFGA) решает, **кто** может обратиться к ресурсу; Content Privacy Pipeline решает, **какое содержимое** допустимо в конкретном `destination` — поиск, Wiki Git, агентный контекст, внешняя модель. Успешный `adapter_check` не разрешает raw egress. `original_read` для врача/оператора остаётся отдельным предметным действием с проверкой прав.
 
 При отказе преобразования нельзя подставлять raw filename, object_id, source_uri или полный текст. Подробнее: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+## 16. Корпуса и Note-ACL для CROW (ADR-0051)
+
+**Никакой новой базы прав внутри CROW.** LBS Access остаётся владельцем действующих ролей/групп и простых назначений `space_id → bundle_id[]`. Предметная политика Wiki вычисляет `can_read_note = active_actor AND allowed_space AND registered_note AND note_restriction AND sensitivity/destination AND audience`. Редкое исключение на Note **только сужает** доступ к пространству; нельзя использовать действующее OR-пересечение `scope_tokens_match` как замену AND-проверке. Неизвестная/отозванная Note, запрещённый corpus, ошибка политики ⇒ deny.
+
+**Read:** LBS batch-проверяет разрешённые Note, собирает временное безопасное дерево *копий* Folder/Note **до native `Steps.select`**; после отбора повторно проверяет выдачу/citations/audience. Для полного контекста `Researcher.ask` вызывает только LBS `ScopedReadStore.load/read`: права на `raw` и `.archive` проверяются отдельно. Если запрос позволяет читать Note, это **не** означает разрешение открыть её исходники.
+
+**Write:** LBS выбирает физический CROW bundle по совместимости ACL источника и целевой аудитории **до `Wiki.ingest`**; native merge/relate не знает LBS прав. При несовместимой аудитории — другая write-partition либо контролируемый отказ, не автоматическое общее слияние. На время многофайловой операции LBS держит writer lock + read barrier и валидирует результат; это не предмет OpenFGA.
+
+**Хранение:** space policy/редкие Note-restrictions — в Access/домене LBS (PostgreSQL/typed settings), **не в OKF YAML**; `scope_tokens` на CROW-странице не становятся вторым независимо редактируемым источником разрешений. `type/status/sources/confirmation_state` живут в OKF. Access-проверки работают при `provider=crow enabled` и при базовом OKF-чтении после его выключения.
+
+OpenFGA остаётся опциональным ResourceRelationshipBackend только при настоящей необходимости в сложных отношениях. [Конкретная схема](11_CROW_OKF_INTEGRATION.md#410-конкретная-модель-хранения-прав-в-lbs), [принятый ADR](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).

@@ -102,7 +102,7 @@
 | D01 | LBS Factory — agent-first, installed capabilities optional | Рекомендуется принять |
 | D02 | Основные контракты агентов в ядре; A2A сетевой адаптер опционален | Рекомендуется принять |
 | D03 | LangGraph/Pi/Claude — сменяемые providers; не обещать перенос runtime state | Рекомендуется принять |
-| D04 | LLM-Wiki базируется на `apps.memory`; канон Markdown/Git, review и ACL сохраняются | Рекомендуется принять |
+| D04 | LBS Knowledge API на базе `apps.memory`, канон OKF Markdown/Git, optional CROW-провайдер для выбранных корпусов; review обычных рабочих заметок неблокирующий | Accepted, ADR-0051 / v3.4 |
 | D05 | Raw интервью и документы не пишутся автоматически в accepted Git Wiki | Обязательно до пилота |
 | D06 | Для Multi-user необходимы identity, ACL, audit, даже если IAM provider выбран отдельно | Обязательно |
 | D07 | Один источник истины для бизнес-задач; отдельные AgentTask/Job/WikiProposal | Обязательно |
@@ -191,3 +191,19 @@ R40/P1: выбирать сложность защиты по последств
 - **R46/P1 — ложная уверенность.** Regex, HMAC-псевдонимы и `pii_off` не дают гарантии полной анонимности; защищённое использование оригинала отличается от безопасной AI-выдачи.
 
 **Решение:** узкая общая библиотека, не новый privacy-worker или обязательное review каждого документа. Полная спецификация: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+## 13. Согласование ранних документов с ADR-0051 CROW/OKF
+
+| Риск | Ошибка прежнего описания | Исправление и проверка |
+|---|---|---|
+| **R47/P0: два поиска** | Для CROW-корпуса одновременно описаны primary FTS и CROW select | CROW — основной `knowledge.search` данного корпуса; FTS остаётся для `source_data` и non-CROW, не конкурирует за одни Note |
+| **R48/P0: два writer** | Прямой `save_working` в Git и native CROW ingest пишут те же файлы | Один provider на `corpus_id`, один LBS-controlled writer; CROW native ingest, потом один LBS Git commit |
+| **R49/P0: ACL после select** | Штатный CROW видит скрытые названия в classifier до финальной фильтрации | Scoped Folder/Note view **до** select и fallback; source/archive проверяются отдельно |
+| **R50/P0: ACL после merge** | Фильтр поиска ошибочно считается достаточным для route/match/merge | Разделённые write-partitions по совместимым правам до ingest, без silent cross-ACL merge |
+| **R51/P0: Git-only recovery** | Упрощённый Wiki writer не учитывает `raw/.archive/.llmw2/sync` и многофайловые native изменения | Read barrier + writer lock + recovery marker + связанный backup и тест промежуточных отказов |
+| **R52/P1: теряются строки/история/конфликты** | Для агентного ответа вызывается только `Steps.select` | Для полного контекста `Researcher.ask` + `ScopedReadStore` + capture `Steps.answer`, contract tests pinned upstream |
+| **R53/P1: непереносимый формат** | Legacy `kind/status/source_refs` трактуются как OKF без адаптации | `type: Note`, отдельные OKF status / confirmation / lifecycle, сохранение unknown Frontmatter |
+| **R54/P1: ложная безопасность сырого текста** | «SafeProjection» автоматически приравнивают к «PII-free» или наоборот запускают CROW до privacy gate | Выбранная source×destination policy до CROW и проверка результата модели; PII/Git остаётся открытым долгом |
+| **R55/P1: AGPL и пилот** | Начать кодирование без проверки лицензии, закладывая downstream fork | Pinned upstream, отдельный лицензионный gate и критерии отказа до коммерческого использования |
+
+**Новый ADR не нужен:** ADR-0051 уже принят. Этот раздел уточняет implementation guidance и не отменяет его. **Не вводить** вместо исправлений OpenFGA, новый Source API, отдельный CROW-сервис или второй индекс знаний. [Целевой обзор](03_LLM_WIKI.md), [контракт](11_CROW_OKF_INTEGRATION.md), [план](12_CROW_IMPLEMENTATION_PLAN.md).

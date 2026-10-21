@@ -21,22 +21,23 @@ LBS — **фреймворк агентного внедрения**, а не у
 
 ## 2. Принцип разделения
 
-```
-              Telegram / LBS Web Chat / Bitrix24 / CLI
-                               |
-                     Channel Adaptors (optional)
-                               |
-                         LBS Kernel API
-                 /         |         |          \
-         Agent Dispatch   Trust     Artifacts   Components
-                 |         |         |          |
-     Pi / Claude /       IAM /     LLM-Wiki      Adapters
-     LangGraph / ...     ACL       Knowledge     & Recipes
-                 |         |         |          |
-                [typed tasks, results, policies, audit]
-                                |
-             Existing IS / open-source / custom software
-```
+~~~text
+Telegram / LBS Web Chat / Bitrix24 / CLI (каналы optional)
+                         |
+                   LBS Kernel API
+           /             |              \
+        Агенты       LBS Access       Knowledge API
+         |              |            /          \
+  Pi / Claude /    Identity/ACL   MemoryProvider  CROW Adapter
+   LangGraph                         |             |
+                                  Markdown/    CROW OKF bundles
+                                  source_data    raw/archive
+                                       \         /
+                             LBS-controlled Git/OKF canon
+                              + восстанавливаемые индексы
+                         |
+               Прочие подключаемые бизнес-модули
+~~~
 
 Здесь линии показывают логические интерфейсы, а не обязательные сетевые hop'ы. Компактное внедрение может состоять из одного серверного приложения и файлового хранилища. Профиль без агентов не запускает Agent Runtime; интерфейсы Task и Artifact можно оставить библиотечными.
 
@@ -60,7 +61,7 @@ LBS — **фреймворк агентного внедрения**, а не у
 
 - Для интерактивного корпоративного доступа обязателен один настроенный `IdentityProvider` (локальный либо внешний), но не конкретный сервер IAM.
 - Для межагентных *долгих/асинхронных* задач нужен durable Task Store; лёгкая SQLite/PostgreSQL-реализация по профилю допустима.
-- Для Wiki нужны безопасное каноническое хранилище и enforcement доступа; способ запуска независим.
+- Для Wiki необходимы OKF-совместимая запись и Access/privacy enforcement; CROW необязателен. В CROW-профиле нужны writer lock, read barrier и отдельный backup `raw/.archive/sync`.
 - Для команд и изменений внешних данных проверка прав на **предметной стороне**, независимо от авторизации AgentTask.
 
 ## 4. Capabilities — первая продуктовая матрица
@@ -70,7 +71,7 @@ LBS — **фреймворк агентного внедрения**, а не у
 | `channel.telegram` | Bot API adapter | Не обязателен; коммуникация не означает полномочий |
 | `channel.webchat` | LBS on-prem UI, personal/group rooms | Готовый messaging backend допустим после теста API/ACL; не дублировать чаты автоматически |
 | `connector.bitrix24` | OAuth/webhook adapter; изолированные tasks/chat/crm/files | API лимиты, версии, учётная запись, scopes; никаких бесконтрольных двусторонних синхронизаций |
-| `knowledge.wiki` | Изолируемый рефакторинг `apps.memory` | Markdown/Git canon, metadata/FTS, optional vectors |
+| `knowledge.wiki` | Единый LBS Knowledge API на базе `apps.memory` | CROW — заменяемый OrganizationProvider для выбранных OKF-корпусов; LBS MemoryProvider — для остальных. Один writer на корпус; FTS не конкурирует с CROW-search. |
 | `tasks` | Bitrix24 TaskProvider | Vikunja/OpenProject/LBS Kanban опционально; владелец задач один |
 | `identity` | Local / OIDC / LDAP/AD | authentik/Keycloak как варианты, не зависимости ядра |
 | `access` | **LBS Access** на базе существующих `apps.accounts` + модульных declarations | Альтернативный AuthorizationProvider возможен; защита прав/аудит обязательны в многопользовательском профиле |
@@ -86,7 +87,7 @@ LBS — **фреймворк агентного внедрения**, а не у
 ## 5. Границы данных
 
 - **Solution specification (Git)**: подтверждённые требования, спецификации, ADR, планы и тесты, без секретов и сырых персональных данных.
-- **LLM-Wiki (отдельный управляемый канон)**: обобщённые, курируемые знания организации, источники/provenance, историю редакций и права.
+- **LLM-Wiki:** единый управляемый OKF v0.2 Markdown/Git-канон, источники/provenance и история; native CROW `raw/.archive/.llmw2/sync` вне Git, с самостоятельным backup/retention; Access и права вне CROW.
 - **Source documents**: оригиналы интервью, сканы, внешние выгрузки и иной материал с ограниченными правами и хранением; *не автоматически копировать в Wiki Git*.
 - **Business data**: живут в системе-владельце (Битрикс24, 1С, ERP, специальный сервис), а не автоматически в Wiki.
 - **Agent task data**: задание/статус/результаты и корреляция; transcript/scratchpads по отдельной retention policy.
@@ -99,7 +100,7 @@ LBS — **фреймворк агентного внедрения**, а не у
 
 1. **Кто владеет?** Только один authorititative owner каждой бизнес-сущности.
 2. **Задачи**: если TaskProvider = Bitrix24, Битрикс24 владеет задачами. Локальная таблица — read model/cache, не конкурентный журнал правок.
-3. **Знания**: рабочие и подтверждённые Markdown-страницы в каноне Wiki; отметка needs_confirmation не блокирует поиск. Индексы являются производными.
+3. **Знания**: OKF v0.2 Markdown/Git-страницы — единый канон по каждому корпусу, один активный writer; CROW организует/ищет Note только в назначенных bundles. `raw/.archive/.llmw2/sync` — отдельно сохраняемое служебное состояние, а DB/FTS — производные. `needs_confirmation` не задерживает запись.
 4. **Задания агентам**: локальный Task Ledger — источник истины о состоянии делегирования, а не LangGraph checkpointer или Telegram сообщение; runtime checkpoint остаётся внутри provider.
 5. **Критические записи**: операцию исполняет доменная система, агентная цепочка только предлагает команду и получает результат.
 
@@ -172,3 +173,15 @@ OpenFGA — **необязательный resource-relationship backend** дл�
 `adapter_check` проверяет **право на источник**, но не разрешает обход маскирования. Authorized original_read остаётся отдельной операцией владельца данных. `pii_off` не доказывает отсутствие PII; профили `pii_guarded/pii_strict` должны реально применяться и в файловом пути. Старые проекции требуют оценки и reindex. Отдельный DLP-service **не нужен**.
 
 Нормативный проект, проверенные участки кода, этапы `PRIV-00..06` и тесты: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+## 15. Принятая модель CROW/OKF (уточнение v3.4)
+
+**ADR-0051 (Accepted) имеет приоритет над прежним описанием «собственная LLM-Wiki + FTS»**. LBS Knowledge API остаётся единым публичным фасадом. На уровне `corpus_id` выбирается один `provider=lbs|crow`; оба используют переносимый OKF v0.2. CROW не получает собственный корпоративный IAM, второй Git-канон или пользовательский write API. При отключённом CROW LBS читает OKF-страницы непосредственно, но не обещает CROW-классификатор/таблицы/историю без альтернативного провайдера.
+
+`knowledge.search` в CROW — быстрый `Steps.select` с LBS ACL-фильтром **до** вызова классификатора. `knowledge.prepare_context` — `Researcher.ask` + `ScopedReadStore(load/read)` + `Steps.answer=collect_context`, что позволяет сохранить штатные таблицы, историю и эвристики противоречий. `Wiki.ask` со штатным неограниченным store запрещён. Кэш полного дерева — доверенный RAM-снимок по версии bundle, на запрос LBS формирует разрешённый Folder/Note view; отдельные `raw/.archive` читаются только с актуальным Access/privacy и соответствующим назначением.
+
+При записи native CROW может смешивать заметки **до** выдачи, поэтому ACL-несовместимые источники маршрутизируются LBS в разные физические write-partitions; final ACL на search этого не исправляет. Native CROW изменяет много файлов: требуются writer lock, read barrier, проверка результата и восстановление. Source API внутри CROW и OpenFGA откладываются.
+
+**Обработка ПДн**: единая выбранная политика источника/назначения обязательна, тотальное PII-маскирование **не утверждено**. До реального пилота с ПДн решить [открытый долг по Git/raw/backup](../../planning/active/knowledge-personal-data-git-policy-debt.md); синтетический пилот не блокируется. Для CROW AGPL-3.0-or-later провести лицензионную проверку до коммерческого включения.
+
+Подробности: [03_LLM_WIKI.md](03_LLM_WIKI.md), [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [12_CROW_IMPLEMENTATION_PLAN.md](12_CROW_IMPLEMENTATION_PLAN.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).

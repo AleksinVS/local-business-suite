@@ -427,16 +427,16 @@ docs: # Документация проекта
   architecture: # Архитектурные документы проекта
     lbs-factory: # Согласованная целевая LBS Factory v3.4: CROW/OKF Wiki, агенты, LBS Access, прогрессивная сложность (реализация поэтапная)
       00_README.md: file # Навигация по согласованной целевой архитектуре LBS Factory v3.4 и открытым архитектурным долгам
-      01_CONCEPT.md: file # Целевая архитектура агентной фабрики внедрения и состав компонентов
-      02_AGENT_INTERACTION.md: file # Контракты взаимодействия агентов, A2A, MCP, AG-UI и доверенные полномочия
-      03_LLM_WIKI.md: file # Развитие LLM-Wiki на базе apps.memory, знания, источники и ACL
-      04_CRITICAL_REVIEW.md: file # Критическое архитектурное ревью и способы упрощения
-      05_ROADMAP_AND_ACCEPTANCE.md: file # Поэтапный план миграции и критерии приемки
+      01_CONCEPT.md: file # Целевая архитектура Factory, Knowledge API, подключаемые провайдеры и OKF/CROW границы
+      02_AGENT_INTERACTION.md: file # Контракты агентов, A2A/MCP/AG-UI и различие CROW search/prepare_context
+      03_LLM_WIKI.md: file # Единая согласованная модель LBS Wiki/OKF/CROW: корпусный provider, чтение, запись, ACL, Git/raw и восстановление
+      04_CRITICAL_REVIEW.md: file # Архитектурное ревью, риски и предотвращение дублирования движков поиска/записи
+      05_ROADMAP_AND_ACCEPTANCE.md: file # План Factory и приёмка; CROW-этапы привязаны к единому исполнительному документу 12
       06_PLUGGABLE_BUSINESS_MODULES.md: file # Выделение Kanban, Waiting List и Warehouse в подключаемые модули
-      07_ACCESS_ARCHITECTURE.md: file # Целевая архитектура подключаемой системы полномочий LBS Access
-      08_ACCESS_MIGRATION_AND_TESTS.md: file # Этапы и тесты миграции LBS Access
-      09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
-      10_CONTENT_PRIVACY_PIPELINE.md: file # Согласованная граница Access/secret/egress и профилей; окончательная политика ПДн в знаниях/Git открыта
+      07_ACCESS_ARCHITECTURE.md: file # LBS Access: роли, объекты, два уровня Wiki/Note ACL и безопасный CROW
+      08_ACCESS_MIGRATION_AND_TESTS.md: file # Миграция Access и негативные тесты CROW пространств/Note/raw
+      09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная Factory: два Wiki-профиля LBS/CROW и условный OpenFGA
+      10_CONTENT_PRIVACY_PIPELINE.md: file # Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг
       11_CROW_OKF_INTEGRATION.md: file # Согласованная архитектура CROW как заменяемого OKF v0.2 модуля над LBS Wiki
       12_CROW_IMPLEMENTATION_PLAN.md: file # Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса

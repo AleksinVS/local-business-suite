@@ -278,6 +278,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/lbs-factory/00_README.md` — **согласованная целевая архитектура** LBS Factory v3.4, обязательная модульность, Wiki/CROW/OKF и LBS Access (**план, не реализованный код**).
 - `docs/architecture/lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — немедленная запись Wiki, неблокирующий реестр подтверждений, условное подключение OpenFGA.
 - `docs/architecture/lbs-factory/10_CONTENT_PRIVACY_PIPELINE.md` — согласованная граница Access/secret/egress и выбор профилей обработки; обязательность обезличивания всех ПДн не принята.
+- `docs/architecture/lbs-factory/03_LLM_WIKI.md` — единая модель LBS Knowledge API и CROW/OKF: запись, два режима чтения, права, восстановление.
 - `docs/architecture/lbs-factory/11_CROW_OKF_INTEGRATION.md` — согласованная архитектура CROW как заменяемого модуля над OKF v0.2.
 - `docs/architecture/lbs-factory/12_CROW_IMPLEMENTATION_PLAN.md` — план разработки CROW, защищённого поиска и подготовки контекста.
 - `docs/adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md` — принятый ADR CROW/OKF.

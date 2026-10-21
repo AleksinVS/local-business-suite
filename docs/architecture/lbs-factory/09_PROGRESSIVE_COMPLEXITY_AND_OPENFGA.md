@@ -119,3 +119,13 @@ class ResourceRelationshipBackend:
 Wiki-first/Review-optional сохраняется, но **до сохранения и выдачи** обязательна единая библиотечная подготовка разрешённой версии текста и метаданных. Реальные источники подключаются только после устранения обходов file ingestion/`adapter_check` и контроля старых индексов. `pii_off` для узкого внутреннего использования остаётся возможным, но не разрешает raw во внешний LLM. Оригиналы доступны через авторизованный доменный `original_read`, не через безопасный поиск. Никакого обязательного DLP-сервиса, сложной privacy-очереди или review всех знаний.
 
 Практический план: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).
+
+
+## 8. Эволюционная интеграция CROW и OKF v0.2
+
+OKF v0.2 — формат корпоративных знаний независимо от реализации. CROW — опциональный заменяемый модуль; первый этап использует его штатные алгоритмы, `raw`, индексы и ревизии через LBS-адаптер, выделенную область Git-канона и единственный writer. `MemorySourceObject` остаётся, прямой Source API внутри CROW — условный будущий этап.
+
+До CROW выполняется единый [Content Privacy Pipeline](10_CONTENT_PRIVACY_PIPELINE.md), в том числе для запросов к внешнему LLM/classifier. Не смешивать ACL-разные документы в native дереве CROW; не включать второй контролирующий editor/registry. `working` записывается сразу; `needs_confirmation` не блокирует ingest. Legacy `pending` остаётся закрытым. Новые страницы соответствуют OKF сразу, исторические LBS — только после совместимой миграции.
+
+Полная спецификация: [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed).
+

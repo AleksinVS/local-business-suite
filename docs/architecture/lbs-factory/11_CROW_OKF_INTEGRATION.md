@@ -148,31 +148,38 @@ return lbs_knowledge_api.authorize_and_format(hits, actor, audience)
 
 ### 4.6 Что фильтруется в CROW и как использовать native raw
 
-**На ingestion:** LBS Access определяет допустимый получатель/пространство, а Content Privacy Pipeline готовит источник целиком (body/title/metadata/Origin) до передачи CROW и любых внешних моделей; только подготовленный текст записывается как native `raw`. **Это не фильтрация raw по пользователю**, а единая политика при сохранении.
+**На ingestion:** LBS Access определяет допустимый получатель/пространство и совместимую write-partition; Content Privacy Pipeline готовит источник (body, title, metadata, Origin) **до** CROW и любых LLM. Только подготовленный текст записывается в native `raw`. Это *не* фильтрация raw по пользователю: у копии CROW есть исходная принадлежность и уровень защиты.
 
-**На search:** штатный CROW `select` использует только дерево, названия/описания папок и `Note.title/description`; `raw/*.md` не читает. LBS Access сначала проверяет bundles, затем разрешённые `note_id` внутри каждого, формирует временное `Folder/Note` дерево. Для новых объектов `Folder` допустимы, но **сами разрешённые `Note` должны сохранить Python object identity**: `check_select` проверяет `id(note)`. Ни одно закрытое название каталога, его описание, текст заметки или ссылка не должны попасть в classifier input/trace. При fallback к `classic.select` используется тот же ограниченный корень.
+**На search:** native `Steps.select(ctx, root, question)` использует дерево, имена/описания папок, `Note.title` и `Note.description` (а fallback `classic.select` — то же разрешённое дерево). Нативный `raw/*.md` при `select` не читается. LBS Access сначала разрешает bundles, затем пакетно вычисляет допустимые `knowledge_id`/Note IDs; LBS создаёт *временное* дерево только с этими кандидатами.
 
-**На выдаче:** LBS не возвращает upstream `Note` как есть, а создаёт безопасный `KnowledgeSearchHit` с повторной проверкой note ACL, текущих `source_ref` (в том числе отзыва прав), `See also` и цитат. Разрешение читать обобщённую заметку **не означает** разрешения открыть связанный `raw` целиком: для raw нужен отдельный `can_read_source` по Origin/SourceAdapter. Формирование ответа должно использовать только этот проверенный комплект, а не `Wiki.ask`.
+**Уточнение по реальному коду:** `check_select(out, root)` сравнивает Python-идентичность возвращённых Note **с объектами, присутствующими в том же переданном root**. Поэтому можно и желательно клонировать **и Folder, и Note**, если `select` получает именно эти копии, а возвращает выбранные Note-копии из этого дерева. Ранее записанное требование сохранять original `Note` identity было избыточным и менее безопасным. У проекционной Note нужно оставить лишь безопасные `id/title/description` и при необходимости непрозрачный `rel`; исключить body, `sources`, `See also`, `raw` paths и прямую ссылку на оригинальный `Note.folder`. Для папок удалить пустые ветви и опасные `name/description/label`, пересчитать безопасные описания. Хранить request-local сопоставление `scoped_note → canonical knowledge_id`. Важный критерий — неизменность оригинального дерева и отсутствие любых скрытых значений в classifier/LLM prompt и trace.
 
-**Ограничение:** `CROW.select` ранжирует **заметки**, а не отдельные raw-файлы. Для оригинального документа полезная заметка должна существовать и ссылаться на него в `sources`; точный поиск raw-файла по ID при необходимости реализуется как открытие source_ref, не как второй конкурирующий механизм RAG.
+`WikiStore.load()` по-прежнему читает файлы bundle в *доверенный процесс LBS/CROW* до фильтрации. Это не передача их модели. Процессу нужно ограничить файловые права и прямые native API; если потребуется изолировать даже файловое чтение разных ACL на уровне ОС, использовать отдельные физические bundles/процессы. Нельзя делать вид, что scoped `select` обеспечивает эту более жёсткую изоляцию.
 
-Схема **без изменения CROW** (псевдокод, не готовый API):
+**На выдаче:** LBS сопоставляет выбранные ID с каноническими Note, повторно проверяет актуальный actor/audience, note ACL и разрешённый `destination`, затем читает полный текст и отдельно валидирует `sources`, `See also` и ссылки. Читателю можно разрешить *производную заметку*, не давая доступа к защищённому оригиналу. Переход к полному `raw` требует отдельного `can_read_source` по Source Adapter/владельцу, а недоступную цитату скрыть/пометить. Отзыв или удаление источника должен запускать проверку связанности и действительной допустимости заметки, **но не означает, что уже законно опубликованное очищенное знание автоматически запрещено**.
+
+**Внутренние индексы CROW:** штатные `index.md`, `log.md` и автоматически добавляемые `See also` могут ссылаться на недоступные заметки. Поэтому их нельзя отдавать напрямую пользователю или модели; UI/Knowledge API строит собственное разрешённое представление каталога и ссылок.
+
+**Ограничение:** `CROW.select` ранжирует заметки, а не все raw-документы. Для поиска содержания исходника через CROW он должен быть представлен соответствующей Note либо её `sources`; прямое чтение конкретного `source_ref` не является вторым поисковым движком.
+
+Схема **без изменения upstream CROW** (псевдокод; результат Access и служебная карта видимости остаются внутри LBS):
 
 ```python
-allowed_spaces = lbs_access.allowed_spaces(actor, audience)
+spaces = lbs_access.allowed_spaces(actor, audience)
 hits = []
-for bundle in lbs_access.allowed_bundles(allowed_spaces, actor):
+for bundle in lbs_access.allowed_bundles(spaces, actor):
     wiki = crow_wikis[bundle]
-    root = wiki.store.load()  # внутри доверенного LBS-процесса
-    allowed_ids = lbs_access.allowed_note_ids(actor, audience, bundle)
-    scoped_root = make_visible_tree(root, allowed_ids)  # folder clones, original Note objects
-    ctx = wiki.researcher().ctx                    # контекст этого запроса
-    selected = wiki.steps.select(ctx, scoped_root, query)
-    hits.extend(lbs_access.authorize_and_render(selected, actor, audience))
+    tree = wiki.store.load()                      # доверенный LBS-процесс
+    visible_ids = lbs_access.allowed_note_ids(actor, audience, bundle)
+    view, originals = make_safe_view(tree, visible_ids)  # cloned Folder AND cloned Note
+    ctx = wiki.researcher().ctx
+    chosen = check_select(wiki.steps.select(ctx, view, query), view)
+    refs = [originals[n] for n in chosen]          # stable knowledge_id
+    hits.extend(lbs_knowledge.get_authorized(refs, actor, audience))
 return hits
 ```
 
-Перед вызовом `Steps.select` проверять доступ/готовность модели; в реализации использовать `check_select(selected, scoped_root)`, пакетный ACL-check и временный per-request контекст. Нельзя менять общий `root` in-place или использовать один mutable ACL-фильтр для разных пользователей.
+В рабочем коде `get_authorized` выполняет повторную проверку полномочий, privacy/egress и разрешённой аудитории, а `make_safe_view` возвращает только разрешённые метаданные. Использовать пакетный ACL-check и отдельный контекст на запрос; после изменения прав кэш разрешённых ID должен обновляться или fail-closed.
 
 ### 4.7 Отдельный контроль записи и консолидации
 
@@ -182,6 +189,66 @@ return hits
 
 Второй этап **при доказанной потребности** — узкие контролируемые обёртки native `route/match/relate` и пересборка writer/plan/split с фильтрованной областью, без переноса ACL в сам алгоритм CROW. Обёртка `select` без переписывания core — дешёвая; полноценный mixed-ACL ingest — отдельная по сложности задача.
 
+
+### 4.8 Конкретная модель хранения прав в LBS
+
+**Не создавать новую базу прав CROW.** Использовать существующую `accounts.User`, Django `Group` / роль-гранты LBS Access в PostgreSQL и предметный `DomainPolicy` Wiki. Текущее состояние: `MemoryKnowledgeItem.scope_tokens` и `sensitivity` уже существуют, а `can_access_knowledge_item` проверяет пересечение токенов; отдельного полноценного постраничного ACL-селектора CROW пока нет. Его следует добавить *один раз* в LBS, а не реализовывать заново для каждого провайдера.
+
+Минимальные LBS-owned данные для первой установки:
+
+| Данные | Источник истины | Обновление |
+|---|---|---|
+| User, действующие группы, роли и grants | LBS Access / `accounts` / штатные настройки ролей в PostgreSQL | Через LBS Access / AD sync |
+| Логическое `space_id`, список физических `bundle_id` и политика чтения/записи пространства | Реестр пространств LBS (typed runtime-настройка или маленькая модель `KnowledgeSpace`) | Через администрирование LBS |
+| Исключение ACL для конкретной Note | Редкие записи `KnowledgeNoteRestriction` / Resource ACL, привязанные к **стабильному `knowledge_id`**, в PostgreSQL | Через LBS Access; не Git/не CROW |
+| Заголовок, тело, `type`, `sources`, `confirmation_state`, `sensitivity` | OKF Markdown Frontmatter + body в каноне Git | Контролируемый Writer LBS |
+| Индексные токены ACL, `MemoryKnowledgeItem`, состояние индекса | Производная LBS-проекция для быстрой выборки | Перестраивается после изменения канона или Access |
+
+На первом этапе достаточно **простого статического назначения пространств группам** и разреженных ограничений на отдельных Note; **не вводить новый универсальный ACL engine/OpenFGA**. Если в текущем контуре LBS Access есть подходящий ресурсный selector, переиспользовать его, а не создавать вторую матрицу прав. Если понадобится новая таблица, она должна принадлежать Access/Wiki DomainPolicy, а не CROW.
+
+Формула чтения:
+
+```text
+can_read = actor_is_verified_and_active
+       AND actor_can_read(space_id)
+       AND note_is_registered_and_readable
+       AND note_sensitivity_allows(actor, destination)
+       AND (no_note_restriction OR actor_satisfies_note_restriction)
+       AND audience_is_allowed
+```
+
+Исключение для Note **может только сужать**, а не расширять доступ к пространству. Отсутствие ACL override ⇒ наследование прав пространства *только для зарегистрированной действующей Note*. Неизвестная Note, отсутствие разрешённого space, неразрешимая ACL или сбой авторизации ⇒ deny. Explicit deny сильнее allow. Нынешняя функция `scope_tokens_match` использует **OR-пересечение** и сама по себе не реализует указанное наследование через AND — в CROW-пути требуется отдельная предметная проверка, а не склеивание токенов.
+
+При запросе LBS один раз получает актуальный actor/grants, делает пакетную выборку ID для bundle, формирует разрешённое дерево; финальная проверка при выдаче учитывает отзыв роли и аудиторию группы. Кэш scoped-представлений — только с привязкой к bundle revision + Access revision/actor/audience или с контролируемым отключением на старте. Никаких обращений CROW к LBS Access по одному Note.
+
+### 4.9 Что писать в OKF Frontmatter
+
+**Для ACL не нужны списки пользователей, групп и разрешений в заметке.** При физической группировке `space_id` определяется LBS по `bundle_id`, а разрешения групп/пользователей и исключения Note хранятся отдельно в Access. Нативный CROW уже пишет стабильный `id`, `type: Note`, `title`, `description` и `sources`. Для LBS достаточно после контролируемой записи связать этот ID с **глобальным стабильным `knowledge_id`** (можно оставить оба: внутренний native ID и внешний LBS ID), поставить `sensitivity` и `confirmation_state`, не переписывая нативные поля.
+
+Пример проектируемой канонической Note:
+
+```yaml
+---
+type: Note
+id: "a81fae39d7d2"             # CROW ID
+knowledge_id: "knw-7bf2e0ac"    # стабильный внешний LBS ID
+title: "Закрытие месяца"
+description: "Порядок оформления и сверки"
+status: stable                  # OKF status, не Django status
+confirmation_state: working
+sensitivity: internal           # классификация, НЕ право
+sources:
+  - id: s1
+    resource: /raw/20261021-close.md
+    title: "Инструкция"
+---
+```
+
+Принадлежность к пространству восстанавливается по реестру `bundle_id → space_id`; в Frontmatter не дублировать её обязательным вторым authority. Право `accounting` или `finance_manager` хранится в реестре/grants Access, а **не** в YAML. Действующие `scope_tokens` в LBS сейчас пишутся и в Markdown, и в проекцию; для нового OKF-пути **не создавать вторую независимо редактируемую ACL**: использовать их лишь как производную служебную выборку из LBS Access или упразднить в CROW-страницах после изменения writer/retrieval. Поскольку продуктивных внедрений Wiki нет, соответствующие контракты можно привести к единому варианту сразу.
+
+Если в будущем понадобится переносимость самой ACL-политики между LBS-инсталляциями, допустимо добавить **только необязательный `lbs_access_policy_ref`** как стабильную ссылку на политику — не список пользователей/групп. Но для первого этапа и при DB-based LBS Access это поле не нужно: права отдельно резервируются и экспортируются как конфигурация LBS, сам OKF v0.2 не стандартизует корпоративную авторизацию.
+
+**Смена места Note:** CROW `move_note` внутри одного bundle сохраняет `id/knowledge_id` и права из Access. Перенос Note в другой bundle/space **не автоматический файловый move**: требуется транзакционное подтверждение LBS, новый target policy и проверка отсутствия расширения аудитории. Открытые Markdown-файлы и `index.md` не являются средством обхода Access: доступ к Git/FS самого канона ограничен доверенному процессу.
 
 ## 5. OKF v0.2: поддержка с первого этапа
 

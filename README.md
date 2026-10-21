@@ -275,6 +275,8 @@ Runtime-данные не коммитятся:
 
 ## Документация
 
+- `docs/architecture/lbs-factory/00_README.md` — **предлагаемая** архитектура LBS Factory v3.3, развитие LLM-Wiki, взаимодействие агентов, подключаемые модули и LBS Access (не описание текущей реализации).
+
 - `docs/architecture/ARCHITECTURE.md` — обзор архитектуры и ссылки на ключевые документы.
 - `docs/architecture/blueprint.md` — архитектурный blueprint.
 - `docs/architecture/DOMAIN_MODEL.md` — доменная модель.

@@ -12,6 +12,8 @@ The system is organized into several layers:
 
 ## Key Documentation
 
+- **[LBS Factory v3.3 (proposed)](lbs-factory/00_README.md)**: Proposed agent-first factory architecture, modular business applications, LLM-Wiki, inter-agent protocols and LBS Access. Does not describe the currently deployed system.
+
 For a deep dive into specific areas, please refer to the following documents:
 
 - **[Blueprint](blueprint.md)**: The foundational document describing the architectural vision, principles (Local-first, Server-driven UI, Policy-first), and the overall tech stack.

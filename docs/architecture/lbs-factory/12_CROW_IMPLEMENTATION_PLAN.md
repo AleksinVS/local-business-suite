@@ -61,12 +61,13 @@ enabled: false            # до прохождения acceptance
 class LbsCrowAdapter:
     def ingest_safe_source(self, source_ref, actor_ctx) -> str: ...
     def select_notes(self, query, actor_ctx) -> list: ...
-    def answer(self, question, actor_ctx): ...  # optional: native CROW Wiki.ask
+    def prepare_context(self, query, actor_ctx): ...  # native Researcher.ask + capture-answer
+    def answer(self, question, actor_ctx): ...  # optional: gated final LLM
     def get_note(self, note_ref, actor_ctx): ...
     def reconcile(self, corpus_id): ...
 ```
 
-**Важно:** native `Wiki.ask(question)` возвращает сгенерированный ответ и citation paths, **не** объекты поиска `knowledge.search`. Для LBS `knowledge.search` адаптер должен вызвать штатный **`Steps.select(ctx, root, question)`** и преобразовать выбранные `Note` в разрешённые результаты, а не выдавать текст ответа вместо набора документов. Шаги `select`/`answer` документированы CROW и могут использоваться независимо; реализацию такого вызова держать внутри адаптера, не распространять upstream-типы `Note/Folder/StepContext` через публичный LBS API.
+**Два режима CROW вместо одного:** `knowledge.search` может вызывать только `Steps.select(ctx, filtered_root, question)` для списка подходящих Note; **это быстрый поиск без строк таблиц, истории и конфликтных подсказок**. Для итогового агентского ответа использовать `knowledge.prepare_context`: нативный `Researcher.ask()` с `ScopedReadStore` (`load/read` с ACL + destination privacy), wrapper `Steps.select=select_and_hydrate` и подменённым `Steps.answer=collect_context` (не вызывает финальную CROW LLM). Тогда CROW по-прежнему выполняет `_with_history`, `_conflicting`, `_with_rows`, а LBS-агент формирует финальный ответ. Изменение upstream не требуется для прототипа; тип `WikiStore` в конструкторе `Researcher` — не официальный протокол, поэтому обязательны contract tests на pinned CROW. Ни `Wiki.ask` со штатным store, ни `Answer.citations` от capture-режима не считать безопасным LBS API. Подробно: [разделы 4.7–4.8 архитектуры](11_CROW_OKF_INTEGRATION.md).
 
 ## 3. Пакеты работ
 
@@ -110,11 +111,23 @@ class LbsCrowAdapter:
 
 ### CROW-05 — поиск, ответ и отключение провайдера
 
-**Сделать:** LBS `knowledge.search` маршрутизирует запрос по разрешённым `space_id → bundle_id`, строит **scoped `Folder/Note` tree до классификатора** и вызывает штатный CROW `Steps.select`, возвращая штатные `KnowledgeSearchHit`, а не upstream `Answer`. Клонировать **и Folder, и Note** в request-local дереве: `check_select` использует Python `id(Note)` только относительно **переданного scoped root**, поэтому возвращённые выборкой копии допустимы. Note-копии содержат только разрешённые безопасные `id/title/description` и при необходимости обезличенный `rel`, без `body/sources/See also`; скрытые ветви/описания исключаются. Проверять fallback `classic.select` на том же scoped-root. После выборки проверять ACL страницы, источников/citations, `See also`, получателя и `confirmation_state`; только затем LBS/агент формирует ответ. Native `Wiki.ask` не используется в защищённом потоке, так как `_with_rows` и `_with_history` читают raw/archives без per-source LBS Access. Никакой второй основной retrieval по закрытым документам не нужен.
+**Сделать:** построить **кэш базового дерева для каждого физического CROW bundle** (один полный `WikiStore.load()` после старта или удачного commit, immutable snapshot, атомарная замена и проверка версии в каждом LBS worker). На запрос пакетно вычислить разрешённые IDs из LBS Access и собрать только **лёгкое scoped `Folder/Note` дерево** без повторного чтения Markdown-файлов. Пространства без Note restrictions могут использовать готовое безопасное представление; дорогую per-profile/per-user cache вводить лишь после измерений. LBS `knowledge.search` маршрутизирует запрос по разрешённым `space_id → bundle_id`, вызывает native `Steps.select` с этим filtered tree и возвращает `KnowledgeSearchHit`, а не upstream `Answer`. Клонировать **и Folder, и Note** в request-local дереве: `check_select` использует Python `id(Note)` только относительно **переданного scoped root**, поэтому возвращённые выборкой копии допустимы. Note-копии содержат только разрешённые безопасные `id/title/description` и при необходимости обезличенный `rel`, без `body/sources/See also`; скрытые ветви/описания исключаются. Проверять fallback `classic.select` на том же scoped-root. После выборки проверять ACL страницы, источников/citations, `See also`, получателя и `confirmation_state`; только затем LBS/агент формирует ответ. Native `Wiki.ask` не используется в защищённом потоке, так как `_with_rows` и `_with_history` читают raw/archives без per-source LBS Access. Никакой второй основной retrieval по закрытым документам не нужен.
 
 **Сделать:** выключение provider запрещает новые вызовы в CROW, не удаляет данные; LBS в состоянии прочесть CROW OKF Markdown самостоятельно, не включая `llmw2`. Альтернативный provider может принять тот же `corpus_id` лишь при остановке прежнего writer, сохранении стабильных `knowledge_id`/`sources`/статусов и инвариантов безопасности.
 
 **Проверить:** Access работает независимо от Source API и CROW: пользователь общего пространства получает только разрешённые CROW-заметки; пользователь бухгалтерии получает разрешённые common + accounting; ограничения отдельных Note внутри accounting работают **до `select`**, недоступные заголовки/описания отсутствуют в prompt/trace и не расходуют top-k. При попытке открыть raw дополнительно вызывается проверка ACL оригинала; корпоративный групповой чат не раскрывает чужие источники. Read-only чтение/поиск после отключения CROW остаются возможны через LBS по каноническому OKF; для полнофункционального classifier-поиска нужен другой выбранный provider.
+
+### CROW-05b — сохранение штатной подготовки контекста
+
+**Цель:** не потерять функциональность CROW `Researcher.ask`, но использовать окончательный ответ агента LBS.
+
+**Сделать:** создать request-local `ScopedReadStore` c `load()` (scoped tree из кэша) и `read(rel)` (авторизованный доступ к исходной Note/archived/raw версии плюс актуальная privacy destination). В `Steps.select` использовать тонкую обёртку `select_and_hydrate`: штатный select по безопасным metadata-only копиям, `check_select`, затем проверенная гидратация **только выбранных Note-копий** в том же дереве. Запрещённые источники и история должны давать контролируемый отказ/пропуск с записью о неполном контексте.
+
+На основе `dataclasses.replace(wiki.steps, select=select_and_hydrate, answer=collect_context)` создать собственный `Researcher` (официальные Steps, конструктор с доверенным read-proxy) **на каждый запрос**. `collect_context` сохраняет итоговые Note и augmented question (с исторической/конфликтной подсказкой) в локальный объект и возвращает обычный `str` для CROW `check_answer`; реальный final LLM answer выдаёт LBS. Не использовать `Answer.citations`, формируемые regex по сгенерированному тексту, как LBS provenance в capture-режиме: собрать их из разрешённых ID и подтверждённых Source refs.
+
+**Проверить реальные условия upstream:** `_with_history` только если `revisions=replace`, есть предыдущая версия и classifier выбрал историю; `_conflicting` включается при 2+ Note и `answer_conflicts`, не доказывает конфликт; `_with_rows` читает sheets из `/raw/` с бюджетом `effective_read_chars`. Состояние classifier/privacy destination и логи должны быть защищены. Тестировать note-level deny, raw без прав, отказ старой версии, отсутствие пропуска запрещённого body в prompt и глобальное ограничение итогового контекста. Когда CROW изменит внутренний пайплайн — контрактные тесты не должны молча пропустить регрессию.
+
+**Несколько bundles:** встроенная `_conflicting` работает только внутри каждого вызова `Researcher.ask`. При объединении результатов корпусов LBS может повторить проверку межкорпусного конфликта через чистую функцию CROW `conflicts.conflict_state` и один classifier-вызов, если такой сценарий нужен; общий token/char budget применяется перед ответом агента LBS. Не утверждать, что native CROW сам обеспечивает cross-bundle проверки.
 
 ### CROW-06 — эксплуатация и объективное решение о Source API
 
@@ -134,8 +147,13 @@ class LbsCrowAdapter:
 | Подмена `scope_tokens` или `sensitivity` агентом | Не расширяет права; writer отклоняет/удерживает правку |
 | Individual Note ACL внутри отдела | Запрещённые title/description/body/папки не попадают в `select` и его fallback |
 | Доступ к Note, но не к её raw | Разрешённая заметка видна; исходный raw не открывается без отдельного ACL источника |
+| Таблица в разрешённой Note | `prepare_context` использует релевантные строки raw только при праве на источник; plain `select` их не добавляет |
+| Вопрос об историческом правиле | `prepare_context` включает разрешённую предыдущую `.archive` редакцию (при условиях CROW), недоступную не читает |
+| Противоречие между двумя Note | `prepare_context` передаёт подсказку о возможном конфликте; `select` один этого не делает |
+| Несколько физических bundles | Итоговый LBS контекст ограничен общим бюджетом; cross-bundle конфликт проверяется отдельно, если включён |
 | Два писателя / Windows | Одновременное изменение одного namespace исключено |
 | Чтение во время merge | Нельзя получить промежуточную редакцию |
+| Кэш дерева | 100 повторных поисков без изменений не вызывают 100 `WikiStore.load()`, обновление после commit видно всем workers по версии |
 | Прерванная запись/перезапуск | Журнал восстанавливает либо блокирует, никакой тихой потери |
 | `raw` и архивы не в Git | Нет следов в `git ls-files`; есть separate backup и restore |
 | Попытка читать `raw` как Wiki Note | Отказ/исключение из любого обхода |

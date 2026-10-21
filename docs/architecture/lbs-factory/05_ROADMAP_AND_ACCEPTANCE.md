@@ -28,6 +28,18 @@
 
 **Приёмка:** агент проводит серию интервью, записи доступны сразу; отмеченные сомнения видны в реестре, но не тормозят сбор; legacy pending не раскрывается; backup/restore работает.
 
+
+
+### P1-CROW — CROW как optional Wiki provider при обязательном OKF v0.2
+
+**Не блокирует базовое Discovery без CROW.** При включении CROW опираться на [11_CROW_OKF_INTEGRATION.md](11_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed). Взять upstream CROW почти неизменным, `MemorySourceObject` сохранить; выделить один `org/crow/common` corpus с единым ACL и единственным LBS writer.
+
+Порядок зависимостей: **PRIV-00..04 до передачи реального содержимого в CROW**; единый `SafeProjection` используется и для `wiki_git`, и для назначения LLM/classifier. Native CROW raw сохраняется вне Git, доступен только сервису и имеет отдельный backup. Новые CROW-страницы сразу OKF v0.2; legacy LBS предварительно валидируется/мигрирует по отдельному плану, не импортируется автоматически.
+
+Проверить: запрет двух writers/прямого CROW UI, ACL до classifier, исключение raw из `org/**/*.md` обхода, сохранение Frontmatter CROW и `working/needs_confirmation/confirmed`, регистрацию новых заметок в LBS индексе, частичную запись/rollback, idempotent `Origin`, выключение CROW и read-only работу LBS по его OKF-страницам. Коммерческое использование с AGPL — отдельная обязательная проверка.
+
+Подготовить `Origin/source_ref/version+transform` для будущего Source API **без изменения native raw сейчас**. Переход `MemorySourceObject -> raw` и прямое встраивание Source API остаются возможностями для обсуждения, не задачами P1.
+
 ### P2 — Agent Interaction Kernel локально
 
 - локальный Task/Result контракт и один in-process provider;

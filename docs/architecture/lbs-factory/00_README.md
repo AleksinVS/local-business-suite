@@ -31,6 +31,9 @@ LBS Factory — agent-first набор инструментов обследов
 - `08_ACCESS_MIGRATION_AND_TESTS.md` — этапы ACCESS-00..07, задания AX-00..07, тестовая матрица, rollback и ADR.
 - `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — **целевая редакция v3.4**: обязательная модульность, неблокирующий реестр подтверждений, прогрессивное усложнение, optional OpenFGA.
 - `10_CONTENT_PRIVACY_PIPELINE.md` — единый контракт безопасного представления текста и метаданных, разрывы в ingestion/adapter_check и поэтапная очистка индексов.
+- `11_CROW_OKF_INTEGRATION.md` — подключаемый CROW почти без изменений, OKF v0.2 с первого этапа и подготовленный путь к Source API.
+
+**CROW / OKF:** согласуемая интеграция описана в [`11_CROW_OKF_INTEGRATION.md`](11_CROW_OKF_INTEGRATION.md) и [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed). CROW остаётся заменяемым модулем, сохраняет собственный `raw` на старте и получает только материалы после единого [privacy-контура](10_CONTENT_PRIVACY_PIPELINE.md). Поддержка OKF v0.2 обязательна для новых/переносимых страниц; общий legacy-корпус требует отдельного преобразования. Это **не реализованная в коде функция**.
 
 ## Как пользоваться
 

@@ -1,6 +1,6 @@
 {
   ".": "Предлагаемая LBS Factory v3.4 (не текущая реализация): модульность, Wiki, агенты и прогрессивная сложность",
-  "00_README.md": "Навигация по предлагаемой LBS Factory v3.3 и статус решений",
+  "00_README.md": "Навигация по предлагаемой LBS Factory v3.4 и статус решений",
   "01_CONCEPT.md": "Целевая архитектура агентной фабрики внедрения и состав компонентов",
   "02_AGENT_INTERACTION.md": "Контракты взаимодействия агентов, A2A, MCP, AG-UI и доверенные полномочия",
   "03_LLM_WIKI.md": "Развитие LLM-Wiki на базе apps.memory, знания, источники и ACL",
@@ -9,5 +9,6 @@
   "06_PLUGGABLE_BUSINESS_MODULES.md": "Выделение Kanban, Waiting List и Warehouse в подключаемые модули",
   "07_ACCESS_ARCHITECTURE.md": "Целевая архитектура подключаемой системы полномочий LBS Access",
   "08_ACCESS_MIGRATION_AND_TESTS.md": "Этапы и тесты миграции LBS Access",
-  "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста"
+  "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста",
+  "10_CROW_OKF_INTEGRATION.md": "CROW как заменяемый модуль: OKF v0.2 сразу, один канон и writer, native raw, будущий Source API"
 }

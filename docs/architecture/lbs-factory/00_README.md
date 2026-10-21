@@ -30,6 +30,9 @@ LBS Factory — agent-first набор инструментов обследов
 - `07_ACCESS_ARCHITECTURE.md` — развитие текущей системы прав: роли, capabilities, identities, агенты, Wiki, чат, Битрикс24, контракт расширения.
 - `08_ACCESS_MIGRATION_AND_TESTS.md` — этапы ACCESS-00..07, задания AX-00..07, тестовая матрица, rollback и ADR.
 - `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — **целевая редакция v3.4**: обязательная модульность, неблокирующий реестр подтверждений, прогрессивное усложнение, optional OpenFGA.
+- `10_CROW_OKF_INTEGRATION.md` — подключаемый CROW почти без изменений, OKF v0.2 с первого этапа, единый Git-канон и путь к будущему Source API.
+
+**CROW / OKF:** новое предложение описано в [`10_CROW_OKF_INTEGRATION.md`](10_CROW_OKF_INTEGRATION.md) и [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed). CROW — заменяемый provider для выделенного OKF-корпуса; его native `raw` сохраняется, `MemorySourceObject` не заменяется, прямой Source API внутри CROW отложен. Для LBS новые страницы CROW должны соответствовать OKF v0.2, но legacy-файлы требуют отдельной проверки и миграции. **Это документация, не работающая интеграция.**
 
 ## Как пользоваться
 

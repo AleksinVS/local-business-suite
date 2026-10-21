@@ -179,3 +179,7 @@ runtime: in_process
 - Отдельная миграция role documents в PostgreSQL не входит в работу по отключаемости бизнес-модулей.
 
 Связанные детальные спецификации: `07_ACCESS_ARCHITECTURE.md` и `08_ACCESS_MIGRATION_AND_TESTS.md`. Задания BM-01/BM-02/BM-04 согласовать по write scope с AX-01/AX-02/AX-03 до старта coding agents.
+
+## 14. Ранняя модульность без микросервисной обязанности (v3.4)
+
+Интерфейс, владелец данных, серверный enabled-gate и тест выключения модуля обязательны уже на L0. Допускаются обычные Django apps и общий PostgreSQL, без hot-loading и отдельных микросервисов. Сохранить транзакционные инварианты склада. См. [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md).

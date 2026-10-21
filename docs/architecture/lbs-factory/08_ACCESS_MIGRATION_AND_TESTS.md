@@ -34,7 +34,7 @@
 | ACCESS-04 | Вынести TrustedActorContext/identity linking для Local, AD, Telegram, Bitrix24; интеграция с AgentTask | Принимать неподтверждённые identity claims | Чужой external ID/installation отклоняется, audit сохраняется |
 | ACCESS-05 | Подключить Wiki и групповые комнаты к доступу по аудитории; закрытый retrieval и публикация | Использовать только права инициатора | Не допускается cross-room/cross-source leakage |
 | ACCESS-06 | Делегированные agent grants, отзыв, revalidation перед side effects, approval binding | Встроить права агента как текстовый prompt | Два runtime не могут повысить права при делегировании |
-| ACCESS-07 | Критическое сравнение optional providers (OIDC/OpenFGA) и эксплуатационные профили | Разворачивать новый IAM/PDP заранее | Minimal профиль автономен; внешний профиль проходит contract tests |
+| ACCESS-07 | LocalResourceACL port по умолчанию; OpenFGA adapter только при доказанном сложном объектном ACL | Делать OpenFGA/IAM обязательным | Локальный профиль независим, optional backend проходит golden/negative tests |
 
 **Зависимости:** ACCESS-00 должен завершиться до ACCESS-01..03; ACCESS-01 перед ACCESS-03; ACCESS-02 перед полным отключением модулей (BM-01/BM-05); ACCESS-04 до external agent A2A (A06), Bitrix24 write (A08) и корпоративного Telegram; ACCESS-05 до production WebChat/Knowledge; ACCESS-06 до произвольного межагентного делегирования. ACCESS-07 не блокирует минимальный пилот.
 
@@ -119,3 +119,7 @@
 Предложить **ADR-F07: LBS Access as optional authorization provider / module-declared capabilities / trusted agent authority**, поверх текущих ADR-0040, 0043, 0045, 0046, 0048. Не заменять принятые ADR молча. Для external ACL provider — отдельный ADR при реальном пилоте.
 
 Базовые команды: `make verify-fast TEST_SCOPE=...`, `make verify-profile PROFILE=contracts|ai|memory`, после рискованного этапа — `make verify-full` и один сквозной e2e согласно `AGENTS.md`.
+
+## 10. Отложенный пилот OpenFGA (v3.4)
+
+Сейчас предусмотреть небольшой ресурсный порт и локальную реализацию. Реальный OpenFGA — отдельный пилот для одного типа документа/комнаты с verified IDs, pinned model/store, read-only сверкой решений, backfill и rollback. При недоступности — закрытая деградация, не расширение прав. Не изменять одновременно хранилище существующих ролей и объектный ACL. См. [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md).

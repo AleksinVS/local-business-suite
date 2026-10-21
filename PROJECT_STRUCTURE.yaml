@@ -424,7 +424,7 @@ docs: # Документация проекта
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
   architecture: # Архитектурные документы проекта
-    lbs-factory: # Предлагаемая концепция LBS Factory v3.3 (НЕ текущее состояние и НЕ разрешение на production-изменения)
+    lbs-factory: # Предлагаемая архитектура LBS Factory v3.4: простое ядро, реестр подтверждения Wiki, optional OpenFGA
       00_README.md: file # Навигация по предлагаемой LBS Factory v3.3 и статус решений
       01_CONCEPT.md: file # Целевая архитектура агентной фабрики внедрения и состав компонентов
       02_AGENT_INTERACTION.md: file # Контракты взаимодействия агентов, A2A, MCP, AG-UI и доверенные полномочия
@@ -434,6 +434,7 @@ docs: # Документация проекта
       06_PLUGGABLE_BUSINESS_MODULES.md: file # Выделение Kanban, Waiting List и Warehouse в подключаемые модули
       07_ACCESS_ARCHITECTURE.md: file # Целевая архитектура подключаемой системы полномочий LBS Access
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Этапы и тесты миграции LBS Access
+      09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)

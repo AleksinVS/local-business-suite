@@ -12,7 +12,7 @@ The system is organized into several layers:
 
 ## Key Documentation
 
-- **[LBS Factory v3.3 (proposed)](lbs-factory/00_README.md)**: Proposed agent-first factory architecture, modular business applications, LLM-Wiki, inter-agent protocols and LBS Access. Does not describe the currently deployed system.
+- **[LBS Factory v3.4 (proposed)](lbs-factory/00_README.md)**: Progressive complexity, nonblocking knowledge confirmation register, modular business applications and optional OpenFGA. [Decision guide](lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md). Not current deployed state.
 
 For a deep dive into specific areas, please refer to the following documents:
 

@@ -1,4 +1,4 @@
-# Переход к LBS Factory v3.3: агентные пакеты и приёмка
+# Переход к LBS Factory v3.4: агентные пакеты и приёмка
 
 Статус: план; запрещено молча менять production или удалять данные.
 
@@ -19,18 +19,18 @@
 
 ### P1 — Wiki API и безопасный Discovery (первый вертикальный срез)
 
-- ввести локальный `KnowledgeProvider` facade поверх `apps.memory` (search/get/propose/review/history), не переносить ORM и модели;
-- source staging для интервью/Telegram с подтверждёнными scope и provenance;
-- `discovery.notes -> wiki.proposal -> review -> current`;
-- сохранить текущий `memory.remember` через совместимый adapter/версию API;
-- минимальная index/reconcile health и аудит, без добавления graph runtime/data-store.
+- локальный facade поверх apps.memory, без нового Wiki service;
+- **немедленное** сохранение безопасных рабочих тематических знаний в current Wiki, без обычного human review;
+- неблокирующий реестр needs_confirmation как проекция из канона, без второго источника истины;
+- совместимость memory.remember/search и прежнего pending проверять golden tests;
+- сохранность Git, восстановимость индекса, минимум ACL и запрет секретов в Git.
 
-**Приёмка:** фиксированный набор интервью/исходников; unauthorized access невозможен, непроверенный факт не является approved, принятая страница появляется в поиске, rollback/restore срабатывают.
+**Приёмка:** агент проводит серию интервью, записи доступны сразу; отмеченные сомнения видны в реестре, но не тормозят сбор; legacy pending не раскрывается; backup/restore работает.
 
 ### P2 — Agent Interaction Kernel локально
 
-- DTO Task/Result/Artifact/Descriptor, один in-process provider;
-- надёжный DB-backed ledger для длительных задач, status/retries/idempotency/limits;
+- локальный Task/Result контракт и один in-process provider;
+- DB-backed ledger только для **реально долгих/восстанавливаемых** задач, не для каждого синхронного обращения;
 - права по инициатору и агенту; проверяемые artifact refs; **сначала ACCESS-04/06 trust/delegation boundary, права task payload не считать authority**;
 - адаптер к существующему LangGraph, не переписывая agent loop.
 
@@ -40,7 +40,7 @@
 
 - подключить Pi **или** Claude SDK через отдельный adapter, минимальные capabilities;
 - сравнить стоимость выполнения и ресурсы, убедиться в изоляции запуска;
-- подготовить A2A Agent Card mapper, затем один настоящий A2A-сервис при необходимости;
+- зафиксировать границу A2A; реальный A2A сервер только при появлении независимого peer;
 - не переносить внутренний LLM graph state между движками.
 
 **Приёмка:** одна и та же задача выполняется двумя провайдерами, возвращая нормализованные результаты; отказ и недоверенное сообщение обрабатываются корректно.
@@ -85,7 +85,7 @@
 |---|---|---|---|---|
 | A00 | Architectural inventory | весь repo, ADR, configs | только docs/reports | зависимости, факты и непросмотренные зоны перечислены |
 | A01 | KnowledgeProvider facade | `apps/memory`, `apps/core/source_adapters`, docs | новые интерфейсы + минимальные wiring changes | contract tests, legacy search unaffected |
-| A02 | Discovery intake/proposal | `apps/memory`, channel adapters | только discovery/wiki proposal компоненты | raw != accepted, citation/ACL e2e |
+| A02 | Direct Wiki + confirmation register | `apps/memory`, channel adapters | safe-write facade + status projection/tests | запись без review; реестр неблокирующий; ACL/source e2e |
 | A03 | AgentTask schema + ledger | AI/models + agent runtime | новая узкая task library + migration | retry/idempotency/restart/audit tests |
 | A04 | Existing LangGraph adapter | `services/agent_runtime` | adapter и tests; без переписки graph | standard Task API compliant |
 | A05 | Pi/Claude provider pilot | official SDK, sandbox | adapter + deployment test config | no secret leakage; capabilities matrix |
@@ -108,7 +108,7 @@
 | Установленные/активные/разрешённые capabilities не совпадают | x | x | x |
 | Субагент не повышает права | x | x | x |
 | No cross-installation/cross-room leakage | x | x | x |
-| Unreviewed discovery не попадает в current Wiki | x | x | x |
+| Working-знания без review доступны в current Wiki со статусом; needs_confirmation в реестре | x | x | x |
 | Git canon и searchable projection восстанавливаются | x | x | x |
 | Task replay не создаёт второй side effect | x | x | x |
 | Подмена provider endpoint/Agent Card отвергается | x | x | x |
@@ -124,7 +124,7 @@
 
 - `ADR-F01`: LBS Factory как отдельная концепция от текущего Django portal; соглашение о референсном внедрении.
 - `ADR-F02`: local AgentTask, A2A boundary, MCP/AG-UI, auth propagation и delegation limits.
-- `ADR-F03`: LLM-Wiki KnowledgeProvider, proposal flow, Git/PII/erasure, ACL границы.
+- `ADR-F03`: LLM-Wiki KnowledgeProvider, немедленная рабочая запись, необязательный реестр подтверждений, legacy pending, Git/PII/erasure и ACL.
 - `ADR-F04`: provider lifecycle + optionality, identity and secrets.
 - `ADR-F05`: Bitrix24 TaskProvider source of truth, конфликты записей и idempotency.
 - `ADR-F06`: превращение Kanban/Waiting List/Warehouse в подключаемые компоненты, разделение WorkOrders и board UI, режимы disabled/uninstalled и migration strategy.
@@ -151,3 +151,13 @@
 - **ACCESS-07:** optional OIDC/OpenFGA feasibility только по отдельной потребности, не блокирует локальный профиль.
 
 **Задания:** AX-00..07 и подробная матрица в `08_ACCESS_MIGRATION_AND_TESTS.md`. Не поручать один и тот же изменяемый файл разным агентам параллельно; ориентироваться на PR-gates и `AGENTS.md`.
+
+## 8. Порядок по принципу Progressive Complexity (v3.4)
+
+S0: baseline, восстановление и границы модулей.  
+S1: интервью → непосредственная working Wiki → поиск → необязательный реестр подтверждений.  
+S2: один агент, нужные каналы и прямые интеграции.  
+S3: независимое функциональное включение/выключение бизнес-модулей.  
+S4: OpenFGA, A2A, векторы, брокер, второй agent provider и отдельные сервисы — каждый по отдельной доказанной необходимости.
+
+Подробная спецификация: [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md).

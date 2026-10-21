@@ -275,7 +275,8 @@ Runtime-данные не коммитятся:
 
 ## Документация
 
-- `docs/architecture/lbs-factory/00_README.md` — **предлагаемая** архитектура LBS Factory v3.3, развитие LLM-Wiki, взаимодействие агентов, подключаемые модули и LBS Access (не описание текущей реализации).
+- `docs/architecture/lbs-factory/00_README.md` — **предлагаемая** архитектура LBS Factory v3.4, обязательная модульность, упрощённая Wiki и права (не описание текущей реализации).
+- `docs/architecture/lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — немедленная запись Wiki, неблокирующий реестр подтверждений, условное подключение OpenFGA.
 
 - `docs/architecture/ARCHITECTURE.md` — обзор архитектуры и ссылки на ключевые документы.
 - `docs/architecture/blueprint.md` — архитектурный blueprint.

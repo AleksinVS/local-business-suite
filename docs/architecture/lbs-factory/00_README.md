@@ -30,10 +30,11 @@ LBS Factory — agent-first набор инструментов обследов
 - `07_ACCESS_ARCHITECTURE.md` — развитие текущей системы прав: роли, capabilities, identities, агенты, Wiki, чат, Битрикс24, контракт расширения.
 - `08_ACCESS_MIGRATION_AND_TESTS.md` — этапы ACCESS-00..07, задания AX-00..07, тестовая матрица, rollback и ADR.
 - `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — **целевая редакция v3.4**: обязательная модульность, неблокирующий реестр подтверждений, прогрессивное усложнение, optional OpenFGA.
+- `10_CONTENT_PRIVACY_PIPELINE.md` — единый контракт безопасного представления текста и метаданных, разрывы в ingestion/adapter_check и поэтапная очистка индексов.
 
 ## Как пользоваться
 
-**Приоритет v3.4:** исторические требования v3.3 о обязательном proposal→review→accepted для обычного Discovery и преждевременном запуске дополнительных сервисов заменяются правилами `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md`. Production-семантика меняется только после миграции.
+**Приоритет v3.4:** обычные знания записываются без review по `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md`, но предварительная подготовка безопасного содержимого **до Git/индексов/LLM** обязательна по `10_CONTENT_PRIVACY_PIPELINE.md`. Production-семантика не меняется без кода и миграции.
 
 
 1. Утвердить решения, помеченные `D` и открытые вопросы в `04_CRITICAL_REVIEW.md`.

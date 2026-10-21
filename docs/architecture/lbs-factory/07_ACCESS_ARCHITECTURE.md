@@ -236,3 +236,9 @@ allowed(task action) =
 LBS Access остаётся владельцем ролей и capability grants, а домены — бизнес-ограничений. Для отношений конкретных LBS-owned объектов (Wiki, комнаты, проекты) предусматривается лёгкий ResourceRelationshipBackend с LocalResourceACL по умолчанию. **OpenFGAResourceACL реализовать только при реальном пересекающемся sharing/наследовании прав**, сначала на одном типе объекта; без копирования прав Битрикс24/1С.
 
 После подключения у данного типа объекта только **одна** writable authority отношений. Сверить локальные и OpenFGA решения на golden tests, выполнить backfill/cutover и проверить отказ; нет silent allow. Подробнее: [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md).
+
+## 15. Разделение прав и privacy-преобразования
+
+LBS Access (и optional OpenFGA) решает, **кто** может обратиться к ресурсу; Content Privacy Pipeline решает, **какое содержимое** допустимо в конкретном `destination` — поиск, Wiki Git, агентный контекст, внешняя модель. Успешный `adapter_check` не разрешает raw egress. `original_read` для врача/оператора остаётся отдельным предметным действием с проверкой прав.
+
+При отказе преобразования нельзя подставлять raw filename, object_id, source_uri или полный текст. Подробнее: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).

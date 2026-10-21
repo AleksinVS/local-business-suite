@@ -12,6 +12,7 @@
 - инвентаризировать `apps.memory`, `apps.ai`, `services.agent_runtime`, registry, policy, Django settings, read/write paths, ChatRun/PendingAction, source adapters, FTS/vector;
 - **ACCESS-00:** снять baseline ролей, protected flags, org scopes, ACL, `accounts` ↔ `workorders` imports и назначений внешних identities; добавить негативные регрессионные тесты без изменения прав;
 - проверить существующие тесты и конфигурацию `LOCAL_BUSINESS_MEMORY_FILE_CANON_AUTHORITATIVE` реального тестового/production хоста отдельно (не выводить только из defaults);
+- выполнить `PRIV-00`: снять карту raw/safe путей файлов, Source Adapters, `adapter_check`, FTS/vector/reindex/Wiki и AI egress, включая legacy проекции;
 - записать ADR о LBS Factory и коррекцию ADR-0024 (Django owner только текущего внедрения, не всей Factory);
 - подготовить список конфликтующих решений (ADR-0030, ADR-0013, ADR-0021, ADR-0048), не переписывать исторические документы без версии.
 
@@ -19,11 +20,11 @@
 
 ### P1 — Wiki API и безопасный Discovery (первый вертикальный срез)
 
-- локальный facade поверх apps.memory, без нового Wiki service;
+- локальный facade поверх apps.memory, без нового Wiki service; **до первого прямого Git commit пройти PRIV-01 и PRIV-04**;
 - **немедленное** сохранение безопасных рабочих тематических знаний в current Wiki, без обычного human review;
 - неблокирующий реестр needs_confirmation как проекция из канона, без второго источника истины;
 - совместимость memory.remember/search и прежнего pending проверять golden tests;
-- сохранность Git, восстановимость индекса, минимум ACL и запрет секретов в Git.
+- сохранность Git, восстановимость индекса, минимум ACL и запрет секретов в Git; **допуск реальных source_data в AI только после PRIV-02/03 и обработки старых небезопасных проекций PRIV-05**.
 
 **Приёмка:** агент проводит серию интервью, записи доступны сразу; отмеченные сомнения видны в реестре, но не тормозят сбор; legacy pending не раскрывается; backup/restore работает.
 
@@ -113,7 +114,7 @@
 | Task replay не создаёт второй side effect | x | x | x |
 | Подмена provider endpoint/Agent Card отвергается | x | x | x |
 | Отмена не выдаётся за business rollback | x | x | x |
-| Egress gate и секреты | x | x | x |
+| Egress, секреты, PII, safe title/path и `adapter_check` | x | x | x |
 | Versioned contract / old client compatibility | x | x | x |
 | Неподключённый provider не запускается и не ломает kernel | x | x | x |
 | Backend restarts maintain committed tasks |  | x | x |
@@ -161,3 +162,9 @@ S3: независимое функциональное включение/вы�
 S4: OpenFGA, A2A, векторы, брокер, второй agent provider и отдельные сервисы — каждый по отдельной доказанной необходимости.
 
 Подробная спецификация: [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md).
+
+## 9. Этап PRIV перед LLM-Wiki, AI и внешними источниками
+
+Нельзя считать исправление privacy-зазоров необязательным расширением безопасности: это предварительное условие стабильного безопасного накопления знаний из реальных документов. Выполнить `PRIV-00` (инвентаризация), `01` (общая библиотека), `02` (file ingestion), `03` (Source Adapters/adapter_check), `04` (Git Wiki и agent egress), `05` (контролируемый reindex существующих проекций) и `06` (регрессия/качество поиска). Не запускать удаление старых индексов на production без отдельного dry-run, резервной копии и подтверждения.
+
+**Gate:** file и adapter paths не выдают raw при `pii_guarded`; `pii_strict` блокирует; `adapter_check` применяет назначенную privacy-политику; первый Wiki Git commit не сохраняет секрет или запрещённый PII. Одно отклонённое содержимое не блокирует общий Wiki/discovery flow. Полная матрица: [10_CONTENT_PRIVACY_PIPELINE.md](10_CONTENT_PRIVACY_PIPELINE.md).

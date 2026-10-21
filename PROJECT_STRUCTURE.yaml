@@ -435,6 +435,7 @@ docs: # Документация проекта
       07_ACCESS_ARCHITECTURE.md: file # Целевая архитектура подключаемой системы полномочий LBS Access
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Этапы и тесты миграции LBS Access
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
+      10_CONTENT_PRIVACY_PIPELINE.md: file # Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)

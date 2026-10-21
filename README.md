@@ -277,6 +277,7 @@ Runtime-данные не коммитятся:
 
 - `docs/architecture/lbs-factory/00_README.md` — **предлагаемая** архитектура LBS Factory v3.4, обязательная модульность, упрощённая Wiki и права (не описание текущей реализации).
 - `docs/architecture/lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — немедленная запись Wiki, неблокирующий реестр подтверждений, условное подключение OpenFGA.
+- `docs/architecture/lbs-factory/10_CONTENT_PRIVACY_PIPELINE.md` — проект обязательной подготовки безопасного текста и метаданных для файлов, Source Adapters, Wiki и AI, включая reindex.
 
 - `docs/architecture/ARCHITECTURE.md` — обзор архитектуры и ссылки на ключевые документы.
 - `docs/architecture/blueprint.md` — архитектурный blueprint.

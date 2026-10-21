@@ -9,5 +9,6 @@
   "06_PLUGGABLE_BUSINESS_MODULES.md": "Выделение Kanban, Waiting List и Warehouse в подключаемые модули",
   "07_ACCESS_ARCHITECTURE.md": "Целевая архитектура подключаемой системы полномочий LBS Access",
   "08_ACCESS_MIGRATION_AND_TESTS.md": "Этапы и тесты миграции LBS Access",
-  "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста"
+  "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста",
+  "10_CONTENT_PRIVACY_PIPELINE.md": "Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV"
 }

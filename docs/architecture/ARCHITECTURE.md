@@ -12,7 +12,7 @@ The system is organized into several layers:
 
 ## Key Documentation
 
-- **[LBS Factory v3.4 (proposed)](lbs-factory/00_README.md)**: Progressive complexity, nonblocking knowledge confirmation register, modular business applications and optional OpenFGA. [Decision guide](lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md). Not current deployed state.
+- **[LBS Factory v3.4 (proposed)](lbs-factory/00_README.md)**: Progressive complexity, nonblocking knowledge confirmation register, modular business applications and optional OpenFGA. [Decision guide](lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md), [Content Privacy Pipeline](lbs-factory/10_CONTENT_PRIVACY_PIPELINE.md). Not current deployed state.
 
 For a deep dive into specific areas, please refer to the following documents:
 

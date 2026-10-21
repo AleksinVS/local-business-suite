@@ -420,6 +420,7 @@ docs: # Документация проекта
     ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
     ADR-0049-portal-autocomplete-and-contextual-form-panels.md: file # Принятый ADR: общее автодополнение и доменные формы в правой панели
     ADR-0050-warehouse-inline-series-and-list-relocation.md: file # Принятый ADR: серия в строке складского движения и перемещение из списка остатков
+    ADR-0051-crow-pluggable-okf-knowledge-provider.md: file # Предлагаемый ADR: CROW — заменяемый OKF-провайдер, единый writer, нативный raw и условный Source API
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
@@ -436,6 +437,7 @@ docs: # Документация проекта
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Этапы и тесты миграции LBS Access
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
       10_CONTENT_PRIVACY_PIPELINE.md: file # Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV
+      11_CROW_OKF_INTEGRATION.md: file # CROW как заменяемый модуль LBS: native raw и OKF v0.2 сразу, единый writer, privacy, путь к Source API
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)

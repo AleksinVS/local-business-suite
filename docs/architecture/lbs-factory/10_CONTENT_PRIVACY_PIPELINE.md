@@ -185,3 +185,13 @@ def prepare_content(source_record, *, privacy_profile, destination) -> SafeProje
 **Связанные документы:** [03_LLM_WIKI.md](03_LLM_WIKI.md), [05_ROADMAP_AND_ACCEPTANCE.md](05_ROADMAP_AND_ACCEPTANCE.md), [07_ACCESS_ARCHITECTURE.md](07_ACCESS_ARCHITECTURE.md), [09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md](09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md). Черновик `docs/adr/ADR-0012-data-anonymization-and-privacy-pipeline.md` описывает значительно более широкий контур; для этого исправления предлагается **узкий ADR-F08** без автоматического внедрения большой системы из черновика.
 
 **Примечание:** настоящий код ещё не исправлен, и эксплуатационные индексы не проверялись. Перед исполнением coding agents должны сверить HEAD и пройти исходные профильные тесты.
+
+
+## 10. Подключаемый CROW — потребитель SafeProjection, не параллельный pipeline
+
+Первоначальный CROW работает практически без изменений, но **не получает raw напрямую из файлов/адаптеров**. `LbsCrowAdapter` перед вызовом upstream проверяет ACL источника и `prepare_content(source, destination)` из этого документа. Нельзя ограничиться `wiki_git`, если модель написания/классификатор расположены во внешнем облаке: допустимость `external_llm` проверяется отдельно, а передаваемый CROW текст должен удовлетворять обоим назначениям. При конфликте — локальная модель, более строгий общий результат или отказ с понятной ошибкой; никакого fallback к оригиналу. Поля `title`, `origin.link`, `source_ref` и выдержки индекса также могут раскрывать сведения, поэтому нормализуются/проверяются отдельно.
+
+CROW `raw` хранит только подготовленное представление, физически исключено из Git и имеет отдельную политику доступа и резервирования. Смена `policy_version` требует новой обработанной версии и контролируемой переиндексации; `Origin.version` формируется с учётом ревизии преобразования, чтобы native CROW не вернул ложное `unchanged`. Корпус CROW на первом этапе — однородный по ACL, иначе его classifier может увидеть чужие заголовки.
+
+Это **не новая библиотека очистки**: решение CROW использует тот же `SafeProjection`. См. [план CROW/OKF](11_CROW_OKF_INTEGRATION.md) и [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).
+

@@ -162,5 +162,5 @@ confirmation_state и confirmation_reason — **новое предлагаем�
 
 `MemorySourceObject` и действующие Source Adapters сохраняются. Задаётся стабильный `Origin`, `source_ref`, версия парсера/очистки и content hash для возможной дальнейшей миграции. **Замена MemorySourceObject на raw и подключение Source API внутри CROW отложены** до отдельного решения на основании эксплуатации.
 
-Связанные документы: [план CROW/OKF](11_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed), [privacy-конвейер](10_CONTENT_PRIVACY_PIPELINE.md).
+Связанные документы: [план CROW/OKF](11_CROW_OKF_INTEGRATION.md), [реализация по пакетам](12_CROW_IMPLEMENTATION_PLAN.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed), [privacy-конвейер](10_CONTENT_PRIVACY_PIPELINE.md).
 

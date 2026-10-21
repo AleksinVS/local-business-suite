@@ -193,5 +193,5 @@ def prepare_content(source_record, *, privacy_profile, destination) -> SafeProje
 
 CROW `raw` хранит только подготовленное представление, физически исключено из Git и имеет отдельную политику доступа и резервирования. Смена `policy_version` требует новой обработанной версии и контролируемой переиндексации; `Origin.version` формируется с учётом ревизии преобразования, чтобы native CROW не вернул ложное `unchanged`. Корпус CROW на первом этапе — однородный по ACL, иначе его classifier может увидеть чужие заголовки.
 
-Это **не новая библиотека очистки**: решение CROW использует тот же `SafeProjection`. См. [план CROW/OKF](11_CROW_OKF_INTEGRATION.md) и [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).
+Это **не новая библиотека очистки**: решение CROW использует тот же `SafeProjection`. См. [план CROW/OKF](11_CROW_OKF_INTEGRATION.md), [инженерные пакеты](12_CROW_IMPLEMENTATION_PLAN.md) и [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).
 

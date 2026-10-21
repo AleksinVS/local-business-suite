@@ -113,3 +113,13 @@ class ResourceRelationshipBackend:
 **Stop/no-go:** потеря канонической Wiki-страницы, невозможность восстановления, утечка закрытых источников, обязательная human review-очередь обычного Discovery, две независимые authority одной ресурсной связи, silent allow при отказе внешней авторизации, независимый бизнес-модуль нельзя отключить без поломки ядра.
 
 **Связанные документы:** 01_CONCEPT.md, 03_LLM_WIKI.md, 04_CRITICAL_REVIEW.md, 05_ROADMAP_AND_ACCEPTANCE.md, 07_ACCESS_ARCHITECTURE.md, 08_ACCESS_MIGRATION_AND_TESTS.md. Перед code change оформить/согласовать корректирующий ADR к существующим решениям о Wiki и LBS Access; эта концепция сама по себе не меняет действующий код.
+
+
+## 7. Модуль CROW поверх Wiki и поддержка OKF
+
+**Дополнение к прогрессивной архитектуре:** OKF v0.2 — обязательный формат новой корпоративной Wiki с первого этапа; CROW — необязательный заменяемый `KnowledgeOrganizationProvider`. На первом этапе он может вести выделенное однородное по ACL пространство в существующем Git-каноне с собственными `raw/index/log`, без изменения upstream алгоритмов. LBS обеспечивает единый writer, безопасность, права, Git и производные индексы. Работа `working / needs_confirmation / confirmed` остаётся неблокирующей, официальный выпуск и расширение прав — отдельные операции.
+
+Нельзя совместно давать CROW и старому LBS writer изменять один и тот же namespace. Нельзя подключать native CROW к смешанному по правам дереву без предварительной фильтрации *до* classifier. Полное соответствие legacy-документов OKF требует миграции `type/status/log`, но новые страницы CROW обязаны соответствовать формату с первого дня.
+
+Переход к прямому Source API внутри CROW оставлен **условным**: сейчас сохраняем `MemorySourceObject` и native raw; `Origin`, `source_ref` и версия очистки позволяют мигрировать позже без смены канона. См. [план CROW+OKF](10_CROW_OKF_INTEGRATION.md), [ADR-0051](../../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md) (Proposed).
+

@@ -1,6 +1,6 @@
 # LBS Factory v3.4 — целевая концепция
 
-Статус: proposed architecture / implementation guidance. Редакция 2026-10-21. Подробный план упрощения: `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md`.
+Статус: **Accepted — согласованная целевая архитектура, 2026-10-21; исполняемая реализация поэтапная.** Редакция 2026-10-21. Подробный план упрощения: `09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md`.
 
 ## 1. Постановка задачи
 

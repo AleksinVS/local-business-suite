@@ -438,6 +438,7 @@ docs: # Документация проекта
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста
       10_CONTENT_PRIVACY_PIPELINE.md: file # Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV
       11_CROW_OKF_INTEGRATION.md: file # CROW как заменяемый модуль LBS: native raw и OKF v0.2 сразу, единый writer, privacy, путь к Source API
+      12_CROW_IMPLEMENTATION_PLAN.md: file # План CROW-00..06: безопасное подключение и OKF, работа без raw-дублирования позже, блокировка чтения при записи, backup и восстановление
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)

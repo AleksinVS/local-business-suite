@@ -11,5 +11,6 @@
   "08_ACCESS_MIGRATION_AND_TESTS.md": "Этапы и тесты миграции LBS Access",
   "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная архитектура: немедленная Wiki, неблокирующий реестр подтверждений, optional OpenFGA и критерии роста",
   "10_CONTENT_PRIVACY_PIPELINE.md": "Общий безопасный текст и метаданные для ingestion, Wiki и AI; миграция старых индексов, тесты и этапы PRIV",
-  "11_CROW_OKF_INTEGRATION.md": "CROW как заменяемый модуль LBS: native raw и OKF v0.2 сразу, единый writer, privacy, путь к Source API"
+  "11_CROW_OKF_INTEGRATION.md": "CROW как заменяемый модуль LBS: native raw и OKF v0.2 сразу, единый writer, privacy, путь к Source API",
+  "12_CROW_IMPLEMENTATION_PLAN.md": "План CROW-00..06: безопасное подключение и OKF, работа без raw-дублирования позже, блокировка чтения при записи, backup и восстановление"
 }

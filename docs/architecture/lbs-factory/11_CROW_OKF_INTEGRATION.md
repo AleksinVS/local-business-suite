@@ -254,7 +254,7 @@ def prepare_crow_context(wiki, actor, audience, question, tree_cache):
 
 **По режимам:**
 
-- `knowledge.search`: быстрый `select` по безопасному дереву, если нужен только список подходящих заметок. Не обещать результатов `_with_rows/юhistory/conflicting` в таком режиме.
+- `knowledge.search`: быстрый `select` по безопасному дереву, если нужен только список подходящих заметок. Не обещать результатов `_with_rows/_with_history/_conflicting` в таком режиме.
 - `knowledge.prepare_context` (рекомендуемый агентский путь): `Researcher.ask` + `ScopedReadStore` + capture-answer hook; сохраняет native CROW таблицы/историю/конфликты **без генерации ответа CROW**.
 - `knowledge.answer` (опционально): тот же защищённый `ScopedReadStore`, но native CROW `answer` генерирует текст только по разрешённому контексту. Не требуется для MVP.
 
@@ -372,7 +372,7 @@ CROW — *provider*, а не новый стандарт хранения. По�
 
 ## 8. Роль Source API и будущая интеграция (НЕ этап 1)
 
-**Источник концепции Source API появился до CROW.** ADR-0018 от 2026-05-28 создал `SourceAdapter`/`SourceObjectEnvelope`, а исходная Factory v3.3 упоминала `Source API` для оригиналов отдельно от Wiki (`04_CRITICAL_REVIEW.md`, §R09). Текущий код ещё не содержит универсального публичного `read(source_ref, version, actor_ctx)`; CROW не является поводом создавать новый API-сервис. Источники, доменные ACL и право прочитать конкретную версию принадлежат LBS/системе-владельцу. Будущий Source API может унифицировать *получение* источников, но не заменяет LBS Access и не фильтрует дерево Wiki CROW.
+**Источник концепции Source API появился до CROW.** ADR-0018 от 2026-05-28 создал `SourceAdapter`/`SourceObjectEnvelope`, а исходная Factory v3.3 упоминала `Source API` для оригиналов отдельно от Wiki (`04_CRITICAL_REVIEW.md`, R09). Текущий код ещё не содержит универсального публичного `read(source_ref, version, actor_ctx)`; CROW не является поводом создавать новый API-сервис. Источники, доменные ACL и право прочитать конкретную версию принадлежат LBS/системе-владельцу. Будущий Source API может унифицировать *получение* источников, но не заменяет LBS Access и не фильтрует дерево Wiki CROW.
 
 На этапе 1 нужна **только договорённость о стабильном адресе источника**, без реального SourceBackend внутри CROW:
 

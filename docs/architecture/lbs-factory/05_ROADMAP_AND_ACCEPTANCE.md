@@ -10,6 +10,14 @@
 
 **Цель:** понять фактический `main` на момент начала, состояние развёртываний и границы знаний/агентов.
 
+**Состояние 2026-10-22:** [исходный отчёт P0](13_P0_BASELINE.md) и
+[ADR-0052](../../adr/ADR-0052-factory-kernel-and-reference-portal.md) подготовлены.
+Локальные исходные проверки выполнены; эксплуатационная часть остаётся открытой.
+Владелец подтвердил одну продуктивную установку Windows + IIS с Waiting List;
+сохраняемый состав — лист ожидания, пользователи, права, подразделения и
+оборудование с зависимостями/историей. Доступа к хосту из среды агента нет;
+подготовлена проверка для запуска оператором. Это не разрешение переноса или P1.
+
 - перепроверить git SHA и git status;
 - инвентаризировать `apps.memory`, `apps.ai`, `services.agent_runtime`, registry, policy, Django settings, read/write paths, ChatRun/PendingAction, source adapters, FTS/vector;
 - **ACCESS-00:** снять baseline ролей, protected flags, org scopes, ACL, `accounts` ↔ `workorders` imports и назначений внешних identities; добавить негативные регрессионные тесты без изменения прав;

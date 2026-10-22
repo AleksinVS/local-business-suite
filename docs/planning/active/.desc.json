@@ -13,5 +13,6 @@
   "kanban-department-filter-ai-sidebar.md": "Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата",
   "access-administration-ux-unification.md": "Активный план единого UX администрирования доступа и канонических путей изменения",
   "settings-storage-simplification.md": "Активный план упрощения хранения и доставки настроек",
-  "knowledge-personal-data-git-policy-debt.md": "Открытый долг: правила хранения/удаления персональных данных в CROW raw, корпоративных знаниях, Git и backup"
+  "knowledge-personal-data-git-policy-debt.md": "Открытый долг: правила хранения/удаления персональных данных в CROW raw, корпоративных знаниях, Git и backup",
+  "lbs-factory-transition.md": "Переход Factory: репозиторная часть P0 проверена, проверка продуктивного Windows/IIS остаётся открытой"
 }

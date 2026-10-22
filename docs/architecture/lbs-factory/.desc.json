@@ -12,5 +12,7 @@
   "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная Factory: два Wiki-профиля LBS/CROW и условный OpenFGA",
   "10_CONTENT_PRIVACY_PIPELINE.md": "Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг",
   "11_CROW_OKF_INTEGRATION.md": "Согласованная архитектура CROW как заменяемого OKF v0.2 модуля над LBS Wiki",
-  "12_CROW_IMPLEMENTATION_PLAN.md": "Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты"
+  "12_CROW_IMPLEMENTATION_PLAN.md": "Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты",
+  "13_P0_BASELINE.md": "Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS",
+  "p0": "Подробные исходные отчёты P0 и подготовка переноса продуктивного Waiting List"
 }

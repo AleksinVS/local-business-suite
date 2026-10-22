@@ -1,0 +1,35 @@
+{
+  "task_id": "01-inventory",
+  "goal": "Выполнить репозиторную часть P0 и оформить отдельный допуск к переносу продуктивного Waiting List",
+  "read_scope": [
+    "apps",
+    "services",
+    "config",
+    "contracts",
+    "docs",
+    "scripts"
+  ],
+  "write_scope": [
+    "docs",
+    "workflow/active/lbs-factory-p0",
+    "README.md",
+    "PROJECT_STRUCTURE.yaml",
+    ".local/lbs-factory-p0"
+  ],
+  "acceptance": [
+    "проверяемые ссылки на код",
+    "раздельные факты Git/local/owner/production unknown",
+    "матрица существующих тестов и пробелов",
+    "ADR без новых несогласованных решений",
+    "план сохранения данных и восстановления",
+    "исходники и runtime-данные не изменены"
+  ],
+  "verification": [
+    "make verify-fast TEST_SCOPE=<исходная матрица>",
+    "make contracts",
+    "make gen-struct",
+    "git diff --check"
+  ],
+  "adr": "Формализация уже согласованного направления Factory и явное уточнение ADR-0024",
+  "status": "accepted_repository_local_only"
+}

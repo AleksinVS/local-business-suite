@@ -1,0 +1,32 @@
+{
+  "task_id": "02-host-verification",
+  "status": "awaiting_operator_report",
+  "goal": "Завершить эксплуатационную часть P0 на Windows+IIS и закрытом стенде восстановления",
+  "read_scope": [
+    "исходная схема/код хоста",
+    "effective IIS configuration",
+    "действующие права и согласованные данные",
+    "закрытые backup references"
+  ],
+  "write_scope": [
+    ".local/lbs-factory-p0 на хосте",
+    "закрытый стенд восстановления",
+    "обезличенный итоговый отчёт P0"
+  ],
+  "non_goals": [
+    "изменение production",
+    "развёртывание Factory",
+    "выгрузка ПДн/secrets в Git/чат",
+    "переключение на Git-default роли"
+  ],
+  "acceptance": [
+    "code SHA/schema/backend установлены",
+    "настройки процесса сверены с IIS",
+    "состав данных/истории/прав подтверждён",
+    "backup отдельно восстановлен",
+    "права и provenance сохранены",
+    "выбран обратимый перенос"
+  ],
+  "artifact": "workflow/active/lbs-factory-p0/host_inventory.py",
+  "reason_pending": "Владелец подтвердил отсутствие доступа к серверу из среды агента и выбрал подготовку проверки для оператора"
+}

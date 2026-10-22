@@ -1,0 +1,8 @@
+{
+  ".": "Исходные отчёты P0 Factory: зависимости, права, privacy, runtime и сохранение production Waiting List",
+  "ACCESS_BASELINE.md": "ACCESS-00: зависимости, исходная семантика и матрица Git-default прав",
+  "PRIVACY_BASELINE.md": "PRIV-00: маршруты файлов, адаптеров, Wiki, индексов и риски содержимого",
+  "RUNTIME_BASELINE.md": "AI runtime: журналы, реестры, доверие, AG-UI и границы будущего AgentTask",
+  "MIGRATION_AND_RECOVERY.md": "Состав переноса Windows+IIS Waiting List, ограничения импортёров и восстановление",
+  "VERIFICATION.md": "Фактические проверки P0, локальные метрики и непроверенные эксплуатационные условия"
+}

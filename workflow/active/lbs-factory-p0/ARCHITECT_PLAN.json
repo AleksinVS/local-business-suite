@@ -1,0 +1,41 @@
+{
+  "block_id": "lbs-factory-p0",
+  "status": "awaiting_host_inventory",
+  "source_head": "2c250ae30e496434e479043ad9db84c758bce0ba",
+  "objective": "Исходная точка перехода Factory: зависимости, права, privacy, runtime, проверки, ADR и сохранение продуктивного Waiting List",
+  "read_scope": [
+    "apps/",
+    "services/",
+    "config/",
+    "contracts/",
+    "docs/",
+    "scripts/",
+    "Makefile"
+  ],
+  "write_scope": [
+    "docs/",
+    "workflow/active/lbs-factory-p0/",
+    "README.md",
+    "PROJECT_STRUCTURE.yaml",
+    ".local/lbs-factory-p0/"
+  ],
+  "non_goals": [
+    "изменение прикладного поведения",
+    "изменение contracts",
+    "перенос или удаление продуктивных данных",
+    "production deployment",
+    "обновление зависимостей"
+  ],
+  "tasks": [
+    "01-inventory",
+    "02-host-verification"
+  ],
+  "verification": [
+    "исходные отрицательные тесты",
+    "локальные метрики на синтетических данных",
+    "локальный снимок и проверка восстановления",
+    "проверка ссылок и структуры",
+    "архитектурные контракты"
+  ],
+  "production_gate": "До переноса отдельно проверить Windows+IIS, фактические данные/права/SSO, резервную копию и восстановление"
+}

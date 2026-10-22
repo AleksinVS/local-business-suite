@@ -11,5 +11,6 @@
   "project-knowledge-base-mvp": "Workflow: MVP базы проектных знаний для ИИ-агентов kb (6 task packets)",
   "kanban-department-filter-ai-sidebar": "Workflow: дерево подразделений в фильтре канбана и сворачиваемый ИИ-чат",
   "access-administration-ux-unification": "Workflow: единый UX администрирования доступа и канонические пути изменения",
-  "settings-storage-simplification": "Workflow: упрощение хранения и доставки настроек (8 task packets)"
+  "settings-storage-simplification": "Workflow: упрощение хранения и доставки настроек (8 task packets)",
+  "lbs-factory-p0": "P0 Factory: репозиторная инвентаризация и локальные проверки; ожидается проверка продуктивного Windows/IIS"
 }

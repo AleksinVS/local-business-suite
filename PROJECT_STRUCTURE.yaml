@@ -417,15 +417,17 @@ docs: # Документация проекта
     ADR-0045-fail-closed-roleless-access-and-new-user-default-role.md: file # Принятый ADR: закрытый доступ без роли и роль новых пользователей по умолчанию
     ADR-0046-role-copying-and-deferred-additive-role-hierarchy.md: file # Предлагаемый ADR: копирование ролей сейчас и ограниченная аддитивная иерархия после отдельного подтверждения
     ADR-0047-warehouse-ledger-and-department-scoped-access.md: file # Принятый ADR: складской журнал, адресное хранение и доступ по подразделениям
-    ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Предлагаемый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
+    ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Принятый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
     ADR-0049-portal-autocomplete-and-contextual-form-panels.md: file # Принятый ADR: общее автодополнение и доменные формы в правой панели
     ADR-0050-warehouse-inline-series-and-list-relocation.md: file # Принятый ADR: серия в строке складского движения и перемещение из списка остатков
     ADR-0051-crow-pluggable-okf-knowledge-provider.md: file # Принятый ADR: CROW как заменяемый OKF v0.2 модуль Wiki, централизованный LBS Access, нативный raw
+    ADR-0052-factory-kernel-and-reference-portal.md: file # Принятый ADR: формализация согласованной Factory v3.4, референсный портал и границы владения данными
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
     NATIVE_AI_UI_PROJECT.md: file # Проектная документация native AI UI
   architecture: # Архитектурные документы проекта
-    lbs-factory: # Согласованная целевая LBS Factory v3.4: CROW/OKF Wiki, агенты, LBS Access, прогрессивная сложность (реализация поэтапная)
+    lbs-factory: # Согласованная целевая LBS Factory v3.4 (не текущая реализация): модульность, CROW/OKF Wiki, агенты, Access и прогрессивная сложность
+      p0: file
       00_README.md: file # Навигация по согласованной целевой архитектуре LBS Factory v3.4 и открытым архитектурным долгам
       01_CONCEPT.md: file # Целевая архитектура Factory, Knowledge API, подключаемые провайдеры и OKF/CROW границы
       02_AGENT_INTERACTION.md: file # Контракты агентов, A2A/MCP/AG-UI и различие CROW search/prepare_context
@@ -439,6 +441,7 @@ docs: # Документация проекта
       10_CONTENT_PRIVACY_PIPELINE.md: file # Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг
       11_CROW_OKF_INTEGRATION.md: file # Согласованная архитектура CROW как заменяемого OKF v0.2 модуля над LBS Wiki
       12_CROW_IMPLEMENTATION_PLAN.md: file # Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты
+      13_P0_BASELINE.md: file # Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)
@@ -525,6 +528,7 @@ docs: # Документация проекта
       kanban-department-filter-ai-sidebar.md: file # Активный план дерева подразделений в фильтре канбана и сворачиваемого ИИ-чата
       knowledge-driven-business-analytics.md: file # Активный план knowledge-driven business analytics
       knowledge-personal-data-git-policy-debt.md: file # Открытый долг: правила хранения/удаления персональных данных в CROW raw, корпоративных знаниях, Git и backup
+      lbs-factory-transition.md: file # Переход Factory: репозиторная часть P0 проверена, проверка продуктивного Windows/IIS остаётся открытой
       memory-alignment-hardening.md: file # Активный план доводки памяти после ревью целевой архитектуры (дополнение ADR-0030)
       memory-hybrid-ranking-profiles-and-agent-prompts.md: file # Активный план профилей гибридного ранжирования памяти и подсказок ИИ-бота
       native-ag-ui-chat-development.md: file # Активный план разработки самописного AG-UI ИИ-чата
@@ -799,6 +803,15 @@ workflow: # Исполнительные workflow-пакеты для сложн
       BLOCK_BRIEF.md: file # Brief for the knowledge-driven business analytics workflow
       EXECUTOR_REPORT.knowledge-driven-business-analytics.md: file # Executor report for the MVP implementation slice
       TASK_ACCEPTANCE.knowledge-driven-business-analytics.md: file # Acceptance report for the MVP implementation slice
+    lbs-factory-p0: # P0 Factory: репозиторная часть принята, эксплуатационная ожидает оператора Windows/IIS
+      task-packets: file
+      ARCHITECT_PLAN.json: file # Границы исполнения и статусы задач P0
+      BASELINE_CHECKS.md: file # Полный исходник экспериментальной проверки, исполняемой только из .local
+      BLOCK_BRIEF.md: file # Цель, границы P0 и условия незавершённой проверки хоста
+      EXECUTOR_REPORT.01-inventory.md: file # Отчёт репозиторного и локального исполнения P0
+      host_inventory.py: file # Сбор агрегированных сведений хоста без выгрузки строк и изменений бизнес-данных
+      RETROSPECTIVE.md: file # Промежуточные выводы без объявления P0 завершённым
+      TASK_ACCEPTANCE.01-inventory.md: file # Приёмка только репозиторной части, открытые условия хоста
     memory-alignment-hardening: # Workflow: доводка памяти после ревью целевой архитектуры (дополнения ADR-0030 от 2026-07-06 по 2026-07-13)
       task-packets: file
       ARCHITECT_PLAN.json: file # Порядок исполнения, ограничения, точные имена файлов и моделей для пакетов

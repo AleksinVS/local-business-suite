@@ -442,6 +442,7 @@ docs: # Документация проекта
       11_CROW_OKF_INTEGRATION.md: file # Контракт адаптеров CROW 1.0.1, прямая запись в OKF, классификация, противоречия и обслуживание структуры
       12_CROW_IMPLEMENTATION_PLAN.md: file # Пакеты внедрения CROW и прямой редактуры OKF, сценарии приёмки и дополнительные инструменты
       13_P0_BASELINE.md: file # Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS
+    agent-wiki-architecture.md: file # Переносимая архитектура проектной вики с агентом, навыком автора и CROW
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)
     ARCHITECTURE.md: file # Общая архитектура (слои, правила)

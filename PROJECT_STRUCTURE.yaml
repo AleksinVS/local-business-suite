@@ -420,7 +420,7 @@ docs: # Документация проекта
     ADR-0048-typed-setting-documents-and-postgresql-runtime-state.md: file # Принятый ADR: типизированные документы настроек, Git-дефолты и PostgreSQL для управляемых рабочих версий
     ADR-0049-portal-autocomplete-and-contextual-form-panels.md: file # Принятый ADR: общее автодополнение и доменные формы в правой панели
     ADR-0050-warehouse-inline-series-and-list-relocation.md: file # Принятый ADR: серия в строке складского движения и перемещение из списка остатков
-    ADR-0051-crow-pluggable-okf-knowledge-provider.md: file # Принятый ADR: CROW как заменяемый OKF v0.2 модуль Wiki, централизованный LBS Access, нативный raw
+    ADR-0051-crow-pluggable-okf-knowledge-provider.md: file # Принятое решение о прямой редактуре OKF агентом, отдельных инструментах CROW и общем Git-корпусе
     ADR-0052-factory-kernel-and-reference-portal.md: file # Принятый ADR: формализация согласованной Factory v3.4, референсный портал и границы владения данными
   ai-ui: # Документация по AI UI (драйверы чата, протокол, переписка)
     NATIVE_AI_UI_EXECUTION.md: file # Исполнительная документация native AI UI
@@ -431,16 +431,16 @@ docs: # Документация проекта
       00_README.md: file # Навигация по согласованной целевой архитектуре LBS Factory v3.4 и открытым архитектурным долгам
       01_CONCEPT.md: file # Целевая архитектура Factory, Knowledge API, подключаемые провайдеры и OKF/CROW границы
       02_AGENT_INTERACTION.md: file # Контракты агентов, A2A/MCP/AG-UI и различие CROW search/prepare_context
-      03_LLM_WIKI.md: file # Единая согласованная модель LBS Wiki/OKF/CROW: корпусный provider, чтение, запись, ACL, Git/raw и восстановление
-      04_CRITICAL_REVIEW.md: file # Архитектурное ревью, риски и предотвращение дублирования движков поиска/записи
+      03_LLM_WIKI.md: file # Тематическая OKF-вики, прямая редактура агентом, работа CROW с источниками, доступ и восстановление
+      04_CRITICAL_REVIEW.md: file # Архитектурное ревью поиска и обслуживания вики, содержательности статей и совместной записи
       05_ROADMAP_AND_ACCEPTANCE.md: file # План Factory и приёмка; CROW-этапы привязаны к единому исполнительному документу 12
       06_PLUGGABLE_BUSINESS_MODULES.md: file # Выделение Kanban, Waiting List и Warehouse в подключаемые модули
       07_ACCESS_ARCHITECTURE.md: file # LBS Access: роли, объекты, два уровня Wiki/Note ACL и безопасный CROW
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Миграция Access и негативные тесты CROW пространств/Note/raw
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная Factory: два Wiki-профиля LBS/CROW и условный OpenFGA
       10_CONTENT_PRIVACY_PIPELINE.md: file # Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг
-      11_CROW_OKF_INTEGRATION.md: file # Согласованная архитектура CROW как заменяемого OKF v0.2 модуля над LBS Wiki
-      12_CROW_IMPLEMENTATION_PLAN.md: file # Согласованный исполнительный план интеграции CROW/OKF: пакеты, ACL, кэш, восстановление и тесты
+      11_CROW_OKF_INTEGRATION.md: file # Контракт адаптеров CROW 1.0.1, прямая запись в OKF, классификация, противоречия и обслуживание структуры
+      12_CROW_IMPLEMENTATION_PLAN.md: file # Пакеты внедрения CROW и прямой редактуры OKF, сценарии приёмки и дополнительные инструменты
       13_P0_BASELINE.md: file # Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
     ANALYTICS_MODEL.md: file # Модель аналитики (экспорт данных)

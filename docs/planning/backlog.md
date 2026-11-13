@@ -457,4 +457,4 @@ e2e-сценария двух подразделений.
 
 Нужно отдельно решить допустимость ПДн в CROW `raw/`, `.archive/`, Markdown/Frontmatter Wiki, Git-истории/клонах, поисковых проекциях, журналах и резервных копиях; варианты необязательной/выборочной очистки; сроки, удаление и допустимые LLM/egress. **Обязательное обнаружение и маскирование всех ПДн не принято.** До решения не публиковать произвольные реальные ПДн в Git или во внешний LLM без утверждённой политики конкретного источника.
 
-Подробная постановка и условия закрытия: [knowledge-personal-data-git-policy-debt.md](active/knowledge-personal-data-git-policy-debt.md). Согласованная архитектура CROW: [ADR-0051](../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).
+Подробная постановка и условия закрытия: [долг по ПДн](active/knowledge-personal-data-git-policy-debt.md). Границы авторской правки OKF и обработки источников CROW согласованы в [ADR-0051 от 2026-11-13](../adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md).

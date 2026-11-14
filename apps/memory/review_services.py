@@ -434,7 +434,7 @@ def _lock_pending_item(item):
         if locked_ref is not None
         else None
     )
-    if locked is None or (locked.metadata or {}).get("lifecycle") != "pending":
+    if locked is None or locked.source_kind == "crow_note" or (locked.metadata or {}).get("lifecycle") != "pending":
         raise ValidationError("Элемент памяти уже не находится в очереди ревью.")
     return locked
 

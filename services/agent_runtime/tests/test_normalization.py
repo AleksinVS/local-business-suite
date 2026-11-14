@@ -428,6 +428,9 @@ class TestRuntimeMemoryTool(unittest.TestCase):
             },
         )
 
+        search_tool.invoke({"query": "oxygen", "bundle_id": "clinical"})
+        self.assertEqual(gateway.calls[1]["payload"]["bundle_id"], "clinical")
+
     def test_access_editor_tool_forwards_only_bounded_target_fields(self):
         from services.agent_runtime.tools import build_tools
 
@@ -474,7 +477,7 @@ class TestRuntimeMemoryTool(unittest.TestCase):
         search_tool = next(tool for tool in tools if tool.name == "memory.search")
         schema_args = set(search_tool.args)
 
-        self.assertEqual(schema_args, {"query", "limit", "sensitivity", "corpus"})
+        self.assertEqual(schema_args, {"query", "limit", "sensitivity", "corpus", "bundle_id"})
         self.assertNotIn("search_mode", schema_args)
         self.assertNotIn("ranking_profile", schema_args)
         self.assertNotIn("include_source_data", schema_args)

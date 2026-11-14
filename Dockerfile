@@ -25,8 +25,10 @@ RUN apt-get update \
 # requirements.txt: requirements.lock фиксирует версии всех транзитивных
 # зависимостей и делает сборку образа воспроизводимой. requirements.txt
 # остаётся человекочитаемым входом для `make lock` / pip-compile.
-COPY requirements.txt requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock
+COPY requirements.txt requirements.lock requirements-crow.txt ./
+ARG LBS_WITH_CROW=0
+RUN pip install --no-cache-dir -r requirements.lock \
+    && if [ "$LBS_WITH_CROW" = "1" ]; then pip install --no-cache-dir -c requirements.lock -r requirements-crow.txt; fi
 
 COPY apps/ /app/apps/
 COPY config/ /app/config/

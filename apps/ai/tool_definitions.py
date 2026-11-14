@@ -354,7 +354,7 @@ TOOLS = [
         "execution_mode": "service_or_read_only_query",
         "description": (
             "Искать принятые знания памяти и необязательные ссылки на исходные данные с цитатами и служебными "
-            "метаданными маршрутизации. Единственный профиль ранжирования (гибрид FTS + вектор, слияние RRF) "
+            "метаданными маршрутизации. В обычном корпусе единый профиль ранжирования (гибрид FTS + вектор, слияние RRF) "
             "применяется всегда; выбор весов каналов или именованного профиля недоступен ИИ-боту (ADR-0030 "
             "решение 6). Профили ранжирования ADR-0016 — отложенный архитектурный долг, не публичный параметр."
         ),
@@ -363,6 +363,7 @@ TOOLS = [
             "limit",
             "sensitivity",
             "corpus",
+            "bundle_id",
         ],
         "input_schemas": {
             "query": {
@@ -384,6 +385,7 @@ TOOLS = [
                     "secret",
                 ],
             },
+            "bundle_id": {"description": "Опциональный раздел Wiki для corpus=knowledge. Поиск ограничен его опубликованными разрешёнными статьями.", "type": "string"},
             "corpus": {
                 "description": (
                     "Корпус поиска. knowledge (по умолчанию) — принятые знания, с автоматическим fallback к "
@@ -602,6 +604,182 @@ TOOLS = [
             "items",
         ],
         "required_role_scope": "superuser",
+    },
+    {
+        "id": "knowledge.search",
+        "title": "Найти статьи вики",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Получить доступные разделы без bundle_id, список статей без query или поиск по телу в выбранном разделе.",
+        "inputs": [
+            "bundle_id",
+            "query",
+            "limit"
+        ],
+        "input_schemas": {
+            "bundle_id": {
+                "type": "string"
+            },
+            "query": {
+                "type": "string"
+            },
+            "limit": {
+                "type": "integer"
+            }
+        },
+        "outputs": [
+            "bundles",
+            "revision",
+            "items",
+            "engine"
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible"
+    },
+    {
+        "id": "knowledge.get",
+        "title": "Прочитать статью вики",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Прочитать опубликованную Note по устойчивому ID или пути внутри раздела с редакцией и состоянием подтверждения.",
+        "inputs": [
+            "bundle_id",
+            "knowledge_id",
+            "path"
+        ],
+        "input_schemas": {
+            "bundle_id": {
+                "type": "string"
+            },
+            "knowledge_id": {
+                "type": "string"
+            },
+            "path": {
+                "type": "string"
+            }
+        },
+        "outputs": [
+            "knowledge_id",
+            "title",
+            "path",
+            "revision",
+            "markdown",
+            "confirmation_state"
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible"
+    },
+    {
+        "id": "knowledge.source",
+        "title": "Прочитать основание статьи",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Прочитать разрешённый исходный материал и получить ссылку на проверенную версию для source_refs.",
+        "inputs": [
+            "bundle_id",
+            "source_code",
+            "source_object_id"
+        ],
+        "input_schemas": {
+            "bundle_id": {
+                "type": "string"
+            },
+            "source_code": {
+                "type": "string"
+            },
+            "source_object_id": {
+                "type": "string"
+            }
+        },
+        "outputs": [
+            "source_ref",
+            "text"
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible"
+    },
+    {
+        "id": "knowledge.edit",
+        "title": "Отредактировать статьи вики",
+        "domain": "memory",
+        "mode": "write",
+        "execution_mode": "service_layer",
+        "description": "Сохранить связанные статьи одной правкой на основе прочитанного Git SHA. files задаёт полный Markdown по пути внутри раздела, null удаляет файл.",
+        "inputs": [
+            "bundle_id",
+            "expected_revision",
+            "files"
+        ],
+        "input_schemas": {
+            "bundle_id": {
+                "type": "string"
+            },
+            "expected_revision": {
+                "type": "string"
+            },
+            "files": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                }
+            }
+        },
+        "outputs": [
+            "revision",
+            "committed",
+            "changed_paths",
+            "index_status"
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible"
+    },
+    {
+        "id": "knowledge.compare",
+        "title": "Сопоставить утверждения статей",
+        "domain": "memory",
+        "mode": "read",
+        "execution_mode": "service_or_read_only_query",
+        "description": "Сопоставить две статьи или предлагаемую правку с проверяемым основанием через локальный классификатор.",
+        "inputs": [
+            "bundle_id",
+            "left_id",
+            "right_id",
+            "proposed_text",
+            "source_ref"
+        ],
+        "input_schemas": {
+            "bundle_id": {
+                "type": "string"
+            },
+            "left_id": {
+                "type": "string"
+            },
+            "right_id": {
+                "type": "string"
+            },
+            "proposed_text": {
+                "type": "string"
+            },
+            "source_ref": {
+                "type": "object"
+            }
+        },
+        "outputs": [
+            "revision",
+            "left_id",
+            "right_id",
+            "relation",
+            "probability",
+            "model"
+        ],
+        "requires_confirmation": False,
+        "required_role_scope": "visible"
     },
 ]
 

@@ -43,7 +43,7 @@
   "management/commands/memory_ingest_source.py": "Ingestion обнаруженных документов в MemorySearchDocument без постоянного safe corpus",
   "management/commands/memory_prepare_bootstrap_package.py": "Подготовка safe bootstrap package из проиндексированных документов источника",
   "management/commands/knowledge_reflection_worker.py": "Ночная рефлексия: index.md/log.md regeneration и предложение organization-кандидатов (pending pages) из личной памяти",
-  "management/commands/memory_reconcile.py": "Pull-reconciler канона знаний: content-hash gate, guard понижения классификации (lifecycle: pending), rebuild index.md/log.md, детерминированный материализатор MemoryKnowledgeEdge из relations: (ADR-0030 решение 3)",
+  "management/commands/memory_reconcile.py": "Сверка исторической памяти и полная опись зарегистрированных OKF-разделов по Git SHA",
   "management/commands/memory_queue_worker.py": "Воркер единой очереди памяти MemoryExternalConnectorJob: reconcile/ingestion/reindex задачи с retry и dead-letter (ADR-0030 решение 2)",
   "management/commands/memory_export_knowledge_files.py": "Экспорт активных MemoryKnowledgeItem в файловый репозиторий знаний",
   "management/commands/memory_verify_knowledge_files.py": "Проверка соответствия metadata знаний файлам и хэшам",
@@ -57,5 +57,11 @@
   "management/commands/memory_external_queue_status.py": "Статус standalone external connector queue backend",
   "management/commands/memory_external_cleanup.py": "Retention cleanup для expired external connector landing-zone artifacts",
   "management/commands/source_adapter_reconcile.py": "Snapshot reconcile универсальных SourceAdapter envelopes в memory/analytics projections",
-  "migrations/": "Миграции приложения памяти"
+  "migrations/": "Миграции приложения памяти",
+  "wiki_config.py": "Операторский реестр разделов OKF, токенов доступа и устойчивых ID",
+  "wiki_reconcile.py": "Опись Notes по Git SHA и атомарное восстановление карточек Wiki и состояния раздела",
+  "wiki_files.py": "Изолированная фиксация авторских правок OKF, ссылок и навигации в одном коммите",
+  "wiki_sources.py": "Доступный проверенный фрагмент источника и воспроизводимая ссылка для статьи",
+  "wiki_gateway.py": "Чтение, поиск, сравнение и редактирование разрешённой Wiki от лица агента",
+  "crow_provider.py": "Адаптер закреплённого CROW для поиска BM25 по разрешённым статьям и типизированных сравнений"
 }

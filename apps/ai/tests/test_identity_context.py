@@ -397,15 +397,15 @@ class IdentityContextPropagationTests(TestCase):
             audit = MemoryAccessAudit.objects.get(request_id="req-ai-memory-untrusted")
             self.assertGreaterEqual(audit.retrieval_trace["filtered"].get("trust_gate_denied_document", 0), 1)
 
-    def test_memory_search_tool_contract_reduces_params_to_corpus_and_limit(self):
+    def test_memory_search_tool_contract_accepts_optional_wiki_bundle(self):
         """ADR-0030 decision 6: memory.search's public contract is limited to
-        corpus (knowledge/source_data) and limit. It no longer declares a
+        corpus (knowledge/source_data), optional Wiki bundle and limit. It no longer declares a
         ranking profile, search mode, include_source_data toggle or raw
         channel weights as inputs."""
         from apps.ai.tool_definitions import get_tool_registry
 
         tool = get_tool_registry()["memory.search"]
-        self.assertEqual(set(tool["inputs"]), {"query", "limit", "sensitivity", "corpus"})
+        self.assertEqual(set(tool["inputs"]), {"query", "limit", "sensitivity", "corpus", "bundle_id"})
         self.assertEqual(tool["input_schemas"]["corpus"]["enum"], ["knowledge", "source_data"])
         for removed_param in ("ranking_profile", "search_mode", "include_source_data", "fulltext_weight", "vector_weight", "graph_weight"):
             self.assertNotIn(removed_param, tool["inputs"])

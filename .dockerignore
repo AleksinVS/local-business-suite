@@ -52,6 +52,7 @@ staticfiles/
 
 # Docs
 *.md
+!contracts/ai/skills/*/SKILL.md
 docs/
 
 # Docker

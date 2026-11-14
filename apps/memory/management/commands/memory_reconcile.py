@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.memory.chat_memory import index_knowledge_item
@@ -28,12 +28,15 @@ from apps.memory.knowledge_files import (
     _git_head,
     _safe_repo_path,
     knowledge_repo_root,
+    is_wiki_path,
     parse_knowledge_file,
     rebuild_all_knowledge_indexes,
     rebuild_all_knowledge_logs,
     sha256_text,
 )
 from apps.memory.models import MemoryKnowledgeItem
+from apps.memory.wiki_config import wiki_bundles
+from apps.memory.wiki_reconcile import WikiInventoryError, reconcile_wiki_bundle, wiki_head
 from apps.memory.routing import FALLBACK_SENSITIVITY_LEVELS
 from apps.memory.config_documents import get_memory_document_snapshots
 
@@ -82,6 +85,7 @@ class Command(BaseCommand):
             action="store_true",
             help="Report drift without writing projections or state.",
         )
+        parser.add_argument("--wiki-bundle", help="Reconcile only this configured OKF bundle.")
         parser.add_argument(
             "--force",
             action="store_true",
@@ -91,10 +95,39 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = bool(options.get("dry_run"))
         force = bool(options.get("force"))
+        bundles = wiki_bundles()
+        selected = options.get("wiki_bundle")
+        if selected and selected not in bundles:
+            raise CommandError("Unknown Wiki bundle.")
+        failures = []
+        if selected:
+            bundles = {selected: bundles[selected]}
+        if not selected:
+            # A missing mounted registry must never be initialized as a fresh
+            # legacy repository by the index/log rebuild during a timer pass.
+            run_legacy = True
+            if bundles:
+                try:
+                    wiki_head(knowledge_repo_root())
+                except WikiInventoryError:
+                    run_legacy = False
+            if run_legacy:
+                self._legacy(dry_run=dry_run, force=force)
+        for bundle in bundles.values():
+            report = reconcile_wiki_bundle(bundle, dry_run=dry_run, force=force)
+            self.stdout.write(json.dumps(report, ensure_ascii=False))
+            if report["status"] == "error":
+                failures.append(bundle.bundle_id)
+        if failures:
+            raise CommandError("Wiki reconcile incomplete: " + ", ".join(failures))
+
+    def _legacy(self, *, dry_run, force):
         root = knowledge_repo_root()
         head = _git_head(root) if (root / ".git").exists() else ""
 
-        items = MemoryKnowledgeItem.objects.exclude(knowledge_file_path="").filter(
+        items = MemoryKnowledgeItem.objects.exclude(knowledge_file_path="").exclude(
+            source_kind="crow_note"
+        ).exclude(knowledge_file_path__startswith="org/crow/").filter(
             status=MemoryKnowledgeItem.Status.ACTIVE
         )
         snapshots = get_memory_document_snapshots(
@@ -109,7 +142,7 @@ class Command(BaseCommand):
         for item in items.iterator():
             scanned += 1
             path = _safe_repo_path(root, item.knowledge_file_path)
-            if not path.exists():
+            if is_wiki_path(path.relative_to(root.resolve()).as_posix()) or not path.exists():
                 continue
             raw_content = path.read_text(encoding="utf-8")
             parsed = parse_knowledge_file(raw_content)
@@ -192,7 +225,7 @@ class Command(BaseCommand):
         # live in an unrelated file). `--dry-run` reports the projected
         # create/update/delete counts without writing.
         edges_result = materialize_knowledge_edges(
-            dry_run=dry_run, snapshots=snapshots
+            dry_run=dry_run, snapshots=snapshots, root=root
         )
 
         indexes_written = []

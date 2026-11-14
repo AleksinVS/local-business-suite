@@ -461,7 +461,7 @@ def pending_knowledge_queryset(user, params=None):
     user = resolve_active_actor(user, force_refresh=True)
     queryset = MemoryKnowledgeItem.objects.select_related("owner_user", "created_by").filter(
         metadata__lifecycle="pending"
-    ).order_by("-updated_at", "-id")
+    ).exclude(source_kind="crow_note").order_by("-updated_at", "-id")
     if user is None or not can_view_memory_review_queue(user):
         return queryset.none()
     if getattr(user, "is_superuser", False):

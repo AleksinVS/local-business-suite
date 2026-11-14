@@ -1,0 +1,2 @@
+# Optional local OKF search and typed decisions for the Django memory adapter.
+llmwiki2==1.0.1

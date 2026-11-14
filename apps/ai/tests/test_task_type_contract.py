@@ -111,26 +111,9 @@ class TaskTypeContractTests(SimpleTestCase):
 
     def test_validate_bounded_tools_exist_in_catalog(self):
         from services.agent_runtime.task_types import validate_bounded_tools_exist_in_catalog
-        catalog = {
-            "tools": [
-                {"id": "workorders.list"},
-                {"id": "workorders.create"},
-                {"id": "workorders.transition"},
-                {"id": "workorders.get"},
-                {"id": "departments.list"},
-                {"id": "devices.list"},
-                {"id": "workorders.comment"},
-                {"id": "workorders.confirm_closure"},
-                {"id": "workorders.rate"},
-                {"id": "inventory.devices.create"},
-                {"id": "inventory.devices.update"},
-                {"id": "inventory.devices.archive"},
-                {"id": "analytics.summary"},
-                {"id": "memory.search"},
-                {"id": "memory.remember"},
-                {"id": "memory.update_personal"},
-            ]
-        }
+        from apps.ai.tool_definitions import get_registry_payload
+
+        catalog = get_registry_payload()
         errors = validate_bounded_tools_exist_in_catalog(catalog)
         self.assertEqual(errors, [])  # all tools exist
 

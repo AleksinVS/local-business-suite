@@ -11,8 +11,8 @@
   "08_ACCESS_MIGRATION_AND_TESTS.md": "Миграция Access и негативные тесты CROW пространств/Note/raw",
   "09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md": "Прогрессивная Factory: два Wiki-профиля LBS/CROW и условный OpenFGA",
   "10_CONTENT_PRIVACY_PIPELINE.md": "Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг",
-  "11_CROW_OKF_INTEGRATION.md": "Контракт адаптеров CROW 1.0.1, прямая запись в OKF, классификация, противоречия и обслуживание структуры",
-  "12_CROW_IMPLEMENTATION_PLAN.md": "Пакеты внедрения CROW и прямой редактуры OKF, сценарии приёмки и дополнительные инструменты",
+  "11_CROW_OKF_INTEGRATION.md": "Контракт LBS с CROW/OKF, доступные инструменты автора и границы первой поставки",
+  "12_CROW_IMPLEMENTATION_PLAN.md": "Пакеты реализации, состояние первого контура, проверка на стенде и эксплуатация",
   "13_P0_BASELINE.md": "Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS",
   "p0": "Подробные исходные отчёты P0 и подготовка переноса продуктивного Waiting List"
 }

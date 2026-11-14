@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -46,6 +46,16 @@ def knowledge_repo_root() -> Path:
     return Path(settings.DATA_DIR) / "knowledge_repo"
 
 
+def is_wiki_path(relative_path: str) -> bool:
+    # Reserve the namespace even when a bundle is disabled or its config is broken.
+    return PurePosixPath(relative_path).parts[:2] == ("org", "crow")
+
+
+def _require_legacy_item(item):
+    if item.source_kind == "crow_note" or is_wiki_path(item.knowledge_file_path):
+        raise PermissionDenied("A registered Wiki Note requires Wiki access.")
+
+
 def ensure_knowledge_repo() -> Path:
     root = knowledge_repo_root()
     root.mkdir(parents=True, exist_ok=True)
@@ -75,12 +85,13 @@ def write_knowledge_item_file(
     body: str,
     commit_message: str = "",
 ) -> KnowledgeFileWriteResult:
+    _require_legacy_item(item)
     body = (body or "").strip()
     if not body:
         raise ValidationError("Knowledge file body must not be empty.")
     root = ensure_knowledge_repo()
     relative_path = build_knowledge_file_relative_path(item)
-    target = _safe_repo_path(root, relative_path)
+    target = _safe_legacy_path(root, relative_path)
     payload = KnowledgeFile(metadata=_knowledge_file_metadata(item, body=body), body=body)
     content = render_knowledge_file(payload)
     text_hash = sha256_text(body)
@@ -95,9 +106,11 @@ def write_knowledge_item_file(
             raise ValidationError("Knowledge file hash check failed before replace.")
         os.replace(tmp_path, target)
         _run_git(root, "add", relative_path)
+        paths = [relative_path]
         if (root / "schemas" / "knowledge_file.schema.json").exists():
-            _run_git(root, "add", "schemas/knowledge_file.schema.json")
-        _commit_if_needed(root, commit_message or f"Update knowledge {item.memory_id}")
+            paths.append("schemas/knowledge_file.schema.json")
+            _run_git(root, "add", paths[-1])
+        _commit_if_needed(root, commit_message or f"Update knowledge {item.memory_id}", paths)
         commit_hash = _git_head(root)
 
     item.knowledge_file_path = relative_path
@@ -123,10 +136,11 @@ def write_knowledge_item_file(
 
 
 def read_knowledge_item_file(item: MemoryKnowledgeItem) -> KnowledgeFile:
+    _require_legacy_item(item)
     if not item.knowledge_file_path:
         raise ValidationError(f"Knowledge item {item.memory_id} has no knowledge file path.")
     root = knowledge_repo_root()
-    path = _safe_repo_path(root, item.knowledge_file_path)
+    path = _safe_legacy_path(root, item.knowledge_file_path)
     if not path.exists():
         raise ValidationError(f"Knowledge file for {item.memory_id} is missing.")
     content = path.read_text(encoding="utf-8")
@@ -158,9 +172,10 @@ def knowledge_file_body_hash(item: MemoryKnowledgeItem) -> str | None:
     Used by the reconciler as the content-hash gate: reindex only when the
     file body hash differs from the projection's stored text_hash.
     """
+    _require_legacy_item(item)
     if not item.knowledge_file_path:
         return None
-    path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+    path = _safe_legacy_path(knowledge_repo_root(), item.knowledge_file_path)
     if not path.exists():
         return None
     parsed = parse_knowledge_file(path.read_text(encoding="utf-8"))
@@ -168,6 +183,10 @@ def knowledge_file_body_hash(item: MemoryKnowledgeItem) -> str | None:
 
 
 def read_knowledge_for_actor(*, item: MemoryKnowledgeItem, actor, request_id: str = "") -> dict[str, Any]:
+    if item.source_kind == "crow_note":
+        from .wiki_gateway import read_wiki_memory
+
+        return read_wiki_memory(actor, item=item, request_id=request_id)
     if not can_access_knowledge_item(actor, item):
         raise PermissionDenied("Knowledge item is not available for this user.")
     parsed = read_knowledge_item_file(item)
@@ -186,13 +205,14 @@ def read_knowledge_for_actor(*, item: MemoryKnowledgeItem, actor, request_id: st
 
 
 def verify_knowledge_item_file(item: MemoryKnowledgeItem) -> dict[str, Any]:
+    _require_legacy_item(item)
     parsed = None
     text_hash = ""
     file_hash = ""
     file_exists = False
     error = ""
     if item.knowledge_file_path:
-        path = _safe_repo_path(knowledge_repo_root(), item.knowledge_file_path)
+        path = _safe_legacy_path(knowledge_repo_root(), item.knowledge_file_path)
         file_exists = path.exists()
         if file_exists:
             content = path.read_text(encoding="utf-8")
@@ -238,13 +258,13 @@ def rebuild_knowledge_index(*, scope: str, owner_user_id: int | None = None) -> 
     content = _index_markdown(scope=scope, owner_user_id=owner_user_id, entries=entries)
 
     with knowledge_repo_lock(root):
-        index_path = _safe_repo_path(root, index_relative)
+        index_path = _safe_legacy_path(root, index_relative)
         index_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = index_path.with_name(index_path.name + ".tmp")
         tmp_path.write_text(content, encoding="utf-8")
         os.replace(tmp_path, index_path)
         _run_git(root, "add", index_relative)
-        _commit_if_needed(root, f"Update {scope} knowledge index")
+        _commit_if_needed(root, f"Update {scope} knowledge index", [index_relative])
     return index_relative
 
 
@@ -292,17 +312,18 @@ def rebuild_knowledge_log(*, scope: str, owner_user_id: int | None = None) -> st
         title = "Organization knowledge log"
     log_relative = f"{rel_dir}/{LOG_FILE_NAME}"
 
-    entries = _git_log_entries(root, rel_dir=rel_dir, exclude_relative_paths=(log_relative,))
+    entries = [entry for entry in _git_log_entries_with_paths(root)
+               if _legacy_commit_in_scope(entry, (rel_dir + "/",), exclude=log_relative, allow_schema=True)]
     content = _log_markdown(title=title, entries=entries)
 
     with knowledge_repo_lock(root):
-        log_path = _safe_repo_path(root, log_relative)
+        log_path = _safe_legacy_path(root, log_relative)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = log_path.with_name(log_path.name + ".tmp")
         tmp_path.write_text(content, encoding="utf-8")
         os.replace(tmp_path, log_path)
         _run_git(root, "add", log_relative)
-        _commit_if_needed(root, f"Update {scope} knowledge log")
+        _commit_if_needed(root, f"Update {scope} knowledge log", [log_relative])
     return log_relative
 
 
@@ -334,7 +355,8 @@ def _recent_knowledge_commits(*, limit: int = 50) -> list[dict[str, str]]:
     root = knowledge_repo_root()
     if not (root / ".git").exists():
         return []
-    return _git_log_entries(root, rel_dir=None, exclude_relative_paths=(), limit=limit)
+    return [entry for entry in _git_log_entries_with_paths(root, limit=limit)
+            if _legacy_commit_in_scope(entry, ("",))]
 
 
 def recent_knowledge_commits_for_actor(*, actor, limit: int = 50) -> list[dict[str, str]]:
@@ -362,70 +384,35 @@ def recent_knowledge_commits_for_actor(*, actor, limit: int = 50) -> list[dict[s
     # touching the actor's directory and another user's personal directory is
     # intentionally omitted as a mixed/ambiguous audit entry.
     for entry in _git_log_entries_with_paths(root, limit=max(int(limit) * 4, 50)):
-        paths = entry.pop("paths", ())
-        if not paths or any(not any(path.startswith(prefix) for prefix in allowed_prefixes) for path in paths):
+        if not _legacy_commit_in_scope(entry, tuple(allowed_prefixes)):
             continue
         entries_by_hash.setdefault(entry["hash"], entry)
     return sorted(entries_by_hash.values(), key=lambda item: item.get("date", ""), reverse=True)[: max(int(limit), 1)]
 
 
-def _git_log_entries(
-    root: Path,
-    *,
-    rel_dir: str | None,
-    exclude_relative_paths: tuple[str, ...] = (),
-    limit: int | None = None,
-) -> list[dict[str, str]]:
-    args = ["log", "--no-merges", "--date=iso-strict", "--pretty=format:%h\x1f%ad\x1f%an\x1f%s"]
-    if limit:
-        args += [f"-n{int(limit)}"]
-    pathspecs: list[str] = []
-    if rel_dir is not None:
-        pathspecs.append(rel_dir)
-        for excluded in exclude_relative_paths:
-            pathspecs.append(f":(exclude){excluded}")
-    if pathspecs:
-        args.append("--")
-        args.extend(pathspecs)
-    result = _run_git_optional(root, *args)
-    if result.returncode != 0 or not result.stdout.strip():
-        return []
-    entries = []
-    for line in result.stdout.splitlines():
-        parts = line.split("\x1f")
-        if len(parts) != 4:
-            continue
-        commit_hash, date, author, subject = parts
-        entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject})
-    return entries
+def _legacy_commit_in_scope(entry, prefixes, *, exclude="", allow_schema=False):
+    paths = entry.pop("paths", ())
+    return (any(path != exclude and path.startswith(prefixes) for path in paths)
+            and all(not is_wiki_path(path) and (path.startswith(prefixes) or
+                    (allow_schema and path == "schemas/knowledge_file.schema.json")) for path in paths))
 
 
 def _git_log_entries_with_paths(root: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
-    """Read complete commit path lists for actor-bound privacy filtering."""
-    args = [
-        "log",
-        "--no-merges",
-        "--date=iso-strict",
-        # Start each record with the separator so the following --name-only
-        # paths stay attached to the commit they describe.
-        "--pretty=format:%x1e%h\x1f%ad\x1f%an\x1f%s",
-        "--name-only",
-    ]
+    """NUL-frame exact paths. Mixed Wiki or out-of-scope subjects stay private."""
+    args = ["log", "--no-merges", "--no-renames", "--date=iso-strict", "--name-only", "-z",
+            "--pretty=format:%x00%h%x00%ad%x00%an%x00%s%x00"]
     if limit:
         args.append(f"-n{int(limit)}")
-    result = _run_git_optional(root, *args)
-    if result.returncode != 0 or not result.stdout.strip():
+    result = subprocess.run(["git", *args], cwd=root, capture_output=True)
+    if result.returncode != 0:
         return []
     entries = []
-    for record in result.stdout.split("\x1e"):
-        lines = [line.strip() for line in record.splitlines()]
-        if not lines:
+    for record in result.stdout.lstrip(b"\0").split(b"\0\0\0"):
+        fields = record.split(b"\0", 4)
+        if len(fields) != 5:
             continue
-        parts = lines[0].split("\x1f")
-        if len(parts) != 4:
-            continue
-        commit_hash, date, author, subject = parts
-        paths = tuple(line for line in lines[1:] if line)
+        commit_hash, date, author, subject = (value.decode("utf-8", errors="replace") for value in fields[:4])
+        paths = tuple(os.fsdecode(value) for value in fields[4].removeprefix(b"\n").split(b"\0") if value)
         entries.append({"hash": commit_hash, "date": date, "author": author, "subject": subject, "paths": paths})
     return entries
 
@@ -439,11 +426,22 @@ def _log_markdown(*, title: str, entries: list[dict[str, str]]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _legacy_markdown_paths(root: Path, base_dir: Path):
+    for directory, children, files in os.walk(base_dir, followlinks=False):
+        parent = Path(directory)
+        children[:] = sorted(name for name in children
+                             if not is_wiki_path((parent / name).relative_to(root).as_posix()))
+        for name in sorted(files):
+            path = parent / name
+            if name.endswith(".md") and not path.is_symlink():
+                yield path
+
+
 def _walk_knowledge_files(*, root: Path, base_dir: Path) -> list[tuple[str, dict, str]]:
     entries: list[tuple[str, dict, str]] = []
     if not base_dir.exists():
         return entries
-    for path in sorted(base_dir.rglob("*.md")):
+    for path in _legacy_markdown_paths(root, base_dir):
         if path.name in (INDEX_FILE_NAME, LOG_FILE_NAME):
             continue
         try:
@@ -613,6 +611,13 @@ def _write_schema_file(root: Path) -> None:
     )
 
 
+def _safe_legacy_path(root: Path, relative_path: str) -> Path:
+    path = _safe_repo_path(root, relative_path)
+    if is_wiki_path(path.relative_to(root.resolve()).as_posix()):
+        raise PermissionDenied("Reserved Wiki namespace.")
+    return path
+
+
 def _safe_repo_path(root: Path, relative_path: str) -> Path:
     path = (root / relative_path).resolve()
     root_resolved = root.resolve()
@@ -655,19 +660,13 @@ def _ensure_git_identity(root: Path) -> None:
         _run_git(root, "config", "user.email", "memory-writer@local")
 
 
-def _commit_if_needed(root: Path, message: str) -> None:
-    # Check the STAGED diff specifically (``git diff --cached``), not
-    # ``git status --porcelain``: the working tree can legitimately show
-    # unrelated noise at this point (the always-present, never-committed
-    # ``.knowledge-write.lock`` file; another knowledge file edited directly
-    # on disk but not yet reconciled/staged) while the file(s) we just
-    # ``git add``-ed have no real diff from HEAD (e.g. a no-op index.md
-    # regeneration). Committing on any such noise fails with "nothing added
-    # to commit" / "no changes added to commit".
-    result = _run_git_optional(root, "diff", "--cached", "--quiet")
-    if result.returncode == 0:
-        return
-    _run_git(root, "commit", "-m", message)
+def _commit_if_needed(root: Path, message: str, paths: list[str]) -> None:
+    # A foreign staged edit, including a restricted Wiki file, is not ours to commit.
+    result = _run_git_optional(root, "diff", "--cached", "--quiet", "--", *paths)
+    if result.returncode == 1:
+        _run_git(root, "commit", "--only", "-m", message, "--", *paths)
+    elif result.returncode:
+        result.check_returncode()
 
 
 def _git_head(root: Path) -> str:

@@ -11,8 +11,8 @@
 - Django app `apps.memory` (канон + reconciler + единая очередь + ревью через git + словарь рёбер + заглушки data store) и `apps.filehub` (замороженное автоупорядочивание файлов, вынесено из `apps.memory`);
 - контракты `contracts/ai/memory_sources.json`, `memory_profiles.json`, `memory_routing.json`, `memory_trust_policy.json`, `memory_claims_policy.json`, `memory_retrieval_budget.json`, `memory_ingestion_profiles.json`, `memory_file_organization_profiles.json`, `memory_graph_schema.json` (контролируемый словарь типов рёбер для `relations:`, не LLM-схема);
 - схемы `contracts/schemas/memory_*.schema.json`;
-- AI tool `memory.search` — публичный контракт сокращен до `query`/`limit`/`sensitivity`/`corpus` (ADR-0030 решение 6); `search_mode`/`ranking_profile`/`include_source_data` отклоняются явной ошибкой;
-- pull-reconciler `memory_reconcile` (`--dry-run`, `--force`) и сверка `memory_verify_knowledge_files`;
+- AI tool `memory.search` — параметры `query`/`limit`/`sensitivity`/`corpus` и необязательный `bundle_id` для Wiki (ADR-0030 решение 6); `search_mode`/`ranking_profile`/`include_source_data` отклоняются явной ошибкой;
+- pull-reconciler `memory_reconcile` (`--dry-run`, `--force`, `--wiki-bundle <id>`) и сверка `memory_verify_knowledge_files`;
 - management commands `memory_sync_source`, `memory_reindex`, `memory_eval`, `memory_export_knowledge_files`, `memory_migrate_legacy_knowledge`;
 - фоновые команды над единой очередью `memory_queue_worker`, `knowledge_reflection_worker` (регенерация `index.md`/`log.md`, предложение кандидатов), `memory_file_backed_e2e`, `memory_file_content_search_e2e`;
 - external connector commands `memory_external_enqueue`, `memory_external_worker`, `memory_external_queue_status`, `memory_external_cleanup` (та же таблица-очередь `MemoryExternalConnectorJob`, что и у остальных фоновых задач памяти);
@@ -37,7 +37,7 @@ Runtime data:
 - `data/memory/manifests/` — manifests;
 - `data/memory/external_api/` — normalized landing zone for external information system connectors;
 - `data/memory/queues/` — dev/legacy standalone external connector queue backend;
-- `data/memory/reconcile_state.json` — состояние текущей команды сверки (Git HEAD, наблюдавшийся в начале последнего записанного прохода, и время прохода);
+- `data/memory/reconcile_state.json` — состояние сверки исторического корпуса (Git HEAD, наблюдавшийся в начале последнего записанного прохода, и время прохода);
 - `data/memory/eval/` — eval reports.
 
 Эти runtime data не коммитятся в основной репозиторий кода, но `data/knowledge_repo/` — это отдельный git-репозиторий сам по себе (см. backup ниже).
@@ -148,35 +148,66 @@ cutover.
 
 2. **Файловый backup.** Если удаленный git недоступен (изолированная сеть), делать снимок каталога целиком (включая `.git/`) на резервное хранилище стандартными средствами бэкапа хоста (тот же механизм, что и для `data/db/`, media и прочих runtime data). Файловый backup обязан включать `.git/`, иначе история и возможность `git filter-repo` (см. `docs/guides/MEMORY_USER_GUIDE.md`, «Мягкое удаление») будут потеряны вместе с рабочими файлами.
 
-При восстановлении текущей установки развернуть согласованные резервные копии Git-канона и БД, содержащей карточки и настройки доступа. Затем выполнить `python manage.py memory_reconcile --dry-run` и `python manage.py memory_reconcile --force`. Текущая команда читает файлы рабочего дерева по путям уже зарегистрированных **активных** карточек. Флаг `--force` обходит проверку хеша/метаданных для этих карточек. Он не создаёт карточки неизвестных файлов и не гасит карточки отсутствующих файлов. Отметка `last_commit` сохраняется для диагностики, а не заменяет опись раздела. При пустой БД один Git clone и этот флаг не восстанавливают проекцию с нуля.
+При восстановлении текущей установки развернуть согласованные резервные копии Git-канона и БД, содержащей карточки и настройки доступа. Затем выполнить `python manage.py memory_reconcile --dry-run` и `python manage.py memory_reconcile --force`. Для исторических страниц команда читает файлы рабочего дерева по путям уже зарегистрированных **активных** карточек. Флаг `--force` обходит проверку хеша/метаданных для этих карточек. Он не создаёт карточки неизвестных файлов и не гасит карточки отсутствующих файлов. Отметка `last_commit` сохраняется для диагностики, а не заменяет опись раздела. При пустой БД восстановление исторических карточек требует бэкапа БД. Зарегистрированные разделы OKF отдельно поддерживают полную пересборку из Git при восстановленных пользователях, настройках доступа и источниках.
 
-## Запуск reconciler: старт, таймер, после записи
+## Подключение раздела OKF
 
-`memory_reconcile` обязан выполняться в трех точках эксплуатации:
+Регистрация по умолчанию пуста. Для первого стенда используйте новый тестовый раздел, синтетические материалы и отдельного технического пользователя Django для поля `created_by` у восстанавливаемых карточек. Присвоение пользователю этой роли не выдаёт ему прав на статьи и не свидетельствует об авторстве их содержания. Пример для нового технического пользователя с отключённым входом:
 
-1. **При старте** приложения/деплоя (после `migrate`, до открытия трафика) — сверяет содержимое уже зарегистрированных активных страниц после простоя:
+```bash
+python manage.py migrate --noinput
+python manage.py shell -c 'from django.contrib.auth import get_user_model; u, created = get_user_model().objects.get_or_create(username="wiki-projection", defaults={"is_active": False}); print(u.pk)'
+```
 
-   ```bash
-   python manage.py memory_reconcile
-   ```
+В приватном env-файле хоста (`deployments/<host>/.env` в типовой Docker-установке) задайте переменные для web-процесса и запускаемых им команд. Ниже `42` — пример ID технического пользователя, `17` — пример ID существующего активного автора теста. Подставьте фактические значения. После изменения конфигурации пересоздайте процесс с новым окружением и повторите сверку.
 
-2. **По таймеру** (cron/systemd timer/планировщик Windows) — периодический проход подхватывает изменения зарегистрированных активных страниц. Пропущенные операции других очередей проверяются в соответствующем обработчике:
+```dotenv
+LOCAL_BUSINESS_WIKI_BUNDLES='{"manuals":{"path":"org/crow/manuals","projection_user_id":42,"read_tokens":["user:17"],"write_tokens":["user:17"],"note_read_tokens":{},"sensitivity":"internal","model_context":true}}'
+LOCAL_BUSINESS_WIKI_SEARCH=basic
+```
 
-   ```bash
-   */5 * * * *  cd /path/to/project && .venv/bin/python manage.py memory_reconcile
-   ```
+Путь раздела относителен к runtime-репозиторию знаний, по умолчанию `data/knowledge_repo`. Если тестовый репозиторий новый, создайте его в предназначенном для стенда каталоге командой `git init <каталог>`. В существующем checkout убедитесь, что выбрали правильный Git-корень. Ниже пример для **нового** `org/crow/manuals` внутри подтверждённого репозитория. Используйте настроенную в этом репозитории Git identity оператора. Существующие файлы раздела сохраняйте.
 
-   Периодичность подбирается под допустимое окно рассинхронизации (concept v0.5 §7.1: мягкая деградация между правкой и reconcile, не ошибка) — 5 минут является разумной отправной точкой.
+```bash
+repo="${LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR:-${LOCAL_BUSINESS_DATA_DIR:-data}/knowledge_repo}"
+git -C "$repo" rev-parse --show-toplevel
+mkdir -p "$repo/org/crow/manuals"
+test ! -e "$repo/org/crow/manuals/index.md" && printf '%s\n' '---' 'okf_version: "0.2"' '---' '' '# Notes' > "$repo/org/crow/manuals/index.md"
+git -C "$repo" add -- org/crow/manuals/index.md
+git -C "$repo" commit --only -m "Initialize manuals OKF bundle" -- org/crow/manuals/index.md
+git -C "$repo" rev-parse HEAD
 
-3. **После записи** — `memory.remember` уже индексирует инлайн в рамках синхронного вызова (см. `docs/architecture/MEMORY_MVP_CURRENT_STATE.md`), поэтому отдельный `memory_reconcile` после каждой записи не обязателен для штатного пути. Он остается нужен после операций, которые меняют канон в обход `memory.remember`: прямая правка файла администратором/автором, `git pull` изменений с другого узла, восстановление из backup, ручное слияние pending-страницы через `/memory/review/pending/` (хотя `accept_pending_item`/`reject_pending_item` сами коммитят, дальнейший `memory_reconcile` подтверждает консистентность проекции).
+python manage.py memory_reconcile --wiki-bundle manuals --dry-run
+python manage.py memory_reconcile --wiki-bundle manuals --force
+python manage.py ai_skill_list
+```
 
-Для текущего рабочего дерева согласовывайте запись администратора с проходом сверки. Команда содержит отдельные операции с `knowledge_repo_lock`, но не удерживает блокировку вокруг всего обхода. Она также обновляет legacy-рёбра и генерируемые `index.md`/`log.md`. Их запись может создать Git-коммит. Существующий общий Git index с чужими staged-правками нельзя считать изолированным.
+Стартовый `index.md` закрепляет существование пустого раздела в Git. Опись подтверждённого пустого дерева позволяет снять исчезнувшие Notes. Отсутствующий путь или недоступный Git-корень дают ошибку и сохраняют карточки. `--dry-run` показывает `created/updated/moved/deleted`, статус и SHA. `--force` перечитывает зафиксированную ревизию и пересобирает карточки. Успех обозначается `status: ready` с полным SHA. БД хранит состояние последнего прохода в `WikiBundleCheckpoint`. Если владелец получил `index_pending` после успешной правки, нужно повторить сверку и проверить возвращённый SHA. Повторной публикации Markdown не требуется.
 
-### Целевой режим нового CROW/OKF-раздела
+**Движок и модель.** Для `basic` достаточно стандартного web-образа. Для CROW установите в Python-среде Django `python -m pip install -r requirements-crow.txt` либо соберите web-образ с аргументом `LBS_WITH_CROW=1`. Пример для штатного production Compose при заданном `LOCAL_BUSINESS_ENV_FILE`:
 
-Этот режим запланирован как расширение той же команды. Работу хоста в нём принимать по [пакетам CROW-03 и CROW-04](../architecture/lbs-factory/12_CROW_IMPLEMENTATION_PLAN.md). Для первого тестового внедрения используется чистый раздел OKF, прежней внедрённой Wiki нет. В целевом режиме хост при успешной непустой записи делает один коммит своих изменений одной разрешённой области. Внешний редактор фиксирует правки обычным Git-процессом проекта. Опись берёт из отслеживаемой ветки только зафиксированные Note. Сверка CROW-раздела обновляет производные данные, не публикует файлы и не включает сторонние изменения в коммит. Уходить с существующего операционного порядка на этот режим можно после проверки установленной реализации.
+```bash
+docker compose -f docker-compose.prod.yml build --build-arg LBS_WITH_CROW=1 web
+docker compose -f docker-compose.prod.yml up -d --no-deps web
+```
 
-После включения проверенного режима CROW запускать `memory_reconcile` после коммита хоста, после получения внешнего коммита, при старте и по тому же таймеру. Пропущенный запуск, незавершённую индексацию и изменение HEAD во время обхода отрабатывает повтор. Для диагностики использовать `--dry-run`. После восстановления канона и правил доступа `--force` должен восстанавливать **проекции CROW-раздела** с нуля по полной описи одного SHA. Только успешная опись даёт основание погасить исчезнувшую страницу. Практическая проверка — новая Note находится по слову из её тела, после переноса сохраняет идентичность, после удаления исчезает из поиска. Кроме Git и правил доступа восстановить требуемые версии первоисточников и вспомогательные CROW `raw/.archive/.llmw2/sync` по политике хоста.
+Для этой сборки укажите `LOCAL_BUSINESS_WIKI_SEARCH=crow` в окружении web. Это значение по умолчанию для выбора движка; аргумент сборки по умолчанию равен `0`. Поиск BM25 CROW 1.0.1 работает без модели и ключей. Установка пакета не включает классификацию автоматически. Для `knowledge.compare` настройте совместимый локальный сервер, укажите `LOCAL_BUSINESS_WIKI_DECISION_PROVIDER=custom`, `LOCAL_BUSINESS_WIKI_DECISION_URL=http://127.0.0.1:<порт>/v1` и `LOCAL_BUSINESS_WIKI_DECISION_MODEL=<имя модели на сервере>`. Loopback относится к сетевому пространству web-процесса. Запросы к внешнему JEV через шлюз закрыты. При отсутствии модели поиск, чтение и запись сохраняются.
+
+**Проверка от лица автора.** Вызовите `knowledge.search` без аргументов, затем с `bundle_id=manuals`. `knowledge.source` выдаёт допустимый фрагмент зарегистрированного объекта и `source_ref` с полями `source_code`, `source_object_id`, `text_hash`. Внесите эту ссылку в `source_refs` создаваемой Note. `knowledge.edit` принимает `bundle_id`, полный SHA из последнего чтения в `expected_revision` и объект `files` с полным Markdown по относительным путям. После записи найдите слово из тела через `knowledge.search` или `memory.search` с `corpus=knowledge` и `bundle_id=manuals`, прочитайте статью через `knowledge.get`. Для `knowledge.compare` передайте `left_id` и либо `right_id`, либо `proposed_text` и проверенный `source_ref`.
+
+**Границы первого контура.** Пустой `note_read_tokens` допускает однородный раздел. Ограничения отдельных ID сужают права чтения; для смешанного по ACL раздела шлюз закрывает запись. Источник должен разрешать текст самому пользователю, всей аудитории раздела и маршруту передачи данных. У `workorders` и `waiting_list` доступ проверяется динамическим адаптером: в пилоте проще использовать именованные `user:<id>`, для каждого проверяются действующие права. Широкий групповой раздел требует совместимого источника с подтверждённой областью доступа. Недоступное основание, несогласованный хеш, закрытый статус, неизвестная политика или локальный профиль `confidential` исключают материал из выдачи чат-агенту. Шлюз использует актуальное безопасное текстовое представление. Нативные `sources`/raw, архив, история, изменение статуса и ingest файла CROW в этом контуре не доступны. При отдельном использовании upstream защищённые `raw/.archive/.llmw2` требуют собственного режима хранения и восстановления.
+
+## Запуск сверки при старте и по расписанию
+
+После успешного `knowledge.edit` шлюз запускает сверку своего раздела; для `memory.remember` действует синхронная индексация исторических страниц. Для внешнего коммита сначала получите его по принятому процессу Git на хосте, затем запустите `python manage.py memory_reconcile --wiki-bundle manuals`. Сверка всегда берёт текущий локальный HEAD. Сама команда не выполняет pull и push.
+
+В поставке нет установленного таймера или автоматического запуска `memory_reconcile` из production entrypoint. Оператор включает запуск после `migrate` при старте и повтор по расписанию под той же учётной записью и с тем же окружением, что у web. Для Docker это может быть cron хоста; пример для одного раздела, интервал 5 минут можно изменить:
+
+```cron
+*/5 * * * * cd /srv/lbs && LOCAL_BUSINESS_ENV_FILE=/srv/lbs/deployments/HOST/.env docker compose -f docker-compose.prod.yml exec -T web python manage.py memory_reconcile --wiki-bundle manuals
+```
+
+Укажите фактические пути и проверьте первый запуск и журнал ошибок. Вариант без `--wiki-bundle` обрабатывает исторические страницы и все зарегистрированные разделы. Только для исторического корпуса при этом регенерируются Git-артефакты навигации и журнала. Проектор OKF пишет производные данные в Django, сохраняя Git канона без изменений.
 
 ## Откат этапа 1 (file canon authoritative)
 

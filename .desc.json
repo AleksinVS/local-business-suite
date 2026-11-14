@@ -32,5 +32,6 @@
   ".env.example": "Шаблон переменных окружения",
   ".gitignore": "Исключения из Git",
   ".dockerignore": "Исключения из Docker build context",
-  "pytest.ini": "Конфигурация pytest"
+  "pytest.ini": "Конфигурация pytest",
+  "requirements-crow.txt": "Необязательная зависимость Django для BM25 и типизированного классификатора CROW 1.0.1"
 }

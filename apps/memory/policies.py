@@ -187,6 +187,8 @@ def can_view_memory_access_audit(user) -> bool:
 
 
 def can_review_scoped_search_document(user, document: MemorySearchDocument) -> bool:
+    if document.knowledge_item_id and document.knowledge_item.source_kind == "crow_note":
+        return False
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None:
         return False
@@ -260,6 +262,8 @@ def scope_tokens_match(required_tokens, allowed_tokens) -> bool:
 
 
 def can_access_search_document(user, document: MemorySearchDocument, *, snapshots=None, profile=None) -> bool:
+    if document.knowledge_item_id and document.knowledge_item.source_kind == "crow_note":
+        return False
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None:
         return False
@@ -285,6 +289,8 @@ def can_access_search_document(user, document: MemorySearchDocument, *, snapshot
 
 
 def can_access_knowledge_item(user, item) -> bool:
+    if getattr(item, "source_kind", "") == "crow_note":
+        return False
     actor = resolve_active_actor(user, force_refresh=True)
     if actor is None:
         return False

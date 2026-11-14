@@ -301,6 +301,9 @@ def _index_knowledge_item_locked(
     index_backends=("fulltext", "vector"),
     snapshots=None,
 ):
+    if item.source_kind == "crow_note":
+        # CROW search is built from authorized committed blobs, never the legacy vector index.
+        return {"document_ids": [], "fact_ids": [], "knowledge_id": item.memory_id, "skipped": "wiki_projection"}
     lifecycle = str((item.metadata or {}).get("lifecycle") or "current")
     if lifecycle != "current":
         # ADR-0030 decisions 4 & 8: a page proposed via the git

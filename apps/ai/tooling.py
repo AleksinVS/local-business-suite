@@ -213,11 +213,14 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         return {"device": archive_device_for_actor(actor=actor, payload=payload)}
     elif tool_code == "analytics.summary":
         return get_analytics_summary_for_actor(actor=actor, payload=payload)
+    elif tool_code.startswith("knowledge."):
+        from apps.memory.wiki_gateway import wiki_tool
+
+        return wiki_tool(tool_code.split(".", 1)[1], actor, payload)
     elif tool_code == "memory.search":
         from apps.memory.retrieval import memory_search
 
-        # ADR-0030 decision 6: the public memory.search contract exposes only
-        # corpus + limit (see apps/ai/tool_definitions.py, contracts/ai/tools.json).
+        # ADR-0030 decision 6: corpus and an optional Wiki bundle select content.
         # ranking_profile/search_mode/include_source_data and raw channel
         # weights were removed from the public surface; reject them explicitly
         # rather than silently ignoring a caller that still sends them.
@@ -225,10 +228,16 @@ def _dispatch_tool(*, tool_code, actor, session, actor_context, payload, user_me
         if removed_keys:
             raise ValidationError(
                 "memory.search больше не принимает параметры выбора профиля/весов ранжирования: "
-                f"{', '.join(sorted(removed_keys))}. Публичный контракт сокращен до corpus и limit "
+                f"{', '.join(sorted(removed_keys))}. "
                 "(ADR-0030 решение 6; профили ранжирования ADR-0016 — отложенный долг)."
             )
         corpus = _normalize_memory_search_corpus(payload.get("corpus"))
+        if "bundle_id" in payload:
+            from apps.memory.wiki_gateway import search_wiki_memory
+
+            return search_wiki_memory(actor, bundle_id=payload["bundle_id"], corpus=corpus,
+                                      query=payload.get("query"), sensitivity=payload.get("sensitivity"),
+                                      limit=payload.get("limit", 5), request_id=actor_context.get("request_id", ""))
         return memory_search(
             actor=actor,
             query=payload.get("query"),
@@ -502,12 +511,13 @@ def execute_tool(
                 payload=payload,
                 user_message=user_message,
             )
+        stored_result = _audit_result(tool_code, result)
         append_chat_message(
             session=session,
             role=ChatMessage.Role.TOOL,
             content=f"Tool {tool_code} executed successfully.",
             tool_name=tool_code,
-            metadata={**{"result_preview": result}, **trace_context},
+            metadata={**{"result_preview": stored_result}, **trace_context},
         )
         record_action(
             actor=actor,
@@ -515,7 +525,7 @@ def execute_tool(
             action_kind=tool["mode"],
             status=AgentActionLog.Status.SUCCEEDED,
             request_payload=audit_request_payload,
-            response_payload={**trace_context, **result},
+            response_payload={**trace_context, **stored_result},
             session=session,
             message=user_message,
         )
@@ -918,7 +928,7 @@ def _finalize_pending_action_success(*, pending, result, trace_context, audit_re
             action_kind=pending.action_kind,
             status=AgentActionLog.Status.SUCCEEDED,
             request_payload=audit_request_payload,
-            response_payload={**trace_context, **result},
+            response_payload={**trace_context, **_audit_result(pending.tool_code, result)},
             session=pending.session,
             message=None,
         )
@@ -929,7 +939,7 @@ def _finalize_pending_action_success(*, pending, result, trace_context, audit_re
                 content=f"Tool {pending.tool_code} executed after confirmation.",
                 tool_name=pending.tool_code,
                 metadata={
-                    "result_preview": result,
+                    "result_preview": _audit_result(pending.tool_code, result),
                     "pending_token": str(pending.token),
                     **trace_context,
                 },
@@ -962,7 +972,7 @@ def _record_pending_action_reconciliation(
                     **trace_context,
                     "dispatch_succeeded": True,
                     "reconciliation_required": True,
-                    "result_preview": result,
+                    "result_preview": _audit_result(pending.tool_code, result),
                 },
                 session=pending.session,
                 message=None,
@@ -1070,8 +1080,19 @@ def _pending_action_response(
     }
 
 
+def _audit_result(tool_code, result):
+    if tool_code == "memory.search" and result.get("meta", {}).get("search_mode") == "wiki_bundle":
+        return {"revision": result["meta"].get("revision", "")}
+    if tool_code.startswith("knowledge."):
+        return {key: result[key] for key in ("revision", "committed", "index_status") if key in result}
+    return result
+
+
 def _build_audit_request_payload(*, tool_code, payload, trace_context, command_context=None):
     safe_payload = dict(payload or {})
+    if tool_code.startswith("knowledge.") or (tool_code == "memory.search" and "bundle_id" in safe_payload):
+        # Permissions may later be revoked. Do not copy source text into chat or audit history.
+        safe_payload = {}
     if tool_code in {"memory.remember", "memory.update_personal"}:
         for key in ("user_note", "new_text"):
             if key in safe_payload:

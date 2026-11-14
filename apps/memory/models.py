@@ -737,3 +737,13 @@ class MemoryEvalCase(models.Model):
 
     def __str__(self):
         return self.code
+
+
+class WikiBundleCheckpoint(models.Model):
+    """Last completely applied Git revision and current projection health."""
+    bundle_id = models.CharField(max_length=160, unique=True)
+    revision = models.CharField(max_length=64, blank=True)
+    policy_hash = models.CharField(max_length=64, blank=True)
+    status = models.CharField(max_length=16, default="pending")
+    error = models.CharField(max_length=64, blank=True)
+    conflicting_ids = models.JSONField(default=list, blank=True)

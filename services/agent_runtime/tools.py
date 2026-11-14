@@ -196,12 +196,48 @@ def build_tools(
         )
         return result
 
+    def wiki_call(action, payload):
+        return gateway_client.execute_tool(
+            tool_code="knowledge." + action, actor=actor, payload=payload,
+            session_id=session_id, conversation_id=conversation_id, request_id=request_id,
+            origin_channel=origin_channel, actor_version=actor_version,
+        )
+
+    @tool("knowledge.search")
+    def wiki_search(bundle_id: str = "", query: str = "", limit: int = 8) -> dict:
+        """List accessible wiki bundles, browse a bundle, or search published articles by content."""
+        return wiki_call("search", {"bundle_id": bundle_id, "query": query, "limit": limit})
+
+    @tool("knowledge.get")
+    def wiki_get(bundle_id: str, knowledge_id: str = "", path: str = "") -> dict:
+        """Read a published OKF Note by stable ID or follow its bundle-relative path."""
+        return wiki_call("get", {"bundle_id": bundle_id, "knowledge_id": knowledge_id, "path": path})
+
+    @tool("knowledge.source")
+    def wiki_source(bundle_id: str, source_code: str, source_object_id: str) -> dict:
+        """Read a source projection authorized for this bundle and get its versioned citation."""
+        return wiki_call("source", {"bundle_id": bundle_id, "source_code": source_code,
+                                   "source_object_id": source_object_id})
+
+    @tool("knowledge.edit")
+    def wiki_edit(bundle_id: str, expected_revision: str, files: dict[str, str | None]) -> dict:
+        """Write complete connected articles in one edit. Paths are bundle-relative; null removes a Note."""
+        return wiki_call("edit", {"bundle_id": bundle_id, "expected_revision": expected_revision, "files": files})
+
+    @tool("knowledge.compare")
+    def wiki_compare(bundle_id: str, left_id: str, right_id: str = "", proposed_text: str = "",
+                    source_ref: dict[str, str] | None = None) -> dict:
+        """Compare two published articles or classify a proposed change with its verified source_ref."""
+        return wiki_call("compare", {"bundle_id": bundle_id, "left_id": left_id, "right_id": right_id,
+                                    "proposed_text": proposed_text, "source_ref": source_ref})
+
     @tool("memory.search")
     def search_memory(
         query: str,
         limit: int = 5,
         sensitivity: str = "internal",
         corpus: str = "knowledge",
+        bundle_id: str | None = None,
     ) -> dict:
         """
         Search the safe memory corpus for cited context available to the current user.
@@ -214,7 +250,8 @@ def build_tools(
         indexed files or source documents). There is a single ranking profile
         (hybrid full-text + vector, RRF fusion) — it is not a parameter. The
         tool returns only safe chunks/facts with citations; it does not
-        expose raw snapshots.
+        expose raw snapshots. Pass bundle_id to restrict knowledge retrieval to published
+        articles in that authorized Wiki bundle. Omit it for the ordinary memory corpus.
         """
         result = gateway_client.execute_tool(
             tool_code="memory.search",
@@ -224,6 +261,7 @@ def build_tools(
                 "limit": limit,
                 "sensitivity": sensitivity,
                 "corpus": corpus,
+                **({"bundle_id": bundle_id} if bundle_id is not None else {}),
             },
             session_id=session_id,
             conversation_id=conversation_id,
@@ -433,6 +471,7 @@ def build_tools(
         comment_workorder,
         list_departments,
         list_devices,
+        wiki_search, wiki_get, wiki_source, wiki_edit, wiki_compare,
         search_memory,
         remember_memory,
         update_personal_memory,

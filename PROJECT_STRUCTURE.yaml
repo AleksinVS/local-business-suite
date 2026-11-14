@@ -22,6 +22,8 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
   ai: # Панель управления чат-агентом, шлюз инструментов и аудит AI
     management: # Management command package for AI chat runtime data
       commands: file
+    tests: # Тесты шлюза и UI чат-агента
+      test_wiki_tools.py: file # Сквозные сценарии инструментов Wiki через агентский шлюз, ACL, сравнение и аудит
     ui_runtime: # Общий runtime-слой AI UI: выбор драйвера, actor context, подпись и config payload
       __init__.py: file # Инициализация пакета общего AI UI runtime
       actor.py: file # Создание и HMAC-подпись actor/session payload для UI-драйверов
@@ -117,6 +119,13 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты инвентаря
     views.py: file # Представления CRUD устройств со scoped read querysets
   memory: # Метаданные AI memory service: sources, search documents, knowledge items, jobs, audit and eval cases
+    migrations: # Миграции моделей памяти
+      0025_wikibundlecheckpoint.py: file # Хранение последней применённой ревизии, ошибок и конфликтующих ID раздела Wiki
+    tests: # Тесты сервиса памяти
+      test_crow_provider.py: file # Ограниченный корпус BM25 и типизированный классификатор CROW
+      test_wiki_files.py: file # Изоляция изменений хоста в Git, повтор, конфликты, навигация и сохранность файлов
+      test_wiki_reconcile.py: file # Опись Git, изменение проекций, конфликты ID, карантин, повтор и изоляция старой памяти
+      test_wiki_sources.py: file # Проверка разрешённого источника, версии текста, аудитории и доступа до передачи
     access_services.py: file # Подписанный preview/apply-сервис экспертных назначений технических групп памяти с отдельным аудитом
     acl.py: file # ACL inheritance resolver и fail-closed mapping file ACL metadata в portal scope tokens
     admin.py: file # Регистрация моделей памяти в Django Admin
@@ -125,6 +134,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     chat_memory.py: file # Синхронный memory.remember (файл+commit+индекс), personal/org chat knowledge writer path, organization candidacy (pending pages) и reflection
     config_documents.py: file # Спецификации документов памяти и FileHub в типизированном реестре настроек
     contracts.py: file # Валидаторы доменных контрактов памяти (sources, profiles, routing, trust/claims policy, retrieval budget, graph schema, ingestion и file organization), вынесенные из apps.core.json_utils (правила 3/5 AGENTS.md)
+    crow_provider.py: file # Адаптер закреплённого CROW для поиска BM25 по разрешённым статьям и типизированных сравнений
     deidentification.py: file # Детерминированная деидентификация и редактирование PII перед индексированием
     document_ingestion.py: file # Discovery/ingestion корпоративных документов из local/UNC источников и issue queue (graph schema bootstrapping/extraction helpers удалены, ADR-0030 решение 3)
     embeddings.py: file # Локальные embedding providers для векторного индекса памяти: deterministic test profile и optional SentenceTransformers
@@ -151,6 +161,11 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты UI ревью памяти под /memory/review/ (контур File Source Auto Organization вынесен в apps.filehub, ADR-0030 решение 5)
     vector_backends.py: file # Backend-neutral vector/full-text interface, PostgreSQL FTS, SQLite FTS5 fallback and LanceDB vector backend
     views.py: file # Django views рабочего UI ревью памяти и поискового индекса
+    wiki_config.py: file # Операторский реестр разделов OKF, токенов доступа и устойчивых ID
+    wiki_files.py: file # Изолированная фиксация авторских правок OKF, ссылок и навигации в одном коммите
+    wiki_gateway.py: file # Чтение, поиск, сравнение и редактирование разрешённой Wiki от лица агента
+    wiki_reconcile.py: file # Опись Notes по Git SHA и атомарное восстановление карточек Wiki и состояния раздела
+    wiki_sources.py: file # Доступный проверенный фрагмент источника и воспроизводимая ссылка для статьи
   notifications: # Домен пользовательских уведомлений: серверная очередь, получатели, настройки, браузерные клиенты и API
     admin.py: file # Регистрация моделей уведомлений в Django Admin
     apps.py: file # Конфигурация приложения уведомлений
@@ -311,6 +326,7 @@ config: # Конфигурация Django и JSON-контракты
   wsgi.py: file # WSGI-точка входа
 contracts: # Версионируемые default-контракты; runtime-копии создаются в data/contracts/
   ai: # Default AI-контракты, которые читает Django и agent runtime
+    skills: directory... # Инструкции подключаемых навыков агента, включая wiki-author/SKILL.md для авторов тематических статей
     chat_settings.json: file # Общий runtime contract настроек основного и встроенного AI-чата
     memory_claims_policy.json: file # Политика жизненного цикла claims/beliefs памяти
     memory_file_organization_profiles.json: file # Дефолтные профили автоупорядочивания файловых источников без host-specific путей
@@ -439,8 +455,8 @@ docs: # Документация проекта
       08_ACCESS_MIGRATION_AND_TESTS.md: file # Миграция Access и негативные тесты CROW пространств/Note/raw
       09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md: file # Прогрессивная Factory: два Wiki-профиля LBS/CROW и условный OpenFGA
       10_CONTENT_PRIVACY_PIPELINE.md: file # Access/secret/egress gate, выбранные политики назначения, пост-генерационная проверка CROW, открытый PII/Git долг
-      11_CROW_OKF_INTEGRATION.md: file # Контракт адаптеров CROW 1.0.1, прямая запись в OKF, классификация, противоречия и обслуживание структуры
-      12_CROW_IMPLEMENTATION_PLAN.md: file # Пакеты внедрения CROW и прямой редактуры OKF, сценарии приёмки и дополнительные инструменты
+      11_CROW_OKF_INTEGRATION.md: file # Контракт LBS с CROW/OKF, доступные инструменты автора и границы первой поставки
+      12_CROW_IMPLEMENTATION_PLAN.md: file # Пакеты реализации, состояние первого контура, проверка на стенде и эксплуатация
       13_P0_BASELINE.md: file # Исходная точка перехода Factory: зависимости, исходные права, privacy, локальные проверки и открытая проверка Windows/IIS
     agent-wiki-architecture.md: file # Переносимая архитектура проектной вики с агентом, навыком автора и CROW
     AI_UI_PROTOCOL_FOUNDATION_PLAN.md: file # План версионируемой основы AI UI протоколов для CopilotKit и самописного интерфейса
@@ -485,7 +501,7 @@ docs: # Документация проекта
     DEPLOYMENT.md: file # Основной гайд по деплою (Docker + VPS)
     DESKTOP_NOTIFIER_DEPLOYMENT.md: file # Инструкция сборки и распространения Tauri-клиента уведомлений
     IIS_SSO.md: file # Настройка IIS с Windows Authentication SSO
-    MEMORY_DEPLOYMENT.md: file # Развертывание, runtime contracts и smoke-проверки системы памяти
+    MEMORY_DEPLOYMENT.md: file # Развёртывание памяти и OKF Wiki, настройка прав, Git-канона, CROW и запуска сверки
     POSTGRESQL_MIGRATION.md: file # Runbook миграции основного репозитория с SQLite на одну PostgreSQL database
     SETTINGS_CENTER_DEPLOYMENT.md: file # Deployment note для Settings Center, env proposals, migrations и restart semantics
     SETTINGS_DOCUMENTS_MIGRATION.md: file # Runbook безопасного plan/apply/export переноса legacy JSON overrides в RuntimeSettingDocument
@@ -932,6 +948,7 @@ manage.py: file # Точка входа Django CLI
 package-lock.json: file # Lock-файл Node.js зависимостей
 package.json: file # Node.js зависимости и npm-скрипты: Playwright, CopilotKit React bundle, CopilotKit runtime
 pytest.ini: file # Конфигурация pytest
+requirements-crow.txt: file # Необязательная зависимость Django для BM25 и типизированного классификатора CROW 1.0.1
 requirements-dev.lock: file # Зафиксированные версии средств разработки и тестирования
 requirements-dev.txt: file # Средства локальной разработки и тестирования поверх runtime-зависимостей
 requirements.lock: file # Lock-файл зависимостей (pip-compile)

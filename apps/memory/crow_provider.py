@@ -38,8 +38,8 @@ def _load_crow():
         import llmw2
     except ImportError as exc:
         raise CrowUnavailable("Install the optional requirements-crow.txt dependency.") from exc
-    if getattr(llmw2, "__version__", None) != "1.0.1":
-        raise CrowUnavailable("This adapter supports llmwiki2==1.0.1.")
+    if getattr(llmw2, "__version__", None) != "1.0.5":
+        raise CrowUnavailable("This adapter supports llmwiki2==1.0.5.")
     return llmw2
 
 
@@ -48,7 +48,7 @@ def search_crow_pages(query: str, pages: Sequence[CrowPage], *, limit: int = 8) 
     if not query.strip() or limit < 1:
         raise ValueError("Provide a non-empty query and a positive search limit.")
     crow = _load_crow()
-    # 1.0.1's public Wiki.search loads a whole bundle. NoteSearch is the pinned
+    # 1.0.5's public Wiki.search loads a whole bundle. NoteSearch is the pinned
     # internal implementation that Wiki.search uses after loading its candidates.
     from llmw2.search import NoteSearch
 

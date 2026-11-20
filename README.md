@@ -281,7 +281,7 @@ Runtime-данные не коммитятся:
 - `docs/architecture/lbs-factory/09_PROGRESSIVE_COMPLEXITY_AND_OPENFGA.md` — немедленная запись Wiki, неблокирующий реестр подтверждений, условное подключение OpenFGA.
 - `docs/architecture/lbs-factory/10_CONTENT_PRIVACY_PIPELINE.md` — согласованная граница Access/secret/egress и выбор профилей обработки; обязательность обезличивания всех ПДн не принята.
 - `docs/architecture/lbs-factory/03_LLM_WIKI.md` — автор редактирует тематические OKF-страницы в разрешённой области. Поиск и подготовка контекста учитывают права на страницу и источники.
-- `docs/architecture/lbs-factory/11_CROW_OKF_INTEGRATION.md` — штатный CROW 1.0.1 для поиска, классификации, работы с источниками, подсказок о противоречиях и реструктуризации.
+- `docs/architecture/lbs-factory/11_CROW_OKF_INTEGRATION.md` — штатный CROW 1.0.5: подключены поиск и сравнение через адаптеры LBS; нативный импорт, raw, архив и реструктуризация остаются отдельными задачами.
 - `docs/architecture/lbs-factory/12_CROW_IMPLEMENTATION_PLAN.md` — исполнительный план авторской записи и подключения CROW, проверок качества, прав и восстановления.
 - `docs/adr/ADR-0051-crow-pluggable-okf-knowledge-provider.md` — принятое решение о CROW/OKF в редакции 2026-11-13.
 - `docs/planning/active/knowledge-personal-data-git-policy-debt.md` — открытый архитектурный долг по персональным данным в знаниях и Git.

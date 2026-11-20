@@ -1,5 +1,7 @@
 from langchain.tools import tool
 
+from apps.ai.tool_definitions import get_tool_registry
+
 from .config import get_effective_tool_policies, normalize_priority, normalize_status
 from .gateway_client import DjangoGatewayClient
 
@@ -19,6 +21,7 @@ def build_tools(
     Build LangChain tools with identity/correlation context.
     """
     current_session_id = session_id
+    tool_registry = get_tool_registry()
 
     @tool("ui.get_current_context")
     def get_current_context() -> dict:
@@ -203,28 +206,28 @@ def build_tools(
             origin_channel=origin_channel, actor_version=actor_version,
         )
 
-    @tool("knowledge.search")
+    @tool("knowledge.search", description=tool_registry["knowledge.search"]["description"])
     def wiki_search(bundle_id: str = "", query: str = "", limit: int = 8) -> dict:
         """List accessible wiki bundles, browse a bundle, or search published articles by content."""
         return wiki_call("search", {"bundle_id": bundle_id, "query": query, "limit": limit})
 
-    @tool("knowledge.get")
+    @tool("knowledge.get", description=tool_registry["knowledge.get"]["description"])
     def wiki_get(bundle_id: str, knowledge_id: str = "", path: str = "") -> dict:
         """Read a published OKF Note by stable ID or follow its bundle-relative path."""
         return wiki_call("get", {"bundle_id": bundle_id, "knowledge_id": knowledge_id, "path": path})
 
-    @tool("knowledge.source")
+    @tool("knowledge.source", description=tool_registry["knowledge.source"]["description"])
     def wiki_source(bundle_id: str, source_code: str, source_object_id: str) -> dict:
         """Read a source projection authorized for this bundle and get its versioned citation."""
         return wiki_call("source", {"bundle_id": bundle_id, "source_code": source_code,
                                    "source_object_id": source_object_id})
 
-    @tool("knowledge.edit")
+    @tool("knowledge.edit", description=tool_registry["knowledge.edit"]["description"])
     def wiki_edit(bundle_id: str, expected_revision: str, files: dict[str, str | None]) -> dict:
         """Write complete connected articles in one edit. Paths are bundle-relative; null removes a Note."""
         return wiki_call("edit", {"bundle_id": bundle_id, "expected_revision": expected_revision, "files": files})
 
-    @tool("knowledge.compare")
+    @tool("knowledge.compare", description=tool_registry["knowledge.compare"]["description"])
     def wiki_compare(bundle_id: str, left_id: str, right_id: str = "", proposed_text: str = "",
                     source_ref: dict[str, str] | None = None) -> dict:
         """Compare two published articles or classify a proposed change with its verified source_ref."""

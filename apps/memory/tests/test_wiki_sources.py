@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 
 from apps.core.models import Department
 from apps.core.source_adapters import get_source_adapter
+from apps.memory.config_documents import get_document_specs
 from apps.memory.models import MemorySearchDocument, MemorySource, MemorySourceObject
 from apps.memory.services import sha256_text, upsert_memory_projection_from_envelope
 from apps.memory.wiki_config import WikiBundle
@@ -103,9 +104,20 @@ class WikiSourceTests(TestCase):
         )
         adapter = get_source_adapter("workorders")
         envelope = adapter.render_envelope(adapter.get_object(str(order.pk)))
-        with TemporaryDirectory() as directory, override_settings(
-            DATA_DIR=Path(directory), RUNTIME_CONTRACTS_DIR=Path(directory) / "contracts",
+        directory = Path(self.enterContext(TemporaryDirectory()))
+        contracts = directory / "contracts"
+        # Keep legacy paths canonical so missing files use validated Git defaults,
+        # independently of any local runtime mirrors outside this fixture.
+        legacy_paths = {
+            spec.legacy_settings_path: contracts / Path(spec.default_path).relative_to("contracts")
+            for spec in get_document_specs()
+            if spec.legacy_settings_path
+        }
+        with override_settings(
+            DATA_DIR=directory, RUNTIME_CONTRACTS_DIR=contracts,
+            LOCAL_BUSINESS_ROLE_RULES_FILE=contracts / "role_rules.json",
             LOCAL_BUSINESS_MEMORY_VECTOR_BACKEND="disabled",
+            **legacy_paths,
         ):
             upsert_memory_projection_from_envelope(envelope, index_backends=())
             bundle = replace(self.bundle, read_tokens=(f"user:{self.actor.pk}",))

@@ -1,8 +1,10 @@
 import os
 import subprocess
 from hashlib import sha256
+from importlib.util import find_spec
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import skipUnless
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +26,8 @@ from .test_contract_gateway import ai_policy_snapshot
 
 @pytest.mark.integration
 class WikiAgentFlowTests(TestCase):
+    search_engine = "basic"
+
     def setUp(self):
         self.root = Path(self.enterContext(TemporaryDirectory()))
         self.enterContext(patch.dict(os.environ, {"LOCAL_BUSINESS_KNOWLEDGE_REPO_DIR": str(self.root)}))
@@ -34,7 +38,7 @@ class WikiAgentFlowTests(TestCase):
                            read_tokens=[token], write_tokens=[token], model_context=True)
         self.enterContext(override_settings(LOCAL_BUSINESS_WIKI_BUNDLES={"manuals": self.bundle},
                                            LOCAL_BUSINESS_MEMORY_TEST_SOURCE_ALLOWLIST=("wiki-reference",),
-                                           LOCAL_BUSINESS_WIKI_SEARCH="basic"))
+                                           LOCAL_BUSINESS_WIKI_SEARCH=self.search_engine))
         self.dir = self.root / self.bundle["path"]
         self.dir.mkdir(parents=True)
         (self.dir / "index.md").write_text('---\nokf_version: "0.2"\n---\n\n# Notes\n')
@@ -145,3 +149,10 @@ class WikiAgentFlowTests(TestCase):
         result = self.run_tool("edit", bundle_id="manuals", expected_revision=sha, files={"article.md":md})
         self.assertFalse(result["ok"])
         self.assertEqual(wiki_head(self.root), sha)
+
+
+@skipUnless(find_spec("llmw2") is not None, "optional llmwiki2 wheel is not installed")
+class CrowWikiAgentFlowTests(WikiAgentFlowTests):
+    """Exercise the same author and access flows with the installed CROW search."""
+
+    search_engine = "crow"

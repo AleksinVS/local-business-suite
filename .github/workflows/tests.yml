@@ -133,8 +133,7 @@ jobs:
 
       - name: Install locked dependencies and optional CROW
         run: |
-          python -m pip install -r requirements.lock -r requirements-dev.lock
-          python -m pip install -c requirements.lock -r requirements-crow.txt
+          python -m pip install -r requirements.lock -r requirements-dev.lock -r requirements-crow.txt
           python -m pip check
 
       - name: Prepare isolated runtime for system checks

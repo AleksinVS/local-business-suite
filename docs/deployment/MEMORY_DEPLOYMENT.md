@@ -184,7 +184,7 @@ python manage.py ai_skill_list
 
 Стартовый `index.md` закрепляет существование пустого раздела в Git. Опись подтверждённого пустого дерева позволяет снять исчезнувшие Notes. Отсутствующий путь или недоступный Git-корень дают ошибку и сохраняют карточки. `--dry-run` показывает `created/updated/moved/deleted`, статус и SHA. `--force` перечитывает зафиксированную ревизию и пересобирает карточки. Успех обозначается `status: ready` с полным SHA. БД хранит состояние последнего прохода в `WikiBundleCheckpoint`. Если владелец получил `index_pending` после успешной правки, нужно повторить сверку и проверить возвращённый SHA. Повторной публикации Markdown не требуется.
 
-**Движок и модель.** Для `basic` достаточно стандартного web-образа. Для CROW установите в Python-среде Django `python -m pip install -r requirements-crow.txt` либо соберите web-образ с аргументом `LBS_WITH_CROW=1`. Пример для штатного production Compose при заданном `LOCAL_BUSINESS_ENV_FILE`:
+**Движок и модель.** Для `basic` достаточно стандартного web-образа. Для CROW установите в Python-среде Django `python -m pip install -r requirements.lock -r requirements-crow.txt` либо соберите web-образ с аргументом `LBS_WITH_CROW=1`. Обе установки сохраняют закреплённые зависимости LBS и их extras. Пример для штатного production Compose при заданном `LOCAL_BUSINESS_ENV_FILE`:
 
 ```bash
 docker compose -f docker-compose.prod.yml build --build-arg LBS_WITH_CROW=1 web

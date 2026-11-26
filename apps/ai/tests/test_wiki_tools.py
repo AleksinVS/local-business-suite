@@ -1,6 +1,8 @@
 import os
 import subprocess
 from hashlib import sha256
+from io import StringIO
+import json
 from importlib.util import find_spec
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,7 +12,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
+from django.core.management import call_command, CommandError
 from django.db import DatabaseError
 from django.test import TestCase, override_settings
 
@@ -141,6 +143,48 @@ class WikiAgentFlowTests(TestCase):
         self.assertTrue(self.ok("edit", bundle_id="manuals", expected_revision=second,
                                 files={"beta.md": note("beta", "Independent correction")},
                                 read_revisions={"alpha.md": latest})["committed"])
+
+    def test_background_audit_checks_changed_visible_notes_without_writing(self):
+        ref = self.ok("source", bundle_id="manuals", source_code="wiki-reference",
+                      source_object_id="valve-schedule")["source_ref"]
+
+        def note(key, body):
+            meta = dict(type="Note", knowledge_id=key, title=key, description="Valve schedule", source_refs=[ref])
+            return "---\n" + yaml.safe_dump(meta) + "---\n\n" + body + "\n"
+
+        base = wiki_head(self.root)
+        first = self.ok("edit", bundle_id="manuals", expected_revision=base, files={
+            "alpha.md": note("alpha", "Valve schedule: five weeks."),
+            "beta.md": note("beta", "Valve schedule: six weeks."),
+            "private.md": note("private", "Valve schedule: secret."),
+        })["revision"]
+        head = self.ok("edit", bundle_id="manuals", expected_revision=first,
+                       files={"alpha.md": note("alpha", "Valve schedule: four weeks.")})["revision"]
+        self.bundle["note_read_tokens"] = {"private": []}
+        call_command("memory_reconcile", wiki_bundle="manuals")
+        before = self.git("ls-files", "--stage", "-z")
+        self.dir.joinpath("alpha.md").write_text("Uncommitted author draft")
+        with patch("apps.memory.wiki_gateway.classify_crow_relation",
+                   return_value={"relation": "conflicts", "probability": 0.9, "model": "fixture"}) as classifier:
+            stream = StringIO()
+            call_command("memory_wiki_audit", wiki_bundle="manuals", actor_id=self.author.pk,
+                         since=first, max_pairs=1, stdout=stream)
+            report = json.loads(stream.getvalue())
+            self.assertEqual(report["revision"], head)
+            self.assertEqual(report["checked_pairs"], 1)
+            self.assertEqual(report["changed_articles"], 1)
+            self.assertEqual(report["findings"][0]["left_id"], "alpha")
+            self.assertEqual(report["findings"][0]["right_id"], "beta")
+            self.assertEqual(classifier.call_count, 1)
+            self.assertNotIn("secret", repr(classifier.call_args))
+            self.assertIsNone(report["next_offset"])
+            with self.assertRaises(CommandError):
+                call_command("memory_wiki_audit", wiki_bundle="manuals", actor_id=self.other.pk,
+                             stdout=StringIO())
+            self.assertEqual(classifier.call_count, 1)
+        self.assertEqual(wiki_head(self.root), head)
+        self.assertEqual(self.git("ls-files", "--stage", "-z"), before)
+        self.assertEqual(self.dir.joinpath("alpha.md").read_text(), "Uncommitted author draft")
 
     def test_external_commit_visibility_and_mixed_acl_before_rank(self):
         def note(key, body):

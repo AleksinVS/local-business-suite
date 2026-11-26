@@ -102,6 +102,9 @@ jobs:
       - name: Install locked development dependencies
         run: python -m pip install -r requirements-dev.lock
 
+      - name: Prepare isolated runtime for compatibility tests
+        run: python manage.py bootstrap_runtime
+
       - name: Run unit compatibility tests on pull requests
         if: github.event_name == 'pull_request'
         run: make PYTHON=python test-unit TEST_FLAGS=--maxfail=1
@@ -146,7 +149,8 @@ jobs:
           make PYTHON=python verify-fast
           TEST_SCOPE="apps/memory/tests/test_crow_provider.py
           apps/ai/tests/test_wiki_tools.py
-          apps/memory/tests/test_wiki_files.py::WikiFileTests::test_native_crow_checks_host_navigation_and_published_tree"
+          apps/memory/tests/test_wiki_files.py
+          apps/memory/tests/test_wiki_reconcile.py"
 
   e2e-smoke:
     name: Browser smoke test

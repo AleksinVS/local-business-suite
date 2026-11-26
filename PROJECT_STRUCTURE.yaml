@@ -161,6 +161,7 @@ apps: # Django-приложения: бизнес-логика, API и шабл�
     urls.py: file # URL-маршруты UI ревью памяти под /memory/review/ (контур File Source Auto Organization вынесен в apps.filehub, ADR-0030 решение 5)
     vector_backends.py: file # Backend-neutral vector/full-text interface, PostgreSQL FTS, SQLite FTS5 fallback and LanceDB vector backend
     views.py: file # Django views рабочего UI ревью памяти и поискового индекса
+    wiki_audit.py: file # Ограниченный необязательный аудит противоречий по разрешённым статьям Git-снимка без записи
     wiki_config.py: file # Операторский реестр разделов OKF, токенов доступа и устойчивых ID
     wiki_files.py: file # Изолированная фиксация авторских правок OKF, ссылок и навигации в одном коммите
     wiki_gateway.py: file # Чтение, поиск, сравнение и редактирование разрешённой Wiki от лица агента

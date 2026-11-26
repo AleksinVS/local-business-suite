@@ -223,9 +223,13 @@ def build_tools(
                                    "source_object_id": source_object_id})
 
     @tool("knowledge.edit", description=tool_registry["knowledge.edit"]["description"])
-    def wiki_edit(bundle_id: str, expected_revision: str, files: dict[str, str | None]) -> dict:
+    def wiki_edit(bundle_id: str, expected_revision: str, files: dict[str, str | None],
+                  read_revisions: dict[str, str] | None = None) -> dict:
         """Write complete connected articles in one edit. Paths are bundle-relative; null removes a Note."""
-        return wiki_call("edit", {"bundle_id": bundle_id, "expected_revision": expected_revision, "files": files})
+        payload = {"bundle_id": bundle_id, "expected_revision": expected_revision, "files": files}
+        if read_revisions is not None:
+            payload["read_revisions"] = read_revisions
+        return wiki_call("edit", payload)
 
     @tool("knowledge.compare", description=tool_registry["knowledge.compare"]["description"])
     def wiki_compare(bundle_id: str, left_id: str, right_id: str = "", proposed_text: str = "",

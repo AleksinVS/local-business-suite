@@ -100,6 +100,32 @@ class WikiReconcileTests(TestCase):
         self.assertEqual(self.git("status", "--porcelain"), b"")
         self.assertEqual(wiki_head(self.root), empty)
 
+    def test_author_note_without_raw_survives_projection_rebuild(self):
+        file = self.note("author.md", extra="knowledge_id: authored\ndescription: Authored note\n")
+        revision = self.commit()
+        published = file.read_bytes()
+        self.note("staged.md", native="staged")
+        self.git("add", str(self.directory / "staged.md"))
+        file.write_text("Uncommitted author text", encoding="utf-8")
+        before = {p.relative_to(self.directory): p.read_bytes()
+                  for p in self.directory.rglob("*") if p.is_file()}
+        index = self.git("ls-files", "--stage", "-z")
+        for options in ({}, {"dry_run": True}, {"force": True}):
+            self.command(**options)
+            self.assertEqual(wiki_head(self.root), revision)
+            self.assertEqual(self.git("ls-files", "--stage", "-z"), index)
+            self.assertEqual({p.relative_to(self.directory): p.read_bytes()
+                              for p in self.directory.rglob("*") if p.is_file()}, before)
+        MemoryKnowledgeItem.objects.all().delete()
+        WikiBundleCheckpoint.objects.all().delete()
+        self.command(force=True)
+        self.assertIn("authored", registered_wiki_notes(self.bundle, revision))
+        self.assertEqual(self.git("show", f"HEAD:{self.bundle.path}/author.md"), published)
+        self.assertEqual(wiki_head(self.root), revision)
+        self.assertEqual(self.git("ls-files", "--stage", "-z"), index)
+        self.assertEqual({p.relative_to(self.directory): p.read_bytes()
+                          for p in self.directory.rglob("*") if p.is_file()}, before)
+
     def test_failed_inventory_never_withdraws_and_retry_recovers(self):
         self.note("good.md", extra="knowledge_id: registered\n")
         good = self.commit()

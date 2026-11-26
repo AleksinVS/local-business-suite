@@ -216,7 +216,7 @@ def compare_wiki(actor, *, bundle_id, left_id, right_id="", proposed_text="", so
     return {**result, "revision": snapshot.revision, "left_id": left_id, "right_id": right_id}
 
 
-def edit_wiki(actor, *, bundle_id, expected_revision, files):
+def edit_wiki(actor, *, bundle_id, expected_revision, files, read_revisions=None):
     from .wiki_files import edit_wiki_files
 
     bundle, _ = _bundle_for(actor, bundle_id, write=True)
@@ -227,10 +227,21 @@ def edit_wiki(actor, *, bundle_id, expected_revision, files):
     ):
         raise ValidationError("Ожидается до 32 Markdown-файлов по 128 000 символов.")
 
+    if read_revisions is not None and (not isinstance(read_revisions, dict) or len(read_revisions) > 32 or any(
+        not isinstance(path, str) or not _safe_text(path) or not isinstance(revision, str)
+        for path, revision in read_revisions.items()
+    )):
+        raise ValidationError("Ожидается до 32 путей прочитанных статей и их Git SHA.")
+
     def authorize():
         current, _ = _bundle_for(actor, bundle_id, write=True)
         if current != bundle:
             raise PermissionDenied(_DENIED)
+        # Called under the writer lock, including the first authorization.
+        # An independent writer may have advanced HEAD since the request began.
+        head = wiki_head(knowledge_repo_root())
+        if not wiki_snapshot_ready(bundle, head):
+            reconcile_wiki_bundle(bundle)
         snapshot, visible = _available(actor, bundle)
         # Rebuilding indexes may read neighboring titles. Only write a bundle
         # when the entire inventory is safe for this author and its audience.
@@ -256,13 +267,8 @@ def edit_wiki(actor, *, bundle_id, expected_revision, files):
         if not _safe_text(markdown) or not refs or metadata.get("sources") or not wiki_sources_allowed(actor, bundle, refs):
             raise ValidationError("Проверьте основания статьи, аудиторию и наличие персональных данных.")
 
-    # A process can lose its response between the Git fast-forward and the
-    # database checkpoint. Rebuild from Git so the writer can recognize a retry.
-    head = wiki_head(knowledge_repo_root())
-    if not wiki_snapshot_ready(bundle, head):
-        reconcile_wiki_bundle(bundle)
     result = edit_wiki_files(bundle=bundle, expected_revision=expected_revision, files=files,
-                             authorize=authorize, validate_content=validate_content)
+                             read_revisions=read_revisions, authorize=authorize, validate_content=validate_content)
     try:
         state = reconcile_wiki_bundle(bundle)
         ready = state["status"] == "ready" and state["revision"] == result["revision"]

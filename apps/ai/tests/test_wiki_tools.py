@@ -117,6 +117,31 @@ class WikiAgentFlowTests(TestCase):
         self.assertEqual(self.ok("search", bundle_id="manuals", query="needlevalve")["items"],[])
         self.assertFalse(self.run_tool("get", bundle_id="manuals", knowledge_id="schedule")["ok"])
 
+    def test_stale_revision_independent_edit_and_explicit_read_basis(self):
+        base = wiki_head(self.root)
+        ref = self.ok("source", bundle_id="manuals", source_code="wiki-reference",
+                      source_object_id="valve-schedule")["source_ref"]
+
+        def note(key, body):
+            meta = dict(type="Note", knowledge_id=key, title=key, description="Reference", source_refs=[ref])
+            return "---\n" + yaml.safe_dump(meta) + "---\n\n" + body + "\n"
+
+        first = self.ok("edit", bundle_id="manuals", expected_revision=base,
+                        files={"alpha.md": note("alpha", "Original")})["revision"]
+        second = self.ok("edit", bundle_id="manuals", expected_revision=base,
+                         files={"beta.md": note("beta", "Independent")})["revision"]
+        latest = self.ok("edit", bundle_id="manuals", expected_revision=first,
+                         files={"alpha.md": note("alpha", "Changed")})["revision"]
+        self.assertNotEqual(first, second)
+        result = self.run_tool("edit", bundle_id="manuals", expected_revision=latest,
+                               files={"beta.md": note("beta", "Based on old alpha")},
+                               read_revisions={"alpha.md": first})
+        self.assertFalse(result["ok"])
+        self.assertEqual(wiki_head(self.root), latest)
+        self.assertTrue(self.ok("edit", bundle_id="manuals", expected_revision=second,
+                                files={"beta.md": note("beta", "Independent correction")},
+                                read_revisions={"alpha.md": latest})["committed"])
+
     def test_external_commit_visibility_and_mixed_acl_before_rank(self):
         def note(key, body):
             return f"---\ntype: Note\nknowledge_id: {key}\ntitle: {key}\ndescription: Reference\n---\n\n{body}\n"

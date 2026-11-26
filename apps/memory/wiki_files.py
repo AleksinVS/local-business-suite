@@ -202,8 +202,11 @@ def _check_clean_paths(root, head, changes):
             raise WikiEditConflict('An edited wiki path is occupied.')
 
 
-def _operation_key(bundle, base, files):
-    payload = json.dumps([bundle.bundle_id, base, files], sort_keys=True, ensure_ascii=False).encode()
+def _operation_key(bundle, base, files, read_revisions):
+    parts = [bundle.bundle_id, base, files]
+    if read_revisions:
+        parts.append(read_revisions)
+    payload = json.dumps(parts, sort_keys=True, ensure_ascii=False).encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -229,7 +232,30 @@ def _check_authorized(authorize):
         raise PermissionDenied('Wiki editing is not available.')
 
 
-def edit_wiki_files(*, bundle, expected_revision, files, authorize, validate_content=None):
+def _require_ancestor(root, revision, head):
+    if (not isinstance(revision, str)
+            or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision)
+            or _git(root, 'cat-file', '-t', revision).strip() != b'commit'):
+        raise WikiEditConflict('Wiki base is not an available commit.')
+    _git(root, 'merge-base', '--is-ancestor', revision, head)
+
+
+def _path_entry(root, revision, path):
+    # Include mode and kind: a symlink or a directory is not the same as a Note.
+    return _git(root, 'ls-tree', '-z', revision, '--', path)
+
+
+def _already_committed(root, base, head, key):
+    if base == head:
+        return False
+    trailers = _git(root, 'log', '--format=%(trailers:key=LBS-Wiki-Operation,valueonly)',
+                    '--fixed-strings', '--grep=LBS-Wiki-Operation: ' + key,
+                    f'{base}..{head}').decode().splitlines()
+    return key in trailers
+
+
+def edit_wiki_files(*, bundle, expected_revision, files, authorize, validate_content=None,
+                    read_revisions=None):
     """Publish exact article Markdown as a single commit and preserve unrelated edits."""
     if not isinstance(expected_revision, str) or not re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}', expected_revision):
         raise ValidationError('Expected an immutable Git commit SHA.')
@@ -239,17 +265,33 @@ def edit_wiki_files(*, bundle, expected_revision, files, authorize, validate_con
         _relative_article(path)
         if markdown is not None and not isinstance(markdown, str):
             raise ValidationError('Expected complete Markdown or a deletion.')
+    if read_revisions is None:
+        read_revisions = {}
+    if not isinstance(read_revisions, dict):
+        raise ValidationError('Expected article paths and their read revisions.')
+    for path, revision in read_revisions.items():
+        _relative_article(path)
+        if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}', revision):
+            raise ValidationError('Expected an immutable Git commit SHA for each read article.')
     root = knowledge_repo_root().resolve()
     with knowledge_repo_lock(root) as lock:
         _check_authorized(authorize)
         head = wiki_head(root)
-        key = _operation_key(bundle, expected_revision, files)
-        if expected_revision != head:
-            parent = _git(root, 'show', '-s', '--format=%P', head).strip().decode()
-            trailer = _git(root, 'show', '-s', '--format=%(trailers:key=LBS-Wiki-Operation,valueonly)', head).strip().decode()
-            if parent == expected_revision and trailer == key:
-                return {'revision': head, 'committed': False, 'changed_paths': []}
-            raise WikiEditConflict('Wiki revision has changed. Reread the articles.')
+        _require_ancestor(root, expected_revision, head)
+        for revision in set(read_revisions.values()) - {expected_revision}:
+            _require_ancestor(root, revision, head)
+        key = _operation_key(bundle, expected_revision, files, read_revisions)
+        # Check a lost-response retry before considering a new edit. A later
+        # author may have changed or reverted the target; never replay over them.
+        replay = _already_committed(root, expected_revision, head, key)
+        for path in files.keys() | read_revisions.keys():
+            full = f'{bundle.path}/{path}'
+            before = _path_entry(root, read_revisions.get(path, expected_revision), full)
+            current = _path_entry(root, head, full)
+            if path in read_revisions and not before.startswith(b'100644 blob ') and not before.startswith(b'100755 blob '):
+                raise WikiEditConflict('A declared read article is unavailable.')
+            if before != current and not replay:
+                raise WikiEditConflict('A target or declared basis changed. Review the diff and relevant context.')
         snapshot = read_wiki_snapshot(bundle, head)
         tree = wiki_tree(root, head, bundle.path)
 
@@ -258,7 +300,16 @@ def edit_wiki_files(*, bundle, expected_revision, files, authorize, validate_con
             return wiki_blob(root, oid).decode('utf-8') if oid else None
 
         documents = {PurePosixPath(n.path).relative_to(bundle.path).as_posix(): n for n in snapshot.notes.values()}
+        if not replay and any(path not in documents for path in read_revisions):
+            raise WikiEditConflict('A declared read article is unavailable.')
+        for path in files:
+            full = f'{bundle.path}/{path}'
+            entry = _path_entry(root, head, full)
+            if entry and path not in documents:
+                raise ValidationError('Only thematic Notes may be edited or removed.')
         changes = {p: text for p, text in files.items() if text != load(p)}
+        if replay and changes:
+            raise WikiEditConflict('This operation was already applied; a later edit changed its result.')
         if not changes:
             return {'revision': head, 'committed': False, 'changed_paths': []}
         updated = dict(documents)

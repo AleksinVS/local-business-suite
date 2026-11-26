@@ -145,7 +145,7 @@ class WikiFileTests(SimpleTestCase):
         self.assertNotIn('](one.md)', nav)
         self.assertIn('](two.md)', nav)
 
-    def test_concurrent_authors_one_revision_wins(self):
+    def test_concurrent_authors_independent_articles_both_win(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier
 
@@ -159,8 +159,42 @@ class WikiFileTests(SimpleTestCase):
                 return False
 
         with ThreadPoolExecutor(2) as workers:
-            self.assertCountEqual(workers.map(writer, ['one', 'two']), [True, False])
-        self.assertEqual(self.git('rev-list', '--count', 'HEAD'), '2')
+            self.assertCountEqual(workers.map(writer, ['one', 'two']), [True, True])
+        self.assertEqual(self.git('rev-list', '--count', 'HEAD'), '3')
+        self.assertIn('](one.md)', (self.wiki / 'index.md').read_text())
+        self.assertIn('](two.md)', (self.wiki / 'index.md').read_text())
+
+    def test_stale_target_and_declared_basis_conflict_but_unrelated_edit_succeeds(self):
+        base = self.edit({'alpha.md': article(), 'beta.md': article('beta')})['revision']
+        latest = self.edit({'alpha.md': article(body='Changed by another author')}, base)['revision']
+        with self.assertRaises(WikiEditConflict):
+            self.edit({'alpha.md': article(body='Stale author')}, base)
+        with self.assertRaises(WikiEditConflict):
+            self.edit({'beta.md': article('beta', body='Stale basis')}, latest,
+                      read_revisions={'alpha.md': base})
+        result = self.edit({'beta.md': article('beta', body='Independent change')}, base)
+        self.assertTrue(result['committed'])
+        self.assertEqual(self.git('rev-parse', 'HEAD^'), latest)
+
+    def test_retry_after_independent_commit_and_later_target_change(self):
+        first = {'alpha.md': article()}
+        rev = self.edit(first)['revision']
+        latest = self.edit({'beta.md': article('beta')}, self.base)['revision']
+        self.assertEqual(self.edit(first), {'revision': latest, 'committed': False, 'changed_paths': []})
+        changed = self.edit({'alpha.md': article(body='Later edit')}, rev)['revision']
+        with self.assertRaises(WikiEditConflict):
+            self.edit(first)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), changed)
+
+    def test_stale_create_and_mode_change_conflict(self):
+        rev = self.edit({'alpha.md': article()})['revision']
+        with self.assertRaises(WikiEditConflict):
+            self.edit({'alpha.md': article('another')})
+        self.git('update-index', '--chmod=+x', str(self.wiki / 'alpha.md'))
+        self.git('commit', '-qm', 'Changed mode')
+        with self.assertRaises(WikiEditConflict):
+            self.edit({'alpha.md': article(body='No overwrite')}, rev)
+
 
     def test_new_links_and_identity_must_match_an_article_in_this_bundle(self):
         for path, text in [('../a.md', article()), ('raw/a.md', article()), ('index.md', article()),
